@@ -45,3 +45,19 @@ export type ItemBody = {
 export type ItemMultigetEntry =
   | ItemBody
   | { code: number; body: ItemBody };
+
+export type OrderSearchOrder = {
+  order_items?: Array<{
+    quantity: number;
+    item?: { id?: string };
+  }>;
+};
+
+export type OrderSearchResponse = {
+  results: OrderSearchOrder[];
+  paging: {
+    total: number;
+    offset: number;
+    limit: number;
+  };
+};
