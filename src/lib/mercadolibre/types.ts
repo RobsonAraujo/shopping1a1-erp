@@ -32,6 +32,8 @@ export type ItemBody = {
   sold_quantity: number;
   status: string;
   permalink: string;
+  /** Catálogo compartilhado (ML) vs anúncio clássico do vendedor */
+  catalog_listing?: boolean;
   thumbnail?: string;
   condition?: string;
   variations?: Array<{
