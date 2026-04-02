@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { stockPlanningConfig } from "@/config/stock-planning";
 import { DashboardAttentionPanel } from "@/components/dashboard-attention-panel";
 import { DashboardItemsTable } from "@/components/dashboard-items-table";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
   fetchAllUserItemIds,
   fetchItemsByIds,
@@ -88,9 +91,9 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro ao carregar anúncios";
     return (
-      <div className="rounded-lg border border-red-200 bg-white p-6 text-red-800">
-        {msg}
-      </div>
+      <Card className="border-red-200 bg-red-50/50">
+        <CardContent className="pt-6 text-red-900">{msg}</CardContent>
+      </Card>
     );
   }
 
@@ -105,90 +108,111 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const w = stockPlanningConfig.salesAverageWindowDays;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       {attentionSnapshot ? (
         <DashboardAttentionPanel
           items={attentionSnapshot.items}
           salesByItem={attentionSnapshot.salesByItem}
         />
       ) : (
-        <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm text-amber-950">
-          Não foi possível carregar o painel de prioridades. Atualize a página
-          ou tente de novo em instantes.
-        </div>
+        <Card className="border-amber-200 bg-amber-50/50">
+          <CardContent className="pt-6 text-sm text-amber-950">
+            Não foi possível carregar o painel de prioridades. Atualize a
+            página ou tente de novo em instantes.
+          </CardContent>
+        </Card>
       )}
 
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-[var(--brand)]">
-          Anúncios
-        </h1>
-        <p className="mt-1 text-sm text-[var(--text-muted)]">
-          {total} anúncio{total !== 1 ? "s" : ""} no total. Nesta página:{" "}
-          {catalogItems.length === 1
-            ? "1 anúncio do catálogo"
-            : `${catalogItems.length} anúncios do catálogo`}
-          {" · "}
-          {ownItems.length === 1
-            ? "1 anúncio próprio"
-            : `${ownItems.length} anúncios próprios`}
-          . Projeções usam vendas dos últimos {w} dias (todos os pedidos exceto
-          cancelados; janela
-          por{" "}
-          {stockPlanningConfig.salesWindowDateField === "date_closed"
-            ? "data de fechamento do pedido"
-            : "data de criação do pedido"}
-          ; soma de <code className="rounded bg-[var(--surface-muted)] px-1">quantity</code> em{" "}
-          <code className="rounded bg-[var(--surface-muted)] px-1">order_items</code> via{" "}
-          <code className="rounded bg-[var(--surface-muted)] px-1">orders/search?item=id</code>
-          ).
-        </p>
-      </div>
-
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold text-[var(--brand)]">
-          Anúncios do catálogo
-        </h2>
-        <DashboardItemsTable items={catalogItems} salesByItem={salesByItem} />
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold text-[var(--brand)]">
-          Anúncios próprios
-        </h2>
-        <DashboardItemsTable items={ownItems} salesByItem={salesByItem} />
-      </section>
-
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <p className="text-sm text-[var(--text-muted)]">
-          Página {Math.floor(offset / limit) + 1} de{" "}
-          {Math.max(1, Math.ceil(total / limit))}
-        </p>
-        <div className="flex gap-2">
-          {hasPrev ? (
-            <Link
-              href={prevOffset ? `/dashboard?offset=${prevOffset}` : "/dashboard"}
-              className="rounded-md border border-[var(--border)] bg-white px-4 py-2 text-sm font-medium text-[var(--brand)] hover:bg-[var(--surface-muted)]"
-            >
-              Anterior
-            </Link>
-          ) : (
-            <span className="rounded-md border border-transparent px-4 py-2 text-sm text-[var(--text-muted)]">
-              Anterior
-            </span>
-          )}
-          {hasNext ? (
-            <Link
-              href={`/dashboard?offset=${nextOffset}`}
-              className="rounded-md border border-[var(--border)] bg-white px-4 py-2 text-sm font-medium text-[var(--brand)] hover:bg-[var(--surface-muted)]"
-            >
-              Próxima
-            </Link>
-          ) : (
-            <span className="rounded-md border border-transparent px-4 py-2 text-sm text-[var(--text-muted)]">
-              Próxima
-            </span>
-          )}
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-[var(--primary)]">
+            Anúncios
+          </h1>
+          <p className="mt-2 max-w-3xl text-[15px] leading-relaxed text-[var(--muted-foreground)]">
+            {total} anúncio{total !== 1 ? "s" : ""} no total. Nesta página:{" "}
+            {catalogItems.length === 1
+              ? "1 anúncio do catálogo"
+              : `${catalogItems.length} anúncios do catálogo`}
+            {" · "}
+            {ownItems.length === 1
+              ? "1 anúncio próprio"
+              : `${ownItems.length} anúncios próprios`}
+            . Projeções usam vendas dos últimos {w} dias (pedidos exceto
+            cancelados; janela por{" "}
+            {stockPlanningConfig.salesWindowDateField === "date_closed"
+              ? "data de fechamento do pedido"
+              : "data de criação do pedido"}
+            ; soma de{" "}
+            <code className="rounded-md bg-[var(--muted)] px-1.5 py-0.5 font-mono text-[13px] text-[var(--foreground)]">
+              quantity
+            </code>{" "}
+            em{" "}
+            <code className="rounded-md bg-[var(--muted)] px-1.5 py-0.5 font-mono text-[13px] text-[var(--foreground)]">
+              order_items
+            </code>{" "}
+            via{" "}
+            <code className="rounded-md bg-[var(--muted)] px-1.5 py-0.5 font-mono text-[13px] text-[var(--foreground)]">
+              orders/search?item=id
+            </code>
+            ).
+          </p>
         </div>
+
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold text-[var(--primary)]">
+            Anúncios do catálogo
+          </h2>
+          <DashboardItemsTable items={catalogItems} salesByItem={salesByItem} />
+        </section>
+
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold text-[var(--primary)]">
+            Anúncios próprios
+          </h2>
+          <DashboardItemsTable items={ownItems} salesByItem={salesByItem} />
+        </section>
+
+        <Card>
+          <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:py-4">
+            <p className="text-sm text-[var(--muted-foreground)]">
+              Página {Math.floor(offset / limit) + 1} de{" "}
+              {Math.max(1, Math.ceil(total / limit))}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {hasPrev ? (
+                <Button variant="outline" size="sm" asChild>
+                  <Link
+                    href={
+                      prevOffset ? `/dashboard?offset=${prevOffset}` : "/dashboard"
+                    }
+                    className="gap-1.5"
+                  >
+                    <ChevronLeft className="size-4" />
+                    Anterior
+                  </Link>
+                </Button>
+              ) : (
+                <Button variant="outline" size="sm" disabled className="gap-1.5">
+                  <ChevronLeft className="size-4" />
+                  Anterior
+                </Button>
+              )}
+              {hasNext ? (
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={`/dashboard?offset=${nextOffset}`} className="gap-1.5">
+                    Próxima
+                    <ChevronRight className="size-4" />
+                  </Link>
+                </Button>
+              ) : (
+                <Button variant="outline" size="sm" disabled className="gap-1.5">
+                  Próxima
+                  <ChevronRight className="size-4" />
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

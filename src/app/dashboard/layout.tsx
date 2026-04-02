@@ -1,8 +1,10 @@
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { LayoutDashboard, LogOut, Package } from "lucide-react";
 import { fetchMe } from "@/lib/mercadolibre/api";
 import { getValidAccessToken } from "@/lib/mercadolibre/session";
+import { Button } from "@/components/ui/button";
 
 export default async function DashboardLayout({
   children,
@@ -24,31 +26,59 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="min-h-full flex flex-col bg-[var(--surface-muted)]">
-      <header className="bg-[var(--brand)] text-white shadow-sm">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-          <div className="flex items-center gap-6">
+    <div className="flex min-h-full flex-col bg-[var(--background)]">
+      <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[var(--card)]/85 backdrop-blur-md supports-[backdrop-filter]:bg-[var(--card)]/75">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3.5 sm:px-6">
+          <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-8">
             <Link
               href="/dashboard"
-              className="text-lg font-semibold tracking-tight text-white hover:opacity-90"
+              className="flex shrink-0 items-center gap-2 text-[var(--primary)] transition-opacity hover:opacity-90"
             >
-              ERP 1a1
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm">
+                <LayoutDashboard className="size-5" aria-hidden />
+              </span>
+              <span className="hidden font-semibold tracking-tight sm:inline">
+                ERP 1a1
+              </span>
             </Link>
-            <span className="hidden text-sm text-white/80 sm:inline">
+            <nav className="hidden items-center gap-1 sm:flex" aria-label="Principal">
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/dashboard" className="gap-2">
+                  <Package className="size-4" aria-hidden />
+                  Anúncios
+                </Link>
+              </Button>
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/dashboard#prioridades" className="gap-2">
+                  Prioridades
+                </Link>
+              </Button>
+            </nav>
+          </div>
+          <div className="flex shrink-0 items-center gap-2 sm:gap-4">
+            <span
+              className="hidden max-w-[12rem] truncate text-sm text-[var(--muted-foreground)] md:inline"
+              title={nickname}
+            >
               {nickname}
             </span>
+            <form action="/api/auth/mercadolibre/signout" method="post">
+              <Button
+                type="submit"
+                variant="outline"
+                size="sm"
+                className="gap-2 border-[var(--border)]"
+              >
+                <LogOut className="size-4" aria-hidden />
+                <span className="hidden sm:inline">Sair</span>
+              </Button>
+            </form>
           </div>
-          <form action="/api/auth/mercadolibre/signout" method="post">
-            <button
-              type="submit"
-              className="rounded-md border border-white/30 bg-transparent px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-white/10"
-            >
-              Sair
-            </button>
-          </form>
         </div>
       </header>
-      <div className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6">{children}</div>
+      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
+        {children}
+      </main>
     </div>
   );
 }

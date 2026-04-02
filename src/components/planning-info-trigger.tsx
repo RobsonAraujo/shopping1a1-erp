@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 
 function ExplainerBody({ content }: { content: string }) {
   return (
-    <p className="text-left text-xs leading-relaxed text-[var(--foreground)]">
+    <p className="text-left text-xs leading-relaxed text-[var(--popover-foreground)]">
       {content}
     </p>
   );
@@ -35,20 +35,28 @@ export function PlanningInfoTrigger({
             <button
               type="button"
               className={cn(
-                "inline-flex shrink-0 items-center justify-center rounded-full p-0.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--brand)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--brand)]",
+                "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]",
                 className,
               )}
               aria-label="Ver detalhes do cálculo"
             >
-              <CircleHelp className="size-4" strokeWidth={2} aria-hidden />
+              <CircleHelp className="size-[15px]" strokeWidth={2} aria-hidden />
             </button>
           </PopoverTrigger>
         </TooltipTrigger>
-        <TooltipContent side="top" align="start" className="max-w-sm">
+        <TooltipContent
+          side="top"
+          align="start"
+          className="max-w-sm border-[var(--border)] bg-[var(--popover)] text-[var(--popover-foreground)] shadow-md"
+        >
           <ExplainerBody content={content} />
         </TooltipContent>
       </Tooltip>
-      <PopoverContent side="top" align="start" className="max-w-sm">
+      <PopoverContent
+        side="top"
+        align="start"
+        className="max-w-sm border-[var(--border)] bg-[var(--popover)] text-[var(--popover-foreground)] shadow-md"
+      >
         <ExplainerBody content={content} />
       </PopoverContent>
     </Popover>
