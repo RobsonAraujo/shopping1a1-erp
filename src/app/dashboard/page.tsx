@@ -4,7 +4,7 @@ import { stockPlanningConfig } from "@/config/stock-planning";
 import { DashboardItemsTable } from "@/components/dashboard-items-table";
 import {
   fetchItemsByIds,
-  fetchUnitsSoldByItemInWindow,
+  fetchUnitsSoldForItemsInWindow,
   fetchUserItemsSearch,
 } from "@/lib/mercadolibre/api";
 import {
@@ -35,9 +35,16 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   try {
     search = await fetchUserItemsSearch(token, userId, offset, limit);
     const windowDays = stockPlanningConfig.salesAverageWindowDays;
+    const dateField = stockPlanningConfig.salesWindowDateField;
     const [loadedItems, soldMap] = await Promise.all([
       fetchItemsByIds(token, search.results),
-      fetchUnitsSoldByItemInWindow(token, userId, windowDays),
+      fetchUnitsSoldForItemsInWindow(
+        token,
+        userId,
+        search.results,
+        windowDays,
+        dateField,
+      ),
     ]);
     items = loadedItems;
     salesByItem = soldMap;
@@ -75,8 +82,15 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           {ownItems.length === 1
             ? "1 anúncio próprio"
             : `${ownItems.length} anúncios próprios`}
-          . Projeções usam a média de vendas dos últimos {w} dias (pedidos
-          pagos).
+          . Projeções usam vendas dos últimos {w} dias (pedidos pagos; janela
+          por{" "}
+          {stockPlanningConfig.salesWindowDateField === "date_closed"
+            ? "data de fechamento do pedido"
+            : "data de criação do pedido"}
+          ; soma de <code className="rounded bg-[var(--surface-muted)] px-1">quantity</code> em{" "}
+          <code className="rounded bg-[var(--surface-muted)] px-1">order_items</code> via{" "}
+          <code className="rounded bg-[var(--surface-muted)] px-1">orders/search?item=id</code>
+          ).
         </p>
       </div>
 

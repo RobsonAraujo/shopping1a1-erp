@@ -46,11 +46,15 @@ export type ItemMultigetEntry =
   | ItemBody
   | { code: number; body: ItemBody };
 
+export type OrderSearchOrderItem = {
+  quantity?: number;
+  item?: { id?: string };
+  /** Em algumas respostas o id do anúncio vem no nível da linha */
+  item_id?: string;
+};
+
 export type OrderSearchOrder = {
-  order_items?: Array<{
-    quantity: number;
-    item?: { id?: string };
-  }>;
+  order_items?: OrderSearchOrderItem[];
 };
 
 export type OrderSearchResponse = {

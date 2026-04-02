@@ -54,8 +54,13 @@ export function computeStockPlanningDisplay(
   config: StockPlanningConfig,
   now: Date = new Date(),
 ): StockPlanningDisplay {
+  const salesDateHint =
+    config.salesWindowDateField === "date_closed"
+      ? "Janela por data de fechamento do pedido (pago/confirmado), busca com q=id do anúncio na API de pedidos."
+      : "Janela por data de criação do pedido, busca com q=id do anúncio na API de pedidos.";
+
   const noSalesTooltip =
-    `Sem vendas registradas nos últimos ${windowDays} dias neste anúncio (pedidos pagos). Não dá para estimar cobertura nem datas.`;
+    `Sem vendas registradas nos últimos ${windowDays} dias neste anúncio (pedidos pagos; ${salesDateHint}). Não dá para estimar cobertura nem datas.`;
 
   if (
     windowDays <= 0 ||
@@ -110,7 +115,7 @@ export function computeStockPlanningDisplay(
     stockWillLast: [
       `Este anúncio vendeu ${unitsSoldInWindow} ${
         unitsSoldInWindow === 1 ? "unidade" : "unidades"
-      } nos últimos ${windowDays} dias.`,
+      } nos últimos ${windowDays} dias (${salesDateHint}).`,
       `Média de ${formatNumPt(dailyAvg)} vendas por dia (${unitsSoldInWindow} ÷ ${windowDays}).`,
       `Estoque atual: ${availableQuantity} ${
         availableQuantity === 1 ? "unidade" : "unidades"

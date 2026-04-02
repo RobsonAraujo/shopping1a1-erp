@@ -87,26 +87,56 @@ export async function fetchItemById(
   return items[0] ?? null;
 }
 
+type SalesWindowDateField = "date_closed" | "date_created";
+
+function setOrderDateRange(
+  u: URL,
+  field: SalesWindowDateField,
+  fromIso: string,
+  toIso: string,
+) {
+  const prefix =
+    field === "date_closed" ? "order.date_closed" : "order.date_created";
+  u.searchParams.set(`${prefix}.from`, fromIso);
+  u.searchParams.set(`${prefix}.to`, toIso);
+}
+
+function listingIdFromOrderLine(line: {
+  item?: { id?: string };
+  item_id?: string;
+}): string | undefined {
+  const id = line.item?.id ?? line.item_id;
+  return id ?? undefined;
+}
+
+function quantityFromOrderLine(line: { quantity?: unknown }): number {
+  const q = line.quantity;
+  if (typeof q === "number" && Number.isFinite(q)) return Math.max(0, q);
+  if (typeof q === "string") {
+    const n = parseInt(q, 10);
+    return Number.isFinite(n) ? Math.max(0, n) : 0;
+  }
+  return 0;
+}
+
 /**
- * Soma unidades vendidas por item (MLA123…) em pedidos pagos no intervalo
- * [now - windowDays, now], usando order.date_created. Pagina até cobrir todos os pedidos.
+ * Soma **unidades** (soma de `quantity` em cada linha de `order_items`) de **um**
+ * anúncio em pedidos pagos na janela. Um pedido pode ter várias unidades na
+ * mesma linha (`quantity` maior que 1) e/ou várias linhas do mesmo anúncio.
+ *
+ * - Filtro `item=<id>` (doc ML) para o anúncio.
+ * - `display=complete` para trazer `order_items` com `quantity` e `item.id`.
  */
-export async function fetchUnitsSoldByItemInWindow(
+async function fetchUnitsSoldForOneItem(
   accessToken: string,
   sellerId: number,
-  windowDays: number,
-): Promise<Record<string, number>> {
-  if (windowDays <= 0) return {};
-
+  itemId: string,
+  fromStr: string,
+  toStr: string,
+  dateField: SalesWindowDateField,
+): Promise<number> {
   const { apiBase } = getMercadoLibreConfig();
-  const now = new Date();
-  const from = new Date(now.getTime());
-  from.setDate(from.getDate() - windowDays);
-
-  const fromStr = from.toISOString();
-  const toStr = now.toISOString();
-  const totals: Record<string, number> = {};
-
+  let sum = 0;
   let offset = 0;
   const limit = 50;
   let total = Infinity;
@@ -114,12 +144,13 @@ export async function fetchUnitsSoldByItemInWindow(
   while (offset < total) {
     const u = new URL(`${apiBase}/orders/search`);
     u.searchParams.set("seller", String(sellerId));
+    u.searchParams.set("item", itemId);
     u.searchParams.set("order.status", "paid");
-    u.searchParams.set("order.date_created.from", fromStr);
-    u.searchParams.set("order.date_created.to", toStr);
+    setOrderDateRange(u, dateField, fromStr, toStr);
     u.searchParams.set("offset", String(offset));
     u.searchParams.set("limit", String(limit));
     u.searchParams.set("sort", "date_desc");
+    u.searchParams.set("display", "complete");
 
     const res = await fetch(u.toString(), {
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -131,20 +162,61 @@ export async function fetchUnitsSoldByItemInWindow(
     }
 
     const data = (await res.json()) as OrderSearchResponse;
-    total = data.paging?.total ?? 0;
+    const reported = data.paging?.total;
+    total =
+      reported != null && reported >= 0
+        ? reported
+        : ((data.results?.length ?? 0) > 0 ? Infinity : 0);
 
-    for (const order of data.results ?? []) {
+    const batch = data.results ?? [];
+    for (const order of batch) {
       for (const line of order.order_items ?? []) {
-        const id = line.item?.id;
-        if (!id) continue;
-        const q = line.quantity ?? 0;
-        totals[id] = (totals[id] ?? 0) + q;
+        if (listingIdFromOrderLine(line) !== itemId) continue;
+        sum += quantityFromOrderLine(line);
       }
     }
 
-    if ((data.results?.length ?? 0) === 0) break;
+    if (batch.length === 0) break;
     offset += limit;
+    if (batch.length < limit) break;
   }
 
-  return totals;
+  return sum;
+}
+
+/**
+ * Unidades vendidas por id de anúncio (MLB…) em pedidos pagos na janela.
+ * Uma sequência de requests paginados por anúncio (`item` + intervalo de data).
+ */
+export async function fetchUnitsSoldForItemsInWindow(
+  accessToken: string,
+  sellerId: number,
+  itemIds: string[],
+  windowDays: number,
+  dateField: SalesWindowDateField = "date_closed",
+): Promise<Record<string, number>> {
+  const unique = [...new Set(itemIds.filter(Boolean))];
+  if (unique.length === 0 || windowDays <= 0) return {};
+
+  const now = new Date();
+  const from = new Date(now.getTime());
+  from.setDate(from.getDate() - windowDays);
+  const fromStr = from.toISOString();
+  const toStr = now.toISOString();
+
+  const results = await Promise.all(
+    unique.map(async (itemId) => {
+      const n = await fetchUnitsSoldForOneItem(
+        accessToken,
+        sellerId,
+        itemId,
+        fromStr,
+        toStr,
+        dateField,
+      );
+      return [itemId, n] as const;
+    }),
+  );
+
+  return Object.fromEntries(results);
 }

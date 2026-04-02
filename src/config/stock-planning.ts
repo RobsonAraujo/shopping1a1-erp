@@ -23,6 +23,14 @@ export const stockPlanningConfig = {
    * ativo no anúncio (coluna “O novo estoque precisa entrar ativo em”).
    */
   activeStockBufferDays: 1,
+
+  /**
+   * Qual data do pedido delimita a janela em `/orders/search`:
+   * - `date_closed`: pedido pago/confirmado (costuma bater melhor com “vendas”
+   *   no painel do Mercado Livre).
+   * - `date_created`: criação do pedido.
+   */
+  salesWindowDateField: "date_closed" as const,
 } as const;
 
 export type StockPlanningConfig = typeof stockPlanningConfig;
