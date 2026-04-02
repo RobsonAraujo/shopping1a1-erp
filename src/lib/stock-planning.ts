@@ -11,6 +11,8 @@ export type StockPlanningDisplay = {
   searchStartsOn: string | null;
   activeStockOn: string | null;
   searchIsOverdue: boolean;
+  searchStartsAtMs: number | null;
+  needsSchedulingAttention: boolean;
   tooltips: StockPlanningTooltips;
 };
 
@@ -43,6 +45,10 @@ function formatNumPt(n: number, maxFractionDigits = 2): string {
   });
 }
 
+function startOfLocalDayMs(d: Date): number {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
 /**
  * Cobertura em dias e datas derivadas a partir do estoque atual e vendas na janela.
  * Os dias de cobertura exibidos usam arredondamento para baixo (ex.: 3,4 → 3).
@@ -73,6 +79,8 @@ export function computeStockPlanningDisplay(
       searchStartsOn: null,
       activeStockOn: null,
       searchIsOverdue: false,
+      searchStartsAtMs: null,
+      needsSchedulingAttention: false,
       tooltips: {
         stockWillLast: noSalesTooltip,
         search: noSalesTooltip,
@@ -103,6 +111,9 @@ export function computeStockPlanningDisplay(
   const activeAt = addDays(stockoutAt, -bufferDays);
 
   const searchIsOverdue = searchAt.getTime() < now.getTime();
+  const searchStartsAtMs = searchAt.getTime();
+  const needsSchedulingAttention =
+    startOfLocalDayMs(searchAt) <= startOfLocalDayMs(now);
 
   const stockoutLabel = formatDatePtBR(stockoutAt);
   const leadPhrase = formatLeadTimePhrase(leadDays);
@@ -150,6 +161,8 @@ export function computeStockPlanningDisplay(
     searchStartsOn: formatDatePtBR(searchAt),
     activeStockOn: formatDatePtBR(activeAt),
     searchIsOverdue,
+    searchStartsAtMs,
+    needsSchedulingAttention,
     tooltips,
   };
 }

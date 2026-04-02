@@ -1,16 +1,21 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { stockPlanningConfig } from "@/config/stock-planning";
+import { DashboardAttentionPanel } from "@/components/dashboard-attention-panel";
 import { DashboardItemsTable } from "@/components/dashboard-items-table";
 import {
+  fetchAllUserItemIds,
   fetchItemsByIds,
+  fetchItemsByIdsBatched,
   fetchUnitsSoldForItemsInWindow,
+  fetchUnitsSoldForItemsInWindowBatched,
   fetchUserItemsSearch,
 } from "@/lib/mercadolibre/api";
 import {
   getValidAccessToken,
   readSession,
 } from "@/lib/mercadolibre/session";
+import type { ItemBody } from "@/lib/mercadolibre/types";
 
 type PageProps = {
   searchParams: Promise<{ offset?: string }>;
@@ -29,25 +34,57 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     return null;
   }
 
+  const windowDays = stockPlanningConfig.salesAverageWindowDays;
+  const dateField = stockPlanningConfig.salesWindowDateField;
+
   let search;
   let items;
   let salesByItem: Record<string, number> = {};
+  let attentionSnapshot: {
+    items: ItemBody[];
+    salesByItem: Record<string, number>;
+  } | null = null;
+
   try {
-    search = await fetchUserItemsSearch(token, userId, offset, limit);
-    const windowDays = stockPlanningConfig.salesAverageWindowDays;
-    const dateField = stockPlanningConfig.salesWindowDateField;
-    const [loadedItems, soldMap] = await Promise.all([
-      fetchItemsByIds(token, search.results),
-      fetchUnitsSoldForItemsInWindow(
-        token,
-        userId,
-        search.results,
-        windowDays,
-        dateField,
-      ),
+    const [pageBundle, attentionResult] = await Promise.all([
+      (async () => {
+        const s = await fetchUserItemsSearch(token, userId, offset, limit);
+        const [loadedItems, soldMap] = await Promise.all([
+          fetchItemsByIds(token, s.results),
+          fetchUnitsSoldForItemsInWindow(
+            token,
+            userId,
+            s.results,
+            windowDays,
+            dateField,
+          ),
+        ]);
+        return { search: s, items: loadedItems, soldMap };
+      })(),
+      (async () => {
+        try {
+          const allIds = await fetchAllUserItemIds(token, userId);
+          const [allItems, allSales] = await Promise.all([
+            fetchItemsByIdsBatched(token, allIds),
+            fetchUnitsSoldForItemsInWindowBatched(
+              token,
+              userId,
+              allIds,
+              windowDays,
+              dateField,
+            ),
+          ]);
+          return { items: allItems, salesByItem: allSales };
+        } catch {
+          return null;
+        }
+      })(),
     ]);
-    items = loadedItems;
-    salesByItem = soldMap;
+
+    search = pageBundle.search;
+    items = pageBundle.items;
+    salesByItem = pageBundle.soldMap;
+    attentionSnapshot = attentionResult;
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro ao carregar anúncios";
     return (
@@ -68,7 +105,19 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const w = stockPlanningConfig.salesAverageWindowDays;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
+      {attentionSnapshot ? (
+        <DashboardAttentionPanel
+          items={attentionSnapshot.items}
+          salesByItem={attentionSnapshot.salesByItem}
+        />
+      ) : (
+        <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm text-amber-950">
+          Não foi possível carregar o painel de prioridades. Atualize a página
+          ou tente de novo em instantes.
+        </div>
+      )}
+
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-[var(--brand)]">
           Anúncios

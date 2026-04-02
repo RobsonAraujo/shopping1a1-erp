@@ -87,7 +87,7 @@ export async function fetchItemById(
   return items[0] ?? null;
 }
 
-type SalesWindowDateField = "date_closed" | "date_created";
+export type SalesWindowDateField = "date_closed" | "date_created";
 
 function setOrderDateRange(
   u: URL,
@@ -219,4 +219,72 @@ export async function fetchUnitsSoldForItemsInWindow(
   );
 
   return Object.fromEntries(results);
+}
+
+/** Todos os ids de anúncios do vendedor (paginação interna). */
+export async function fetchAllUserItemIds(
+  accessToken: string,
+  userId: number,
+  options?: { status?: string },
+): Promise<string[]> {
+  const ids: string[] = [];
+  let offset = 0;
+  const pageLimit = 50;
+  let total = Infinity;
+
+  while (offset < total) {
+    const search = await fetchUserItemsSearch(
+      accessToken,
+      userId,
+      offset,
+      pageLimit,
+      options,
+    );
+    ids.push(...search.results);
+    total = search.paging.total;
+    offset += pageLimit;
+    if (search.results.length === 0) break;
+  }
+
+  return ids;
+}
+
+export async function fetchItemsByIdsBatched(
+  accessToken: string,
+  ids: string[],
+  batchSize = 20,
+): Promise<ItemBody[]> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  const out: ItemBody[] = [];
+  for (let i = 0; i < unique.length; i += batchSize) {
+    const batch = unique.slice(i, i + batchSize);
+    const items = await fetchItemsByIds(accessToken, batch);
+    out.push(...items);
+  }
+  return out;
+}
+
+/** Mesmo que `fetchUnitsSoldForItemsInWindow`, mas em lotes para limitar paralelismo. */
+export async function fetchUnitsSoldForItemsInWindowBatched(
+  accessToken: string,
+  sellerId: number,
+  itemIds: string[],
+  windowDays: number,
+  dateField: SalesWindowDateField = "date_closed",
+  chunkSize = 12,
+): Promise<Record<string, number>> {
+  const unique = [...new Set(itemIds.filter(Boolean))];
+  const out: Record<string, number> = {};
+  for (let i = 0; i < unique.length; i += chunkSize) {
+    const chunk = unique.slice(i, i + chunkSize);
+    const part = await fetchUnitsSoldForItemsInWindow(
+      accessToken,
+      sellerId,
+      chunk,
+      windowDays,
+      dateField,
+    );
+    Object.assign(out, part);
+  }
+  return out;
 }
