@@ -82,7 +82,8 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           {ownItems.length === 1
             ? "1 anúncio próprio"
             : `${ownItems.length} anúncios próprios`}
-          . Projeções usam vendas dos últimos {w} dias (pedidos pagos; janela
+          . Projeções usam vendas dos últimos {w} dias (todos os pedidos exceto
+          cancelados; janela
           por{" "}
           {stockPlanningConfig.salesWindowDateField === "date_closed"
             ? "data de fechamento do pedido"

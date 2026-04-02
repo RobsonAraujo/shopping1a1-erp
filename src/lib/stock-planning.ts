@@ -56,11 +56,11 @@ export function computeStockPlanningDisplay(
 ): StockPlanningDisplay {
   const salesDateHint =
     config.salesWindowDateField === "date_closed"
-      ? "Janela por data de fechamento do pedido (pago/confirmado), busca com q=id do anúncio na API de pedidos."
-      : "Janela por data de criação do pedido, busca com q=id do anúncio na API de pedidos.";
+      ? "Janela por data de fechamento do pedido (exceto cancelados), busca com q=id do anúncio na API de pedidos."
+      : "Janela por data de criação do pedido (exceto cancelados), busca com q=id do anúncio na API de pedidos.";
 
   const noSalesTooltip =
-    `Sem vendas registradas nos últimos ${windowDays} dias neste anúncio (pedidos pagos; ${salesDateHint}). Não dá para estimar cobertura nem datas.`;
+    `Sem vendas registradas nos últimos ${windowDays} dias neste anúncio (${salesDateHint}). Não dá para estimar cobertura nem datas.`;
 
   if (
     windowDays <= 0 ||

@@ -121,8 +121,8 @@ function quantityFromOrderLine(line: { quantity?: unknown }): number {
 
 /**
  * Soma **unidades** (soma de `quantity` em cada linha de `order_items`) de **um**
- * anúncio em pedidos pagos na janela. Um pedido pode ter várias unidades na
- * mesma linha (`quantity` maior que 1) e/ou várias linhas do mesmo anúncio.
+ * anúncio na janela, contando **todos os pedidos exceto** `status === "cancelled"`.
+ * Um pedido pode ter várias unidades na mesma linha ou várias linhas do mesmo anúncio.
  *
  * - Filtro `item=<id>` (doc ML) para o anúncio.
  * - `display=complete` para trazer `order_items` com `quantity` e `item.id`.
@@ -145,7 +145,6 @@ async function fetchUnitsSoldForOneItem(
     const u = new URL(`${apiBase}/orders/search`);
     u.searchParams.set("seller", String(sellerId));
     u.searchParams.set("item", itemId);
-    u.searchParams.set("order.status", "paid");
     setOrderDateRange(u, dateField, fromStr, toStr);
     u.searchParams.set("offset", String(offset));
     u.searchParams.set("limit", String(limit));
@@ -170,6 +169,7 @@ async function fetchUnitsSoldForOneItem(
 
     const batch = data.results ?? [];
     for (const order of batch) {
+      if (order.status === "cancelled") continue;
       for (const line of order.order_items ?? []) {
         if (listingIdFromOrderLine(line) !== itemId) continue;
         sum += quantityFromOrderLine(line);
@@ -185,7 +185,7 @@ async function fetchUnitsSoldForOneItem(
 }
 
 /**
- * Unidades vendidas por id de anúncio (MLB…) em pedidos pagos na janela.
+ * Unidades vendidas por id de anúncio (MLB…) na janela (todos os pedidos exceto cancelados).
  * Uma sequência de requests paginados por anúncio (`item` + intervalo de data).
  */
 export async function fetchUnitsSoldForItemsInWindow(

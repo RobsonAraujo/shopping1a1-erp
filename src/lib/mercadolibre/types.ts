@@ -54,6 +54,8 @@ export type OrderSearchOrderItem = {
 };
 
 export type OrderSearchOrder = {
+  /** Ex.: `paid`, `cancelled` — usamos para excluir cancelados na soma de vendas */
+  status?: string;
   order_items?: OrderSearchOrderItem[];
 };
 
