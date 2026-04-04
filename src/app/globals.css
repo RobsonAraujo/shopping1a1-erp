@@ -16,8 +16,13 @@
   --muted-foreground: #5c6378;
   --accent: #e8ebf7;
   --accent-foreground: #1b2d6f;
-  --destructive: #dc2626;
-  --destructive-foreground: #fafafa;
+  --destructive: #be123c;
+  --destructive-foreground: #fff7f7;
+  /** Destaque para datas / prazos atrasados (UI) */
+  --overdue: #9f1239;
+  --overdue-foreground: #ffffff;
+  --overdue-surface: #fff1f2;
+  --overdue-border: #fda4af;
   --border: #dfe3ee;
   --input: #dfe3ee;
   --ring: #3d52a8;

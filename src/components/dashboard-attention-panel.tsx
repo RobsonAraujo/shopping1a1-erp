@@ -99,7 +99,7 @@ export function DashboardAttentionPanel({
                       className={cn(
                         "rounded-xl border bg-[var(--card)] p-5 shadow-sm transition-shadow hover:shadow-md",
                         urgent
-                          ? "border-amber-300 ring-1 ring-amber-200/80"
+                          ? "border-[var(--border)] bg-rose-50/40"
                           : "border-[var(--border)]",
                       )}
                     >
@@ -136,10 +136,7 @@ export function DashboardAttentionPanel({
                               {item.title}
                             </Link>
                             {urgent ? (
-                              <Badge
-                                variant="destructive"
-                                className="shrink-0 uppercase"
-                              >
+                              <Badge variant="overdue" className="shrink-0">
                                 Atrasado
                               </Badge>
                             ) : (
@@ -183,8 +180,10 @@ export function DashboardAttentionPanel({
                           </p>
                           <p
                             className={cn(
-                              "text-2xl font-bold leading-tight tracking-tight",
-                              urgent ? "text-amber-900" : "text-[var(--primary)]",
+                              "text-2xl font-bold tabular-nums leading-tight tracking-tight",
+                              urgent
+                                ? "text-rose-900"
+                                : "text-[var(--primary)]",
                             )}
                           >
                             {plan.searchStartsOn ?? "—"}

@@ -125,17 +125,18 @@ export function DashboardItemsTable({
                           {plan.stockWillLast}
                         </MetricWithHint>
                       </td>
-                      <td
-                        className={cn(
-                          "max-w-[11rem] align-top px-4 py-3.5 text-xs leading-snug",
-                          plan.searchIsOverdue && plan.searchStartsOn
-                            ? "font-medium text-amber-900"
-                            : "text-[var(--foreground)]",
-                        )}
-                      >
-                        <MetricWithHint content={plan.tooltips.search}>
-                          {plan.searchStartsOn ?? "—"}
-                        </MetricWithHint>
+                      <td className="max-w-[11rem] align-top px-4 py-3.5 text-xs leading-snug text-[var(--foreground)]">
+                        <div
+                          className={cn(
+                            plan.searchIsOverdue &&
+                              plan.searchStartsOn &&
+                              "border-l-[3px] border-rose-600 pl-2.5 font-semibold text-rose-900",
+                          )}
+                        >
+                          <MetricWithHint content={plan.tooltips.search}>
+                            {plan.searchStartsOn ?? "—"}
+                          </MetricWithHint>
+                        </div>
                       </td>
                       <td className="max-w-[11rem] align-top px-4 py-3.5 text-xs leading-snug text-[var(--foreground)]">
                         <MetricWithHint content={plan.tooltips.activeStock}>

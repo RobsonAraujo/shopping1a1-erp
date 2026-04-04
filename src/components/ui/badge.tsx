@@ -20,6 +20,8 @@ const badgeVariants = cva(
           "border-emerald-200/80 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100",
         muted:
           "border-transparent bg-[var(--muted)] text-[var(--muted-foreground)]",
+        overdue:
+          "border border-rose-700/30 bg-rose-700 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white shadow-sm",
       },
     },
     defaultVariants: {
