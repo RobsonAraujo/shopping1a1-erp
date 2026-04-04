@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { ChevronLeft, ExternalLink } from "lucide-react";
 import { notFound } from "next/navigation";
 import { fetchItemById } from "@/lib/mercadolibre/api";
+import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { getValidAccessToken } from "@/lib/mercadolibre/session";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,6 +39,8 @@ export default async function ItemDetailPage({ params }: PageProps) {
       qty: v.available_quantity ?? 0,
     })) ?? [];
 
+  const imageUrl = bestItemImageUrl(item);
+
   return (
     <div className="space-y-8">
       <nav className="flex flex-wrap items-center gap-2 text-sm text-[var(--muted-foreground)]">
@@ -54,13 +57,14 @@ export default async function ItemDetailPage({ params }: PageProps) {
       <Card className="overflow-hidden shadow-sm">
         <CardContent className="p-6 sm:p-8">
           <div className="flex flex-col gap-8 lg:flex-row">
-            {item.thumbnail ? (
+            {imageUrl ? (
               <Image
-                src={item.thumbnail}
+                src={imageUrl}
                 alt=""
-                width={192}
-                height={192}
+                width={400}
+                height={400}
                 className="h-48 w-48 shrink-0 rounded-xl border border-[var(--border)] bg-[var(--muted)] object-contain"
+                sizes="192px"
               />
             ) : null}
             <div className="min-w-0 flex-1 space-y-6">

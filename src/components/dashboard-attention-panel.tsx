@@ -1,8 +1,10 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
-import { AlertTriangle, LayoutGrid } from "lucide-react";
+import { AlertTriangle, ImageOff, LayoutGrid } from "lucide-react";
 import { stockPlanningConfig } from "@/config/stock-planning";
+import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { computeStockPlanningDisplay } from "@/lib/stock-planning";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import { MetricWithHint } from "@/components/metric-with-hint";
@@ -90,6 +92,7 @@ export function DashboardAttentionPanel({
               <ul className="grid gap-4 lg:grid-cols-2">
                 {rows.map(({ item, plan }) => {
                   const urgent = plan.searchIsOverdue;
+                  const imageUrl = bestItemImageUrl(item);
                   return (
                     <li
                       key={item.id}
@@ -100,27 +103,56 @@ export function DashboardAttentionPanel({
                           : "border-[var(--border)]",
                       )}
                     >
-                      <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="flex gap-4">
                         <Link
                           href={`/dashboard/items/${item.id}`}
-                          className="min-w-0 flex-1 text-base font-semibold leading-snug text-[var(--primary)] underline-offset-2 hover:underline sm:text-lg"
+                          className="relative shrink-0 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--muted)] ring-offset-2 transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+                          aria-label={`Abrir detalhes: ${item.title}`}
                         >
-                          {item.title}
+                          {imageUrl ? (
+                            <Image
+                              src={imageUrl}
+                              alt=""
+                              width={224}
+                              height={224}
+                              className="size-24 object-contain sm:size-28"
+                              sizes="(max-width: 640px) 96px, 112px"
+                            />
+                          ) : (
+                            <div className="flex size-24 items-center justify-center sm:size-28">
+                              <ImageOff
+                                className="size-9 text-[var(--muted-foreground)]/70"
+                                aria-hidden
+                              />
+                            </div>
+                          )}
                         </Link>
-                        {urgent ? (
-                          <Badge variant="destructive" className="shrink-0 uppercase">
-                            Atrasado
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary" className="shrink-0">
-                            Hoje
-                          </Badge>
-                        )}
+                        <div className="min-w-0 flex-1 space-y-2">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <Link
+                              href={`/dashboard/items/${item.id}`}
+                              className="min-w-0 flex-1 text-base font-semibold leading-snug text-[var(--primary)] underline-offset-2 hover:underline sm:text-lg"
+                            >
+                              {item.title}
+                            </Link>
+                            {urgent ? (
+                              <Badge
+                                variant="destructive"
+                                className="shrink-0 uppercase"
+                              >
+                                Atrasado
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary" className="shrink-0">
+                                Hoje
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="font-mono text-xs text-[var(--muted-foreground)]">
+                            {item.id}
+                          </p>
+                        </div>
                       </div>
-
-                      <p className="mt-2 font-mono text-xs text-[var(--muted-foreground)]">
-                        {item.id}
-                      </p>
 
                       <div className="mt-5 grid gap-5 sm:grid-cols-3">
                         <div className="space-y-1">

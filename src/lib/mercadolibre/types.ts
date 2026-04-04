@@ -34,7 +34,17 @@ export type ItemBody = {
   permalink: string;
   /** Catálogo compartilhado (ML) vs anúncio clássico do vendedor */
   catalog_listing?: boolean;
+  /** Miniatura (baixa resolução); prefira `pictures` ou `bestItemImageUrl` */
   thumbnail?: string;
+  secure_thumbnail?: string;
+  /** Fotos do anúncio; `secure_url` costuma ser maior que `thumbnail` */
+  pictures?: Array<{
+    id?: string;
+    secure_url?: string;
+    url?: string;
+    size?: string;
+    max_size?: string;
+  }>;
   condition?: string;
   variations?: Array<{
     id: number;
