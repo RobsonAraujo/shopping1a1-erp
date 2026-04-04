@@ -14,10 +14,7 @@ import {
   fetchUnitsSoldForItemsInWindowBatched,
   fetchUserItemsSearch,
 } from "@/lib/mercadolibre/api";
-import {
-  getValidAccessToken,
-  readSession,
-} from "@/lib/mercadolibre/session";
+import { getValidAccessToken, readSession } from "@/lib/mercadolibre/session";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 
 type PageProps = {
@@ -117,8 +114,8 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       ) : (
         <Card className="border-amber-200 bg-amber-50/50">
           <CardContent className="pt-6 text-sm text-amber-950">
-            Não foi possível carregar o painel de prioridades. Atualize a
-            página ou tente de novo em instantes.
+            Não foi possível carregar o painel de prioridades. Atualize a página
+            ou tente de novo em instantes.
           </CardContent>
         </Card>
       )}
@@ -138,22 +135,23 @@ export default async function DashboardPage({ searchParams }: PageProps) {
               ? "1 anúncio próprio"
               : `${ownItems.length} anúncios próprios`}
             . Projeções usam vendas dos últimos {w} dias (pedidos exceto
-            cancelados; janela por{" "}
+            cancelados
+            {/* janela por{" "}
             {stockPlanningConfig.salesWindowDateField === "date_closed"
               ? "data de fechamento do pedido"
-              : "data de criação do pedido"}
-            ; soma de{" "}
-            <code className="rounded-md bg-[var(--muted)] px-1.5 py-0.5 font-mono text-[13px] text-[var(--foreground)]">
+              : "data de criação do pedido"} */}
+            {/* ; soma de{" "} */}
+            {/* <code className="rounded-md bg-[var(--muted)] px-1.5 py-0.5 font-mono text-[13px] text-[var(--foreground)]">
               quantity
             </code>{" "}
             em{" "}
             <code className="rounded-md bg-[var(--muted)] px-1.5 py-0.5 font-mono text-[13px] text-[var(--foreground)]">
               order_items
             </code>{" "}
-            via{" "}
-            <code className="rounded-md bg-[var(--muted)] px-1.5 py-0.5 font-mono text-[13px] text-[var(--foreground)]">
+            via{" "} */}
+            {/* <code className="rounded-md bg-[var(--muted)] px-1.5 py-0.5 font-mono text-[13px] text-[var(--foreground)]">
               orders/search?item=id
-            </code>
+            </code> */}
             ).
           </p>
         </div>
@@ -183,7 +181,9 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                 <Button variant="outline" size="sm" asChild>
                   <Link
                     href={
-                      prevOffset ? `/dashboard?offset=${prevOffset}` : "/dashboard"
+                      prevOffset
+                        ? `/dashboard?offset=${prevOffset}`
+                        : "/dashboard"
                     }
                     className="gap-1.5"
                   >
@@ -192,20 +192,33 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                   </Link>
                 </Button>
               ) : (
-                <Button variant="outline" size="sm" disabled className="gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled
+                  className="gap-1.5"
+                >
                   <ChevronLeft className="size-4" />
                   Anterior
                 </Button>
               )}
               {hasNext ? (
                 <Button variant="outline" size="sm" asChild>
-                  <Link href={`/dashboard?offset=${nextOffset}`} className="gap-1.5">
+                  <Link
+                    href={`/dashboard?offset=${nextOffset}`}
+                    className="gap-1.5"
+                  >
                     Próxima
                     <ChevronRight className="size-4" />
                   </Link>
                 </Button>
               ) : (
-                <Button variant="outline" size="sm" disabled className="gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled
+                  className="gap-1.5"
+                >
                   Próxima
                   <ChevronRight className="size-4" />
                 </Button>
