@@ -1,7 +1,10 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
+import { ImageOff } from "lucide-react";
 import { stockPlanningConfig } from "@/config/stock-planning";
+import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { computeStockPlanningDisplay } from "@/lib/stock-planning";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import { MetricWithHint } from "@/components/metric-with-hint";
@@ -22,7 +25,7 @@ export function DashboardItemsTable({
     <TooltipProvider delayDuration={200}>
       <Card className="overflow-hidden p-0 shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[56rem] text-left text-sm">
+          <table className="w-full min-w-[60rem] text-left text-sm">
             <thead className="border-b border-[var(--border)] bg-[var(--muted)]/80">
               <tr>
                 <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
@@ -61,6 +64,7 @@ export function DashboardItemsTable({
               ) : (
                 items.map((item) => {
                   const sold = salesByItem[item.id] ?? 0;
+                  const imageUrl = bestItemImageUrl(item);
                   const plan = computeStockPlanningDisplay(
                     item.available_quantity,
                     sold,
@@ -75,9 +79,33 @@ export function DashboardItemsTable({
                       <td className="align-top px-4 py-3.5">
                         <Link
                           href={`/dashboard/items/${item.id}`}
-                          className="font-medium text-[var(--primary)] underline-offset-2 hover:underline"
+                          className="group flex gap-3"
                         >
-                          {item.title}
+                          <span
+                            className="relative shrink-0 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--muted)]"
+                            aria-hidden
+                          >
+                            {imageUrl ? (
+                              <Image
+                                src={imageUrl}
+                                alt=""
+                                width={128}
+                                height={128}
+                                className="size-12 object-contain sm:size-14"
+                                sizes="56px"
+                              />
+                            ) : (
+                              <span className="flex size-12 items-center justify-center sm:size-14">
+                                <ImageOff
+                                  className="size-5 text-[var(--muted-foreground)]/60"
+                                  aria-hidden
+                                />
+                              </span>
+                            )}
+                          </span>
+                          <span className="min-w-0 flex-1 font-medium leading-snug text-[var(--primary)] underline-offset-2 group-hover:underline">
+                            {item.title}
+                          </span>
                         </Link>
                       </td>
                       <td className="hidden align-top px-4 py-3.5 font-mono text-xs text-[var(--muted-foreground)] sm:table-cell">

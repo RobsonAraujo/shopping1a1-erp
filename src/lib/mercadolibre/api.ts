@@ -24,13 +24,19 @@ export async function fetchUserItemsSearch(
   userId: number,
   offset: number,
   limit: number,
-  options?: { status?: string },
+  options?: { status?: string; catalog_listing?: boolean },
 ): Promise<ItemsSearchResponse> {
   const { apiBase } = getMercadoLibreConfig();
   const u = new URL(`${apiBase}/users/${userId}/items/search`);
   u.searchParams.set("offset", String(offset));
   u.searchParams.set("limit", String(limit));
   u.searchParams.set("status", options?.status ?? "active");
+  if (options?.catalog_listing !== undefined) {
+    u.searchParams.set(
+      "catalog_listing",
+      options.catalog_listing ? "true" : "false",
+    );
+  }
 
   const res = await fetch(u.toString(), {
     headers: { Authorization: `Bearer ${accessToken}` },
