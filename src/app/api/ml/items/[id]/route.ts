@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { fetchItemById } from "@/lib/mercadolibre/api";
+import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 import { getValidAccessToken } from "@/lib/mercadolibre/session";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -24,7 +25,9 @@ export async function GET(
     }
     return NextResponse.json(item);
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "item_failed";
-    return NextResponse.json({ error: msg }, { status: 502 });
+    logServerError("api/ml/items/[id]", e);
+    return NextResponse.json(apiErrorPayload(e, "item_failed"), {
+      status: 502,
+    });
   }
 }

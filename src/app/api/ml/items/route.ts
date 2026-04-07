@@ -4,6 +4,7 @@ import {
   fetchItemsByIds,
   fetchUserItemsSearch,
 } from "@/lib/mercadolibre/api";
+import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 import {
   getValidAccessToken,
   readSession,
@@ -35,7 +36,9 @@ export async function GET(request: NextRequest) {
     const items = await fetchItemsByIds(token, search.results);
     return NextResponse.json({ paging: search.paging, items });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "items_failed";
-    return NextResponse.json({ error: msg }, { status: 502 });
+    logServerError("api/ml/items", e);
+    return NextResponse.json(apiErrorPayload(e, "items_failed"), {
+      status: 502,
+    });
   }
 }

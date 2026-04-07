@@ -3,6 +3,10 @@ import { cookies } from "next/headers";
 import { exchangeCodeForTokens } from "@/lib/mercadolibre/oauth";
 import { fetchMe } from "@/lib/mercadolibre/api";
 import {
+  logServerError,
+  oauthRedirectErrorParam,
+} from "@/lib/server-public-error";
+import {
   clearOAuthStateCookie,
   readOAuthState,
   setSessionCookies,
@@ -45,9 +49,10 @@ export async function GET(request: NextRequest) {
     setSessionCookies(res.cookies, tokens, me.id);
     return res;
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "token_exchange_failed";
+    logServerError("mercadolibre/callback", e);
+    const code = oauthRedirectErrorParam(e, "oauth_failed");
     return NextResponse.redirect(
-      new URL(`/?error=${encodeURIComponent(msg)}`, request.url),
+      new URL(`/?error=${code}`, request.url),
     );
   }
 }

@@ -1,6 +1,10 @@
 import { randomBytes } from "crypto";
 import { NextResponse } from "next/server";
 import { buildAuthorizationUrl } from "@/lib/mercadolibre/oauth";
+import {
+  logServerError,
+  oauthRedirectErrorParam,
+} from "@/lib/server-public-error";
 import { setOAuthStateCookie } from "@/lib/mercadolibre/session";
 
 export async function GET(request: Request) {
@@ -11,9 +15,10 @@ export async function GET(request: Request) {
     setOAuthStateCookie(res.cookies, state);
     return res;
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "config_error";
+    logServerError("mercadolibre/signin", e);
+    const code = oauthRedirectErrorParam(e, "oauth_config");
     return NextResponse.redirect(
-      new URL(`/?error=${encodeURIComponent(msg)}`, request.url),
+      new URL(`/?error=${code}`, request.url),
     );
   }
 }
