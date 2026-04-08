@@ -1,0 +1,38 @@
+// https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// Anúncio sincronizado do Mercado Livre (chave = ml_item_id, ex. MLB…).
+model Listing {
+  mlItemId       String    @id @map("ml_item_id")
+  titleSnapshot  String?   @map("title_snapshot")
+  catalogListing Boolean?  @map("catalog_listing")
+  lastSyncedAt   DateTime? @map("last_synced_at")
+  activeOnMl     Boolean   @default(true) @map("active_on_ml")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  warehouseStock WarehouseStock?
+
+  @@index([activeOnMl])
+  @@map("listings")
+}
+
+/// Estoque físico no galpão (1:1 com listing).
+model WarehouseStock {
+  mlItemId  String   @id @map("ml_item_id")
+  quantity  Int      @default(0)
+  notes     String?
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  listing Listing @relation(fields: [mlItemId], references: [mlItemId], onDelete: Cascade)
+
+  @@map("warehouse_stock")
+}

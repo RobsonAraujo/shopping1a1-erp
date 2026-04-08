@@ -25,6 +25,8 @@ export type ItemsSearchResponse = {
 
 export type ItemBody = {
   id: string;
+  /** Dono do anúncio (API `/items`); usado para validar sessão. */
+  seller_id?: number;
   title: string;
   price: number;
   currency_id: string;
