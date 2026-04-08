@@ -38,6 +38,7 @@ export default async function InventoryPage({ searchParams }: PageProps) {
     imageUrl?: string;
     mlStock: number;
     warehouseStock: number;
+    leadTimeDays: number | null;
   }[] = [];
 
   try {
@@ -48,13 +49,21 @@ export default async function InventoryPage({ searchParams }: PageProps) {
     const ids = items.map((i) => i.id);
 
     let warehouseById: Record<string, number> = {};
+    let leadTimeById: Record<string, number | null> = {};
     try {
       const stocks = await prisma.warehouseStock.findMany({
         where: { mlItemId: { in: ids } },
-        select: { mlItemId: true, quantity: true },
+        select: {
+          mlItemId: true,
+          quantity: true,
+          purchaseLeadTimeDays: true,
+        },
       });
       warehouseById = Object.fromEntries(
         stocks.map((s) => [s.mlItemId, s.quantity]),
+      );
+      leadTimeById = Object.fromEntries(
+        stocks.map((s) => [s.mlItemId, s.purchaseLeadTimeDays]),
       );
     } catch {
       warehouseLoadFailed = true;
@@ -66,6 +75,7 @@ export default async function InventoryPage({ searchParams }: PageProps) {
       imageUrl: bestItemImageUrl(item),
       mlStock: mlAvailableStockUnits(item),
       warehouseStock: warehouseById[item.id] ?? 0,
+      leadTimeDays: leadTimeById[item.id] ?? null,
     }));
 
     search = s;
@@ -93,7 +103,8 @@ export default async function InventoryPage({ searchParams }: PageProps) {
         <p className="mt-2 max-w-3xl text-[15px] leading-relaxed text-[var(--muted-foreground)]">
           Anúncios <strong>ativos</strong>: estoque no galpão (banco local),
           estoque no Mercado Livre (API, atualizado ao carregar a página) e
-          total geral (soma dos dois). Use <strong>Editar</strong> só para o
+          total geral (soma dos dois). <strong>Editar</strong> ajusta só o
+          galpão; <strong>Configurações</strong> define o prazo compra →
           galpão.
         </p>
       </div>

@@ -76,9 +76,12 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   }
 }
 
+const MAX_PURCHASE_LEAD_TIME_DAYS = 365;
+
 type PatchBody = {
   quantity?: unknown;
   notes?: unknown;
+  purchaseLeadTimeDays?: unknown;
 };
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
@@ -123,6 +126,27 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     notes = body.notes === null ? null : body.notes;
   }
 
+  let purchaseLeadTimeDays: number | null | undefined;
+  if (body.purchaseLeadTimeDays !== undefined) {
+    if (body.purchaseLeadTimeDays === null) {
+      purchaseLeadTimeDays = null;
+    } else if (
+      typeof body.purchaseLeadTimeDays === "number" &&
+      Number.isInteger(body.purchaseLeadTimeDays) &&
+      body.purchaseLeadTimeDays >= 0 &&
+      body.purchaseLeadTimeDays <= MAX_PURCHASE_LEAD_TIME_DAYS
+    ) {
+      purchaseLeadTimeDays = body.purchaseLeadTimeDays;
+    } else {
+      return NextResponse.json(
+        {
+          error: `purchaseLeadTimeDays must be null or an integer 0–${MAX_PURCHASE_LEAD_TIME_DAYS}`,
+        },
+        { status: 400 },
+      );
+    }
+  }
+
   try {
     const item = await fetchItemById(token, mlItemId);
     if (!item) {
@@ -151,10 +175,16 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
             mlItemId,
             quantity,
             notes: notes ?? null,
+            ...(purchaseLeadTimeDays !== undefined
+              ? { purchaseLeadTimeDays }
+              : {}),
           },
           update: {
             quantity,
             ...(notes !== undefined ? { notes } : {}),
+            ...(purchaseLeadTimeDays !== undefined
+              ? { purchaseLeadTimeDays }
+              : {}),
           },
         });
 

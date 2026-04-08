@@ -27,10 +27,12 @@ model Listing {
 
 /// Estoque físico no galpão (1:1 com listing).
 model WarehouseStock {
-  mlItemId  String   @id @map("ml_item_id")
-  quantity  Int      @default(0)
-  notes     String?
-  updatedAt DateTime @updatedAt @map("updated_at")
+  mlItemId              String   @id @map("ml_item_id")
+  quantity              Int      @default(0)
+  /// Prazo compra → chegada no galpão (dias inteiros; UI pode informar em semanas).
+  purchaseLeadTimeDays  Int?     @map("purchase_lead_time_days")
+  notes                 String?
+  updatedAt             DateTime @updatedAt @map("updated_at")
 
   listing Listing @relation(fields: [mlItemId], references: [mlItemId], onDelete: Cascade)
 
