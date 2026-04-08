@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { LayoutDashboard, LogOut, Package } from "lucide-react";
+import { LayoutDashboard, LogOut, Package, Warehouse } from "lucide-react";
 import { fetchMe } from "@/lib/mercadolibre/api";
 import { getValidAccessToken } from "@/lib/mercadolibre/session";
 import { Button } from "@/components/ui/button";
@@ -41,7 +41,10 @@ export default async function DashboardLayout({
                 ERP 1a1
               </span>
             </Link>
-            <nav className="hidden items-center gap-1 sm:flex" aria-label="Principal">
+            <nav
+              className="hidden items-center gap-1 sm:flex"
+              aria-label="Principal"
+            >
               <Button variant="ghost" size="sm" asChild>
                 <Link href="/dashboard" className="gap-2">
                   <Package className="size-4" aria-hidden />
@@ -49,10 +52,16 @@ export default async function DashboardLayout({
                 </Link>
               </Button>
               <Button variant="ghost" size="sm" asChild>
+                <Link href="/dashboard/inventory" className="gap-2">
+                  <Warehouse className="size-4" aria-hidden />
+                  Estoque
+                </Link>
+              </Button>
+              {/* <Button variant="ghost" size="sm" asChild>
                 <Link href="/dashboard#prioridades" className="gap-2">
                   Prioridades
                 </Link>
-              </Button>
+              </Button> */}
             </nav>
           </div>
           <div className="flex shrink-0 items-center gap-2 sm:gap-4">
