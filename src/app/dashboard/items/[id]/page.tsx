@@ -5,6 +5,7 @@ import { ChevronLeft, ExternalLink } from "lucide-react";
 import { notFound } from "next/navigation";
 import { fetchItemById } from "@/lib/mercadolibre/api";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
+import { getItemSku } from "@/lib/mercadolibre/item-sku";
 import { getValidAccessToken } from "@/lib/mercadolibre/session";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,6 +41,7 @@ export default async function ItemDetailPage({ params }: PageProps) {
     })) ?? [];
 
   const imageUrl = bestItemImageUrl(item);
+  const sku = getItemSku(item);
 
   return (
     <div className="space-y-8">
@@ -68,9 +70,17 @@ export default async function ItemDetailPage({ params }: PageProps) {
               />
             ) : null}
             <div className="min-w-0 flex-1 space-y-6">
-              <h1 className="text-2xl font-bold tracking-tight text-[var(--primary)] sm:text-3xl">
-                {item.title}
-              </h1>
+              <div className="space-y-1">
+                <h1 className="text-2xl font-bold tracking-tight text-[var(--primary)] sm:text-3xl">
+                  {sku ?? "Sem SKU"}
+                </h1>
+                <p
+                  className="text-sm leading-snug text-[var(--muted-foreground)]"
+                  title={item.title}
+                >
+                  {item.title}
+                </p>
+              </div>
               <dl className="grid gap-4 sm:grid-cols-2">
                 <div className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/50 p-4">
                   <dt className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">

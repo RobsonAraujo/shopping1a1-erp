@@ -18,6 +18,7 @@ const MAX_LEAD_DAYS = 365;
 
 export type InventoryRow = {
   mlItemId: string;
+  sku: string | null;
   title: string;
   imageUrl?: string;
   mlStock: number;
@@ -142,8 +143,19 @@ export function InventoryStockTable({ rows }: InventoryStockTableProps) {
                               </span>
                             )}
                           </span>
-                          <span className="min-w-0 flex-1 font-medium leading-snug text-[var(--foreground)]">
-                            {row.title}
+                          <span className="min-w-0 flex-1">
+                            <span
+                              className="block truncate font-semibold leading-snug text-[var(--foreground)]"
+                              title={row.title}
+                            >
+                              {row.sku ?? "Sem SKU"}
+                            </span>
+                            <span
+                              className="mt-0.5 block truncate text-xs leading-snug text-[var(--muted-foreground)]"
+                              title={row.title}
+                            >
+                              {row.title}
+                            </span>
                           </span>
                         </div>
                       </td>
@@ -309,9 +321,17 @@ function WarehouseEditModal({
           Ajuste apenas a quantidade física no galpão. O estoque no Mercado
           Livre vem da API do ML e não é alterado aqui.
         </p>
-        <p className="mt-3 text-sm font-medium text-[var(--foreground)] line-clamp-2">
-          {row.title}
-        </p>
+        <div className="mt-3">
+          <p className="text-sm font-semibold text-[var(--foreground)]">
+            {row.sku ?? "Sem SKU"}
+          </p>
+          <p
+            className="text-xs text-[var(--muted-foreground)] line-clamp-2"
+            title={row.title}
+          >
+            {row.title}
+          </p>
+        </div>
 
         <label
           htmlFor="warehouse-qty"
@@ -467,9 +487,17 @@ function LeadTimeSettingsModal({
         >
           Ajuste o tempo entre decidir a compra e o produto chegar no galpão.
         </p>
-        <p className="mt-3 text-sm font-medium text-[var(--foreground)] line-clamp-2">
-          {row.title}
-        </p>
+        <div className="mt-3">
+          <p className="text-sm font-semibold text-[var(--foreground)]">
+            {row.sku ?? "Sem SKU"}
+          </p>
+          <p
+            className="text-xs text-[var(--muted-foreground)] line-clamp-2"
+            title={row.title}
+          >
+            {row.title}
+          </p>
+        </div>
 
         <div className="mt-4 space-y-2">
           <div className="flex items-center gap-2">

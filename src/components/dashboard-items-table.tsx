@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ImageOff } from "lucide-react";
 import { stockPlanningConfig } from "@/config/stock-planning";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
+import { getItemSku } from "@/lib/mercadolibre/item-sku";
 import { computeStockPlanningDisplay } from "@/lib/stock-planning";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import { MetricWithHint } from "@/components/metric-with-hint";
@@ -65,6 +66,7 @@ export function DashboardItemsTable({
                 items.map((item) => {
                   const sold = salesByItem[item.id] ?? 0;
                   const imageUrl = bestItemImageUrl(item);
+                  const sku = getItemSku(item);
                   const plan = computeStockPlanningDisplay(
                     item.available_quantity,
                     sold,
@@ -103,8 +105,19 @@ export function DashboardItemsTable({
                               </span>
                             )}
                           </span>
-                          <span className="min-w-0 flex-1 font-medium leading-snug text-[var(--primary)] underline-offset-2 group-hover:underline">
-                            {item.title}
+                          <span className="min-w-0 flex-1">
+                            <span
+                              className="block truncate font-semibold leading-snug text-[var(--primary)] underline-offset-2 group-hover:underline"
+                              title={item.title}
+                            >
+                              {sku ?? "Sem SKU"}
+                            </span>
+                            <span
+                              className="mt-0.5 block truncate text-xs leading-snug text-[var(--muted-foreground)]"
+                              title={item.title}
+                            >
+                              {item.title}
+                            </span>
                           </span>
                         </Link>
                       </td>

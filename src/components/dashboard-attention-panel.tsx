@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AlertTriangle, ImageOff, LayoutGrid } from "lucide-react";
 import { stockPlanningConfig } from "@/config/stock-planning";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
+import { getItemSku } from "@/lib/mercadolibre/item-sku";
 import { computeStockPlanningDisplay } from "@/lib/stock-planning";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import { MetricWithHint } from "@/components/metric-with-hint";
@@ -93,6 +94,7 @@ export function DashboardAttentionPanel({
                 {rows.map(({ item, plan }) => {
                   const urgent = plan.searchIsOverdue;
                   const imageUrl = bestItemImageUrl(item);
+                  const sku = getItemSku(item);
                   return (
                     <li
                       key={item.id}
@@ -131,9 +133,15 @@ export function DashboardAttentionPanel({
                           <div className="flex flex-wrap items-start justify-between gap-2">
                             <Link
                               href={`/dashboard/items/${item.id}`}
-                              className="min-w-0 flex-1 text-base font-semibold leading-snug text-[var(--primary)] underline-offset-2 hover:underline sm:text-lg"
+                              className="min-w-0 flex-1 underline-offset-2 hover:underline"
+                              title={item.title}
                             >
-                              {item.title}
+                              <span className="block truncate text-base font-semibold leading-snug text-[var(--primary)] sm:text-lg">
+                                {sku ?? "Sem SKU"}
+                              </span>
+                              <span className="mt-0.5 block truncate text-xs font-normal leading-snug text-[var(--muted-foreground)]">
+                                {item.title}
+                              </span>
                             </Link>
                             {urgent ? (
                               <Badge variant="overdue" className="shrink-0">

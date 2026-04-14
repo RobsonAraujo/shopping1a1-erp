@@ -27,6 +27,8 @@ export type ItemBody = {
   id: string;
   /** Dono do anúncio (API `/items`); usado para validar sessão. */
   seller_id?: number;
+  /** SKU do vendedor (quando preenchido no anúncio). */
+  seller_custom_field?: string;
   title: string;
   price: number;
   currency_id: string;
@@ -51,6 +53,12 @@ export type ItemBody = {
   variations?: Array<{
     id: number;
     available_quantity?: number;
+  }>;
+  /** Atributos do anúncio (alguns fluxos expõem o SKU aqui como `SELLER_SKU`). */
+  attributes?: Array<{
+    id?: string;
+    value_name?: string;
+    value_id?: string;
   }>;
 };
 

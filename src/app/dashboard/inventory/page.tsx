@@ -7,6 +7,7 @@ import {
 } from "@/lib/mercadolibre/api";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
+import { getItemSku } from "@/lib/mercadolibre/item-sku";
 import { prisma } from "@/lib/db";
 import { getValidAccessToken, readSession } from "@/lib/mercadolibre/session";
 
@@ -24,6 +25,7 @@ export default async function InventoryPage() {
   let warehouseLoadFailed = false;
   let rows: {
     mlItemId: string;
+    sku: string | null;
     title: string;
     imageUrl?: string;
     mlStock: number;
@@ -61,6 +63,7 @@ export default async function InventoryPage() {
 
     rows = items.map((item) => ({
       mlItemId: item.id,
+      sku: getItemSku(item),
       title: item.title,
       imageUrl: bestItemImageUrl(item),
       mlStock: mlAvailableStockUnits(item),
