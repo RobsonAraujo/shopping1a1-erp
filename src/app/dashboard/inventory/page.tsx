@@ -1,26 +1,16 @@
-import Link from "next/link";
 import { cookies } from "next/headers";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import { InventoryStockTable } from "@/components/inventory-stock-table";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import {
-  fetchItemsByIds,
-  fetchUserItemsSearch,
+  fetchAllUserItemIds,
+  fetchItemsByIdsBatched,
 } from "@/lib/mercadolibre/api";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { prisma } from "@/lib/db";
 import { getValidAccessToken, readSession } from "@/lib/mercadolibre/session";
 
-type PageProps = {
-  searchParams: Promise<{ offset?: string }>;
-};
-
-export default async function InventoryPage({ searchParams }: PageProps) {
-  const sp = await searchParams;
-  const offset = Math.max(0, parseInt(sp.offset ?? "0", 10) || 0);
-  const limit = 20;
+export default async function InventoryPage() {
 
   const cookieStore = await cookies();
   const token = await getValidAccessToken(cookieStore);
@@ -30,7 +20,7 @@ export default async function InventoryPage({ searchParams }: PageProps) {
     return null;
   }
 
-  let search;
+  let total = 0;
   let warehouseLoadFailed = false;
   let rows: {
     mlItemId: string;
@@ -42,10 +32,10 @@ export default async function InventoryPage({ searchParams }: PageProps) {
   }[] = [];
 
   try {
-    const s = await fetchUserItemsSearch(token, userId, offset, limit, {
+    const allIds = await fetchAllUserItemIds(token, userId, {
       status: "active",
     });
-    const items = await fetchItemsByIds(token, s.results);
+    const items = await fetchItemsByIdsBatched(token, allIds);
     const ids = items.map((i) => i.id);
 
     let warehouseById: Record<string, number> = {};
@@ -78,7 +68,7 @@ export default async function InventoryPage({ searchParams }: PageProps) {
       leadTimeDays: leadTimeById[item.id] ?? null,
     }));
 
-    search = s;
+    total = items.length;
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro ao carregar anúncios";
     return (
@@ -87,12 +77,6 @@ export default async function InventoryPage({ searchParams }: PageProps) {
       </Card>
     );
   }
-
-  const { total } = search.paging;
-  const prevOffset = Math.max(0, offset - limit);
-  const nextOffset = offset + limit;
-  const hasPrev = offset > 0;
-  const hasNext = nextOffset < total;
 
   return (
     <div className="space-y-8">
@@ -125,62 +109,9 @@ export default async function InventoryPage({ searchParams }: PageProps) {
       <InventoryStockTable rows={rows} />
 
       <Card>
-        <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:py-4">
-          <p className="text-sm text-[var(--muted-foreground)]">
-            Página {Math.floor(offset / limit) + 1} de{" "}
-            {Math.max(1, Math.ceil(total / limit))}
-            {" · "}
-            {total} anúncio{total !== 1 ? "s" : ""} ativo{total !== 1 ? "s" : ""}{" "}
-            no total
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {hasPrev ? (
-              <Button variant="outline" size="sm" asChild>
-                <Link
-                  href={
-                    prevOffset
-                      ? `/dashboard/inventory?offset=${prevOffset}`
-                      : "/dashboard/inventory"
-                  }
-                  className="gap-1.5"
-                >
-                  <ChevronLeft className="size-4" />
-                  Anterior
-                </Link>
-              </Button>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled
-                className="gap-1.5"
-              >
-                <ChevronLeft className="size-4" />
-                Anterior
-              </Button>
-            )}
-            {hasNext ? (
-              <Button variant="outline" size="sm" asChild>
-                <Link
-                  href={`/dashboard/inventory?offset=${nextOffset}`}
-                  className="gap-1.5"
-                >
-                  Próxima
-                  <ChevronRight className="size-4" />
-                </Link>
-              </Button>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled
-                className="gap-1.5"
-              >
-                Próxima
-                <ChevronRight className="size-4" />
-              </Button>
-            )}
-          </div>
+        <CardContent className="p-4 text-sm text-[var(--muted-foreground)] sm:py-4">
+          {total} anúncio{total !== 1 ? "s" : ""} ativo{total !== 1 ? "s" : ""}{" "}
+          no total
         </CardContent>
       </Card>
     </div>
