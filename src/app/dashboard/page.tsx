@@ -12,7 +12,6 @@ import { getValidAccessToken, readSession } from "@/lib/mercadolibre/session";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 
 export default async function DashboardPage() {
-
   const cookieStore = await cookies();
   const token = await getValidAccessToken(cookieStore);
   const { userId } = readSession(cookieStore);
@@ -26,7 +25,10 @@ export default async function DashboardPage() {
 
   let items;
   let salesByItem: Record<string, number> = {};
-  let attentionSnapshot: { items: ItemBody[]; salesByItem: Record<string, number> } | null = null;
+  let attentionSnapshot: {
+    items: ItemBody[];
+    salesByItem: Record<string, number>;
+  } | null = null;
 
   try {
     const allIds = await fetchAllUserItemIds(token, userId);
@@ -113,18 +115,17 @@ export default async function DashboardPage() {
 
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-[var(--primary)]">
-            Anúncios do catálogo
-          </h2>
-          <DashboardItemsTable items={catalogItems} salesByItem={salesByItem} />
-        </section>
-
-        <section className="space-y-3">
-          <h2 className="text-lg font-semibold text-[var(--primary)]">
             Anúncios próprios
           </h2>
           <DashboardItemsTable items={ownItems} salesByItem={salesByItem} />
         </section>
 
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold text-[var(--primary)]">
+            Anúncios do catálogo
+          </h2>
+          <DashboardItemsTable items={catalogItems} salesByItem={salesByItem} />
+        </section>
       </div>
     </div>
   );
