@@ -8,7 +8,7 @@ export const stockPlanningConfig = {
    * média diária de vendas: soma das unidades vendidas nesse intervalo ÷ este
    * número de dias. Ex.: 7 = basear a média nos últimos 7 dias.
    */
-  salesAverageWindowDays: 7,
+  salesAverageWindowDays: 14,
 
   /**
    * Prazo em dias entre o início do processo de reposição (busca, compra,
