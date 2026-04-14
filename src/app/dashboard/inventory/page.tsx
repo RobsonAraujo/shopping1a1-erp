@@ -1,13 +1,16 @@
 import { cookies } from "next/headers";
+import { stockPlanningConfig } from "@/config/stock-planning";
 import { InventoryStockTable } from "@/components/inventory-stock-table";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   fetchAllUserItemIds,
   fetchItemsByIdsBatched,
+  fetchUnitsSoldForItemsInWindowBatched,
 } from "@/lib/mercadolibre/api";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { getItemSku } from "@/lib/mercadolibre/item-sku";
+import { computeStockPlanningDisplay } from "@/lib/stock-planning";
 import { prisma } from "@/lib/db";
 import { getValidAccessToken, readSession } from "@/lib/mercadolibre/session";
 
@@ -31,13 +34,23 @@ export default async function InventoryPage() {
     mlStock: number;
     warehouseStock: number;
     leadTimeDays: number | null;
+    needsPurchaseAttention: boolean;
   }[] = [];
 
   try {
     const allIds = await fetchAllUserItemIds(token, userId, {
       status: "active",
     });
-    const items = await fetchItemsByIdsBatched(token, allIds);
+    const [items, salesByItem] = await Promise.all([
+      fetchItemsByIdsBatched(token, allIds),
+      fetchUnitsSoldForItemsInWindowBatched(
+        token,
+        userId,
+        allIds,
+        stockPlanningConfig.salesAverageWindowDays,
+        stockPlanningConfig.salesWindowDateField,
+      ),
+    ]);
     const ids = items.map((i) => i.id);
 
     let warehouseById: Record<string, number> = {};
@@ -62,13 +75,29 @@ export default async function InventoryPage() {
     }
 
     rows = items.map((item) => ({
+      ...(() => {
+        const mlStock = mlAvailableStockUnits(item);
+        const warehouseStock = warehouseById[item.id] ?? 0;
+        const purchaseLeadTimeDays = leadTimeById[item.id] ?? 0;
+        const sold = salesByItem[item.id] ?? 0;
+        const plan = computeStockPlanningDisplay(
+          mlStock + warehouseStock,
+          sold,
+          stockPlanningConfig.salesAverageWindowDays,
+          stockPlanningConfig,
+          purchaseLeadTimeDays,
+        );
+        return {
+          mlStock,
+          warehouseStock,
+          leadTimeDays: leadTimeById[item.id] ?? null,
+          needsPurchaseAttention: plan.needsPurchaseAttention,
+        };
+      })(),
       mlItemId: item.id,
       sku: getItemSku(item),
       title: item.title,
       imageUrl: bestItemImageUrl(item),
-      mlStock: mlAvailableStockUnits(item),
-      warehouseStock: warehouseById[item.id] ?? 0,
-      leadTimeDays: leadTimeById[item.id] ?? null,
     }));
 
     total = items.length;

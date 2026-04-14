@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useState } from "react";
 import { HelpCircle, ImageOff, Pencil, Settings } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -24,6 +25,7 @@ export type InventoryRow = {
   mlStock: number;
   warehouseStock: number;
   leadTimeDays: number | null;
+  needsPurchaseAttention: boolean;
 };
 
 type InventoryStockTableProps = {
@@ -51,10 +53,10 @@ export function InventoryStockTable({ rows }: InventoryStockTableProps) {
   const [editId, setEditId] = useState<string | null>(null);
   const [settingsId, setSettingsId] = useState<string | null>(null);
   const editing = editId
-    ? rows.find((r) => r.mlItemId === editId) ?? null
+    ? (rows.find((r) => r.mlItemId === editId) ?? null)
     : null;
   const settingsRow = settingsId
-    ? rows.find((r) => r.mlItemId === settingsId) ?? null
+    ? (rows.find((r) => r.mlItemId === settingsId) ?? null)
     : null;
 
   return (
@@ -90,8 +92,8 @@ export function InventoryStockTable({ rows }: InventoryStockTableProps) {
                         </button>
                       </TooltipTrigger>
                       <TooltipContent side="top" className="max-w-xs">
-                        Tempo entre decidir comprar e o produto chegar no galpão.
-                        Usado para planejamento futuro.
+                        Tempo entre decidir comprar e o produto chegar no
+                        galpão. Usado para planejamento futuro.
                       </TooltipContent>
                     </Tooltip>
                   </span>
@@ -144,14 +146,21 @@ export function InventoryStockTable({ rows }: InventoryStockTableProps) {
                             )}
                           </span>
                           <span className="min-w-0 flex-1">
-                            <span
-                              className="block truncate font-semibold leading-snug text-[var(--foreground)]"
-                              title={row.title}
-                            >
-                              {row.sku ?? "Sem SKU"}
+                            <span className="flex items-center gap-2">
+                              <span
+                                className="block truncate font-semibold leading-snug text-[var(--foreground)]"
+                                title={row.title}
+                              >
+                                {row.sku ?? "Sem SKU"}
+                              </span>
+                              {row.needsPurchaseAttention ? (
+                                <Badge variant="warning" className="h-5 px-1.5 text-[10px]">
+                                  Comprar
+                                </Badge>
+                              ) : null}
                             </span>
                             <span
-                              className="mt-0.5 block truncate text-xs leading-snug text-[var(--muted-foreground)]"
+                              className="mt-0.5 block text-xs leading-snug text-[var(--muted-foreground)]"
                               title={row.title}
                             >
                               {row.title}
@@ -550,8 +559,8 @@ function LeadTimeSettingsModal({
             </select>
           </div>
           <p className="text-xs text-[var(--muted-foreground)]">
-            Informe em semanas ou em dias; o sistema grava em dias para
-            cálculos futuros. Deixe em branco para remover o prazo.
+            Informe em semanas ou em dias; o sistema grava em dias para cálculos
+            futuros. Deixe em branco para remover o prazo.
           </p>
         </div>
 

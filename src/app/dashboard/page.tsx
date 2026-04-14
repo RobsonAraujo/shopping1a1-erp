@@ -8,6 +8,7 @@ import {
   fetchItemsByIdsBatched,
   fetchUnitsSoldForItemsInWindowBatched,
 } from "@/lib/mercadolibre/api";
+import { prisma } from "@/lib/db";
 import { getValidAccessToken, readSession } from "@/lib/mercadolibre/session";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 
@@ -25,14 +26,18 @@ export default async function DashboardPage() {
 
   let items;
   let salesByItem: Record<string, number> = {};
+  let purchaseLeadTimeByItem: Record<string, number | null> = {};
+  let warehouseStockByItem: Record<string, number> = {};
   let attentionSnapshot: {
     items: ItemBody[];
     salesByItem: Record<string, number>;
+    purchaseLeadTimeByItem: Record<string, number | null>;
+    warehouseStockByItem: Record<string, number>;
   } | null = null;
 
   try {
     const allIds = await fetchAllUserItemIds(token, userId);
-    const [allItems, allSales] = await Promise.all([
+    const [allItems, allSales, warehouseStocks] = await Promise.all([
       fetchItemsByIdsBatched(token, allIds),
       fetchUnitsSoldForItemsInWindowBatched(
         token,
@@ -41,11 +46,26 @@ export default async function DashboardPage() {
         windowDays,
         dateField,
       ),
+      prisma.warehouseStock.findMany({
+        where: { mlItemId: { in: allIds } },
+        select: { mlItemId: true, purchaseLeadTimeDays: true, quantity: true },
+      }),
     ]);
 
+    purchaseLeadTimeByItem = Object.fromEntries(
+      warehouseStocks.map((s) => [s.mlItemId, s.purchaseLeadTimeDays]),
+    );
+    warehouseStockByItem = Object.fromEntries(
+      warehouseStocks.map((s) => [s.mlItemId, s.quantity]),
+    );
     items = allItems;
     salesByItem = allSales;
-    attentionSnapshot = { items: allItems, salesByItem: allSales };
+    attentionSnapshot = {
+      items: allItems,
+      salesByItem: allSales,
+      purchaseLeadTimeByItem,
+      warehouseStockByItem,
+    };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro ao carregar anúncios";
     return (
@@ -67,6 +87,8 @@ export default async function DashboardPage() {
         <DashboardAttentionPanel
           items={attentionSnapshot.items}
           salesByItem={attentionSnapshot.salesByItem}
+          purchaseLeadTimeByItem={attentionSnapshot.purchaseLeadTimeByItem}
+          warehouseStockByItem={attentionSnapshot.warehouseStockByItem}
         />
       ) : (
         <Card className="border-amber-200 bg-amber-50/50">

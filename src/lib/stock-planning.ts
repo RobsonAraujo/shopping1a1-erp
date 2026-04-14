@@ -4,15 +4,20 @@ export type StockPlanningTooltips = {
   stockWillLast: string;
   search: string;
   activeStock: string;
+  purchase: string;
 };
 
 export type StockPlanningDisplay = {
   stockWillLast: string;
   searchStartsOn: string | null;
   activeStockOn: string | null;
+  purchaseStartsOn: string | null;
   searchIsOverdue: boolean;
+  purchaseIsOverdue: boolean;
   searchStartsAtMs: number | null;
+  purchaseStartsAtMs: number | null;
   needsSchedulingAttention: boolean;
+  needsPurchaseAttention: boolean;
   tooltips: StockPlanningTooltips;
 };
 
@@ -58,6 +63,7 @@ export function computeStockPlanningDisplay(
   unitsSoldInWindow: number,
   windowDays: number,
   config: StockPlanningConfig,
+  purchaseLeadTimeDays = 0,
   now: Date = new Date(),
 ): StockPlanningDisplay {
   const salesDateHint =
@@ -78,13 +84,18 @@ export function computeStockPlanningDisplay(
         unitsSoldInWindow <= 0 ? "Sem vendas no período" : "—",
       searchStartsOn: null,
       activeStockOn: null,
+      purchaseStartsOn: null,
       searchIsOverdue: false,
+      purchaseIsOverdue: false,
       searchStartsAtMs: null,
+      purchaseStartsAtMs: null,
       needsSchedulingAttention: false,
+      needsPurchaseAttention: false,
       tooltips: {
         stockWillLast: noSalesTooltip,
         search: noSalesTooltip,
         activeStock: noSalesTooltip,
+        purchase: noSalesTooltip,
       },
     };
   }
@@ -102,18 +113,25 @@ export function computeStockPlanningDisplay(
         }`;
 
   const leadDays = config.leadTimeDays as number;
+  const purchaseLeadDays = Math.max(0, purchaseLeadTimeDays);
+  const totalPurchaseLeadDays = purchaseLeadDays + leadDays;
   const bufferDays = config.activeStockBufferDays as number;
 
   const stockoutAt = new Date(
     now.getTime() + daysCoverage * 24 * 60 * 60 * 1000,
   );
   const searchAt = addDays(stockoutAt, -leadDays);
+  const purchaseAt = addDays(stockoutAt, -totalPurchaseLeadDays);
   const activeAt = addDays(stockoutAt, -bufferDays);
 
   const searchIsOverdue = searchAt.getTime() < now.getTime();
+  const purchaseIsOverdue = purchaseAt.getTime() < now.getTime();
   const searchStartsAtMs = searchAt.getTime();
+  const purchaseStartsAtMs = purchaseAt.getTime();
   const needsSchedulingAttention =
     startOfLocalDayMs(searchAt) <= startOfLocalDayMs(now);
+  const needsPurchaseAttention =
+    startOfLocalDayMs(purchaseAt) <= startOfLocalDayMs(now);
 
   const stockoutLabel = formatDatePtBR(stockoutAt);
   const leadPhrase = formatLeadTimePhrase(leadDays);
@@ -146,6 +164,16 @@ export function computeStockPlanningDisplay(
       } antes desse momento: ${formatDatePtBR(searchAt)}.`,
     ].join(" "),
 
+    purchase: [
+      `Esgotamento previsto (estoque zerar ao ritmo atual): ${stockoutLabel}.`,
+      `Para não faltar estoque, a compra precisa começar antes da soma dos prazos: compra (${purchaseLeadDays} ${
+        purchaseLeadDays === 1 ? "dia" : "dias"
+      }) + Full (${leadDays} ${leadDays === 1 ? "dia" : "dias"}) = ${totalPurchaseLeadDays} ${
+        totalPurchaseLeadDays === 1 ? "dia" : "dias"
+      }.`,
+      `Data sugerida para iniciar compra: ${formatDatePtBR(purchaseAt)}.`,
+    ].join(" "),
+
     activeStock: [
       `Esgotamento previsto: ${stockoutLabel}.`,
       `Para o novo estoque estar ativo ${bufferPhrase}, a data alvo é ${formatDatePtBR(
@@ -160,9 +188,13 @@ export function computeStockPlanningDisplay(
     stockWillLast,
     searchStartsOn: formatDatePtBR(searchAt),
     activeStockOn: formatDatePtBR(activeAt),
+    purchaseStartsOn: formatDatePtBR(purchaseAt),
     searchIsOverdue,
+    purchaseIsOverdue,
     searchStartsAtMs,
+    purchaseStartsAtMs,
     needsSchedulingAttention,
+    needsPurchaseAttention,
     tooltips,
   };
 }
