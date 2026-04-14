@@ -105,15 +105,15 @@ export function DashboardItemsTable({
                               </span>
                             )}
                           </span>
-                          <span className="min-w-0 flex-1">
+                          <span className="min-w-0 flex-1 overflow-hidden">
                             <span
-                              className="block truncate font-semibold leading-snug text-[var(--primary)] underline-offset-2 group-hover:underline"
+                              className="block max-w-full truncate font-semibold leading-snug text-[var(--primary)] underline-offset-2 group-hover:underline"
                               title={item.title}
                             >
                               {sku ?? "Sem SKU"}
                             </span>
                             <span
-                              className="mt-0.5 block truncate text-xs leading-snug text-[var(--muted-foreground)]"
+                              className="mt-0.5 block   text-xs  text-[var(--muted-foreground)]"
                               title={item.title}
                             >
                               {item.title}

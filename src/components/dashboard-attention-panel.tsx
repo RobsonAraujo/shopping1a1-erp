@@ -55,29 +55,28 @@ export function DashboardAttentionPanel({
     <TooltipProvider delayDuration={200}>
       <section id="prioridades" className="scroll-mt-24">
         <Card className="overflow-hidden border-amber-200/90 bg-gradient-to-br from-amber-50/90 via-white to-[var(--card)] shadow-md ring-1 ring-amber-100/70">
-          <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4 space-y-0 pb-4">
+          <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4 space-y-0 pb-3">
             <div className="space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100 text-amber-900">
                   <AlertTriangle className="size-5" aria-hidden />
                 </span>
-                <CardTitle className="text-xl text-[var(--primary)]">
+                <CardTitle className="text-lg text-[var(--primary)]">
                   Precisa de atenção agora
                 </CardTitle>
               </div>
-              <CardDescription className="max-w-2xl text-[15px] leading-relaxed">
+              <CardDescription className="max-w-2xl text-sm leading-relaxed">
                 Data de início da busca ou agendamento é hoje ou já passou —
                 hora de agendar e planejar estoque.
               </CardDescription>
             </div>
             {rows.length > 0 ? (
               <Badge variant="warning" className="shrink-0 px-3 py-1 text-sm">
-                {rows.length}{" "}
-                {rows.length === 1 ? "anúncio" : "anúncios"}
+                {rows.length} {rows.length === 1 ? "anúncio" : "anúncios"}
               </Badge>
             ) : null}
           </CardHeader>
-          <CardContent className="pb-6">
+          <CardContent className="pb-4">
             {rows.length === 0 ? (
               <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-[var(--border)] bg-[var(--muted)]/30 px-6 py-12 text-center">
                 <LayoutGrid
@@ -90,7 +89,7 @@ export function DashboardAttentionPanel({
                 </p>
               </div>
             ) : (
-              <ul className="grid gap-4 lg:grid-cols-2">
+              <ul className="space-y-2.5">
                 {rows.map(({ item, plan }) => {
                   const urgent = plan.searchIsOverdue;
                   const imageUrl = bestItemImageUrl(item);
@@ -99,122 +98,120 @@ export function DashboardAttentionPanel({
                     <li
                       key={item.id}
                       className={cn(
-                        "rounded-xl border bg-[var(--card)] p-5 shadow-sm transition-shadow hover:shadow-md",
+                        "rounded-lg border bg-[var(--card)] px-3 py-2.5 transition-colors hover:bg-[var(--muted)]/20",
                         urgent
-                          ? "border-[var(--border)] bg-rose-50/40"
+                          ? "border-rose-200 bg-rose-50/40"
                           : "border-[var(--border)]",
                       )}
                     >
-                      <div className="flex gap-4">
+                      <div className="flex items-start gap-3">
                         <Link
                           href={`/dashboard/items/${item.id}`}
-                          className="relative shrink-0 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--muted)] ring-offset-2 transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+                          className="relative shrink-0 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--muted)] ring-offset-2 transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
                           aria-label={`Abrir detalhes: ${item.title}`}
                         >
                           {imageUrl ? (
                             <Image
                               src={imageUrl}
                               alt=""
-                              width={224}
-                              height={224}
-                              className="size-24 object-contain sm:size-28"
-                              sizes="(max-width: 640px) 96px, 112px"
+                              width={80}
+                              height={80}
+                              className="size-14 object-contain sm:size-16"
+                              sizes="64px"
                             />
                           ) : (
-                            <div className="flex size-24 items-center justify-center sm:size-28">
+                            <div className="flex size-14 items-center justify-center sm:size-16">
                               <ImageOff
-                                className="size-9 text-[var(--muted-foreground)]/70"
+                                className="size-6 text-[var(--muted-foreground)]/70"
                                 aria-hidden
                               />
                             </div>
                           )}
                         </Link>
-                        <div className="min-w-0 flex-1 space-y-2">
-                          <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1 space-y-1.5">
+                          <div className="flex flex-wrap items-start justify-between gap-1.5">
                             <Link
                               href={`/dashboard/items/${item.id}`}
                               className="min-w-0 flex-1 underline-offset-2 hover:underline"
                               title={item.title}
                             >
-                              <span className="block truncate text-base font-semibold leading-snug text-[var(--primary)] sm:text-lg">
+                              <span className="block truncate text-sm font-semibold leading-snug text-[var(--primary)] sm:text-base">
                                 {sku ?? "Sem SKU"}
                               </span>
                               <span className="mt-0.5 block truncate text-xs font-normal leading-snug text-[var(--muted-foreground)]">
                                 {item.title}
                               </span>
                             </Link>
-                            {urgent ? (
-                              <Badge variant="overdue" className="shrink-0">
-                                Atrasado
-                              </Badge>
-                            ) : (
-                              <Badge variant="secondary" className="shrink-0">
-                                Hoje
-                              </Badge>
-                            )}
+                            <div className="flex shrink-0 items-center gap-1.5">
+                              {item.catalog_listing ? (
+                                <Badge
+                                  variant="secondary"
+                                  className="h-6 px-2 text-[11px]"
+                                >
+                                  Catálogo
+                                </Badge>
+                              ) : null}
+                              {urgent ? (
+                                <Badge
+                                  variant="overdue"
+                                  className="h-6 px-2 text-[11px]"
+                                >
+                                  Atrasado
+                                </Badge>
+                              ) : (
+                                <Badge
+                                  variant="secondary"
+                                  className="h-6 px-2 text-[11px]"
+                                >
+                                  Hoje
+                                </Badge>
+                              )}
+                            </div>
                           </div>
-                          <p className="font-mono text-xs text-[var(--muted-foreground)]">
-                            {item.id}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="mt-5 grid gap-5 sm:grid-cols-3">
-                        <div className="space-y-1">
-                          <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-                            Estoque agora
-                          </p>
-                          <p className="text-3xl font-bold tabular-nums text-[var(--primary)]">
-                            {item.available_quantity}
-                            <span className="ml-1 text-lg font-semibold text-[var(--muted-foreground)]">
-                              un.
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--muted-foreground)]">
+                            <span className="tabular-nums">
+                              Estoque:{" "}
+                              <span className="font-semibold text-[var(--foreground)]">
+                                {item.available_quantity}
+                              </span>
                             </span>
-                          </p>
-                          <div className="text-xs text-[var(--muted-foreground)]">
-                            <MetricWithHint content={plan.tooltips.stockWillLast}>
+                            <MetricWithHint
+                              content={plan.tooltips.stockWillLast}
+                            >
                               <span>
-                                Cobertura ~{" "}
-                                <span className="font-medium text-[var(--foreground)]">
+                                Cobertura:{" "}
+                                <span className="font-semibold text-[var(--foreground)]">
                                   {plan.stockWillLast}
                                 </span>
                               </span>
                             </MetricWithHint>
-                          </div>
-                        </div>
-
-                        <div className="space-y-1">
-                          <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-                            Iniciar busca / agendamento
-                          </p>
-                          <p
-                            className={cn(
-                              "text-2xl font-bold tabular-nums leading-tight tracking-tight",
-                              urgent
-                                ? "text-rose-900"
-                                : "text-[var(--primary)]",
-                            )}
-                          >
-                            {plan.searchStartsOn ?? "—"}
-                          </p>
-                          <p className="text-xs text-[var(--muted-foreground)]">
                             <MetricWithHint content={plan.tooltips.search}>
-                              <span>Como calculamos</span>
+                              <span>
+                                Buscar em:{" "}
+                                <span
+                                  className={cn(
+                                    "font-semibold",
+                                    urgent
+                                      ? "text-rose-900"
+                                      : "text-[var(--foreground)]",
+                                  )}
+                                >
+                                  {plan.searchStartsOn ?? "—"}
+                                </span>
+                              </span>
                             </MetricWithHint>
-                          </p>
-                        </div>
-
-                        <div className="space-y-1">
-                          <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-                            Novo estoque ativo até
-                          </p>
-                          <p className="text-2xl font-bold leading-tight tracking-tight text-[var(--primary)]">
-                            {plan.activeStockOn ?? "—"}
-                          </p>
-                          <p className="text-xs text-[var(--muted-foreground)]">
                             <MetricWithHint content={plan.tooltips.activeStock}>
-                              <span>Como calculamos</span>
+                              <span>
+                                Ativo em:{" "}
+                                <span className="font-semibold text-[var(--foreground)]">
+                                  {plan.activeStockOn ?? "—"}
+                                </span>
+                              </span>
                             </MetricWithHint>
-                          </p>
+                            <span className="font-mono text-[11px]">
+                              {item.id}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </li>

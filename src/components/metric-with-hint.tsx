@@ -18,16 +18,15 @@ export function MetricWithHint({
 }) {
   return (
     <span
-      className={cn(
-        "flex min-w-0 items-start gap-1.5 text-left",
-        className,
-      )}
+      className={cn("flex min-w-0 items-center  gap-1.5 text-left", className)}
     >
       <span className="min-w-0 flex-1 leading-snug">{children}</span>
-      <PlanningInfoTrigger
-        content={content}
-        className="mt-px shrink-0 self-start"
-      />
+      <span>
+        <PlanningInfoTrigger
+          content={content}
+          className="mt-px shrink-0 self-start"
+        />
+      </span>
     </span>
   );
 }
