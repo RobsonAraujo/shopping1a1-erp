@@ -36,9 +36,13 @@ function fmtMinutes(minutes: number): string {
 }
 
 function statusCellClass(status: "winning" | "losing" | "shared") {
-  if (status === "winning") return "font-semibold text-emerald-700";
-  if (status === "losing") return "font-semibold text-rose-700";
-  return "font-semibold text-amber-700";
+  if (status === "winning") {
+    return "inline-flex rounded-md bg-emerald-600 px-2 py-1 font-semibold text-white";
+  }
+  if (status === "losing") {
+    return "inline-flex rounded-md bg-rose-600 px-2 py-1 font-semibold text-white";
+  }
+  return "inline-flex rounded-md bg-amber-500 px-2 py-1 font-semibold text-white";
 }
 
 export function CatalogCompetitionReportClient() {
@@ -131,9 +135,36 @@ export function CatalogCompetitionReportClient() {
 
       {data ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card><CardHeader><CardTitle className="text-sm">Ganhando</CardTitle></CardHeader><CardContent className="text-2xl font-semibold text-emerald-700">{fmtMinutes(data.totals.winning)}</CardContent></Card>
-          <Card><CardHeader><CardTitle className="text-sm">Perdendo</CardTitle></CardHeader><CardContent className="text-2xl font-semibold text-rose-700">{fmtMinutes(data.totals.losing)}</CardContent></Card>
-          <Card><CardHeader><CardTitle className="text-sm">Compartilhando</CardTitle></CardHeader><CardContent className="text-2xl font-semibold text-amber-700">{fmtMinutes(data.totals.shared)}</CardContent></Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Ganhando</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <span className="inline-flex rounded-md bg-emerald-600 px-2.5 py-1 text-2xl font-semibold text-white">
+                {fmtMinutes(data.totals.winning)}
+              </span>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Perdendo</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <span className="inline-flex rounded-md bg-rose-600 px-2.5 py-1 text-2xl font-semibold text-white">
+                {fmtMinutes(data.totals.losing)}
+              </span>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Compartilhando</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <span className="inline-flex rounded-md bg-amber-500 px-2.5 py-1 text-2xl font-semibold text-white">
+                {fmtMinutes(data.totals.shared)}
+              </span>
+            </CardContent>
+          </Card>
           <Card><CardHeader><CardTitle className="text-sm">Sem sinal</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{fmtMinutes(data.totals.unknown)}</CardContent></Card>
         </div>
       ) : null}
@@ -194,14 +225,20 @@ export function CatalogCompetitionReportClient() {
                           </div>
                         </Link>
                       </td>
-                      <td className={`py-2 pr-3 ${statusCellClass("winning")}`}>
-                        {fmtMinutes(row.totals.winning)}
+                      <td className="py-2 pr-3">
+                        <span className={statusCellClass("winning")}>
+                          {fmtMinutes(row.totals.winning)}
+                        </span>
                       </td>
-                      <td className={`py-2 pr-3 ${statusCellClass("losing")}`}>
-                        {fmtMinutes(row.totals.losing)}
+                      <td className="py-2 pr-3">
+                        <span className={statusCellClass("losing")}>
+                          {fmtMinutes(row.totals.losing)}
+                        </span>
                       </td>
-                      <td className={`py-2 pr-3 ${statusCellClass("shared")}`}>
-                        {fmtMinutes(row.totals.shared)}
+                      <td className="py-2 pr-3">
+                        <span className={statusCellClass("shared")}>
+                          {fmtMinutes(row.totals.shared)}
+                        </span>
                       </td>
                       <td className="py-2 pr-3">{row.timeline.length}</td>
                     </tr>

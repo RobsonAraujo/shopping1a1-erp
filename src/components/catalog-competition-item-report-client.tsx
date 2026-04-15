@@ -38,10 +38,16 @@ function fmtMinutes(minutes: number): string {
 }
 
 function statusClass(status: string): string {
-  if (status === "winning") return "text-emerald-700";
-  if (status === "losing") return "text-rose-700";
-  if (status === "shared") return "text-amber-700";
-  return "text-[var(--muted-foreground)]";
+  if (status === "winning") {
+    return "inline-flex rounded-md bg-emerald-600 px-2 py-0.5 font-semibold text-white";
+  }
+  if (status === "losing") {
+    return "inline-flex rounded-md bg-rose-600 px-2 py-0.5 font-semibold text-white";
+  }
+  if (status === "shared") {
+    return "inline-flex rounded-md bg-amber-500 px-2 py-0.5 font-semibold text-white";
+  }
+  return "inline-flex rounded-md bg-[var(--muted)] px-2 py-0.5 font-semibold text-[var(--muted-foreground)]";
 }
 
 function isoDateInput(d: Date): string {
@@ -172,7 +178,7 @@ export function CatalogCompetitionItemReportClient({ itemId }: { itemId: string 
               ) : (
                 day.entries.map((entry, idx) => (
                   <p key={`${day.dayKey}-${idx}`} className="text-sm">
-                    <span className={`font-semibold ${statusClass(entry.status)}`}>
+                    <span className={statusClass(entry.status)}>
                       {entry.status === "winning"
                         ? "Ganhando"
                         : entry.status === "losing"
