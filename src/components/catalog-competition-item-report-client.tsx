@@ -50,6 +50,13 @@ function statusClass(status: string): string {
   return "inline-flex rounded-md bg-[var(--muted)] px-2 py-0.5 font-semibold text-[var(--muted-foreground)]";
 }
 
+function segmentClass(status: string): string {
+  if (status === "winning") return "bg-emerald-500";
+  if (status === "losing") return "bg-rose-500";
+  if (status === "shared") return "bg-amber-400";
+  return "bg-slate-400";
+}
+
 function isoDateInput(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
@@ -176,20 +183,44 @@ export function CatalogCompetitionItemReportClient({ itemId }: { itemId: string 
               {day.entries.length === 0 ? (
                 <p className="text-sm text-[var(--muted-foreground)]">Sem eventos.</p>
               ) : (
-                day.entries.map((entry, idx) => (
-                  <p key={`${day.dayKey}-${idx}`} className="text-sm">
-                    <span className={statusClass(entry.status)}>
-                      {entry.status === "winning"
-                        ? "Ganhando"
-                        : entry.status === "losing"
-                          ? "Perdendo"
-                          : entry.status === "shared"
-                            ? "Compartilhando"
-                            : "Sem sinal"}
-                    </span>{" "}
-                    das {entry.from} até {entry.to} ({fmtMinutes(entry.minutes)})
-                  </p>
-                ))
+                <>
+                  <div className="overflow-hidden rounded-md border border-[var(--border)]">
+                    <div className="flex h-6 w-full">
+                      {day.entries.map((entry, idx) => {
+                        const dayTotal = day.entries.reduce(
+                          (sum, part) => sum + part.minutes,
+                          0,
+                        );
+                        const widthPct =
+                          dayTotal > 0 ? (entry.minutes / dayTotal) * 100 : 0;
+                        return (
+                          <div
+                            key={`${day.dayKey}-bar-${idx}`}
+                            className={segmentClass(entry.status)}
+                            style={{ width: `${widthPct}%` }}
+                            title={`${entry.status}: ${entry.from} - ${entry.to} (${fmtMinutes(
+                              entry.minutes,
+                            )})`}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                  {day.entries.map((entry, idx) => (
+                    <p key={`${day.dayKey}-${idx}`} className="text-sm">
+                      <span className={statusClass(entry.status)}>
+                        {entry.status === "winning"
+                          ? "Ganhando"
+                          : entry.status === "losing"
+                            ? "Perdendo"
+                            : entry.status === "shared"
+                              ? "Compartilhando"
+                              : "Sem sinal"}
+                      </span>{" "}
+                      das {entry.from} até {entry.to} ({fmtMinutes(entry.minutes)})
+                    </p>
+                  ))}
+                </>
               )}
             </CardContent>
           </Card>

@@ -108,7 +108,12 @@ export function CatalogCompetitionReportClient() {
 
   const ranking = useMemo(() => {
     if (!data) return [];
-    return [...data.items].sort((a, b) => b.totals.losing - a.totals.losing);
+    return [...data.items].sort((a, b) => {
+      const scoreA = a.totals.losing * 10 + a.totals.shared * 3 - a.totals.winning;
+      const scoreB = b.totals.losing * 10 + b.totals.shared * 3 - b.totals.winning;
+      if (scoreA !== scoreB) return scoreB - scoreA;
+      return b.timeline.length - a.timeline.length;
+    });
   }, [data]);
 
   return (
@@ -219,7 +224,8 @@ export function CatalogCompetitionReportClient() {
                   </tr>
                 </thead>
                 <tbody>
-                  {ranking.map((row) => (
+                  {ranking.map((row) => {
+                    return (
                     <tr
                       key={row.mlItemId}
                       className="border-b border-[var(--border)]"
@@ -270,7 +276,8 @@ export function CatalogCompetitionReportClient() {
                       </td>
                       <td className="py-2 pr-3">{row.timeline.length}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
