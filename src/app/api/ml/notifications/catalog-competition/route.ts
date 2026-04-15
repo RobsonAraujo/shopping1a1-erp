@@ -43,6 +43,7 @@ export async function POST(request: NextRequest) {
     payload.status ?? payload.item_competition_status ?? payload.action,
   );
   const eventAt = payload.sent ? new Date(payload.sent) : new Date();
+  const rawPayload = JSON.parse(JSON.stringify(payload));
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -66,7 +67,7 @@ export async function POST(request: NextRequest) {
           status,
           source: "webhook",
           eventAt,
-          rawPayload: payload,
+          rawPayload,
         },
       });
     });
