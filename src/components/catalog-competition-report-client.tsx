@@ -17,7 +17,12 @@ type ReportResponse = {
     titleSnapshot: string | null;
     skuSnapshot: string | null;
     imageUrlSnapshot: string | null;
-    totals: { winning: number; losing: number; shared: number; unknown: number };
+    totals: {
+      winning: number;
+      losing: number;
+      shared: number;
+      unknown: number;
+    };
     timeline: Array<{
       from: string;
       to: string;
@@ -56,10 +61,14 @@ export function CatalogCompetitionReportClient() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/reports/catalog-competition?window=${windowKey}`);
+      const res = await fetch(
+        `/api/reports/catalog-competition?window=${windowKey}`,
+      );
       const json = (await res.json()) as ReportResponse | { error?: string };
       if (!res.ok) {
-        setError((json as { error?: string }).error ?? "Falha ao carregar relatório.");
+        setError(
+          (json as { error?: string }).error ?? "Falha ao carregar relatório.",
+        );
         return;
       }
       setData(json as ReportResponse);
@@ -121,7 +130,12 @@ export function CatalogCompetitionReportClient() {
         >
           Últimos 30 dias
         </Button>
-        <Button variant="outline" size="sm" onClick={() => void collectSnapshot()} disabled={refreshing}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void collectSnapshot()}
+          disabled={refreshing}
+        >
           <RefreshCw className="mr-1.5 size-4" />
           {refreshing ? "Atualizando..." : "Coletar snapshot agora"}
         </Button>
@@ -129,7 +143,9 @@ export function CatalogCompetitionReportClient() {
 
       {error ? (
         <Card className="border-red-200 bg-red-50/70">
-          <CardContent className="pt-6 text-sm text-red-900">{error}</CardContent>
+          <CardContent className="pt-6 text-sm text-red-900">
+            {error}
+          </CardContent>
         </Card>
       ) : null}
 
@@ -165,17 +181,26 @@ export function CatalogCompetitionReportClient() {
               </span>
             </CardContent>
           </Card>
-          <Card><CardHeader><CardTitle className="text-sm">Sem sinal</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{fmtMinutes(data.totals.unknown)}</CardContent></Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Sem sinal</CardTitle>
+            </CardHeader>
+            <CardContent className="text-2xl font-semibold">
+              {fmtMinutes(data.totals.unknown)}
+            </CardContent>
+          </Card>
         </div>
       ) : null}
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Catálogo: anúncios mais tempo perdendo</CardTitle>
+          <CardTitle className="text-base">Catálogo anúncios </CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <p className="text-sm text-[var(--muted-foreground)]">Carregando...</p>
+            <p className="text-sm text-[var(--muted-foreground)]">
+              Carregando...
+            </p>
           ) : ranking.length === 0 ? (
             <p className="text-sm text-[var(--muted-foreground)]">
               Sem dados de catálogo ainda. Clique em &quot;Coletar snapshot
@@ -195,7 +220,10 @@ export function CatalogCompetitionReportClient() {
                 </thead>
                 <tbody>
                   {ranking.map((row) => (
-                    <tr key={row.mlItemId} className="border-b border-[var(--border)]">
+                    <tr
+                      key={row.mlItemId}
+                      className="border-b border-[var(--border)]"
+                    >
                       <td className="py-2 pr-3">
                         <Link
                           href={`/dashboard/catalog-report/${row.mlItemId}`}
@@ -216,7 +244,7 @@ export function CatalogCompetitionReportClient() {
                             <div className="truncate font-medium text-[var(--primary)] group-hover:underline">
                               {row.skuSnapshot ?? "Sem SKU"}
                             </div>
-                            <div className="truncate text-xs text-[var(--muted-foreground)]">
+                            <div className="truncate max-w-[400px] text-xs text-[var(--muted-foreground)]">
                               {row.titleSnapshot ?? "Sem título sincronizado"}
                             </div>
                             <div className="font-mono text-[11px] text-[var(--muted-foreground)]">
@@ -252,4 +280,3 @@ export function CatalogCompetitionReportClient() {
     </div>
   );
 }
-
