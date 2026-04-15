@@ -1,6 +1,7 @@
 import { getMercadoLibreConfig } from "./config";
 import type {
   ItemBody,
+  ItemPriceToWinResponse,
   ItemMultigetEntry,
   ItemsSearchResponse,
   OrderSearchResponse,
@@ -91,6 +92,22 @@ export async function fetchItemById(
 ): Promise<ItemBody | null> {
   const items = await fetchItemsByIds(accessToken, [id]);
   return items[0] ?? null;
+}
+
+export async function fetchItemPriceToWin(
+  accessToken: string,
+  itemId: string,
+): Promise<ItemPriceToWinResponse> {
+  const { apiBase } = getMercadoLibreConfig();
+  const res = await fetch(`${apiBase}/items/${itemId}/price_to_win`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`items/${itemId}/price_to_win failed: ${res.status} ${t}`);
+  }
+  return res.json() as Promise<ItemPriceToWinResponse>;
 }
 
 export type SalesWindowDateField = "date_closed" | "date_created";
@@ -231,7 +248,7 @@ export async function fetchUnitsSoldForItemsInWindow(
 export async function fetchAllUserItemIds(
   accessToken: string,
   userId: number,
-  options?: { status?: string },
+  options?: { status?: string; catalog_listing?: boolean },
 ): Promise<string[]> {
   const ids: string[] = [];
   let offset = 0;

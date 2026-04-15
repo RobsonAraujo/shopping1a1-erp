@@ -87,3 +87,9 @@ export type OrderSearchResponse = {
     limit: number;
   };
 };
+
+export type ItemPriceToWinResponse = {
+  status?: string;
+  // Doc fields can vary by category/site; keep flexible for raw persistence.
+  [key: string]: unknown;
+};

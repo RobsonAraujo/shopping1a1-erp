@@ -13,6 +13,8 @@ datasource db {
 model Listing {
   mlItemId       String    @id @map("ml_item_id")
   titleSnapshot  String?   @map("title_snapshot")
+  skuSnapshot    String?   @map("sku_snapshot")
+  imageUrlSnapshot String? @map("image_url_snapshot")
   catalogListing Boolean?  @map("catalog_listing")
   lastSyncedAt   DateTime? @map("last_synced_at")
   activeOnMl     Boolean   @default(true) @map("active_on_ml")
@@ -20,9 +22,57 @@ model Listing {
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
   warehouseStock WarehouseStock?
+  competitionEvents CatalogCompetitionEvent[]
+  competitionSnapshots CatalogCompetitionSnapshot[]
 
   @@index([activeOnMl])
   @@map("listings")
+}
+
+enum CatalogCompetitionStatus {
+  winning
+  losing
+  shared
+  unknown
+}
+
+enum CatalogCompetitionSource {
+  webhook
+  missed_feed
+  manual_poll
+}
+
+model CatalogCompetitionEvent {
+  id         String                   @id @default(cuid())
+  mlItemId   String                   @map("ml_item_id")
+  status     CatalogCompetitionStatus
+  source     CatalogCompetitionSource @default(webhook)
+  eventAt    DateTime                 @map("event_at")
+  receivedAt DateTime                 @default(now()) @map("received_at")
+  rawPayload Json                     @map("raw_payload")
+
+  listing Listing @relation(fields: [mlItemId], references: [mlItemId], onDelete: Cascade)
+
+  @@index([mlItemId, eventAt(sort: Desc)])
+  @@index([eventAt(sort: Desc)])
+  @@map("catalog_competition_events")
+}
+
+model CatalogCompetitionSnapshot {
+  id           String                   @id @default(cuid())
+  mlItemId     String                   @map("ml_item_id")
+  status       CatalogCompetitionStatus
+  priceToWin   Decimal?                 @map("price_to_win") @db.Decimal(18, 2)
+  snapshotAt   DateTime                 @default(now()) @map("snapshot_at")
+  source       CatalogCompetitionSource @default(manual_poll)
+  rawResponse  Json                     @map("raw_response")
+
+  listing Listing @relation(fields: [mlItemId], references: [mlItemId], onDelete: Cascade)
+
+  @@unique([mlItemId, snapshotAt])
+  @@index([snapshotAt(sort: Desc)])
+  @@index([mlItemId, snapshotAt(sort: Desc)])
+  @@map("catalog_competition_snapshots")
 }
 
 /// Estoque físico no galpão (1:1 com listing).
