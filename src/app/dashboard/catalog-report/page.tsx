@@ -9,7 +9,8 @@ export default function CatalogReportPage() {
         </h1>
         <p className="mt-2 max-w-3xl text-[15px] leading-relaxed text-[var(--muted-foreground)]">
           Visão separada de anúncios de catálogo com histórico de ganhando,
-          perdendo e compartilhando para os últimos 7 e 30 dias.
+          perdendo e compartilhando para os últimos 7 e 30 dias. Clique em um
+          anúncio para abrir a timeline detalhada.
         </p>
       </div>
 

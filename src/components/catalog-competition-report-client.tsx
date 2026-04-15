@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,12 @@ function fmtMinutes(minutes: number): string {
   const m = minutes % 60;
   if (h <= 0) return `${m}m`;
   return `${h}h ${m}m`;
+}
+
+function statusCellClass(status: "winning" | "losing" | "shared") {
+  if (status === "winning") return "font-semibold text-emerald-700";
+  if (status === "losing") return "font-semibold text-rose-700";
+  return "font-semibold text-amber-700";
 }
 
 export function CatalogCompetitionReportClient() {
@@ -124,9 +131,9 @@ export function CatalogCompetitionReportClient() {
 
       {data ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card><CardHeader><CardTitle className="text-sm">Ganhando</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{fmtMinutes(data.totals.winning)}</CardContent></Card>
-          <Card><CardHeader><CardTitle className="text-sm">Perdendo</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{fmtMinutes(data.totals.losing)}</CardContent></Card>
-          <Card><CardHeader><CardTitle className="text-sm">Compartilhando</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{fmtMinutes(data.totals.shared)}</CardContent></Card>
+          <Card><CardHeader><CardTitle className="text-sm">Ganhando</CardTitle></CardHeader><CardContent className="text-2xl font-semibold text-emerald-700">{fmtMinutes(data.totals.winning)}</CardContent></Card>
+          <Card><CardHeader><CardTitle className="text-sm">Perdendo</CardTitle></CardHeader><CardContent className="text-2xl font-semibold text-rose-700">{fmtMinutes(data.totals.losing)}</CardContent></Card>
+          <Card><CardHeader><CardTitle className="text-sm">Compartilhando</CardTitle></CardHeader><CardContent className="text-2xl font-semibold text-amber-700">{fmtMinutes(data.totals.shared)}</CardContent></Card>
           <Card><CardHeader><CardTitle className="text-sm">Sem sinal</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{fmtMinutes(data.totals.unknown)}</CardContent></Card>
         </div>
       ) : null}
@@ -159,7 +166,10 @@ export function CatalogCompetitionReportClient() {
                   {ranking.map((row) => (
                     <tr key={row.mlItemId} className="border-b border-[var(--border)]">
                       <td className="py-2 pr-3">
-                        <div className="flex items-center gap-2.5">
+                        <Link
+                          href={`/dashboard/catalog-report/${row.mlItemId}`}
+                          className="group flex items-center gap-2.5 rounded-md px-1 py-0.5 hover:bg-[var(--muted)]/40"
+                        >
                           <span className="relative inline-flex size-10 shrink-0 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--muted)]">
                             {row.imageUrlSnapshot ? (
                               <Image
@@ -172,7 +182,7 @@ export function CatalogCompetitionReportClient() {
                             ) : null}
                           </span>
                           <div className="min-w-0">
-                            <div className="truncate font-medium">
+                            <div className="truncate font-medium text-[var(--primary)] group-hover:underline">
                               {row.skuSnapshot ?? "Sem SKU"}
                             </div>
                             <div className="truncate text-xs text-[var(--muted-foreground)]">
@@ -182,11 +192,17 @@ export function CatalogCompetitionReportClient() {
                               {row.mlItemId}
                             </div>
                           </div>
-                        </div>
+                        </Link>
                       </td>
-                      <td className="py-2 pr-3">{fmtMinutes(row.totals.winning)}</td>
-                      <td className="py-2 pr-3">{fmtMinutes(row.totals.losing)}</td>
-                      <td className="py-2 pr-3">{fmtMinutes(row.totals.shared)}</td>
+                      <td className={`py-2 pr-3 ${statusCellClass("winning")}`}>
+                        {fmtMinutes(row.totals.winning)}
+                      </td>
+                      <td className={`py-2 pr-3 ${statusCellClass("losing")}`}>
+                        {fmtMinutes(row.totals.losing)}
+                      </td>
+                      <td className={`py-2 pr-3 ${statusCellClass("shared")}`}>
+                        {fmtMinutes(row.totals.shared)}
+                      </td>
                       <td className="py-2 pr-3">{row.timeline.length}</td>
                     </tr>
                   ))}
