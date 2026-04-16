@@ -9,6 +9,7 @@ import {
 import { upsertSellerCredentials } from "@/lib/mercadolibre/persist-seller-tokens";
 import {
   clearOAuthStateCookie,
+  mergeTokensWithExistingRefresh,
   readOAuthState,
   setSessionCookies,
 } from "@/lib/mercadolibre/session";
@@ -43,13 +44,14 @@ export async function GET(request: NextRequest) {
 
   try {
     const tokens = await exchangeCodeForTokens(code);
-    const me = await fetchMe(tokens.access_token);
+    const tokensForSession = mergeTokensWithExistingRefresh(tokens, cookieStore);
+    const me = await fetchMe(tokensForSession.access_token);
 
-    await upsertSellerCredentials(me.id, tokens);
+    await upsertSellerCredentials(me.id, tokensForSession);
 
     const res = NextResponse.redirect(new URL("/dashboard", request.url));
     clearOAuthStateCookie(res.cookies);
-    setSessionCookies(res.cookies, tokens, me.id);
+    setSessionCookies(res.cookies, tokensForSession, me.id);
     return res;
   } catch (e) {
     logServerError("mercadolibre/callback", e);

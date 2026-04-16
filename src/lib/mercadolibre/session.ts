@@ -63,6 +63,22 @@ export function readSession(store: MlCookieStore) {
   };
 }
 
+/**
+ * ML often omits `refresh_token` on later OAuth exchanges. Reuse the refresh token
+ * from the existing session cookie so DB upsert and cookies stay consistent.
+ */
+export function mergeTokensWithExistingRefresh(
+  tokens: TokenResponse,
+  store: MlCookieStore,
+): TokenResponse {
+  const prior = readSession(store);
+  const refresh = tokens.refresh_token ?? prior.refreshToken;
+  if (!refresh) {
+    return tokens;
+  }
+  return { ...tokens, refresh_token: refresh };
+}
+
 export function setSessionCookies(
   store: MlCookieStore,
   tokens: TokenResponse,

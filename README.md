@@ -41,7 +41,7 @@ Notifications for `catalog_item_competition_status` only carry metadata. The han
 
 ### OAuth tokens in the database (no fixed access token env)
 
-After a successful Mercado Livre login, the app stores the seller’s `refresh_token` and `access_token` in PostgreSQL table `ml_seller_credentials`, **encrypted at rest** with **AES-256-GCM** using `ENCRYPTION_KEY` (see [`src/lib/app-secret-crypto.ts`](src/lib/app-secret-crypto.ts)).
+After a successful Mercado Livre login, the app stores the seller’s `refresh_token` and `access_token` in PostgreSQL table `ml_seller_credentials`, **encrypted at rest** with **AES-256-GCM** using `ENCRYPTION_KEY` (see [`src/lib/app-secret-crypto.ts`](src/lib/app-secret-crypto.ts)). If Mercado Livre omits `refresh_token` on a later exchange, the OAuth callback **reuses the refresh token from the existing session cookie** so the row can still be written (`mergeTokensWithExistingRefresh` in [`src/lib/mercadolibre/session.ts`](src/lib/mercadolibre/session.ts)).
 
 The webhook reads the notification `user_id`, loads credentials for that seller, decrypts the refresh token, refreshes the access token when needed, then calls `price_to_win`.
 
