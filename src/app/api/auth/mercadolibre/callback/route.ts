@@ -6,6 +6,7 @@ import {
   logServerError,
   oauthRedirectErrorParam,
 } from "@/lib/server-public-error";
+import { upsertSellerCredentials } from "@/lib/mercadolibre/persist-seller-tokens";
 import {
   clearOAuthStateCookie,
   readOAuthState,
@@ -43,6 +44,8 @@ export async function GET(request: NextRequest) {
   try {
     const tokens = await exchangeCodeForTokens(code);
     const me = await fetchMe(tokens.access_token);
+
+    await upsertSellerCredentials(me.id, tokens);
 
     const res = NextResponse.redirect(new URL("/dashboard", request.url));
     clearOAuthStateCookie(res.cookies);

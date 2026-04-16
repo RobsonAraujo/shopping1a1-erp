@@ -1,3 +1,4 @@
+import { upsertSellerCredentials } from "./persist-seller-tokens";
 import { refreshAccessToken } from "./oauth";
 import type { TokenResponse } from "./types";
 
@@ -123,6 +124,7 @@ export async function getValidAccessToken(
       return null;
     }
     setSessionCookies(cookieStore, tokens, uid);
+    await upsertSellerCredentials(uid, tokens);
     return tokens.access_token;
   } catch {
     clearSessionCookies(cookieStore);

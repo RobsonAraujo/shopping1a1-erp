@@ -88,3 +88,15 @@ model WarehouseStock {
 
   @@map("warehouse_stock")
 }
+
+/// Tokens OAuth do vendedor ML (até 1 linha por `ml_user_id`) para chamadas server-side (ex.: webhook).
+/// `refresh_enc` / `access_enc` são texto cifrado (AES-256-GCM) com `ENCRYPTION_KEY`.
+model MlSellerCredentials {
+  mlUserId        Int       @id @map("ml_user_id")
+  refreshEnc      String    @map("refresh_enc") @db.Text
+  accessEnc       String?   @map("access_enc") @db.Text
+  accessExpiresAt DateTime? @map("access_expires_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@map("ml_seller_credentials")
+}

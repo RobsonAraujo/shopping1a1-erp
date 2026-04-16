@@ -68,25 +68,37 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    const [events, snapshots] = await Promise.all([
-      prisma.catalogCompetitionEvent.findMany({
-        where: { mlItemId: itemId, eventAt: { gte: from, lte: to } },
-        select: { eventAt: true, status: true },
+    const [baseline, snapshots] = await Promise.all([
+      prisma.catalogCompetitionSnapshot.findFirst({
+        where: { mlItemId: itemId, snapshotAt: { lt: from } },
+        select: { snapshotAt: true, status: true },
+        orderBy: { snapshotAt: "desc" },
       }),
       prisma.catalogCompetitionSnapshot.findMany({
         where: { mlItemId: itemId, snapshotAt: { gte: from, lte: to } },
         select: { snapshotAt: true, status: true },
+        orderBy: { snapshotAt: "asc" },
       }),
     ]);
 
-    const points: CompetitionPoint[] = [
-      ...events.map((e) => ({ at: e.eventAt, status: e.status, source: "event" as const })),
-      ...snapshots.map((s) => ({
+    const points: CompetitionPoint[] = [];
+    if (baseline) {
+      const firstAt = snapshots[0]?.snapshotAt.getTime();
+      if (snapshots.length === 0 || (firstAt !== undefined && firstAt > from.getTime())) {
+        points.push({
+          at: from,
+          status: baseline.status,
+          source: "snapshot",
+        });
+      }
+    }
+    for (const s of snapshots) {
+      points.push({
         at: s.snapshotAt,
         status: s.status,
-        source: "snapshot" as const,
-      })),
-    ];
+        source: "snapshot",
+      });
+    }
     const timeline = buildTimeline(points, from, to);
 
     const grouped = new Map<

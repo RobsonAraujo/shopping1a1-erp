@@ -77,41 +77,47 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const [events, snapshots] = await Promise.all([
-      prisma.catalogCompetitionEvent.findMany({
-        where: {
-          mlItemId: { in: itemIds },
-          eventAt: { gte: from, lte: to },
-        },
-        select: { mlItemId: true, eventAt: true, status: true },
-      }),
-      prisma.catalogCompetitionSnapshot.findMany({
-        where: {
-          mlItemId: { in: itemIds },
-          snapshotAt: { gte: from, lte: to },
-        },
-        select: { mlItemId: true, snapshotAt: true, status: true },
-      }),
-    ]);
+    const snapshots = await prisma.catalogCompetitionSnapshot.findMany({
+      where: {
+        mlItemId: { in: itemIds },
+        snapshotAt: { gte: from, lte: to },
+      },
+      select: { mlItemId: true, snapshotAt: true, status: true },
+    });
+    const baselineSnapshots = await prisma.catalogCompetitionSnapshot.findMany({
+      where: {
+        mlItemId: { in: itemIds },
+        snapshotAt: { lt: from },
+      },
+      select: { mlItemId: true, snapshotAt: true, status: true },
+      orderBy: { snapshotAt: "desc" },
+      distinct: ["mlItemId"],
+    });
 
     const totals = { winning: 0, losing: 0, shared: 0, unknown: 0 };
     const items = listings.map((listing) => {
-      const points: CompetitionPoint[] = [
-        ...events
-          .filter((e) => e.mlItemId === listing.mlItemId)
-          .map((e) => ({
-            at: e.eventAt,
-            status: e.status,
-            source: "event" as const,
-          })),
-        ...snapshots
-          .filter((s) => s.mlItemId === listing.mlItemId)
-          .map((s) => ({
-            at: s.snapshotAt,
-            status: s.status,
-            source: "snapshot" as const,
-          })),
-      ];
+      const inWindow = snapshots
+        .filter((s) => s.mlItemId === listing.mlItemId)
+        .sort((a, b) => a.snapshotAt.getTime() - b.snapshotAt.getTime());
+      const baseline = baselineSnapshots.find((s) => s.mlItemId === listing.mlItemId);
+      const points: CompetitionPoint[] = [];
+      if (baseline) {
+        const firstAt = inWindow[0]?.snapshotAt.getTime();
+        if (inWindow.length === 0 || (firstAt !== undefined && firstAt > from.getTime())) {
+          points.push({
+            at: from,
+            status: baseline.status,
+            source: "snapshot",
+          });
+        }
+      }
+      for (const s of inWindow) {
+        points.push({
+          at: s.snapshotAt,
+          status: s.status,
+          source: "snapshot",
+        });
+      }
       const timeline = buildTimeline(points, from, to);
       totals.winning += timeline.totals.winning;
       totals.losing += timeline.totals.losing;

@@ -44,9 +44,6 @@ async function main() {
   });
 
   // 2) Optional reset to rerun seed cleanly for this item.
-  await prisma.catalogCompetitionEvent.deleteMany({
-    where: { mlItemId: ITEM_ID },
-  });
   await prisma.catalogCompetitionSnapshot.deleteMany({
     where: { mlItemId: ITEM_ID },
   });
@@ -83,21 +80,6 @@ async function main() {
 
     for (const point of points) {
       const mlStatus = toMlStatus(point.status);
-
-      await prisma.catalogCompetitionEvent.create({
-        data: {
-          mlItemId: ITEM_ID,
-          status: point.status,
-          source: "webhook",
-          eventAt: point.at,
-          rawPayload: {
-            topic: "catalog_item_competition_status",
-            resource: `/items/${ITEM_ID}/price_to_win`,
-            status: mlStatus,
-            sent: point.at.toISOString(),
-          },
-        },
-      });
 
       await prisma.catalogCompetitionSnapshot.create({
         data: {
