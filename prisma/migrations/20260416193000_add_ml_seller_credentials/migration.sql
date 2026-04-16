@@ -8,3 +8,5 @@ CREATE TABLE "ml_seller_credentials" (
 
     CONSTRAINT "ml_seller_credentials_pkey" PRIMARY KEY ("ml_user_id")
 );
+
+ALTER TABLE "ml_seller_credentials" ALTER COLUMN "updated_at" DROP DEFAULT;
