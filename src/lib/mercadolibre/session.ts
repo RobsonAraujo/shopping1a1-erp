@@ -67,12 +67,19 @@ export function readSession(store: MlCookieStore) {
  * ML often omits `refresh_token` on later OAuth exchanges. Reuse the refresh token
  * from the existing session cookie so DB upsert and cookies stay consistent.
  */
+function nonEmptyRefreshToken(value: string | undefined): string | undefined {
+  const t = value?.trim();
+  return t ? t : undefined;
+}
+
 export function mergeTokensWithExistingRefresh(
   tokens: TokenResponse,
   store: MlCookieStore,
 ): TokenResponse {
   const prior = readSession(store);
-  const refresh = tokens.refresh_token ?? prior.refreshToken;
+  const refresh =
+    nonEmptyRefreshToken(tokens.refresh_token) ??
+    nonEmptyRefreshToken(prior.refreshToken);
   if (!refresh) {
     return tokens;
   }
@@ -139,9 +146,16 @@ export async function getValidAccessToken(
       clearSessionCookies(cookieStore);
       return null;
     }
-    setSessionCookies(cookieStore, tokens, uid);
-    await upsertSellerCredentials(uid, tokens);
-    return tokens.access_token;
+    // ML may omit refresh_token on refresh responses; keep the session refresh for cookies + DB.
+    const tokensForSession: TokenResponse = {
+      ...tokens,
+      refresh_token:
+        nonEmptyRefreshToken(tokens.refresh_token) ??
+        nonEmptyRefreshToken(session.refreshToken),
+    };
+    setSessionCookies(cookieStore, tokensForSession, uid);
+    await upsertSellerCredentials(uid, tokensForSession);
+    return tokensForSession.access_token;
   } catch {
     clearSessionCookies(cookieStore);
     return null;

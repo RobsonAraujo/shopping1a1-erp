@@ -35,6 +35,11 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
+## Mercado Livre OAuth (login)
+
+- `MERCADOLIBRE_REDIRECT_URI` must match **exactly** the Redirect URI registered in the ML app (for example `https://your-domain.com/api/auth/mercadolibre/callback`).
+- The authorization URL requests `scope=offline_access read write` so the token exchange returns a `refresh_token` (see [ML authentication docs](https://developers.mercadolivre.com.br/pt_br/autenticacao-e-autorizacao)). After changing scopes, sellers may need to log in again (or revoke the app once and re-authorize).
+
 ## Catalog competition webhook
 
 Notifications for `catalog_item_competition_status` only carry metadata. The handler calls `GET /items/{id}/price_to_win` and inserts a row in `catalog_competition_snapshots` **only when your derived status changed** vs the latest snapshot.

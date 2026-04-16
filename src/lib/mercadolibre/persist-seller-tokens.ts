@@ -37,7 +37,9 @@ export async function upsertSellerCredentials(
     where: { mlUserId },
   });
 
-  let refreshPlain: string | null = tokens.refresh_token ?? null;
+  const fromTokens =
+    typeof tokens.refresh_token === "string" ? tokens.refresh_token.trim() : "";
+  let refreshPlain: string | null = fromTokens || null;
   if (!refreshPlain && existing) {
     try {
       refreshPlain = decryptAppSecret(existing.refreshEnc);
@@ -49,7 +51,9 @@ export async function upsertSellerCredentials(
   if (!refreshPlain) {
     logServerError(
       "upsertSellerCredentials",
-      new Error("Missing refresh_token and no stored refresh for seller"),
+      new Error(
+        "Missing refresh_token and no stored refresh for seller. Ensure OAuth authorization uses scope offline_access (re-login after enabling), or reuse session cookie on callback.",
+      ),
     );
     return;
   }
