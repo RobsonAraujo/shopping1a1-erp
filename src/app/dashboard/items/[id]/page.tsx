@@ -2,11 +2,14 @@ import Image from "next/image";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { ChevronLeft, ExternalLink } from "lucide-react";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { fetchItemById } from "@/lib/mercadolibre/api";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { getItemSku } from "@/lib/mercadolibre/item-sku";
-import { getValidAccessToken } from "@/lib/mercadolibre/session";
+import {
+  getSessionAccessState,
+  refreshSessionPath,
+} from "@/lib/mercadolibre/session";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -17,7 +20,11 @@ type PageProps = {
 export default async function ItemDetailPage({ params }: PageProps) {
   const { id } = await params;
   const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
+  const session = getSessionAccessState(cookieStore);
+  if (session.needsRefresh) {
+    redirect(refreshSessionPath(`/dashboard/items/${encodeURIComponent(id)}`));
+  }
+  const token = session.accessToken;
 
   if (!token) {
     return null;

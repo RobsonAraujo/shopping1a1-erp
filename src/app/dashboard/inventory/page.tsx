@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { stockPlanningConfig } from "@/config/stock-planning";
 import { InventoryStockTable } from "@/components/inventory-stock-table";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,12 +13,20 @@ import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { getItemSku } from "@/lib/mercadolibre/item-sku";
 import { computeStockPlanningDisplay } from "@/lib/stock-planning";
 import { prisma } from "@/lib/db";
-import { getValidAccessToken, readSession } from "@/lib/mercadolibre/session";
+import {
+  getSessionAccessState,
+  readSession,
+  refreshSessionPath,
+} from "@/lib/mercadolibre/session";
 
 export default async function InventoryPage() {
 
   const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
+  const session = getSessionAccessState(cookieStore);
+  if (session.needsRefresh) {
+    redirect(refreshSessionPath("/dashboard/inventory"));
+  }
+  const token = session.accessToken;
   const { userId } = readSession(cookieStore);
 
   if (!token || userId === undefined) {

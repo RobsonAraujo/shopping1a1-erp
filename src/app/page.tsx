@@ -2,7 +2,10 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { ArrowRight, Shield } from "lucide-react";
-import { getValidAccessToken } from "@/lib/mercadolibre/session";
+import {
+  getSessionAccessState,
+  refreshSessionPath,
+} from "@/lib/mercadolibre/session";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -32,8 +35,11 @@ export default async function Home({ searchParams }: PageProps) {
 
   const err = sp.error;
   const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const isLoggedIn = Boolean(token);
+  const session = getSessionAccessState(cookieStore);
+  const isLoggedIn = session.isLoggedIn;
+  const dashboardHref = session.needsRefresh
+    ? refreshSessionPath("/dashboard")
+    : "/dashboard";
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-[var(--background)]">
@@ -49,7 +55,7 @@ export default async function Home({ searchParams }: PageProps) {
           </div>
           {isLoggedIn ? (
             <Button size="sm" asChild>
-              <Link href="/dashboard" className="gap-2">
+              <Link href={dashboardHref} className="gap-2">
                 Dashboard
                 <ArrowRight className="size-4" />
               </Link>
@@ -84,7 +90,7 @@ export default async function Home({ searchParams }: PageProps) {
             <div className="flex flex-wrap gap-3">
               {isLoggedIn ? (
                 <Button size="lg" asChild>
-                  <Link href="/dashboard" className="gap-2">
+                  <Link href={dashboardHref} className="gap-2">
                     Ir para o dashboard
                     <ArrowRight className="size-4" />
                   </Link>

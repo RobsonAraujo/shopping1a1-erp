@@ -63,6 +63,28 @@ export function readSession(store: MlCookieStore) {
   };
 }
 
+export function getSessionAccessState(store: MlCookieStore) {
+  const session = readSession(store);
+  const now = Date.now();
+  const needsRefresh = Boolean(
+    session.refreshToken &&
+      (!session.accessToken ||
+        (session.expiresAtMs !== undefined &&
+          session.expiresAtMs - now < 60_000)),
+  );
+
+  return {
+    ...session,
+    needsRefresh,
+    isLoggedIn: Boolean(session.accessToken || session.refreshToken),
+  };
+}
+
+export function refreshSessionPath(nextPath: string): string {
+  const next = nextPath.startsWith("/") ? nextPath : "/dashboard";
+  return `/api/auth/mercadolibre/refresh?next=${encodeURIComponent(next)}`;
+}
+
 /**
  * ML often omits `refresh_token` on later OAuth exchanges. Reuse the refresh token
  * from the existing session cookie so DB upsert and cookies stay consistent.

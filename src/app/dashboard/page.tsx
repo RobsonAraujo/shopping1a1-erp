@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { stockPlanningConfig } from "@/config/stock-planning";
 import { DashboardAttentionPanel } from "@/components/dashboard-attention-panel";
 import { DashboardItemsTable } from "@/components/dashboard-items-table";
@@ -9,12 +10,20 @@ import {
   fetchUnitsSoldForItemsInWindowBatched,
 } from "@/lib/mercadolibre/api";
 import { prisma } from "@/lib/db";
-import { getValidAccessToken, readSession } from "@/lib/mercadolibre/session";
+import {
+  getSessionAccessState,
+  readSession,
+  refreshSessionPath,
+} from "@/lib/mercadolibre/session";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 
 export default async function DashboardPage() {
   const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
+  const session = getSessionAccessState(cookieStore);
+  if (session.needsRefresh) {
+    redirect(refreshSessionPath("/dashboard"));
+  }
+  const token = session.accessToken;
   const { userId } = readSession(cookieStore);
 
   if (!token || userId === undefined) {

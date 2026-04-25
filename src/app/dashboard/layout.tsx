@@ -9,7 +9,10 @@ import {
   Warehouse,
 } from "lucide-react";
 import { fetchMe } from "@/lib/mercadolibre/api";
-import { getValidAccessToken } from "@/lib/mercadolibre/session";
+import {
+  getSessionAccessState,
+  refreshSessionPath,
+} from "@/lib/mercadolibre/session";
 import { Button } from "@/components/ui/button";
 
 export default async function DashboardLayout({
@@ -18,17 +21,22 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  if (!token) {
+  const session = getSessionAccessState(cookieStore);
+  if (!session.isLoggedIn) {
     redirect("/");
+  }
+  if (session.needsRefresh) {
+    redirect(refreshSessionPath("/dashboard"));
   }
 
   let nickname = "Conta";
-  try {
-    const me = await fetchMe(token);
-    nickname = me.nickname || `ID ${me.id}`;
-  } catch {
-    // keep default label
+  if (session.accessToken) {
+    try {
+      const me = await fetchMe(session.accessToken);
+      nickname = me.nickname || `ID ${me.id}`;
+    } catch {
+      // keep default label
+    }
   }
 
   return (
