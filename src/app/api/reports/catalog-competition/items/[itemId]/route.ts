@@ -14,6 +14,28 @@ function parseDateParam(v: string | null): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+function parseDateOnlyParamInTz(
+  value: string | null,
+  timeZone: string,
+  endOfDay: boolean,
+): Date | null {
+  if (!value) return null;
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const probe = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  const dayStartMs = getDayStartMsInTz(probe, timeZone);
+  if (!endOfDay) {
+    return new Date(dayStartMs);
+  }
+
+  const nextDayStartMs = getNextDayStartMsInTz(new Date(dayStartMs), timeZone);
+  return new Date(nextDayStartMs - 1000);
+}
+
 function formatInTz(d: Date, timeZone: string) {
   const date = new Intl.DateTimeFormat("pt-BR", {
     timeZone,
@@ -112,8 +134,19 @@ export async function GET(request: NextRequest, context: RouteContext) {
   }
 
   const tz = request.nextUrl.searchParams.get("tz") ?? reportsConfig.catalogCompetitionTimezone;
-  const to = parseDateParam(request.nextUrl.searchParams.get("to")) ?? new Date();
+  const fromDateOnly = parseDateOnlyParamInTz(
+    request.nextUrl.searchParams.get("fromDate"),
+    tz,
+    false,
+  );
+  const toDateOnly = parseDateOnlyParamInTz(
+    request.nextUrl.searchParams.get("toDate"),
+    tz,
+    true,
+  );
+  const to = toDateOnly ?? parseDateParam(request.nextUrl.searchParams.get("to")) ?? new Date();
   const from =
+    fromDateOnly ??
     parseDateParam(request.nextUrl.searchParams.get("from")) ??
     new Date(to.getTime() - 7 * 24 * 60 * 60 * 1000);
   if (from.getTime() >= to.getTime()) {
@@ -166,7 +199,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
         source: "snapshot",
       });
     }
-    const timeline = buildTimeline(points, from, to);
+    const latestSnapshotAt = snapshots[snapshots.length - 1]?.snapshotAt ?? null;
+    const timelineEnd =
+      latestSnapshotAt && latestSnapshotAt.getTime() > from.getTime()
+        ? latestSnapshotAt
+        : from;
+    const timeline = buildTimeline(points, from, timelineEnd);
 
     const grouped = new Map<
       string,

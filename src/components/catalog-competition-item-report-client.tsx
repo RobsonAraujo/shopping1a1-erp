@@ -67,7 +67,7 @@ export function CatalogCompetitionItemReportClient({ itemId }: { itemId: string 
   const [data, setData] = useState<DetailResponse | null>(null);
   const [rangePreset, setRangePreset] = useState<"custom" | 7 | 15 | 30>(7);
   const [fromDate, setFromDate] = useState(() =>
-    isoDateInput(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)),
+    isoDateInput(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000)),
   );
   const [toDate, setToDate] = useState(() => isoDateInput(new Date()));
 
@@ -78,8 +78,8 @@ export function CatalogCompetitionItemReportClient({ itemId }: { itemId: string 
       const effectiveFromDate = range?.fromDate ?? fromDate;
       const effectiveToDate = range?.toDate ?? toDate;
       const q = new URLSearchParams({
-        from: new Date(`${effectiveFromDate}T00:00:00`).toISOString(),
-        to: new Date(`${effectiveToDate}T23:59:59`).toISOString(),
+        fromDate: effectiveFromDate,
+        toDate: effectiveToDate,
         tz: reportsConfig.catalogCompetitionTimezone,
       });
       const res = await fetch(
@@ -106,7 +106,7 @@ export function CatalogCompetitionItemReportClient({ itemId }: { itemId: string 
   function applyPreset(days: 7 | 15 | 30) {
     const to = new Date();
     const from = new Date(to);
-    from.setDate(from.getDate() - days);
+    from.setDate(from.getDate() - (days - 1));
     const nextFromDate = isoDateInput(from);
     const nextToDate = isoDateInput(to);
     setRangePreset(days);
