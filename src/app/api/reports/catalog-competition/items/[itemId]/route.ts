@@ -25,7 +25,7 @@ function formatInTz(d: Date, timeZone: string) {
     timeZone,
     hour: "2-digit",
     minute: "2-digit",
-    hour12: false,
+    hour12: true,
   }).format(d);
   const dayKey = new Intl.DateTimeFormat("en-CA", {
     timeZone,
@@ -34,6 +34,73 @@ function formatInTz(d: Date, timeZone: string) {
     day: "2-digit",
   }).format(d);
   return { date, time, dayKey };
+}
+
+function getTimeZoneOffsetMs(d: Date, timeZone: string): number {
+  const tzNamePart = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    timeZoneName: "shortOffset",
+  })
+    .formatToParts(d)
+    .find((part) => part.type === "timeZoneName")?.value;
+  if (!tzNamePart) return 0;
+  if (tzNamePart === "GMT" || tzNamePart === "UTC") return 0;
+
+  const match = tzNamePart.match(/^GMT([+-])(\d{1,2})(?::?(\d{2}))?$/);
+  if (!match) return 0;
+
+  const sign = match[1] === "-" ? -1 : 1;
+  const hours = Number(match[2]);
+  const minutes = Number(match[3] ?? "0");
+  return sign * (hours * 60 + minutes) * 60 * 1000;
+}
+
+function getDayStartMsInTz(d: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(d);
+
+  const year = Number(parts.find((part) => part.type === "year")?.value ?? "0");
+  const month = Number(parts.find((part) => part.type === "month")?.value ?? "1");
+  const day = Number(parts.find((part) => part.type === "day")?.value ?? "1");
+  const utcMidnightMs = Date.UTC(year, month - 1, day, 0, 0, 0);
+  const offsetMs = getTimeZoneOffsetMs(new Date(utcMidnightMs), timeZone);
+  return utcMidnightMs - offsetMs;
+}
+
+function getNextDayStartMsInTz(d: Date, timeZone: string): number {
+  const startMs = getDayStartMsInTz(d, timeZone);
+  const tomorrowProbe = new Date(startMs + 36 * 60 * 60 * 1000);
+  return getDayStartMsInTz(tomorrowProbe, timeZone);
+}
+
+function splitIntervalByDay(
+  fromDate: Date,
+  toDate: Date,
+  timeZone: string,
+): Array<{ from: Date; to: Date; minutes: number }> {
+  const segments: Array<{ from: Date; to: Date; minutes: number }> = [];
+  let cursorMs = fromDate.getTime();
+  const endMs = toDate.getTime();
+
+  while (cursorMs < endMs) {
+    const nextDayStartMs = getNextDayStartMsInTz(new Date(cursorMs), timeZone);
+    const segmentEndMs = Math.min(endMs, nextDayStartMs);
+    if (segmentEndMs <= cursorMs) break;
+
+    const minutes = Math.max(0, Math.round((segmentEndMs - cursorMs) / 60000));
+    segments.push({
+      from: new Date(cursorMs),
+      to: new Date(segmentEndMs),
+      minutes,
+    });
+    cursorMs = segmentEndMs;
+  }
+
+  return segments;
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
@@ -108,19 +175,22 @@ export async function GET(request: NextRequest, context: RouteContext) {
     for (const interval of timeline.intervals) {
       const fromDate = new Date(interval.from);
       const toDate = new Date(interval.to);
-      const fromFmt = formatInTz(fromDate, tz);
-      const toFmt = formatInTz(toDate, tz);
+      const segments = splitIntervalByDay(fromDate, toDate, tz);
 
-      const key = fromFmt.dayKey;
-      const existing = grouped.get(key) ?? { label: fromFmt.date, entries: [] };
-      existing.entries.push({
-        from: fromFmt.time,
-        to: toFmt.time,
-        status: interval.status,
-        minutes: interval.minutes,
-        source: interval.source,
-      });
-      grouped.set(key, existing);
+      for (const segment of segments) {
+        const fromFmt = formatInTz(segment.from, tz);
+        const toFmt = formatInTz(segment.to, tz);
+        const key = fromFmt.dayKey;
+        const existing = grouped.get(key) ?? { label: fromFmt.date, entries: [] };
+        existing.entries.push({
+          from: fromFmt.time,
+          to: toFmt.time,
+          status: interval.status,
+          minutes: segment.minutes,
+          source: interval.source,
+        });
+        grouped.set(key, existing);
+      }
     }
 
     const days = [...grouped.entries()]

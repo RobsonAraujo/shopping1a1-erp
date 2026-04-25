@@ -65,18 +65,21 @@ export function CatalogCompetitionItemReportClient({ itemId }: { itemId: string 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<DetailResponse | null>(null);
+  const [rangePreset, setRangePreset] = useState<"custom" | 7 | 15 | 30>(7);
   const [fromDate, setFromDate] = useState(() =>
     isoDateInput(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)),
   );
   const [toDate, setToDate] = useState(() => isoDateInput(new Date()));
 
-  async function loadDetail() {
+  async function loadDetail(range?: { fromDate: string; toDate: string }) {
     setLoading(true);
     setError(null);
     try {
+      const effectiveFromDate = range?.fromDate ?? fromDate;
+      const effectiveToDate = range?.toDate ?? toDate;
       const q = new URLSearchParams({
-        from: new Date(`${fromDate}T00:00:00`).toISOString(),
-        to: new Date(`${toDate}T23:59:59`).toISOString(),
+        from: new Date(`${effectiveFromDate}T00:00:00`).toISOString(),
+        to: new Date(`${effectiveToDate}T23:59:59`).toISOString(),
         tz: reportsConfig.catalogCompetitionTimezone,
       });
       const res = await fetch(
@@ -100,6 +103,18 @@ export function CatalogCompetitionItemReportClient({ itemId }: { itemId: string 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemId]);
 
+  function applyPreset(days: 7 | 15 | 30) {
+    const to = new Date();
+    const from = new Date(to);
+    from.setDate(from.getDate() - days);
+    const nextFromDate = isoDateInput(from);
+    const nextToDate = isoDateInput(to);
+    setRangePreset(days);
+    setFromDate(nextFromDate);
+    setToDate(nextToDate);
+    void loadDetail({ fromDate: nextFromDate, toDate: nextToDate });
+  }
+
   const totalMinutes = useMemo(() => {
     if (!data) return 0;
     return (
@@ -115,7 +130,10 @@ export function CatalogCompetitionItemReportClient({ itemId }: { itemId: string 
           <input
             type="date"
             value={fromDate}
-            onChange={(e) => setFromDate(e.target.value)}
+            onChange={(e) => {
+              setRangePreset("custom");
+              setFromDate(e.target.value);
+            }}
             className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
           />
         </div>
@@ -124,9 +142,38 @@ export function CatalogCompetitionItemReportClient({ itemId }: { itemId: string 
           <input
             type="date"
             value={toDate}
-            onChange={(e) => setToDate(e.target.value)}
+            onChange={(e) => {
+              setRangePreset("custom");
+              setToDate(e.target.value);
+            }}
             className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
           />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant={rangePreset === 7 ? "default" : "outline"}
+            size="sm"
+            onClick={() => applyPreset(7)}
+            disabled={loading}
+          >
+            Últimos 7 dias
+          </Button>
+          <Button
+            variant={rangePreset === 15 ? "default" : "outline"}
+            size="sm"
+            onClick={() => applyPreset(15)}
+            disabled={loading}
+          >
+            Últimos 15 dias
+          </Button>
+          <Button
+            variant={rangePreset === 30 ? "default" : "outline"}
+            size="sm"
+            onClick={() => applyPreset(30)}
+            disabled={loading}
+          >
+            Últimos 30 dias
+          </Button>
         </div>
         <Button size="sm" onClick={() => void loadDetail()} disabled={loading}>
           {loading ? "Carregando..." : "Atualizar período"}
