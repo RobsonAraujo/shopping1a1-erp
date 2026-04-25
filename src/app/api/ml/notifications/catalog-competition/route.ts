@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import {
+  type CompetitionStatus,
   deriveStatusFromPriceToWin,
   extractPriceToWin,
 } from "@/lib/catalog-competition";
@@ -22,12 +23,15 @@ import { isEncryptionKeyConfigured } from "@/lib/app-secret-crypto";
  */
 function extractItemId(resource: unknown): string | null {
   if (typeof resource !== "string") return null;
-  const m = resource.match(/\/items\/([^/]+)\/price_to_win/i);
-  return m?.[1] ?? null;
+  const direct = resource.match(/\/items\/([^/?#]+)/i);
+  if (direct?.[1]) return direct[1];
+
+  const anywhere = resource.match(/\b(ML[A-Z]?\d+)\b/i);
+  return anywhere?.[1]?.toUpperCase() ?? null;
 }
 
 function parseMlUserId(payload: Record<string, unknown>): number | null {
-  const v = payload.user_id;
+  const v = payload.user_id ?? payload.userId ?? payload.application_user_id;
   if (typeof v === "number" && Number.isFinite(v)) return v;
   if (typeof v === "string") {
     const n = parseInt(v, 10);
@@ -36,11 +40,60 @@ function parseMlUserId(payload: Record<string, unknown>): number | null {
   return null;
 }
 
+function parseWebhookDate(payload: NotificationPayload): Date {
+  const raw = payload.sent ?? payload.received;
+  if (typeof raw !== "string") return new Date();
+
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? new Date() : d;
+}
+
+function jsonSafe(value: unknown) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function webhookLog(message: string, details: Record<string, unknown>) {
+  console.info("[catalog-competition-webhook]", message, details);
+}
+
+function webhookWarn(message: string, details: Record<string, unknown>) {
+  console.warn("[catalog-competition-webhook]", message, details);
+}
+
+async function createSnapshotWithRetry(data: {
+  mlItemId: string;
+  status: CompetitionStatus;
+  source: "webhook";
+  priceToWin: number | null;
+  snapshotAt: Date;
+  rawResponse: unknown;
+}) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await prisma.catalogCompetitionSnapshot.create({
+        data: {
+          ...data,
+          snapshotAt: new Date(data.snapshotAt.getTime() + attempt),
+          rawResponse: jsonSafe(data.rawResponse),
+        },
+      });
+    } catch (e) {
+      const code =
+        typeof e === "object" && e !== null && "code" in e
+          ? String((e as { code?: unknown }).code)
+          : "";
+      if (code !== "P2002" || attempt === 2) throw e;
+    }
+  }
+}
+
 type NotificationPayload = Record<string, unknown> & {
   topic?: string;
   resource?: string;
   sent?: string;
   received?: string;
+  debugPriceToWin?: Record<string, unknown>;
+  debugBypassCredentials?: boolean;
 };
 
 export async function POST(request: NextRequest) {
@@ -52,16 +105,34 @@ export async function POST(request: NextRequest) {
   }
 
   const topic = payload.topic ?? "";
+  const debugPriceToWin =
+    process.env.NODE_ENV !== "production" ? payload.debugPriceToWin : undefined;
+  const isDebugSimulation =
+    debugPriceToWin !== undefined && payload.debugBypassCredentials === true;
+
   if (topic && topic !== "catalog_item_competition_status") {
-    return NextResponse.json({ ok: true, ignored: "topic" });
+    webhookLog("ignored topic", { topic });
+    return NextResponse.json({ ok: true, ignored: "topic", topic });
   }
 
   const itemId = extractItemId(payload.resource);
   if (!itemId) {
-    return NextResponse.json({ ok: true, ignored: "resource" });
+    webhookWarn("ignored resource", {
+      topic,
+      resource: payload.resource,
+      reason: "item_id_not_found",
+    });
+    return NextResponse.json({
+      ok: true,
+      ignored: "resource",
+      topic,
+      resource: payload.resource,
+      hint: "Could not extract item id from notification resource.",
+    });
   }
 
-  if (!isEncryptionKeyConfigured()) {
+  if (!isDebugSimulation && !isEncryptionKeyConfigured()) {
+    webhookWarn("missing encryption key", { topic, itemId });
     return NextResponse.json(
       {
         ok: true,
@@ -74,28 +145,57 @@ export async function POST(request: NextRequest) {
 
   const mlUserId = parseMlUserId(payload);
   if (mlUserId === null) {
-    return NextResponse.json(
-      { ok: true, skipped: "missing_user_id", hint: "Notification payload had no user_id." },
-      { status: 200 },
-    );
-  }
-
-  const token = await resolveSellerAccessToken(mlUserId);
-  if (!token) {
+    webhookWarn("missing user id", { topic, itemId, resource: payload.resource });
     return NextResponse.json(
       {
         ok: true,
-        skipped: "no_stored_credentials",
-        hint: "Log in once via Mercado Livre so tokens are saved for this seller.",
-        mlUserId,
+        skipped: "missing_user_id",
+        itemId,
+        hint: "Notification payload had no user_id.",
       },
       { status: 200 },
     );
   }
 
+  let token: string | null = null;
+  if (!isDebugSimulation) {
+    const storedCredentials = await prisma.mlSellerCredentials.findUnique({
+      where: { mlUserId },
+      select: { mlUserId: true },
+    });
+    if (!storedCredentials) {
+      webhookWarn("no stored credentials", { topic, itemId, mlUserId });
+      return NextResponse.json(
+        {
+          ok: true,
+          skipped: "no_stored_credentials",
+          hint: "Log in once via Mercado Livre so tokens are saved for this seller.",
+          itemId,
+          mlUserId,
+        },
+        { status: 200 },
+      );
+    }
+
+    token = await resolveSellerAccessToken(mlUserId);
+    if (!token) {
+      webhookWarn("stored credentials unusable", { topic, itemId, mlUserId });
+      return NextResponse.json(
+        {
+          ok: true,
+          skipped: "stored_credentials_unusable",
+          hint: "Stored seller credentials could not be decrypted or refreshed.",
+          itemId,
+          mlUserId,
+        },
+        { status: 200 },
+      );
+    }
+  }
+
   let pricePayload: Record<string, unknown>;
   try {
-    const raw = await fetchItemPriceToWin(token, itemId);
+    const raw = debugPriceToWin ?? (await fetchItemPriceToWin(token ?? "", itemId));
     pricePayload = raw as Record<string, unknown>;
   } catch (e) {
     logServerError(`api/ml/notifications/catalog-competition price_to_win item=${itemId}`, e);
@@ -105,57 +205,74 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const rawResponse = JSON.parse(JSON.stringify(pricePayload));
+  const snapshotAt = parseWebhookDate(payload);
+  const rawResponse = {
+    notification: jsonSafe(payload),
+    priceToWin: jsonSafe(pricePayload),
+  };
   const status = deriveStatusFromPriceToWin(pricePayload);
   const priceToWin = extractPriceToWin(pricePayload);
 
   try {
     const latest = await prisma.catalogCompetitionSnapshot.findFirst({
       where: { mlItemId: itemId },
-      select: { status: true },
+      select: { status: true, snapshotAt: true },
       orderBy: { snapshotAt: "desc" },
     });
 
     if (latest?.status === status) {
+      webhookLog("unchanged status", {
+        itemId,
+        mlUserId,
+        status,
+        latestSnapshotAt: latest.snapshotAt.toISOString(),
+      });
       return NextResponse.json({
         ok: true,
         itemId,
+        mlUserId,
+        status,
         inserted: false,
         unchanged: true,
       });
     }
 
-    await prisma.$transaction(async (tx) => {
-      await tx.listing.upsert({
-        where: { mlItemId: itemId },
-        create: {
-          mlItemId: itemId,
-          catalogListing: true,
-          activeOnMl: true,
-          lastSyncedAt: new Date(),
-        },
-        update: {
-          catalogListing: true,
-          lastSyncedAt: new Date(),
-        },
-      });
-
-      await tx.catalogCompetitionSnapshot.create({
-        data: {
-          mlItemId: itemId,
-          status,
-          source: "webhook",
-          priceToWin,
-          rawResponse,
-        },
-      });
+    await prisma.listing.upsert({
+      where: { mlItemId: itemId },
+      create: {
+        mlItemId: itemId,
+        catalogListing: true,
+        activeOnMl: true,
+        lastSyncedAt: new Date(),
+      },
+      update: {
+        catalogListing: true,
+        lastSyncedAt: new Date(),
+      },
     });
 
+    await createSnapshotWithRetry({
+      mlItemId: itemId,
+      status,
+      source: "webhook",
+      priceToWin,
+      snapshotAt,
+      rawResponse,
+    });
+
+    webhookLog("inserted snapshot", {
+      itemId,
+      mlUserId,
+      status,
+      snapshotAt: snapshotAt.toISOString(),
+    });
     return NextResponse.json({
       ok: true,
       itemId,
+      mlUserId,
       inserted: true,
       status,
+      snapshotAt: snapshotAt.toISOString(),
     });
   } catch (e) {
     logServerError("api/ml/notifications/catalog-competition", e);
