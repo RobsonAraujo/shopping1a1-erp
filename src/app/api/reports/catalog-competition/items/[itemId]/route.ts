@@ -7,6 +7,7 @@ import { getValidAccessToken } from "@/lib/mercadolibre/session";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 
 type RouteContext = { params: Promise<{ itemId: string }> };
+const STATUS_CARRY_MAX_MS = 6 * 60 * 60 * 1000;
 
 function parseDateParam(v: string | null): Date | null {
   if (!v) return null;
@@ -125,6 +126,34 @@ function splitIntervalByDay(
   return segments;
 }
 
+function applyCarryWindow(
+  points: CompetitionPoint[],
+  maxCarryMs: number,
+): CompetitionPoint[] {
+  if (points.length <= 1) return points;
+
+  const ordered = [...points].sort((a, b) => a.at.getTime() - b.at.getTime());
+  const bounded: CompetitionPoint[] = [];
+
+  for (let i = 0; i < ordered.length; i += 1) {
+    const curr = ordered[i];
+    const next = ordered[i + 1];
+    bounded.push(curr);
+
+    if (!next) continue;
+    const gapMs = next.at.getTime() - curr.at.getTime();
+    if (gapMs > maxCarryMs) {
+      bounded.push({
+        at: new Date(curr.at.getTime() + maxCarryMs),
+        status: "unknown",
+        source: curr.source,
+      });
+    }
+  }
+
+  return bounded.sort((a, b) => a.at.getTime() - b.at.getTime());
+}
+
 export async function GET(request: NextRequest, context: RouteContext) {
   const { itemId } = await context.params;
   const cookieStore = await cookies();
@@ -182,7 +211,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
     ]);
 
     const points: CompetitionPoint[] = [];
-    if (baseline) {
+    if (
+      baseline &&
+      from.getTime() - baseline.snapshotAt.getTime() <= STATUS_CARRY_MAX_MS
+    ) {
       const firstAt = snapshots[0]?.snapshotAt.getTime();
       if (snapshots.length === 0 || (firstAt !== undefined && firstAt > from.getTime())) {
         points.push({
@@ -199,12 +231,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
         source: "snapshot",
       });
     }
-    const latestSnapshotAt = snapshots[snapshots.length - 1]?.snapshotAt ?? null;
-    const timelineEnd =
-      latestSnapshotAt && latestSnapshotAt.getTime() > from.getTime()
-        ? latestSnapshotAt
-        : from;
-    const timeline = buildTimeline(points, from, timelineEnd);
+    const boundedPoints = applyCarryWindow(points, STATUS_CARRY_MAX_MS);
+    const latestPointAt = boundedPoints[boundedPoints.length - 1]?.at ?? null;
+    const timelineEnd = latestPointAt
+      ? new Date(Math.min(to.getTime(), latestPointAt.getTime() + STATUS_CARRY_MAX_MS))
+      : from;
+    const timeline = buildTimeline(boundedPoints, from, timelineEnd);
 
     const grouped = new Map<
       string,
