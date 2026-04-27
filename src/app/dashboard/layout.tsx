@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { fetchMe } from "@/lib/mercadolibre/api";
 import { PushNotificationToggle } from "@/components/push-notification-toggle";
+import { MobileDashboardMenu } from "@/components/mobile-dashboard-menu";
 import {
   getSessionAccessState,
   refreshSessionPath,
@@ -93,7 +94,12 @@ export default async function DashboardLayout({
             >
               {nickname}
             </span>
-            <form action="/api/auth/mercadolibre/signout" method="post">
+            <MobileDashboardMenu />
+            <form
+              action="/api/auth/mercadolibre/signout"
+              method="post"
+              className="hidden sm:block"
+            >
               <Button
                 type="submit"
                 variant="outline"
