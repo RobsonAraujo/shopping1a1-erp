@@ -30,12 +30,30 @@ export function PushNotificationToggle() {
   const [statusText, setStatusText] = useState<string | null>(null);
 
   useEffect(() => {
-    setSupported("serviceWorker" in navigator && "PushManager" in window);
+    const pushSupported =
+      "Notification" in window &&
+      "serviceWorker" in navigator &&
+      "PushManager" in window;
+    setSupported(pushSupported);
+    if (!pushSupported) {
+      setStatusText("Este navegador não suporta notificações push.");
+      return;
+    }
     setPermission(Notification.permission);
+    if (Notification.permission === "denied") {
+      setStatusText("Permissão de notificações bloqueada no navegador.");
+    }
 
     void fetch("/api/push/subscriptions")
       .then(async (response) => {
-        if (!response.ok) return null;
+        if (response.status === 401) {
+          setStatusText("Sessão expirada. Entre novamente para ativar alertas.");
+          return null;
+        }
+        if (!response.ok) {
+          setStatusText("Não foi possível verificar alertas.");
+          return null;
+        }
         return (await response.json()) as SubscriptionState;
       })
       .then((data) => {
@@ -147,7 +165,7 @@ export function PushNotificationToggle() {
         {enabled ? "Alertas de catálogo ativos" : "Ativar alertas de catálogo"}
       </Button>
       {statusText ? (
-        <span className="hidden max-w-[14rem] text-right text-[11px] leading-tight text-[var(--muted-foreground)] md:block">
+        <span className="max-w-[14rem] text-right text-[11px] leading-tight text-[var(--muted-foreground)]">
           {statusText}
         </span>
       ) : null}
