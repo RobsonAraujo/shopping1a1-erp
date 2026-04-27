@@ -1,7 +1,8 @@
 import Link from "next/link";
+import Image from "next/image";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { ArrowRight, Shield } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import {
   getSessionAccessState,
   refreshSessionPath,
@@ -46,9 +47,14 @@ export default async function Home({ searchParams }: PageProps) {
       <header className="border-b border-[var(--border)] bg-[var(--card)]/90 backdrop-blur-sm">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-4 sm:px-6">
           <div className="flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm">
-              <Shield className="size-5" aria-hidden />
-            </span>
+            <Image
+              src="/logo-bg-blue.png"
+              alt=""
+              width={36}
+              height={36}
+              className="h-9 w-9 rounded-lg object-cover shadow-sm"
+              priority
+            />
             <span className="text-lg font-semibold tracking-tight text-[var(--primary)]">
               ERP 1a1
             </span>

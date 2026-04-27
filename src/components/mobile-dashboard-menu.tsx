@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
@@ -105,13 +106,22 @@ export function MobileDashboardMenu() {
           ].join(" ")}
         >
           <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                Menu
-              </p>
-              <p className="mt-1 text-sm font-semibold text-[var(--foreground)]">
-                ERP 1a1
-              </p>
+            <div className="flex items-center gap-3">
+              <Image
+                src="/logo-bg-blue.png"
+                alt=""
+                width={40}
+                height={40}
+                className="h-10 w-10 rounded-xl object-cover shadow-sm"
+              />
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                  Menu
+                </p>
+                <p className="mt-1 text-sm font-semibold text-[var(--foreground)]">
+                  ERP 1a1
+                </p>
+              </div>
             </div>
             <Button
               type="button"

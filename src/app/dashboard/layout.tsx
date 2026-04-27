@@ -1,9 +1,9 @@
 import { cookies } from "next/headers";
+import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   ChartNoAxesColumn,
-  LayoutDashboard,
   LogOut,
   Package,
   Warehouse,
@@ -50,9 +50,14 @@ export default async function DashboardLayout({
               href="/dashboard"
               className="flex shrink-0 items-center gap-2 text-[var(--primary)] transition-opacity hover:opacity-90"
             >
-              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm">
-                <LayoutDashboard className="size-5" aria-hidden />
-              </span>
+              <Image
+                src="/logo-bg-blue.png"
+                alt=""
+                width={36}
+                height={36}
+                className="h-9 w-9 rounded-lg object-cover shadow-sm"
+                priority
+              />
               <span className="hidden font-semibold tracking-tight sm:inline">
                 ERP 1a1
               </span>
