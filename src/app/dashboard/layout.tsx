@@ -9,6 +9,7 @@ import {
   Warehouse,
 } from "lucide-react";
 import { fetchMe } from "@/lib/mercadolibre/api";
+import { PushNotificationToggle } from "@/components/push-notification-toggle";
 import {
   getSessionAccessState,
   refreshSessionPath,
@@ -85,6 +86,7 @@ export default async function DashboardLayout({
             </nav>
           </div>
           <div className="flex shrink-0 items-center gap-2 sm:gap-4">
+            <PushNotificationToggle />
             <span
               className="hidden max-w-[12rem] truncate text-sm text-[var(--muted-foreground)] md:inline"
               title={nickname}

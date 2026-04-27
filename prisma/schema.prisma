@@ -83,3 +83,19 @@ model MlSellerCredentials {
 
   @@map("ml_seller_credentials")
 }
+
+/// Push subscriptions Web Push por vendedor/dispositivo.
+model PushSubscription {
+  id         String   @id @default(cuid())
+  mlUserId   Int      @map("ml_user_id")
+  endpoint   String   @db.Text
+  p256dh     String   @db.Text
+  auth       String   @db.Text
+  userAgent  String?  @map("user_agent") @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@unique([mlUserId, endpoint])
+  @@index([mlUserId])
+  @@map("push_subscriptions")
+}

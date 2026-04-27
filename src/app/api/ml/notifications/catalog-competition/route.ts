@@ -7,6 +7,7 @@ import {
 } from "@/lib/catalog-competition";
 import { fetchItemPriceToWin } from "@/lib/mercadolibre/api";
 import { resolveSellerAccessToken } from "@/lib/mercadolibre/persist-seller-tokens";
+import { canSendWebPush, sendWebPushNotification } from "@/lib/push/webpush";
 import { logServerError } from "@/lib/server-public-error";
 import { isEncryptionKeyConfigured } from "@/lib/app-secret-crypto";
 
@@ -58,6 +59,53 @@ function webhookLog(message: string, details: Record<string, unknown>) {
 
 function webhookWarn(message: string, details: Record<string, unknown>) {
   console.warn("[catalog-competition-webhook]", message, details);
+}
+
+async function sendLosingPushAlerts(mlUserId: number, itemId: string, snapshotAt: Date) {
+  if (!canSendWebPush()) {
+    webhookWarn("webpush not configured", { mlUserId, itemId });
+    return;
+  }
+
+  const subscriptions = await prisma.pushSubscription.findMany({
+    where: { mlUserId },
+    select: { endpoint: true, p256dh: true, auth: true },
+  });
+  if (subscriptions.length === 0) return;
+
+  const payload = {
+    title: "Anúncio perdendo no catálogo",
+    body: `${itemId} entrou em losing às ${snapshotAt.toLocaleTimeString("pt-BR")}.`,
+    url: `/dashboard/catalog-report/${encodeURIComponent(itemId)}`,
+    tag: `catalog-losing-${itemId}`,
+  };
+
+  for (const subscription of subscriptions) {
+    try {
+      await sendWebPushNotification(subscription, payload);
+    } catch (error) {
+      const statusCode =
+        typeof error === "object" &&
+        error !== null &&
+        "statusCode" in error &&
+        typeof (error as { statusCode?: unknown }).statusCode === "number"
+          ? (error as { statusCode: number }).statusCode
+          : null;
+
+      if (statusCode === 404 || statusCode === 410) {
+        await prisma.pushSubscription.deleteMany({
+          where: { mlUserId, endpoint: subscription.endpoint },
+        });
+        continue;
+      }
+
+      webhookWarn("failed to send push", {
+        mlUserId,
+        itemId,
+        endpoint: subscription.endpoint,
+      });
+    }
+  }
 }
 
 async function createSnapshotWithRetry(data: {
@@ -220,7 +268,8 @@ export async function POST(request: NextRequest) {
       orderBy: { snapshotAt: "desc" },
     });
 
-    if (latest?.status === status) {
+    const previousStatus = latest?.status ?? null;
+    if (previousStatus === status) {
       webhookLog("unchanged status", {
         itemId,
         mlUserId,
@@ -259,6 +308,10 @@ export async function POST(request: NextRequest) {
       snapshotAt,
       rawResponse,
     });
+
+    if (status === "losing" && previousStatus !== "losing") {
+      await sendLosingPushAlerts(mlUserId, itemId, snapshotAt);
+    }
 
     webhookLog("inserted snapshot", {
       itemId,
