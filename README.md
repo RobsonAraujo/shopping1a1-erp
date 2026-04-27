@@ -20,6 +20,23 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Environment variables
+
+Copy `.env.example` to `.env` and fill the values before running the app.
+
+Required:
+
+- `DATABASE_URL` — PostgreSQL connection string used by Prisma.
+- `MERCADOLIBRE_CLIENT_ID`, `MERCADOLIBRE_CLIENT_SECRET`, `MERCADOLIBRE_REDIRECT_URI` — Mercado Livre OAuth app credentials.
+- `ENCRYPTION_KEY` — long random secret used to encrypt stored Mercado Livre access and refresh tokens. Generate one with `openssl rand -base64 32`. Do not rotate it without a migration path to re-encrypt existing rows.
+- `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` — Web Push credentials used for browser push notifications. Generate the keypair with `npx web-push generate-vapid-keys`; `VAPID_SUBJECT` should be a contact identity such as `mailto:admin@example.com` or `https://shopping1a1.vercel.app`.
+
+Optional:
+
+- `MERCADOLIBRE_AUTH_BASE` — defaults to `https://auth.mercadolivre.com.br`.
+- `MERCADOLIBRE_API_BASE` — defaults to `https://api.mercadolibre.com`.
+- `CATALOG_COMPETITION_WEBHOOK_URL`, `CATALOG_COMPETITION_ITEM_ID`, `CATALOG_COMPETITION_ML_USER_ID`, `CATALOG_COMPETITION_STATUS` — used only by `scripts/simulate-catalog-competition-webhook.ts`.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
@@ -50,10 +67,10 @@ After a successful Mercado Livre login, the app stores the seller’s `refresh_t
 
 The webhook reads the notification `user_id`, loads credentials for that seller, decrypts the refresh token, refreshes the access token when needed, then calls `price_to_win`.
 
-Required environment variables:
+Required environment variables for this flow:
 
 - `ENCRYPTION_KEY` — long random secret (used with scrypt to derive the AES key). **Do not rotate** without a migration path to re-encrypt existing rows.
-- `MERCADOLIBRE_CLIENT_ID` and `MERCADOLIBRE_CLIENT_SECRET` — required for OAuth refresh (same as the login app).
+- `MERCADOLIBRE_CLIENT_ID`, `MERCADOLIBRE_CLIENT_SECRET`, and `MERCADOLIBRE_REDIRECT_URI` — required for OAuth login and token refresh.
 
 Operational notes:
 
