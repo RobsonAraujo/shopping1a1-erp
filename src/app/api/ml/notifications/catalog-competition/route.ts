@@ -61,7 +61,40 @@ function webhookWarn(message: string, details: Record<string, unknown>) {
   console.warn("[catalog-competition-webhook]", message, details);
 }
 
-async function sendLosingPushAlerts(mlUserId: number, itemId: string, snapshotAt: Date) {
+function shouldSendCompetitionPushAlert(
+  previousStatus: CompetitionStatus | null,
+  status: CompetitionStatus,
+) {
+  if (status === "losing") {
+    return previousStatus === "winning" || previousStatus === "shared";
+  }
+  return previousStatus === "shared" && status === "winning";
+}
+
+function pushPayloadForStatus(itemId: string, status: CompetitionStatus, snapshotAt: Date) {
+  if (status === "winning") {
+    return {
+      title: "Anúncio ganhou no catálogo",
+      body: `${itemId} saiu de compartilhando e passou a ganhar às ${snapshotAt.toLocaleTimeString("pt-BR")}.`,
+      url: `/dashboard/catalog-report/${encodeURIComponent(itemId)}`,
+      tag: `catalog-winning-${itemId}`,
+    };
+  }
+
+  return {
+    title: "Anúncio perdendo no catálogo",
+    body: `${itemId} passou a perder às ${snapshotAt.toLocaleTimeString("pt-BR")}.`,
+    url: `/dashboard/catalog-report/${encodeURIComponent(itemId)}`,
+    tag: `catalog-losing-${itemId}`,
+  };
+}
+
+async function sendCompetitionPushAlert(
+  mlUserId: number,
+  itemId: string,
+  status: CompetitionStatus,
+  snapshotAt: Date,
+) {
   if (!canSendWebPush()) {
     webhookWarn("webpush not configured", { mlUserId, itemId });
     return;
@@ -73,12 +106,7 @@ async function sendLosingPushAlerts(mlUserId: number, itemId: string, snapshotAt
   });
   if (subscriptions.length === 0) return;
 
-  const payload = {
-    title: "Anúncio perdendo no catálogo",
-    body: `${itemId} entrou em losing às ${snapshotAt.toLocaleTimeString("pt-BR")}.`,
-    url: `/dashboard/catalog-report/${encodeURIComponent(itemId)}`,
-    tag: `catalog-losing-${itemId}`,
-  };
+  const payload = pushPayloadForStatus(itemId, status, snapshotAt);
 
   for (const subscription of subscriptions) {
     try {
@@ -309,8 +337,12 @@ export async function POST(request: NextRequest) {
       rawResponse,
     });
 
-    if (status === "losing" && previousStatus !== "losing") {
-      await sendLosingPushAlerts(mlUserId, itemId, snapshotAt);
+    const pushNotificationTriggered = shouldSendCompetitionPushAlert(
+      previousStatus,
+      status,
+    );
+    if (pushNotificationTriggered) {
+      await sendCompetitionPushAlert(mlUserId, itemId, status, snapshotAt);
     }
 
     webhookLog("inserted snapshot", {
@@ -326,6 +358,7 @@ export async function POST(request: NextRequest) {
       inserted: true,
       status,
       snapshotAt: snapshotAt.toISOString(),
+      pushNotificationTriggered,
     });
   } catch (e) {
     logServerError("api/ml/notifications/catalog-competition", e);
