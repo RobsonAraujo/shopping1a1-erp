@@ -79,7 +79,7 @@ export function MobileDashboardMenu() {
 
       <div
         className={[
-          "fixed inset-0 z-[100] sm:hidden",
+          "fixed inset-0 z-[100] sm:hidden h-screen",
           open ? "pointer-events-auto" : "pointer-events-none",
         ].join(" ")}
         aria-hidden={!open}
