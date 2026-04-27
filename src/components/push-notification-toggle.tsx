@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 type SubscriptionState = {
   vapidPublicKey: string | null;
   subscribed: boolean;
+  pushConfigured?: boolean;
 };
 
 function base64UrlToUint8Array(base64Url: string): Uint8Array {
@@ -26,6 +27,7 @@ export function PushNotificationToggle() {
   const [enabled, setEnabled] = useState(false);
   const [permission, setPermission] = useState<NotificationPermission>("default");
   const [vapidPublicKey, setVapidPublicKey] = useState<string | null>(null);
+  const [statusText, setStatusText] = useState<string | null>(null);
 
   useEffect(() => {
     setSupported("serviceWorker" in navigator && "PushManager" in window);
@@ -40,17 +42,30 @@ export function PushNotificationToggle() {
         if (!data) return;
         setEnabled(data.subscribed);
         setVapidPublicKey(data.vapidPublicKey);
+        if (!data.vapidPublicKey) {
+          setStatusText("Push ainda não configurado no servidor.");
+        }
       })
-      .catch(() => {});
+      .catch(() => {
+        setStatusText("Não foi possível verificar alertas.");
+      });
   }, []);
 
   async function enablePush() {
-    if (!supported || !vapidPublicKey) return;
+    if (!supported) return;
+    if (!vapidPublicKey) {
+      setStatusText("Configure VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY e VAPID_SUBJECT.");
+      return;
+    }
     setLoading(true);
+    setStatusText(null);
     try {
       const nextPermission = await Notification.requestPermission();
       setPermission(nextPermission);
-      if (nextPermission !== "granted") return;
+      if (nextPermission !== "granted") {
+        setStatusText("Permissão de notificações não concedida.");
+        return;
+      }
 
       const registration = await navigator.serviceWorker.ready;
       const existingSubscription = await registration.pushManager.getSubscription();
@@ -63,7 +78,7 @@ export function PushNotificationToggle() {
         }));
 
       const serialized = subscription.toJSON();
-      await fetch("/api/push/subscriptions", {
+      const response = await fetch("/api/push/subscriptions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -71,7 +86,12 @@ export function PushNotificationToggle() {
           keys: serialized.keys,
         }),
       });
+      if (!response.ok) {
+        setStatusText("Não foi possível ativar alertas neste dispositivo.");
+        return;
+      }
       setEnabled(true);
+      setStatusText("Alertas de catálogo ativos neste dispositivo.");
     } finally {
       setLoading(false);
     }
@@ -80,6 +100,7 @@ export function PushNotificationToggle() {
   async function disablePush() {
     if (!supported) return;
     setLoading(true);
+    setStatusText(null);
     try {
       const registration = await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.getSubscription();
@@ -95,6 +116,7 @@ export function PushNotificationToggle() {
       }
 
       setEnabled(false);
+      setStatusText("Alertas de catálogo desativados neste dispositivo.");
     } finally {
       setLoading(false);
     }
@@ -102,22 +124,33 @@ export function PushNotificationToggle() {
 
   if (!supported) return null;
 
+  const disabled = loading || permission === "denied" || !vapidPublicKey;
+  const title =
+    permission === "denied"
+      ? "Permissão de notificações bloqueada no navegador."
+      : !vapidPublicKey
+        ? "Configuração Web Push ausente no servidor."
+        : statusText ?? undefined;
+
   return (
-    <Button
-      type="button"
-      variant={enabled ? "default" : "outline"}
-      size="sm"
-      onClick={() => void (enabled ? disablePush() : enablePush())}
-      disabled={loading || permission === "denied" || !vapidPublicKey}
-      title={
-        permission === "denied"
-          ? "Permissão de notificações bloqueada no navegador."
-          : undefined
-      }
-      className="gap-2"
-    >
-      {enabled ? <Bell className="size-4" /> : <BellOff className="size-4" />}
-      {enabled ? "Alertas losing ativos" : "Ativar alertas losing"}
-    </Button>
+    <div className="flex flex-col items-end gap-1">
+      <Button
+        type="button"
+        variant={enabled ? "default" : "outline"}
+        size="sm"
+        onClick={() => void (enabled ? disablePush() : enablePush())}
+        disabled={disabled}
+        title={title}
+        className="gap-2"
+      >
+        {enabled ? <Bell className="size-4" /> : <BellOff className="size-4" />}
+        {enabled ? "Alertas de catálogo ativos" : "Ativar alertas de catálogo"}
+      </Button>
+      {statusText ? (
+        <span className="hidden max-w-[14rem] text-right text-[11px] leading-tight text-[var(--muted-foreground)] md:block">
+          {statusText}
+        </span>
+      ) : null}
+    </div>
   );
 }

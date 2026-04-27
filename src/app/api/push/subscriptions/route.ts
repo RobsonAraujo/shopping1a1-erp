@@ -51,6 +51,7 @@ export async function GET() {
 
   return NextResponse.json({
     vapidPublicKey: getVapidPublicKey(),
+    pushConfigured: getVapidPublicKey() !== null,
     subscribed: subscriptions.length > 0,
     endpoint: subscriptions[0]?.endpoint ?? null,
   });
