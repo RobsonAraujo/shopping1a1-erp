@@ -274,7 +274,7 @@ export async function POST(request: NextRequest) {
         itemId,
         mlUserId,
         status,
-        latestSnapshotAt: latest.snapshotAt.toISOString(),
+        latestSnapshotAt: latest?.snapshotAt.toISOString(),
       });
       return NextResponse.json({
         ok: true,

@@ -13,7 +13,11 @@ function base64UrlToUint8Array(base64Url: string): Uint8Array {
   const padding = "=".repeat((4 - (base64Url.length % 4)) % 4);
   const base64 = (base64Url + padding).replaceAll("-", "+").replaceAll("_", "/");
   const raw = atob(base64);
-  return Uint8Array.from(raw, (char) => char.charCodeAt(0));
+  const bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i += 1) {
+    bytes[i] = raw.charCodeAt(i);
+  }
+  return bytes;
 }
 
 export function PushNotificationToggle() {
@@ -54,7 +58,8 @@ export function PushNotificationToggle() {
         existingSubscription ??
         (await registration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: base64UrlToUint8Array(vapidPublicKey),
+          applicationServerKey:
+            base64UrlToUint8Array(vapidPublicKey) as unknown as BufferSource,
         }));
 
       const serialized = subscription.toJSON();
