@@ -26,18 +26,25 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const targetUrl = event.notification.data?.url || "/dashboard/catalog-report";
+  const target = new URL(targetUrl, self.location.origin);
+  const isSameOrigin = target.origin === self.location.origin;
+
   event.waitUntil(
     clients
       .matchAll({ type: "window", includeUncontrolled: true })
       .then((windowClients) => {
+        if (!isSameOrigin) {
+          return clients.openWindow ? clients.openWindow(target.href) : undefined;
+        }
+
         for (const client of windowClients) {
           if ("focus" in client && client.url.includes(self.location.origin)) {
-            client.navigate(targetUrl);
+            client.navigate(target.href);
             return client.focus();
           }
         }
         if (clients.openWindow) {
-          return clients.openWindow(targetUrl);
+          return clients.openWindow(target.href);
         }
       }),
   );

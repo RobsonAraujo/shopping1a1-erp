@@ -5,7 +5,8 @@ import {
   deriveStatusFromPriceToWin,
   extractPriceToWin,
 } from "@/lib/catalog-competition";
-import { fetchItemPriceToWin } from "@/lib/mercadolibre/api";
+import { fetchItemById, fetchItemPriceToWin } from "@/lib/mercadolibre/api";
+import type { ItemBody } from "@/lib/mercadolibre/types";
 import { resolveSellerAccessToken } from "@/lib/mercadolibre/persist-seller-tokens";
 import { canSendWebPush, sendWebPushNotification } from "@/lib/push/webpush";
 import { logServerError } from "@/lib/server-public-error";
@@ -68,23 +69,41 @@ function shouldSendCompetitionPushAlert(
   if (status === "losing") {
     return previousStatus === "winning" || previousStatus === "shared";
   }
-  return previousStatus === "shared" && status === "winning";
+  return (
+    status === "winning" &&
+    (previousStatus === "shared" || previousStatus === "losing")
+  );
 }
 
-function pushPayloadForStatus(itemId: string, status: CompetitionStatus, snapshotAt: Date) {
+function pushPayloadForStatus(
+  itemId: string,
+  itemTitle: string | null,
+  itemUrl: string | null,
+  previousStatus: CompetitionStatus | null,
+  status: CompetitionStatus,
+  snapshotAt: Date,
+) {
+  const itemLabel = itemTitle?.trim() || itemId;
+  const url = itemUrl?.trim() || `/dashboard/catalog-report/${encodeURIComponent(itemId)}`;
+
   if (status === "winning") {
+    const body =
+      previousStatus === "losing"
+        ? `${itemLabel} voltou a ganhar no catálogo às ${snapshotAt.toLocaleTimeString("pt-BR")}.`
+        : `${itemLabel} saiu de compartilhando e passou a ganhar às ${snapshotAt.toLocaleTimeString("pt-BR")}.`;
+
     return {
       title: "Anúncio ganhou no catálogo",
-      body: `${itemId} saiu de compartilhando e passou a ganhar às ${snapshotAt.toLocaleTimeString("pt-BR")}.`,
-      url: `/dashboard/catalog-report/${encodeURIComponent(itemId)}`,
+      body,
+      url,
       tag: `catalog-winning-${itemId}`,
     };
   }
 
   return {
     title: "Anúncio perdendo no catálogo",
-    body: `${itemId} passou a perder às ${snapshotAt.toLocaleTimeString("pt-BR")}.`,
-    url: `/dashboard/catalog-report/${encodeURIComponent(itemId)}`,
+    body: `${itemLabel} passou a perder às ${snapshotAt.toLocaleTimeString("pt-BR")}.`,
+    url,
     tag: `catalog-losing-${itemId}`,
   };
 }
@@ -92,6 +111,9 @@ function pushPayloadForStatus(itemId: string, status: CompetitionStatus, snapsho
 async function sendCompetitionPushAlert(
   mlUserId: number,
   itemId: string,
+  itemTitle: string | null,
+  itemUrl: string | null,
+  previousStatus: CompetitionStatus | null,
   status: CompetitionStatus,
   snapshotAt: Date,
 ) {
@@ -106,7 +128,14 @@ async function sendCompetitionPushAlert(
   });
   if (subscriptions.length === 0) return;
 
-  const payload = pushPayloadForStatus(itemId, status, snapshotAt);
+  const payload = pushPayloadForStatus(
+    itemId,
+    itemTitle,
+    itemUrl,
+    previousStatus,
+    status,
+    snapshotAt,
+  );
 
   for (const subscription of subscriptions) {
     try {
@@ -281,20 +310,36 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  let itemDetails: ItemBody | null = null;
+  if (token) {
+    try {
+      itemDetails = await fetchItemById(token, itemId);
+    } catch (e) {
+      logServerError(`api/ml/notifications/catalog-competition item item=${itemId}`, e);
+    }
+  }
+
   const snapshotAt = parseWebhookDate(payload);
   const rawResponse = {
     notification: jsonSafe(payload),
     priceToWin: jsonSafe(pricePayload),
+    item: itemDetails ? jsonSafe(itemDetails) : null,
   };
   const status = deriveStatusFromPriceToWin(pricePayload);
   const priceToWin = extractPriceToWin(pricePayload);
 
   try {
-    const latest = await prisma.catalogCompetitionSnapshot.findFirst({
-      where: { mlItemId: itemId },
-      select: { status: true, snapshotAt: true },
-      orderBy: { snapshotAt: "desc" },
-    });
+    const [latest, existingListing] = await Promise.all([
+      prisma.catalogCompetitionSnapshot.findFirst({
+        where: { mlItemId: itemId },
+        select: { status: true, snapshotAt: true },
+        orderBy: { snapshotAt: "desc" },
+      }),
+      prisma.listing.findUnique({
+        where: { mlItemId: itemId },
+        select: { titleSnapshot: true },
+      }),
+    ]);
 
     const previousStatus = latest?.status ?? null;
     if (previousStatus === status) {
@@ -318,11 +363,13 @@ export async function POST(request: NextRequest) {
       where: { mlItemId: itemId },
       create: {
         mlItemId: itemId,
+        titleSnapshot: itemDetails?.title ?? null,
         catalogListing: true,
         activeOnMl: true,
         lastSyncedAt: new Date(),
       },
       update: {
+        titleSnapshot: itemDetails?.title ?? undefined,
         catalogListing: true,
         lastSyncedAt: new Date(),
       },
@@ -342,7 +389,15 @@ export async function POST(request: NextRequest) {
       status,
     );
     if (pushNotificationTriggered) {
-      await sendCompetitionPushAlert(mlUserId, itemId, status, snapshotAt);
+      await sendCompetitionPushAlert(
+        mlUserId,
+        itemId,
+        itemDetails?.title ?? existingListing?.titleSnapshot ?? null,
+        itemDetails?.permalink ?? null,
+        previousStatus,
+        status,
+        snapshotAt,
+      );
     }
 
     webhookLog("inserted snapshot", {
