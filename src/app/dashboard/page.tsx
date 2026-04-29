@@ -6,6 +6,7 @@ import {
   type StockAttentionAcknowledgementView,
 } from "@/components/dashboard-attention-panel";
 import { DashboardItemsTable } from "@/components/dashboard-items-table";
+import { CollapsibleDashboardSection } from "@/components/collapsible-dashboard-section";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   fetchAllUserItemIds,
@@ -163,19 +164,25 @@ export default async function DashboardPage() {
           </p>
         </div>
 
-        <section className="space-y-3">
-          <h2 className="text-lg font-semibold text-[var(--primary)]">
-            Anúncios próprios
-          </h2>
+        <CollapsibleDashboardSection
+          title="Anúncios próprios"
+          summary={`${ownItems.length} ${
+            ownItems.length === 1 ? "anúncio próprio" : "anúncios próprios"
+          }`}
+        >
           <DashboardItemsTable items={ownItems} salesByItem={salesByItem} />
-        </section>
+        </CollapsibleDashboardSection>
 
-        <section className="space-y-3">
-          <h2 className="text-lg font-semibold text-[var(--primary)]">
-            Anúncios do catálogo
-          </h2>
+        <CollapsibleDashboardSection
+          title="Anúncios do catálogo"
+          summary={`${catalogItems.length} ${
+            catalogItems.length === 1
+              ? "anúncio do catálogo"
+              : "anúncios do catálogo"
+          }`}
+        >
           <DashboardItemsTable items={catalogItems} salesByItem={salesByItem} />
-        </section>
+        </CollapsibleDashboardSection>
       </div>
     </div>
   );
