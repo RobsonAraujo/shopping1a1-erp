@@ -1,7 +1,10 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { stockPlanningConfig } from "@/config/stock-planning";
-import { DashboardAttentionPanel } from "@/components/dashboard-attention-panel";
+import {
+  DashboardAttentionPanel,
+  type StockAttentionAcknowledgementView,
+} from "@/components/dashboard-attention-panel";
 import { DashboardItemsTable } from "@/components/dashboard-items-table";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -37,29 +40,42 @@ export default async function DashboardPage() {
   let salesByItem: Record<string, number> = {};
   let purchaseLeadTimeByItem: Record<string, number | null> = {};
   let warehouseStockByItem: Record<string, number> = {};
+  let acknowledgements: StockAttentionAcknowledgementView[] = [];
   let attentionSnapshot: {
     items: ItemBody[];
     salesByItem: Record<string, number>;
     purchaseLeadTimeByItem: Record<string, number | null>;
     warehouseStockByItem: Record<string, number>;
+    acknowledgements: StockAttentionAcknowledgementView[];
   } | null = null;
 
   try {
     const allIds = await fetchAllUserItemIds(token, userId);
-    const [allItems, allSales, warehouseStocks] = await Promise.all([
-      fetchItemsByIdsBatched(token, allIds),
-      fetchUnitsSoldForItemsInWindowBatched(
-        token,
-        userId,
-        allIds,
-        windowDays,
-        dateField,
-      ),
-      prisma.warehouseStock.findMany({
-        where: { mlItemId: { in: allIds } },
-        select: { mlItemId: true, purchaseLeadTimeDays: true, quantity: true },
-      }),
-    ]);
+    const [allItems, allSales, warehouseStocks, stockAttentionAcks] =
+      await Promise.all([
+        fetchItemsByIdsBatched(token, allIds),
+        fetchUnitsSoldForItemsInWindowBatched(
+          token,
+          userId,
+          allIds,
+          windowDays,
+          dateField,
+        ),
+        prisma.warehouseStock.findMany({
+          where: { mlItemId: { in: allIds } },
+          select: { mlItemId: true, purchaseLeadTimeDays: true, quantity: true },
+        }),
+        prisma.stockAttentionAcknowledgement.findMany({
+          where: { mlItemId: { in: allIds } },
+          select: {
+            mlItemId: true,
+            kind: true,
+            mlAvailableQuantity: true,
+            warehouseQuantity: true,
+            purchaseLeadTimeDays: true,
+          },
+        }),
+      ]);
 
     purchaseLeadTimeByItem = Object.fromEntries(
       warehouseStocks.map((s) => [s.mlItemId, s.purchaseLeadTimeDays]),
@@ -69,11 +85,13 @@ export default async function DashboardPage() {
     );
     items = allItems;
     salesByItem = allSales;
+    acknowledgements = stockAttentionAcks;
     attentionSnapshot = {
       items: allItems,
       salesByItem: allSales,
       purchaseLeadTimeByItem,
       warehouseStockByItem,
+      acknowledgements,
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro ao carregar anúncios";
@@ -98,6 +116,7 @@ export default async function DashboardPage() {
           salesByItem={attentionSnapshot.salesByItem}
           purchaseLeadTimeByItem={attentionSnapshot.purchaseLeadTimeByItem}
           warehouseStockByItem={attentionSnapshot.warehouseStockByItem}
+          acknowledgements={attentionSnapshot.acknowledgements}
         />
       ) : (
         <Card className="border-amber-200 bg-amber-50/50">

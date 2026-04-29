@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useState } from "react";
 import { ImageOff, ShoppingCart } from "lucide-react";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { getItemSku } from "@/lib/mercadolibre/item-sku";
@@ -17,6 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import type { StockPlanningDisplay } from "@/lib/stock-planning";
+import type { StockAttentionKind } from "@/components/dashboard-attention-panel";
 
 type PurchaseAttentionRow = {
   item: ItemBody;
@@ -26,9 +28,27 @@ type PurchaseAttentionRow = {
 
 export function DashboardAttentionPurchasePanel({
   rows,
+  onAcknowledge,
 }: {
   rows: PurchaseAttentionRow[];
+  onAcknowledge: (itemId: string, kind: StockAttentionKind) => Promise<boolean>;
 }) {
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function acknowledge(itemId: string) {
+    setError(null);
+    setSavingId(itemId);
+    try {
+      const ok = await onAcknowledge(itemId, "purchase");
+      if (!ok) {
+        setError("Não foi possível marcar compra feita.");
+      }
+    } finally {
+      setSavingId(null);
+    }
+  }
+
   return (
     <Card className="overflow-hidden border-sky-200/90 bg-gradient-to-br from-sky-50/90 via-white to-[var(--card)] shadow-md ring-1 ring-sky-100/70">
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4 space-y-0 pb-3">
@@ -54,6 +74,11 @@ export function DashboardAttentionPurchasePanel({
       </CardHeader>
 
       <CardContent className="pb-4">
+        {error ? (
+          <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
+            {error}
+          </p>
+        ) : null}
         {rows.length === 0 ? (
           <p className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--muted)]/30 px-4 py-5 text-sm text-[var(--muted-foreground)]">
             Nenhum anúncio precisa de compra no momento.
@@ -116,7 +141,7 @@ export function DashboardAttentionPurchasePanel({
                             {item.title}
                           </span>
                         </Link>
-                        <div className="flex shrink-0 items-center gap-1.5">
+                        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
                           {item.catalog_listing ? (
                             <Badge
                               variant="secondary"
@@ -140,6 +165,16 @@ export function DashboardAttentionPurchasePanel({
                               Hoje
                             </Badge>
                           )}
+                          <button
+                            type="button"
+                            className="h-6  rounded-md border border-[var(--border)] bg-[var(--background)] px-2 text-[11px] font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--accent)] disabled:cursor-not-allowed cursor-pointer disabled:opacity-60"
+                            onClick={() => void acknowledge(item.id)}
+                            disabled={savingId === item.id}
+                          >
+                            {savingId === item.id
+                              ? "Salvando..."
+                              : "Já comprei"}
+                          </button>
                         </div>
                       </div>
 

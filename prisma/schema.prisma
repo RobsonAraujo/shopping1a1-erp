@@ -23,6 +23,7 @@ model Listing {
 
   warehouseStock WarehouseStock?
   competitionSnapshots CatalogCompetitionSnapshot[]
+  stockAttentionAcknowledgements StockAttentionAcknowledgement[]
 
   @@index([activeOnMl])
   @@map("listings")
@@ -39,6 +40,11 @@ enum CatalogCompetitionSource {
   webhook
   missed_feed
   manual_poll
+}
+
+enum StockAttentionKind {
+  full
+  purchase
 }
 
 model CatalogCompetitionSnapshot {
@@ -70,6 +76,24 @@ model WarehouseStock {
   listing Listing @relation(fields: [mlItemId], references: [mlItemId], onDelete: Cascade)
 
   @@map("warehouse_stock")
+}
+
+/// Avisos de estoque que já receberam ação operacional (ex.: compra feita).
+model StockAttentionAcknowledgement {
+  id                   String             @id @default(cuid())
+  mlItemId             String             @map("ml_item_id")
+  kind                 StockAttentionKind
+  mlAvailableQuantity  Int                @map("ml_available_quantity")
+  warehouseQuantity    Int                @map("warehouse_quantity")
+  purchaseLeadTimeDays Int?               @map("purchase_lead_time_days")
+  acknowledgedAt       DateTime           @default(now()) @map("acknowledged_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+
+  listing Listing @relation(fields: [mlItemId], references: [mlItemId], onDelete: Cascade)
+
+  @@unique([mlItemId, kind])
+  @@index([kind])
+  @@map("stock_attention_acknowledgements")
 }
 
 /// Tokens OAuth do vendedor ML (até 1 linha por `ml_user_id`) para chamadas server-side (ex.: webhook).
