@@ -9,6 +9,27 @@ export function getSkuSupplier(sku: string | null | undefined): string {
   return firstWord || NO_SUPPLIER_LABEL;
 }
 
+export function groupBySkuSupplier<T>(
+  rows: T[],
+  getSku: (row: T) => string | null | undefined,
+): { supplier: string; rows: T[] }[] {
+  const bySupplier = new Map<string, T[]>();
+  for (const row of rows) {
+    const supplier = getSkuSupplier(getSku(row));
+    const group = bySupplier.get(supplier) ?? [];
+    group.push(row);
+    bySupplier.set(supplier, group);
+  }
+
+  return [...bySupplier.entries()]
+    .sort(([a], [b]) => {
+      if (a === NO_SUPPLIER_LABEL) return 1;
+      if (b === NO_SUPPLIER_LABEL) return -1;
+      return a.localeCompare(b, "pt-BR", { sensitivity: "base" });
+    })
+    .map(([supplier, groupRows]) => ({ supplier, rows: groupRows }));
+}
+
 export function getItemSku(item: ItemBody): string | null {
   const directSku = item.seller_custom_field?.trim();
   if (directSku) return directSku;

@@ -13,7 +13,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { getSkuSupplier } from "@/lib/mercadolibre/item-sku";
+import { groupBySkuSupplier } from "@/lib/mercadolibre/item-sku";
 import { cn } from "@/lib/utils";
 
 const MAX_LEAD_DAYS = 365;
@@ -49,26 +49,6 @@ function leadTimeToForm(days: number | null): {
   return { value: String(days), unit: "days" };
 }
 
-function groupRowsBySupplier(
-  rows: InventoryRow[],
-): { supplier: string; rows: InventoryRow[] }[] {
-  const bySupplier = new Map<string, InventoryRow[]>();
-  for (const row of rows) {
-    const supplier = getSkuSupplier(row.sku);
-    const group = bySupplier.get(supplier) ?? [];
-    group.push(row);
-    bySupplier.set(supplier, group);
-  }
-
-  return [...bySupplier.entries()]
-    .sort(([a], [b]) => {
-      if (a === "Sem fornecedor") return 1;
-      if (b === "Sem fornecedor") return -1;
-      return a.localeCompare(b, "pt-BR", { sensitivity: "base" });
-    })
-    .map(([supplier, groupRows]) => ({ supplier, rows: groupRows }));
-}
-
 export function InventoryStockTable({ rows }: InventoryStockTableProps) {
   const router = useRouter();
   const [editId, setEditId] = useState<string | null>(null);
@@ -79,7 +59,7 @@ export function InventoryStockTable({ rows }: InventoryStockTableProps) {
   const settingsRow = settingsId
     ? (rows.find((r) => r.mlItemId === settingsId) ?? null)
     : null;
-  const supplierGroups = groupRowsBySupplier(rows);
+  const supplierGroups = groupBySkuSupplier(rows, (row) => row.sku);
 
   return (
     <TooltipProvider delayDuration={200}>
