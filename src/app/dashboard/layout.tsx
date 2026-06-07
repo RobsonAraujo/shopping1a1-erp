@@ -2,12 +2,7 @@ import { cookies } from "next/headers";
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import {
-  ChartNoAxesColumn,
-  LogOut,
-  Package,
-  Warehouse,
-} from "lucide-react";
+import { ChartNoAxesColumn, LogOut, Package, Warehouse } from "lucide-react";
 import { fetchMe } from "@/lib/mercadolibre/api";
 import { PushNotificationToggle } from "@/components/push-notification-toggle";
 import { MobileDashboardMenu } from "@/components/mobile-dashboard-menu";

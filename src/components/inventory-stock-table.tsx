@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useId, useState } from "react";
+import { Fragment, useCallback, useEffect, useId, useState } from "react";
 import { HelpCircle, ImageOff, Pencil, Settings } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { getSkuSupplier } from "@/lib/mercadolibre/item-sku";
 import { cn } from "@/lib/utils";
 
 const MAX_LEAD_DAYS = 365;
@@ -48,6 +49,26 @@ function leadTimeToForm(days: number | null): {
   return { value: String(days), unit: "days" };
 }
 
+function groupRowsBySupplier(
+  rows: InventoryRow[],
+): { supplier: string; rows: InventoryRow[] }[] {
+  const bySupplier = new Map<string, InventoryRow[]>();
+  for (const row of rows) {
+    const supplier = getSkuSupplier(row.sku);
+    const group = bySupplier.get(supplier) ?? [];
+    group.push(row);
+    bySupplier.set(supplier, group);
+  }
+
+  return [...bySupplier.entries()]
+    .sort(([a], [b]) => {
+      if (a === "Sem fornecedor") return 1;
+      if (b === "Sem fornecedor") return -1;
+      return a.localeCompare(b, "pt-BR", { sensitivity: "base" });
+    })
+    .map(([supplier, groupRows]) => ({ supplier, rows: groupRows }));
+}
+
 export function InventoryStockTable({ rows }: InventoryStockTableProps) {
   const router = useRouter();
   const [editId, setEditId] = useState<string | null>(null);
@@ -58,6 +79,7 @@ export function InventoryStockTable({ rows }: InventoryStockTableProps) {
   const settingsRow = settingsId
     ? (rows.find((r) => r.mlItemId === settingsId) ?? null)
     : null;
+  const supplierGroups = groupRowsBySupplier(rows);
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -114,100 +136,120 @@ export function InventoryStockTable({ rows }: InventoryStockTableProps) {
                   </td>
                 </tr>
               ) : (
-                rows.map((row) => {
-                  const total = row.warehouseStock + row.mlStock;
-                  return (
+                supplierGroups.map((group) => (
+                  <Fragment key={group.supplier}>
                     <tr
-                      key={row.mlItemId}
-                      className="border-b border-[var(--border)] transition-colors last:border-0 hover:bg-[var(--muted)]/40"
+                      className="border-b border-[var(--border)] bg-[var(--muted)]/50"
                     >
-                      <td className="align-middle px-4 py-3.5">
-                        <div className="flex gap-3">
-                          <span
-                            className="relative shrink-0 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--muted)]"
-                            aria-hidden
-                          >
-                            {row.imageUrl ? (
-                              <Image
-                                src={row.imageUrl}
-                                alt=""
-                                width={128}
-                                height={128}
-                                className="size-12 object-contain sm:size-14"
-                                sizes="56px"
-                              />
-                            ) : (
-                              <span className="flex size-12 items-center justify-center sm:size-14">
-                                <ImageOff
-                                  className="size-5 text-[var(--muted-foreground)]/60"
-                                  aria-hidden
-                                />
-                              </span>
-                            )}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="flex items-center gap-2">
-                              <span
-                                className="block truncate font-semibold leading-snug text-[var(--foreground)]"
-                                title={row.title}
-                              >
-                                {row.sku ?? "Sem SKU"}
-                              </span>
-                              {row.needsPurchaseAttention ? (
-                                <Badge variant="warning" className="h-5 px-1.5 text-[10px]">
-                                  Comprar
-                                </Badge>
-                              ) : null}
-                            </span>
-                            <span
-                              className="mt-0.5 block text-xs leading-snug text-[var(--muted-foreground)]"
-                              title={row.title}
-                            >
-                              {row.title}
-                            </span>
-                          </span>
-                        </div>
-                      </td>
-                      <td className="align-middle px-4 py-3.5 tabular-nums">
-                        {row.warehouseStock}
-                      </td>
-                      <td className="align-middle px-4 py-3.5 tabular-nums">
-                        {row.mlStock}
-                      </td>
-                      <td className="align-middle px-4 py-3.5 tabular-nums font-medium">
-                        {total}
-                      </td>
-                      <td className="align-middle px-4 py-3.5 tabular-nums text-[var(--muted-foreground)]">
-                        {formatLeadTimeDisplay(row.leadTimeDays)}
-                      </td>
-                      <td className="align-middle px-4 py-3.5">
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon-sm"
-                            className="shrink-0"
-                            title="Configurações do anúncio"
-                            aria-label="Configurações do anúncio"
-                            onClick={() => setSettingsId(row.mlItemId)}
-                          >
-                            <Settings className="size-4" aria-hidden />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="gap-1.5"
-                            onClick={() => setEditId(row.mlItemId)}
-                          >
-                            <Pencil className="size-3.5" aria-hidden />
-                            Editar
-                          </Button>
-                        </div>
+                      <td colSpan={6} className="px-4 py-2.5">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-[var(--primary)]">
+                          {group.supplier}
+                        </span>
+                        <span className="ml-2 text-xs font-normal normal-case text-[var(--muted-foreground)]">
+                          {group.rows.length} produto
+                          {group.rows.length !== 1 ? "s" : ""}
+                        </span>
                       </td>
                     </tr>
-                  );
-                })
+                    {group.rows.map((row) => {
+                      const total = row.warehouseStock + row.mlStock;
+                      return (
+                        <tr
+                          key={row.mlItemId}
+                          className="border-b border-[var(--border)] transition-colors last:border-0 hover:bg-[var(--muted)]/40"
+                        >
+                          <td className="align-middle px-4 py-3.5">
+                            <div className="flex gap-3">
+                              <span
+                                className="relative shrink-0 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--muted)]"
+                                aria-hidden
+                              >
+                                {row.imageUrl ? (
+                                  <Image
+                                    src={row.imageUrl}
+                                    alt=""
+                                    width={128}
+                                    height={128}
+                                    className="size-12 object-contain sm:size-14"
+                                    sizes="56px"
+                                  />
+                                ) : (
+                                  <span className="flex size-12 items-center justify-center sm:size-14">
+                                    <ImageOff
+                                      className="size-5 text-[var(--muted-foreground)]/60"
+                                      aria-hidden
+                                    />
+                                  </span>
+                                )}
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="flex items-center gap-2">
+                                  <span
+                                    className="block truncate font-semibold leading-snug text-[var(--foreground)]"
+                                    title={row.title}
+                                  >
+                                    {row.sku ?? "Sem SKU"}
+                                  </span>
+                                  {row.needsPurchaseAttention ? (
+                                    <Badge
+                                      variant="warning"
+                                      className="h-5 px-1.5 text-[10px]"
+                                    >
+                                      Comprar
+                                    </Badge>
+                                  ) : null}
+                                </span>
+                                <span
+                                  className="mt-0.5 block text-xs leading-snug text-[var(--muted-foreground)]"
+                                  title={row.title}
+                                >
+                                  {row.title}
+                                </span>
+                              </span>
+                            </div>
+                          </td>
+                          <td className="align-middle px-4 py-3.5 tabular-nums">
+                            {row.warehouseStock}
+                          </td>
+                          <td className="align-middle px-4 py-3.5 tabular-nums">
+                            {row.mlStock}
+                          </td>
+                          <td className="align-middle px-4 py-3.5 tabular-nums font-medium">
+                            {total}
+                          </td>
+                          <td className="align-middle px-4 py-3.5 tabular-nums text-[var(--muted-foreground)]">
+                            {formatLeadTimeDisplay(row.leadTimeDays)}
+                          </td>
+                          <td className="align-middle px-4 py-3.5">
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon-sm"
+                                className="shrink-0"
+                                title="Configurações do anúncio"
+                                aria-label="Configurações do anúncio"
+                                onClick={() => setSettingsId(row.mlItemId)}
+                              >
+                                <Settings className="size-4" aria-hidden />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="gap-1.5"
+                                onClick={() => setEditId(row.mlItemId)}
+                              >
+                                <Pencil className="size-3.5" aria-hidden />
+                                Editar
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </Fragment>
+                ))
               )}
             </tbody>
           </table>

@@ -2,7 +2,48 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
-First, run the development server:
+### Local database (Docker)
+
+The project ships with a PostgreSQL 16 container for local development. Start it in the background:
+
+```bash
+docker compose up -d
+```
+
+Stop the database (data is kept in the `pgdata` volume):
+
+```bash
+docker compose down
+```
+
+To stop and wipe all local data:
+
+```bash
+docker compose down -v
+```
+
+Connection details (also in `.env.example`):
+
+- Host: `localhost`
+- Port: `5433` (mapped from container port `5432`)
+- User / password: `erp` / `erp`
+- Database: `shopping1a1`
+
+Set `DATABASE_URL` in `.env` to:
+
+```bash
+postgresql://erp:erp@localhost:5433/shopping1a1?schema=public
+```
+
+On first setup (or after pulling new migrations), apply the schema:
+
+```bash
+npm run db:migrate
+```
+
+### Development server
+
+With the database running and `.env` configured, start the app:
 
 ```bash
 npm run dev
