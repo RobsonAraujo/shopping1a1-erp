@@ -31,7 +31,9 @@ export type PurchaseAnalysisInput = {
 
 export type PurchaseAnalysisResult = {
   performanceTier: PurchasePerformanceTier;
+  performanceTooltip: string;
   purchaseStatus: PurchaseStatus;
+  statusTooltip: string;
   recommendation: PurchaseRecommendation;
   suggestedQty: number;
   dailyAvg: number;
@@ -53,22 +55,77 @@ function formatNumPt(n: number, maxFractionDigits = 2): string {
 export function computePerformanceTier(
   unitsSoldInWindow: number,
   dailyAvg: number,
-  coverageDays: number | null,
 ): PurchasePerformanceTier {
   if (unitsSoldInWindow <= 0) return "zero";
-  if (
-    unitsSoldInWindow >= purchaseAnalysisConfig.highRotationUnitsSold ||
-    dailyAvg >= purchaseAnalysisConfig.highRotationDailyAvg
-  ) {
-    return "alta";
+  const { altaMin, mediaMin } = purchaseAnalysisConfig.rotationDailyAvg;
+  if (dailyAvg >= altaMin) return "alta";
+  if (dailyAvg >= mediaMin) return "media";
+  return "baixa";
+}
+
+function buildPerformanceTooltip(
+  tier: PurchasePerformanceTier,
+  dailyAvg: number,
+  unitsSoldInWindow: number,
+  windowDays: number,
+): string {
+  const avgLabel = formatNumPt(dailyAvg);
+  const base = `${unitsSoldInWindow} vendas em ${windowDays} dias (média ${avgLabel}/dia).`;
+  switch (tier) {
+    case "zero":
+      return `Não vendeu no período. Classificação: Zero = sem vendas nos últimos ${windowDays} dias.`;
+    case "alta":
+      return `${base} Classificação: Alta = média ≥ 7 vendas/dia.`;
+    case "media":
+      return `${base} Classificação: Média = 3 a 6 vendas/dia.`;
+    case "baixa":
+      return `${base} Classificação: Baixa = 1 a 2 vendas/dia (ou menos de 1/dia quando houve alguma venda).`;
   }
-  if (
-    coverageDays !== null &&
-    coverageDays > purchaseAnalysisConfig.lowRotationCoverageDays
-  ) {
-    return "baixa";
+}
+
+function buildStatusTooltip(
+  status: PurchaseStatus,
+  input: {
+    dailyAvg: number;
+    unitsSoldInWindow: number;
+    windowDays: number;
+    purchaseLeadTimeDays: number;
+    performanceTier: PurchasePerformanceTier;
+    coverageDays: number | null;
+    totalStock: number;
+  },
+): string {
+  const leadFull = stockPlanningConfig.leadTimeDays;
+  const purchaseLead = input.purchaseLeadTimeDays;
+  switch (status) {
+    case "urgente":
+      return [
+        "A data para iniciar a compra já passou.",
+        `Com estoque de ${input.totalStock} un. e média de ${formatNumPt(input.dailyAvg)}/dia,`,
+        `a compra deveria ter começado considerando prazo compra→galpão (${purchaseLead} d) + envio Full (${leadFull} d) antes do esgotamento previsto.`,
+      ].join(" ");
+    case "planejar":
+      return [
+        "Chegou o momento de planejar a reposição (data de compra é hoje ou já passou no calendário do dia),",
+        "mas o atraso ainda não é crítico como em Urgente.",
+        `Média atual: ${formatNumPt(input.dailyAvg)}/dia.`,
+      ].join(" ");
+    case "sem_vendas":
+      return `Nenhuma venda nos últimos ${input.windowDays} dias — sem base para estimar reposição.`;
+    case "evitar":
+      return [
+        `Rotação ${input.performanceTier === "baixa" ? "baixa" : "fraca"} (média ${formatNumPt(input.dailyAvg)}/dia).`,
+        input.coverageDays !== null
+          ? `Cobertura estimada de ${formatNumPt(input.coverageDays, 1)} dias — estoque pode durar demais para o ritmo de venda.`
+          : "Pouca saída em relação ao estoque.",
+        "Evitar repor até reavaliar demanda.",
+      ].join(" ");
+    case "ok":
+      return [
+        "Estoque e vendas dentro do esperado para o período.",
+        `Média ${formatNumPt(input.dailyAvg)}/dia; nenhuma ação de compra necessária agora.`,
+      ].join(" ");
   }
-  return "media";
 }
 
 export function computeSuggestedPurchaseQty(
@@ -112,7 +169,12 @@ export function computePurchaseAnalysis(
   const performanceTier = computePerformanceTier(
     input.unitsSoldInWindow,
     dailyAvg,
-    coverageDays,
+  );
+  const performanceTooltip = buildPerformanceTooltip(
+    performanceTier,
+    dailyAvg,
+    input.unitsSoldInWindow,
+    windowDays,
   );
 
   let purchaseStatus: PurchaseStatus = "ok";
@@ -140,6 +202,16 @@ export function computePurchaseAnalysis(
   } else if (purchaseStatus === "ok") {
     recommendation = "nao_repor";
   }
+
+  const statusTooltip = buildStatusTooltip(purchaseStatus, {
+    dailyAvg,
+    unitsSoldInWindow: input.unitsSoldInWindow,
+    windowDays,
+    purchaseLeadTimeDays: input.purchaseLeadTimeDays,
+    performanceTier,
+    coverageDays,
+    totalStock: input.totalStock,
+  });
 
   let grossMarginPct: number | null = null;
   let worthBuying: boolean | null = null;
@@ -185,7 +257,9 @@ export function computePurchaseAnalysis(
 
   return {
     performanceTier,
+    performanceTooltip,
     purchaseStatus,
+    statusTooltip,
     recommendation,
     suggestedQty,
     dailyAvg,

@@ -51,12 +51,9 @@ export default async function SupplierPurchasePage({ params }: PageProps) {
         supplierMissing = true;
       }
     }
-
   } catch (e) {
     loadError =
-      e instanceof Error
-        ? e.message
-        : "Erro ao carregar análise do fornecedor";
+      e instanceof Error ? e.message : "Erro ao carregar análise do fornecedor";
   }
 
   if (supplierMissing) {
@@ -106,7 +103,7 @@ export default async function SupplierPurchasePage({ params }: PageProps) {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardContent className="p-4">
-            <p className="text-sm text-[var(--muted-foreground)]">Urgentes</p>
+            <p className="text-sm text-[var(--muted-foreground)]">Á Comprar</p>
             <p className="text-2xl font-bold tabular-nums text-rose-900">
               {urgentCount}
             </p>

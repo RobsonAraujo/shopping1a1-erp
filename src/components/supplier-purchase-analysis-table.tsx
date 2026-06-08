@@ -16,7 +16,12 @@ import { MetricWithHint } from "@/components/metric-with-hint";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 const performanceLabels: Record<PurchasePerformanceTier, string> = {
@@ -41,7 +46,7 @@ const statusLabels: Record<PurchaseStatus, string> = {
   planejar: "Planejar",
   ok: "OK",
   sem_vendas: "Sem vendas",
-  evitar: "Evitar reposição",
+  evitar: "Evitar",
 };
 
 const statusVariants: Record<
@@ -76,6 +81,25 @@ function formatMoney(value: number | null): string {
   });
 }
 
+function BadgeTooltip({
+  content,
+  children,
+}: {
+  content: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex cursor-default">{children}</span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs text-left">
+        {content}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function catalogStatusLabel(status: string | null): string | null {
   if (!status) return null;
   if (status === "winning") return "Ganhando";
@@ -103,39 +127,39 @@ export function SupplierPurchaseAnalysisTable({
     <TooltipProvider delayDuration={200}>
       <Card className="overflow-hidden p-0 shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[72rem] text-left text-sm">
+          <table className="w-full table-fixed text-left text-sm">
             <thead className="border-b border-[var(--border)] bg-[var(--muted)]/80">
               <tr>
-                <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                <th className="w-[10.5rem] max-w-[10.5rem] px-2.5 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                   Produto
                 </th>
-                <th className="min-w-[8.5rem] px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                <th className="w-[8rem] px-2 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                   Estoque
                 </th>
-                <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                  Vendas 14d
+                <th className="w-[5rem] px-2 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                  Vendas
                 </th>
-                <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                <th className="w-[5.5rem] px-2 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                   Cobertura
                 </th>
-                <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                <th className="w-[4.5rem] px-2 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                   Rotação
                 </th>
-                <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                <th className="w-[5.5rem] px-2 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                   Status
                 </th>
-                <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                  Qtd. sugerida
+                <th className="w-[4.5rem] px-2 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                  Qtd.
                 </th>
-                <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                  Recomendação
+                <th className="w-[6rem] px-2 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                  Ação
                 </th>
                 {showCostColumns ? (
-                  <th className="min-w-[12rem] px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                  <th className="w-[11rem] px-2 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                     Custos
                   </th>
                 ) : null}
-                <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                <th className="w-[6.5rem] px-2 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                   Ações
                 </th>
               </tr>
@@ -164,57 +188,67 @@ export function SupplierPurchaseAnalysisTable({
                           "bg-rose-50/30",
                       )}
                     >
-                      <td className="align-middle px-4 py-3.5">
-                        <div className="flex gap-3">
+                      <td className="max-w-[10.5rem] align-middle px-2.5 py-3">
+                        <div className="flex min-w-0 gap-2">
                           <Link
                             href={`/dashboard/items/${row.item.id}`}
-                            className="relative shrink-0 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--muted)]"
+                            className="relative shrink-0 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--muted)]"
                           >
                             {imageUrl ? (
                               <Image
                                 src={imageUrl}
                                 alt=""
-                                width={80}
-                                height={80}
-                                className="size-12 object-contain sm:size-14"
-                                sizes="56px"
+                                width={40}
+                                height={40}
+                                className="size-10 object-contain"
+                                sizes="40px"
                               />
                             ) : (
-                              <span className="flex size-12 items-center justify-center sm:size-14">
+                              <span className="flex size-10 items-center justify-center">
                                 <ImageOff
-                                  className="size-5 text-[var(--muted-foreground)]/60"
+                                  className="size-4 text-[var(--muted-foreground)]/60"
                                   aria-hidden
                                 />
                               </span>
                             )}
                           </Link>
-                          <span className="min-w-0 flex-1">
-                            <span className="flex flex-wrap items-center gap-1.5">
-                              <span
-                                className="block truncate font-semibold leading-snug text-[var(--foreground)]"
-                                title={row.item.title}
+                          <span className="min-w-0 flex-1 overflow-hidden">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="block min-w-0 cursor-default overflow-hidden">
+                                  <span className="block truncate text-xs font-semibold leading-snug text-[var(--foreground)]">
+                                    {row.sku ?? "Sem SKU"}
+                                  </span>
+                                  <span className="mt-0.5 block truncate text-[11px] leading-snug text-[var(--muted-foreground)]">
+                                    {row.item.title}
+                                  </span>
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent
+                                side="top"
+                                className="max-w-xs text-left"
                               >
-                                {row.sku ?? "Sem SKU"}
-                              </span>
-                              {catalogLabel ? (
-                                <Badge
-                                  variant="outline"
-                                  className="h-5 px-1.5 text-[10px]"
-                                >
-                                  {catalogLabel}
-                                </Badge>
-                              ) : null}
-                            </span>
-                            <span
-                              className="mt-0.5 block text-xs leading-snug text-[var(--muted-foreground)]"
-                              title={row.item.title}
-                            >
-                              {row.item.title}
-                            </span>
+                                <p className="font-semibold text-[var(--popover-foreground)]">
+                                  {row.sku ?? "Sem SKU"}
+                                </p>
+                                <p className="mt-1 text-[var(--muted-foreground)]">
+                                  {row.item.title}
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                            {catalogLabel ? (
+                              <Badge
+                                variant="outline"
+                                className="mt-1 h-4 max-w-full truncate px-1 text-[9px]"
+                                title={catalogLabel}
+                              >
+                                {catalogLabel}
+                              </Badge>
+                            ) : null}
                           </span>
                         </div>
                       </td>
-                      <td className="min-w-[8.5rem] align-middle px-4 py-3.5 text-xs whitespace-nowrap tabular-nums">
+                      <td className="align-middle px-2 py-3 text-xs whitespace-nowrap tabular-nums">
                         <div>
                           <span className="text-[var(--muted-foreground)]">
                             Galpão:{" "}
@@ -234,7 +268,7 @@ export function SupplierPurchaseAnalysisTable({
                           {row.totalStock}
                         </div>
                       </td>
-                      <td className="align-middle px-4 py-3.5 tabular-nums">
+                      <td className="align-middle px-2 py-3 tabular-nums">
                         <div>{row.unitsSold}</div>
                         <div className="text-xs text-[var(--muted-foreground)]">
                           {analysis.dailyAvg.toLocaleString("pt-BR", {
@@ -243,35 +277,39 @@ export function SupplierPurchaseAnalysisTable({
                           /dia
                         </div>
                       </td>
-                      <td className="align-middle px-4 py-3.5 tabular-nums text-[var(--muted-foreground)]">
+                      <td className="align-middle px-2 py-3 tabular-nums text-[var(--muted-foreground)]">
                         {formatCoverage(analysis.coverageDays)}
                       </td>
-                      <td className="align-middle px-4 py-3.5">
-                        <Badge
-                          variant={
-                            performanceVariants[analysis.performanceTier]
-                          }
-                          className="h-5 px-1.5 text-[10px]"
-                        >
-                          {performanceLabels[analysis.performanceTier]}
-                        </Badge>
+                      <td className="align-middle px-2 py-3">
+                        <BadgeTooltip content={analysis.performanceTooltip}>
+                          <Badge
+                            variant={
+                              performanceVariants[analysis.performanceTier]
+                            }
+                            className="h-5 px-1.5 text-[10px]"
+                          >
+                            {performanceLabels[analysis.performanceTier]}
+                          </Badge>
+                        </BadgeTooltip>
                       </td>
-                      <td className="align-middle px-4 py-3.5">
-                        <Badge
-                          variant={statusVariants[analysis.purchaseStatus]}
-                          className="h-5 px-1.5 text-[10px]"
-                        >
-                          {statusLabels[analysis.purchaseStatus]}
-                        </Badge>
+                      <td className="align-middle px-2 py-3">
+                        <BadgeTooltip content={analysis.statusTooltip}>
+                          <Badge
+                            variant={statusVariants[analysis.purchaseStatus]}
+                            className="h-5 px-1.5 text-[10px]"
+                          >
+                            {statusLabels[analysis.purchaseStatus]}
+                          </Badge>
+                        </BadgeTooltip>
                       </td>
-                      <td className="align-middle px-4 py-3.5 tabular-nums font-medium">
+                      <td className="align-middle px-2 py-3 tabular-nums font-medium">
                         <MetricWithHint
                           content={analysis.recommendationTooltip}
                         >
                           <span>{analysis.suggestedQty}</span>
                         </MetricWithHint>
                       </td>
-                      <td className="align-middle px-4 py-3.5">
+                      <td className="align-middle px-2 py-3">
                         <Badge
                           variant={
                             analysis.recommendation === "comprar"
@@ -286,7 +324,7 @@ export function SupplierPurchaseAnalysisTable({
                         </Badge>
                       </td>
                       {showCostColumns ? (
-                        <td className="min-w-[12rem] align-middle px-4 py-3.5 text-xs whitespace-nowrap">
+                        <td className="align-middle px-2 py-3 text-xs whitespace-nowrap">
                           <div>
                             <span className="text-[var(--muted-foreground)]">
                               Custo pago:{" "}
@@ -301,8 +339,8 @@ export function SupplierPurchaseAnalysisTable({
                           </div>
                         </td>
                       ) : null}
-                      <td className="align-middle px-4 py-3.5">
-                        <div className="flex flex-wrap gap-2">
+                      <td className="align-middle px-2 py-3">
+                        <div className="flex flex-wrap gap-1.5">
                           <Button
                             type="button"
                             variant="outline"

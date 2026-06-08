@@ -73,8 +73,7 @@ export default async function ComprasPage() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {summaries.map((summary) => {
             const hasAlert = rows.some(
-              (r) =>
-                r.supplier === summary.supplier && needsPurchase(r),
+              (r) => r.supplier === summary.supplier && needsPurchase(r),
             );
             return (
               <Link
@@ -106,7 +105,9 @@ export default async function ComprasPage() {
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-[var(--muted-foreground)]">Urgentes</dt>
+                    <dt className="text-[var(--muted-foreground)]">
+                      Á Comprar
+                    </dt>
                     <dd className="font-semibold tabular-nums text-rose-900">
                       {summary.urgentCount}
                     </dd>
