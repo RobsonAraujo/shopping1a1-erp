@@ -95,6 +95,7 @@ export function DashboardAttentionPurchasePanel({
                 <SupplierGroupHeader
                   supplier={group.supplier}
                   count={group.rows.length}
+                  showAnalyzeLink
                 />
                 <ul className="space-y-2.5">
                   {group.rows.map(({ item, plan, warehouseStock }) => {

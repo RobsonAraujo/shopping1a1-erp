@@ -9,6 +9,7 @@ import {
   LogOut,
   Menu,
   Package,
+  ShoppingCart,
   Warehouse,
   X,
 } from "lucide-react";
@@ -26,6 +27,12 @@ const navItems = [
     label: "Estoque",
     description: "Acompanhe o estoque dos produtos",
     icon: Warehouse,
+  },
+  {
+    href: "/dashboard/compras",
+    label: "Compras",
+    description: "Analise reposição por fornecedor",
+    icon: ShoppingCart,
   },
   {
     href: "/dashboard/catalog-report",

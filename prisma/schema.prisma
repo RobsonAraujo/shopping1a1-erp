@@ -70,6 +70,12 @@ model WarehouseStock {
   quantity              Int      @default(0)
   /// Prazo compra → chegada no galpão (dias inteiros; UI pode informar em semanas).
   purchaseLeadTimeDays  Int?     @map("purchase_lead_time_days")
+  /// Último preço pago ao fornecedor (por unidade).
+  lastPurchasePrice     Decimal? @map("last_purchase_price") @db.Decimal(18, 2)
+  /// Teto de custo por unidade que ainda compensa comprar.
+  minAcceptablePrice    Decimal? @map("min_acceptable_price") @db.Decimal(18, 2)
+  /// Override opcional dos dias de cobertura alvo na análise de compra.
+  targetCoverageDays    Int?     @map("target_coverage_days")
   notes                 String?
   updatedAt             DateTime @updatedAt @map("updated_at")
 

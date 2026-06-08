@@ -2,7 +2,13 @@ import { cookies } from "next/headers";
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ChartNoAxesColumn, LogOut, Package, Warehouse } from "lucide-react";
+import {
+  ChartNoAxesColumn,
+  LogOut,
+  Package,
+  ShoppingCart,
+  Warehouse,
+} from "lucide-react";
 import { fetchMe } from "@/lib/mercadolibre/api";
 import { PushNotificationToggle } from "@/components/push-notification-toggle";
 import { MobileDashboardMenu } from "@/components/mobile-dashboard-menu";
@@ -71,6 +77,12 @@ export default async function DashboardLayout({
                 <Link href="/dashboard/inventory" className="gap-2">
                   <Warehouse className="size-4" aria-hidden />
                   Estoque
+                </Link>
+              </Button>
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/dashboard/compras" className="gap-2">
+                  <ShoppingCart className="size-4" aria-hidden />
+                  Compras
                 </Link>
               </Button>
               <Button variant="ghost" size="sm" asChild>

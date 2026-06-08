@@ -82,7 +82,27 @@ type PatchBody = {
   quantity?: unknown;
   notes?: unknown;
   purchaseLeadTimeDays?: unknown;
+  lastPurchasePrice?: unknown;
+  minAcceptablePrice?: unknown;
+  targetCoverageDays?: unknown;
 };
+
+function parseOptionalMoneyField(
+  value: unknown,
+): number | null | undefined | "invalid" {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed === "") return null;
+    const n = Number(trimmed.replace(",", "."));
+    if (Number.isFinite(n) && n >= 0) return n;
+  }
+  return "invalid";
+}
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   const { mlItemId } = await context.params;
@@ -101,18 +121,21 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const quantity = body.quantity;
-  if (typeof quantity !== "number" || !Number.isInteger(quantity)) {
-    return NextResponse.json(
-      { error: "quantity must be an integer" },
-      { status: 400 },
-    );
-  }
-  if (quantity < 0) {
-    return NextResponse.json(
-      { error: "quantity must be >= 0" },
-      { status: 400 },
-    );
+  let quantity: number | undefined;
+  if (body.quantity !== undefined) {
+    if (typeof body.quantity !== "number" || !Number.isInteger(body.quantity)) {
+      return NextResponse.json(
+        { error: "quantity must be an integer" },
+        { status: 400 },
+      );
+    }
+    if (body.quantity < 0) {
+      return NextResponse.json(
+        { error: "quantity must be >= 0" },
+        { status: 400 },
+      );
+    }
+    quantity = body.quantity;
   }
 
   let notes: string | null | undefined;
@@ -147,6 +170,40 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
   }
 
+  const lastPurchasePrice = parseOptionalMoneyField(body.lastPurchasePrice);
+  if (lastPurchasePrice === "invalid") {
+    return NextResponse.json(
+      { error: "lastPurchasePrice must be null or a number >= 0" },
+      { status: 400 },
+    );
+  }
+
+  const minAcceptablePrice = parseOptionalMoneyField(body.minAcceptablePrice);
+  if (minAcceptablePrice === "invalid") {
+    return NextResponse.json(
+      { error: "minAcceptablePrice must be null or a number >= 0" },
+      { status: 400 },
+    );
+  }
+
+  let targetCoverageDays: number | null | undefined;
+  if (body.targetCoverageDays !== undefined) {
+    if (body.targetCoverageDays === null) {
+      targetCoverageDays = null;
+    } else if (
+      typeof body.targetCoverageDays === "number" &&
+      Number.isInteger(body.targetCoverageDays) &&
+      body.targetCoverageDays >= 0
+    ) {
+      targetCoverageDays = body.targetCoverageDays;
+    } else {
+      return NextResponse.json(
+        { error: "targetCoverageDays must be null or an integer >= 0" },
+        { status: 400 },
+      );
+    }
+  }
+
   try {
     const item = await fetchItemById(token, mlItemId);
     if (!item) {
@@ -169,21 +226,46 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           update: listingData,
         });
 
+        const existing = await tx.warehouseStock.findUnique({
+          where: { mlItemId },
+        });
+
         const stockRow = await tx.warehouseStock.upsert({
           where: { mlItemId },
           create: {
             mlItemId,
-            quantity,
+            quantity: quantity ?? 0,
             notes: notes ?? null,
             ...(purchaseLeadTimeDays !== undefined
               ? { purchaseLeadTimeDays }
               : {}),
+            ...(lastPurchasePrice !== undefined
+              ? { lastPurchasePrice }
+              : {}),
+            ...(minAcceptablePrice !== undefined
+              ? { minAcceptablePrice }
+              : {}),
+            ...(targetCoverageDays !== undefined
+              ? { targetCoverageDays }
+              : {}),
           },
           update: {
-            quantity,
+            ...(quantity !== undefined ? { quantity } : {}),
             ...(notes !== undefined ? { notes } : {}),
             ...(purchaseLeadTimeDays !== undefined
               ? { purchaseLeadTimeDays }
+              : {}),
+            ...(lastPurchasePrice !== undefined
+              ? { lastPurchasePrice }
+              : {}),
+            ...(minAcceptablePrice !== undefined
+              ? { minAcceptablePrice }
+              : {}),
+            ...(targetCoverageDays !== undefined
+              ? { targetCoverageDays }
+              : {}),
+            ...(quantity === undefined && !existing
+              ? { quantity: 0 }
               : {}),
           },
         });
