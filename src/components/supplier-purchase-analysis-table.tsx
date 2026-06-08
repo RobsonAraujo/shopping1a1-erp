@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useState } from "react";
-import { ExternalLink, ImageOff, Settings } from "lucide-react";
+import { Check, Copy, ExternalLink, ImageOff, Settings } from "lucide-react";
 import type { PurchaseAnalysisItemRow } from "@/lib/dashboard-purchase-data";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { formatSellerListingStartedLabel } from "@/lib/mercadolibre/listing-dates";
@@ -101,6 +101,75 @@ function BadgeTooltip({
   );
 }
 
+function CopyableTooltipRow({
+  label,
+  value,
+  displayValue,
+}: {
+  label: string;
+  value: string | null;
+  displayValue?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = useCallback(
+    async (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!value) return;
+      try {
+        await navigator.clipboard.writeText(value);
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1200);
+      } catch {
+        // ignore clipboard errors
+      }
+    },
+    [value],
+  );
+
+  if (!value) {
+    return (
+      <div>
+        <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+          {label}
+        </p>
+        <p className="mt-0.5 font-semibold text-[var(--popover-foreground)]">
+          {displayValue ?? "—"}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      className="flex w-full items-start gap-2 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-[var(--accent)]/60"
+      title={`Copiar ${label.toLowerCase()}`}
+    >
+      <span className="min-w-0 flex-1">
+        <span className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+          {label}
+        </span>
+        <span className="mt-0.5 block font-semibold leading-snug text-[var(--popover-foreground)]">
+          {displayValue ?? value}
+        </span>
+      </span>
+      <span className="mt-0.5 shrink-0 text-[var(--muted-foreground)]">
+        {copied ? (
+          <Check className="size-3.5 text-emerald-600" aria-hidden />
+        ) : (
+          <Copy className="size-3.5" aria-hidden />
+        )}
+      </span>
+      <span className="sr-only">
+        {copied ? `${label} copiado` : `Copiar ${label.toLowerCase()}`}
+      </span>
+    </button>
+  );
+}
+
 function catalogStatusLabel(status: string | null): string | null {
   if (!status) return null;
   if (status === "winning") return "Ganhando";
@@ -125,7 +194,7 @@ export function SupplierPurchaseAnalysisTable({
     : null;
 
   return (
-    <TooltipProvider delayDuration={200}>
+    <TooltipProvider delayDuration={200} disableHoverableContent={false}>
       <Card className="overflow-hidden p-0 shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full table-fixed text-left text-sm">
@@ -238,17 +307,25 @@ export function SupplierPurchaseAnalysisTable({
                               </TooltipTrigger>
                               <TooltipContent
                                 side="top"
-                                className="max-w-xs text-left"
+                                className="pointer-events-auto max-w-xs space-y-2 p-2.5 text-left"
                               >
-                                <p className="font-semibold text-[var(--popover-foreground)]">
-                                  {row.sku ?? "Sem SKU"}
-                                </p>
-                                <p className="mt-1 text-[var(--muted-foreground)]">
-                                  {row.item.title}
-                                </p>
+                                <CopyableTooltipRow
+                                  label="SKU"
+                                  value={row.sku}
+                                  displayValue={row.sku ?? "Sem SKU"}
+                                />
+                                <CopyableTooltipRow
+                                  label="Nome"
+                                  value={row.item.title}
+                                />
+                                {row.categoryPath ? (
+                                  <p className="px-1 text-[var(--muted-foreground)]">
+                                    Categoria: {row.categoryPath}
+                                  </p>
+                                ) : null}
                                 {listingStarted ? (
                                   <p
-                                    className="mt-1 text-[var(--muted-foreground)]"
+                                    className="px-1 text-[var(--muted-foreground)]"
                                     title={listingStarted.hint}
                                   >
                                     {listingStarted.label}
@@ -256,6 +333,14 @@ export function SupplierPurchaseAnalysisTable({
                                 ) : null}
                               </TooltipContent>
                             </Tooltip>
+                            {row.categoryName ? (
+                              <Badge
+                                className="mt-0.5 h-4 max-w-full truncate border-sky-200/80 bg-sky-50 px-1.5 text-[10px] font-normal text-sky-900"
+                                title={row.categoryPath ?? undefined}
+                              >
+                                {row.categoryName}
+                              </Badge>
+                            ) : null}
                             {catalogLabel ? (
                               <Badge
                                 variant="outline"

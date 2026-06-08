@@ -40,6 +40,8 @@ export type ItemBody = {
    * Não é a data do produto no catálogo geral do ML (`/products`).
    */
   date_created?: string;
+  /** Categoria do anúncio (ex.: MLB1051). */
+  category_id?: string;
   permalink: string;
   /** Catálogo compartilhado (ML) vs anúncio clássico do vendedor */
   catalog_listing?: boolean;
@@ -91,6 +93,17 @@ export type OrderSearchResponse = {
     offset: number;
     limit: number;
   };
+};
+
+export type CategoryPathSegment = {
+  id: string;
+  name: string;
+};
+
+export type CategoryBody = {
+  id: string;
+  name: string;
+  path_from_root?: CategoryPathSegment[];
 };
 
 export type ItemPriceToWinResponse = {

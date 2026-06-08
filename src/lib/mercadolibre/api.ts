@@ -1,5 +1,6 @@
 import { getMercadoLibreConfig } from "./config";
 import type {
+  CategoryBody,
   ItemBody,
   ItemPriceToWinResponse,
   ItemMultigetEntry,
@@ -92,6 +93,35 @@ export async function fetchItemById(
 ): Promise<ItemBody | null> {
   const items = await fetchItemsByIds(accessToken, [id]);
   return items[0] ?? null;
+}
+
+export async function fetchCategoryById(
+  accessToken: string,
+  categoryId: string,
+): Promise<CategoryBody | null> {
+  const { apiBase } = getMercadoLibreConfig();
+  const res = await fetch(`${apiBase}/categories/${categoryId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store",
+  });
+  if (!res.ok) return null;
+  return res.json() as Promise<CategoryBody>;
+}
+
+export async function fetchCategoriesByIds(
+  accessToken: string,
+  categoryIds: string[],
+): Promise<Record<string, CategoryBody>> {
+  const unique = [...new Set(categoryIds.filter(Boolean))];
+  const entries = await Promise.all(
+    unique.map(async (id) => {
+      const category = await fetchCategoryById(accessToken, id);
+      return category ? ([id, category] as const) : null;
+    }),
+  );
+  return Object.fromEntries(
+    entries.filter((entry): entry is [string, CategoryBody] => entry !== null),
+  );
 }
 
 export async function fetchItemPriceToWin(

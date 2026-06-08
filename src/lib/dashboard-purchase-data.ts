@@ -1,9 +1,11 @@
 import { stockPlanningConfig } from "@/config/stock-planning";
 import {
   fetchAllUserItemIds,
+  fetchCategoriesByIds,
   fetchItemsByIdsBatched,
   fetchUnitsSoldForItemsInWindowBatched,
 } from "@/lib/mercadolibre/api";
+import { formatCategoryPath } from "@/lib/mercadolibre/category-labels";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
 import { getItemSku, getSkuSupplier } from "@/lib/mercadolibre/item-sku";
 import {
@@ -37,6 +39,8 @@ export type PurchaseAnalysisItemRow = {
   plan: ReturnType<typeof buildPurchasePlan>;
   analysis: PurchaseAnalysisResult;
   catalogStatus: string | null;
+  categoryName: string | null;
+  categoryPath: string | null;
   lastPurchasePrice: number | null;
   minAcceptablePrice: number | null;
   targetCoverageDays: number | null;
@@ -141,6 +145,15 @@ export async function loadDashboardPurchaseData(
     snapshots.map((s) => [s.mlItemId, s.status]),
   );
 
+  const categoryIds = [
+    ...new Set(
+      items
+        .map((item) => item.category_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const categoriesById = await fetchCategoriesByIds(token, categoryIds);
+
   const rows: PurchaseAnalysisItemRow[] = items.map((item) => {
     const sku = getItemSku(item);
     const supplier = getSkuSupplier(sku);
@@ -167,6 +180,10 @@ export async function loadDashboardPurchaseData(
         : null,
     });
 
+    const category = item.category_id
+      ? categoriesById[item.category_id]
+      : undefined;
+
     return {
       item,
       sku,
@@ -179,6 +196,10 @@ export async function loadDashboardPurchaseData(
       plan,
       analysis,
       catalogStatus: catalogStatusById[item.id] ?? null,
+      categoryName: category?.name ?? item.category_id ?? null,
+      categoryPath: category
+        ? formatCategoryPath(category)
+        : (item.category_id ?? null),
       lastPurchasePrice: warehouse?.lastPurchasePrice ?? null,
       minAcceptablePrice: warehouse?.minAcceptablePrice ?? null,
       targetCoverageDays: warehouse?.targetCoverageDays ?? null,
