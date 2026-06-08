@@ -35,6 +35,11 @@ export type ItemBody = {
   available_quantity: number;
   sold_quantity: number;
   status: string;
+  /**
+   * Criação deste anúncio na conta do vendedor (ISO 8601, API `/items`).
+   * Não é a data do produto no catálogo geral do ML (`/products`).
+   */
+  date_created?: string;
   permalink: string;
   /** Catálogo compartilhado (ML) vs anúncio clássico do vendedor */
   catalog_listing?: boolean;

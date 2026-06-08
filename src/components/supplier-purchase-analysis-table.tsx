@@ -7,6 +7,7 @@ import { useCallback, useEffect, useId, useState } from "react";
 import { ExternalLink, ImageOff, Settings } from "lucide-react";
 import type { PurchaseAnalysisItemRow } from "@/lib/dashboard-purchase-data";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
+import { formatSellerListingStartedLabel } from "@/lib/mercadolibre/listing-dates";
 import type {
   PurchasePerformanceTier,
   PurchaseRecommendation,
@@ -179,6 +180,9 @@ export function SupplierPurchaseAnalysisTable({
                   const { analysis } = row;
                   const catalogLabel = catalogStatusLabel(row.catalogStatus);
                   const imageUrl = bestItemImageUrl(row.item);
+                  const listingStarted = formatSellerListingStartedLabel(
+                    row.item,
+                  );
                   return (
                     <tr
                       key={row.item.id}
@@ -189,6 +193,14 @@ export function SupplierPurchaseAnalysisTable({
                       )}
                     >
                       <td className="max-w-[10.5rem] align-middle px-2.5 py-3">
+                        {listingStarted ? (
+                          <p
+                            className="mb-1 text-[10px] leading-none text-[var(--muted-foreground)]"
+                            title={listingStarted.hint}
+                          >
+                            {listingStarted.label}
+                          </p>
+                        ) : null}
                         <div className="flex min-w-0 gap-2">
                           <Link
                             href={`/dashboard/items/${row.item.id}`}
@@ -234,6 +246,14 @@ export function SupplierPurchaseAnalysisTable({
                                 <p className="mt-1 text-[var(--muted-foreground)]">
                                   {row.item.title}
                                 </p>
+                                {listingStarted ? (
+                                  <p
+                                    className="mt-1 text-[var(--muted-foreground)]"
+                                    title={listingStarted.hint}
+                                  >
+                                    {listingStarted.label}
+                                  </p>
+                                ) : null}
                               </TooltipContent>
                             </Tooltip>
                             {catalogLabel ? (
