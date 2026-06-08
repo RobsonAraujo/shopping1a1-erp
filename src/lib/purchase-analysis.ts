@@ -27,7 +27,22 @@ export type PurchaseAnalysisInput = {
   needsPurchaseAttention: boolean;
   mlPrice?: number | null;
   costProfile?: PurchaseCostProfile | null;
+  /** Override do buffer de dias na meta da Qtd. sugerida (padrão: config). */
+  coverageBufferDays?: number;
 };
+
+export const PURCHASE_COVERAGE_BUFFER_STORAGE_KEY =
+  "compras-coverage-buffer-days";
+
+export const DEFAULT_PURCHASE_COVERAGE_BUFFER_DAYS =
+  purchaseAnalysisConfig.targetCoverageBufferDays;
+
+export const PURCHASE_COVERAGE_BUFFER_TOOLTIP = [
+  "Quantos dias o estoque deve durar além dos prazos de reposição (compra até o galpão + envio ao Full).",
+  `A Qtd. sugerida mira cobrir esses prazos + este buffer, com base na média de vendas dos últimos ${stockPlanningConfig.salesAverageWindowDays} dias.`,
+  "Ex.: buffer 30 = planejar cerca de 30 dias extras de venda depois que o novo lote estiver disponível para venda.",
+  "Quanto maior o buffer, maior a Qtd. sugerida; quanto menor, menor a sugestão.",
+].join(" ");
 
 export type PurchaseAnalysisResult = {
   performanceTier: PurchasePerformanceTier;
@@ -133,15 +148,15 @@ export function computeSuggestedPurchaseQty(
   totalStock: number,
   purchaseLeadTimeDays: number,
   targetCoverageDaysOverride?: number | null,
+  coverageBufferDays: number = purchaseAnalysisConfig.targetCoverageBufferDays,
 ): { suggestedQty: number; dailyAvg: number; targetDays: number } {
   const windowDays = stockPlanningConfig.salesAverageWindowDays;
   const dailyAvg =
     windowDays > 0 && unitsSoldInWindow > 0 ? unitsSoldInWindow / windowDays : 0;
+  const bufferDays = Math.max(0, coverageBufferDays);
   const targetDays =
     targetCoverageDaysOverride ??
-    purchaseLeadTimeDays +
-      stockPlanningConfig.leadTimeDays +
-      purchaseAnalysisConfig.targetCoverageBufferDays;
+    purchaseLeadTimeDays + stockPlanningConfig.leadTimeDays + bufferDays;
 
   if (dailyAvg <= 0) {
     return { suggestedQty: 0, dailyAvg: 0, targetDays };
@@ -156,11 +171,15 @@ export function computePurchaseAnalysis(
   input: PurchaseAnalysisInput,
 ): PurchaseAnalysisResult {
   const windowDays = stockPlanningConfig.salesAverageWindowDays;
+  const coverageBufferDays =
+    input.coverageBufferDays ??
+    purchaseAnalysisConfig.targetCoverageBufferDays;
   const { suggestedQty, dailyAvg, targetDays } = computeSuggestedPurchaseQty(
     input.unitsSoldInWindow,
     input.totalStock,
     input.purchaseLeadTimeDays,
     input.costProfile?.targetCoverageDays,
+    coverageBufferDays,
   );
 
   const coverageDays =
@@ -239,7 +258,7 @@ export function computePurchaseAnalysis(
     coverageDays !== null
       ? `Cobertura estimada: ${formatNumPt(coverageDays, 1)} dias.`
       : "Sem vendas no período — cobertura indeterminada.",
-    `Meta de cobertura: ${targetDays} dias (prazo compra + Full + buffer).`,
+    `Meta de cobertura: ${targetDays} dias (prazo compra ${input.purchaseLeadTimeDays} d + Full ${stockPlanningConfig.leadTimeDays} d + buffer ${coverageBufferDays} d).`,
     `Quantidade sugerida: max(0, ceil(média × meta) − estoque) = ${suggestedQty} un.`,
   ];
   if (grossMarginPct !== null) {
@@ -269,6 +288,38 @@ export function computePurchaseAnalysis(
     grossMarginPct,
     worthBuying,
     recommendationTooltip: tooltipParts.join(" "),
+  };
+}
+
+export function buildPurchaseAnalysisInputFromRow(
+  row: {
+    unitsSold: number;
+    totalStock: number;
+    purchaseLeadTimeDays: number;
+    plan: {
+      purchaseIsOverdue: boolean;
+      needsPurchaseAttention: boolean;
+    };
+    item: { price?: number | null };
+    lastPurchasePrice: number | null;
+    minAcceptablePrice: number | null;
+    targetCoverageDays: number | null;
+  },
+  coverageBufferDays?: number,
+): PurchaseAnalysisInput {
+  return {
+    unitsSoldInWindow: row.unitsSold,
+    totalStock: row.totalStock,
+    purchaseLeadTimeDays: row.purchaseLeadTimeDays,
+    purchaseIsOverdue: row.plan.purchaseIsOverdue,
+    needsPurchaseAttention: row.plan.needsPurchaseAttention,
+    mlPrice: row.item.price,
+    costProfile: {
+      lastPurchasePrice: row.lastPurchasePrice,
+      minAcceptablePrice: row.minAcceptablePrice,
+      targetCoverageDays: row.targetCoverageDays,
+    },
+    coverageBufferDays,
   };
 }
 

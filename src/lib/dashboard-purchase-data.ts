@@ -33,6 +33,7 @@ export type PurchaseAnalysisItemRow = {
   warehouseStock: number;
   totalStock: number;
   unitsSold: number;
+  purchaseLeadTimeDays: number;
   plan: ReturnType<typeof buildPurchasePlan>;
   analysis: PurchaseAnalysisResult;
   catalogStatus: string | null;
@@ -48,6 +49,7 @@ export type SupplierSummary = {
   highRotationCount: number;
   noSalesCount: number;
   suggestedUnitsTotal: number;
+  hasActiveAlert: boolean;
 };
 
 function hasValidPurchaseAck(
@@ -173,6 +175,7 @@ export async function loadDashboardPurchaseData(
       warehouseStock,
       totalStock,
       unitsSold,
+      purchaseLeadTimeDays: purchaseLead,
       plan,
       analysis,
       catalogStatus: catalogStatusById[item.id] ?? null,
@@ -262,10 +265,7 @@ export function buildSupplierSummaries(
     });
   });
 
-  return sortable.map(
-    ({ hasActiveAlert: _hasActiveAlert, urgentForSort: _urgentForSort, ...summary }) =>
-      summary,
-  );
+  return sortable.map(({ urgentForSort: _urgentForSort, ...summary }) => summary);
 }
 
 export function filterRowsBySupplier(

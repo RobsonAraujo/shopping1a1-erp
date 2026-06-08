@@ -5,6 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import {
   Tooltip,
   TooltipContent,
+  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,7 @@ export function PlanningInfoTrigger({
   className?: string;
 }) {
   return (
+    <TooltipProvider delayDuration={200}>
     <Popover>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -60,5 +62,6 @@ export function PlanningInfoTrigger({
         <ExplainerBody content={content} />
       </PopoverContent>
     </Popover>
+    </TooltipProvider>
   );
 }
