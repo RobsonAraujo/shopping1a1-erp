@@ -4,6 +4,10 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useId, useState } from "react";
 import { HelpCircle, ImageOff, Pencil, Settings } from "lucide-react";
+import {
+  ListingStatusBadge,
+  listingRowMutedClass,
+} from "@/components/listing-status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -23,6 +27,7 @@ export type InventoryRow = {
   sku: string | null;
   title: string;
   imageUrl?: string;
+  mlStatus: string;
   mlStock: number;
   warehouseStock: number;
   leadTimeDays: number | null;
@@ -112,7 +117,7 @@ export function InventoryStockTable({ rows }: InventoryStockTableProps) {
                     colSpan={6}
                     className="px-4 py-12 text-center text-[var(--muted-foreground)]"
                   >
-                    Nenhum anúncio ativo nesta página.
+                    Nenhum anúncio nesta página.
                   </td>
                 </tr>
               ) : (
@@ -136,7 +141,14 @@ export function InventoryStockTable({ rows }: InventoryStockTableProps) {
                       return (
                         <tr
                           key={row.mlItemId}
-                          className="border-b border-[var(--border)] transition-colors last:border-0 hover:bg-[var(--muted)]/40"
+                          className={cn(
+                            "border-b border-[var(--border)] transition-colors last:border-0 hover:bg-[var(--muted)]/40",
+                            listingRowMutedClass(
+                              row.mlStatus,
+                              row.mlStock,
+                              row.warehouseStock,
+                            ),
+                          )}
                         >
                           <td className="align-middle px-4 py-3.5">
                             <div className="flex gap-3">
@@ -185,6 +197,11 @@ export function InventoryStockTable({ rows }: InventoryStockTableProps) {
                                 >
                                   {row.title}
                                 </span>
+                                <ListingStatusBadge
+                                  status={row.mlStatus}
+                                  mlStock={row.mlStock}
+                                  warehouseStock={row.warehouseStock}
+                                />
                               </span>
                             </div>
                           </td>

@@ -11,6 +11,8 @@ import { SupplierGroupHeader } from "@/components/supplier-group-header";
 import { computeStockPlanningDisplay } from "@/lib/stock-planning";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import { DashboardAttentionPurchasePanel } from "@/components/dashboard-attention-purchase-panel";
+import { ListingStatusBadge } from "@/components/listing-status-badge";
+import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
 import { MetricWithHint } from "@/components/metric-with-hint";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -141,6 +143,7 @@ function AttentionSection({
                       mode === "purchase" ? "Comprar em" : "Buscar em";
                     const imageUrl = bestItemImageUrl(item);
                     const sku = getItemSku(item);
+                    const mlStock = mlAvailableStockUnits(item);
 
                     return (
                       <li
@@ -189,6 +192,10 @@ function AttentionSection({
                                 <span className="mt-0.5 block truncate text-xs font-normal leading-snug text-[var(--muted-foreground)]">
                                   {item.title}
                                 </span>
+                                <ListingStatusBadge
+                                  status={item.status}
+                                  mlStock={mlStock}
+                                />
                               </Link>
                               <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
                                 {item.catalog_listing ? (

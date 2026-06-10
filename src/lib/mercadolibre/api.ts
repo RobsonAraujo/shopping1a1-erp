@@ -1,4 +1,5 @@
 import { stockPlanningConfig } from "@/config/stock-planning";
+import { prisma } from "@/lib/db";
 import { getMercadoLibreConfig } from "./config";
 import {
   getCalendarMonthLabels,
@@ -415,6 +416,29 @@ export async function fetchAllUserItemIds(
   }
 
   return ids;
+}
+
+/** Active + paused no ML, mais anúncios com registro no galpão (sem `closed`). */
+export async function fetchOperationalListingIds(
+  accessToken: string,
+  userId: number,
+): Promise<string[]> {
+  const [activeIds, pausedIds, warehouseRows] = await Promise.all([
+    fetchAllUserItemIds(accessToken, userId, { status: "active" }),
+    fetchAllUserItemIds(accessToken, userId, { status: "paused" }),
+    prisma.warehouseStock.findMany({ select: { mlItemId: true } }),
+  ]);
+  const warehouseIds = warehouseRows.map((row) => row.mlItemId);
+  return [...new Set([...activeIds, ...pausedIds, ...warehouseIds])];
+}
+
+export async function fetchOperationalListings(
+  accessToken: string,
+  userId: number,
+): Promise<ItemBody[]> {
+  const ids = await fetchOperationalListingIds(accessToken, userId);
+  if (ids.length === 0) return [];
+  return fetchItemsByIdsBatched(accessToken, ids);
 }
 
 export async function fetchItemsByIdsBatched(

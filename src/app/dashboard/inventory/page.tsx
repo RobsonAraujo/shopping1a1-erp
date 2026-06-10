@@ -4,13 +4,13 @@ import { stockPlanningConfig } from "@/config/stock-planning";
 import { InventoryStockTable } from "@/components/inventory-stock-table";
 import { Card, CardContent } from "@/components/ui/card";
 import {
-  fetchAllUserItemIds,
-  fetchItemsByIdsBatched,
+  fetchOperationalListings,
   fetchUnitsSoldForItemsInWindowBatched,
 } from "@/lib/mercadolibre/api";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { getItemSku } from "@/lib/mercadolibre/item-sku";
+import { countListingsByStatus } from "@/lib/mercadolibre/listing-status";
 import { computeStockPlanningDisplay } from "@/lib/stock-planning";
 import { prisma } from "@/lib/db";
 import {
@@ -34,12 +34,14 @@ export default async function InventoryPage() {
   }
 
   let total = 0;
+  let statusCounts = { active: 0, paused: 0, other: 0 };
   let warehouseLoadFailed = false;
   let rows: {
     mlItemId: string;
     sku: string | null;
     title: string;
     imageUrl?: string;
+    mlStatus: string;
     mlStock: number;
     warehouseStock: number;
     leadTimeDays: number | null;
@@ -47,19 +49,15 @@ export default async function InventoryPage() {
   }[] = [];
 
   try {
-    const allIds = await fetchAllUserItemIds(token, userId, {
-      status: "active",
-    });
-    const [items, salesByItem] = await Promise.all([
-      fetchItemsByIdsBatched(token, allIds),
-      fetchUnitsSoldForItemsInWindowBatched(
-        token,
-        userId,
-        allIds,
-        stockPlanningConfig.salesAverageWindowDays,
-        stockPlanningConfig.salesWindowDateField,
-      ),
-    ]);
+    const items = await fetchOperationalListings(token, userId);
+    const allIds = items.map((item) => item.id);
+    const salesByItem = await fetchUnitsSoldForItemsInWindowBatched(
+      token,
+      userId,
+      allIds,
+      stockPlanningConfig.salesAverageWindowDays,
+      stockPlanningConfig.salesWindowDateField,
+    );
     const ids = items.map((i) => i.id);
 
     let warehouseById: Record<string, number> = {};
@@ -107,9 +105,11 @@ export default async function InventoryPage() {
       sku: getItemSku(item),
       title: item.title,
       imageUrl: bestItemImageUrl(item),
+      mlStatus: item.status,
     }));
 
     total = items.length;
+    statusCounts = countListingsByStatus(items);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro ao carregar anúncios";
     return (
@@ -126,11 +126,10 @@ export default async function InventoryPage() {
           Estoque
         </h1>
         <p className="mt-2 max-w-3xl text-[15px] leading-relaxed text-[var(--muted-foreground)]">
-          Anúncios <strong>ativos</strong>: estoque no galpão (banco local),
-          estoque no Mercado Livre (API, atualizado ao carregar a página) e
-          total geral (soma dos dois). <strong>Editar</strong> ajusta só o
-          galpão; <strong>Configurações</strong> define o prazo compra →
-          galpão.
+          Anúncios <strong>ativos e pausados</strong> no Mercado Livre (pausados
+          aparecem com aviso). Estoque no galpão (banco local), estoque no ML
+          (API) e total geral. <strong>Editar</strong> ajusta só o galpão;{" "}
+          <strong>Configurações</strong> define o prazo compra → galpão.
         </p>
       </div>
 
@@ -151,8 +150,10 @@ export default async function InventoryPage() {
 
       <Card>
         <CardContent className="p-4 text-sm text-[var(--muted-foreground)] sm:py-4">
-          {total} anúncio{total !== 1 ? "s" : ""} ativo{total !== 1 ? "s" : ""}{" "}
-          no total
+          {total} anúncio{total !== 1 ? "s" : ""} no total
+          {statusCounts.paused > 0
+            ? ` · ${statusCounts.active} ativo${statusCounts.active !== 1 ? "s" : ""} · ${statusCounts.paused} pausado${statusCounts.paused !== 1 ? "s" : ""}`
+            : null}
         </CardContent>
       </Card>
     </div>

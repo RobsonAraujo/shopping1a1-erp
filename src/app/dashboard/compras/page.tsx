@@ -59,7 +59,8 @@ export default async function ComprasPage() {
           </h1>
           <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-[var(--muted-foreground)]">
             Visão geral por fornecedor: rotação, quantidade sugerida e alertas
-            de reposição. Clique em um fornecedor para ver a análise completa.
+            de reposição. Inclui anúncios pausados no ML (ex.: sem estoque).
+            Clique em um fornecedor para ver a análise completa.
           </p>
         </div>
       </header>
@@ -72,11 +73,11 @@ export default async function ComprasPage() {
             </span>
             <div>
               <p className="font-medium text-[var(--foreground)]">
-                Nenhum anúncio ativo
+                Nenhum anúncio encontrado
               </p>
               <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-                Quando houver produtos ativos no Mercado Livre, os fornecedores
-                aparecerão aqui.
+                Quando houver produtos ativos ou pausados no Mercado Livre, os
+                fornecedores aparecerão aqui.
               </p>
             </div>
           </CardContent>

@@ -7,7 +7,9 @@ import { ImageOff, ShoppingCart } from "lucide-react";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { getItemSku, groupBySkuSupplier } from "@/lib/mercadolibre/item-sku";
 import { SupplierGroupHeader } from "@/components/supplier-group-header";
+import { ListingStatusBadge } from "@/components/listing-status-badge";
 import { MetricWithHint } from "@/components/metric-with-hint";
+import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -99,7 +101,7 @@ export function DashboardAttentionPurchasePanel({
                 />
                 <ul className="space-y-2.5">
                   {group.rows.map(({ item, plan, warehouseStock }) => {
-                    const mlStock = item.available_quantity;
+                    const mlStock = mlAvailableStockUnits(item);
                     const totalStock = mlStock + warehouseStock;
                     const urgent = plan.purchaseIsOverdue;
                     const imageUrl = bestItemImageUrl(item);
@@ -153,6 +155,11 @@ export function DashboardAttentionPurchasePanel({
                                 <span className="mt-0.5 block truncate text-xs font-normal leading-snug text-[var(--muted-foreground)]">
                                   {item.title}
                                 </span>
+                                <ListingStatusBadge
+                                  status={item.status}
+                                  mlStock={mlStock}
+                                  warehouseStock={warehouseStock}
+                                />
                               </Link>
                               <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
                                 {item.catalog_listing ? (

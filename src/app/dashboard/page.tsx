@@ -9,8 +9,7 @@ import { DashboardItemsTable } from "@/components/dashboard-items-table";
 import { CollapsibleDashboardSection } from "@/components/collapsible-dashboard-section";
 import { Card, CardContent } from "@/components/ui/card";
 import {
-  fetchAllUserItemIds,
-  fetchItemsByIdsBatched,
+  fetchOperationalListings,
   fetchUnitsSoldForItemsInWindowBatched,
 } from "@/lib/mercadolibre/api";
 import { prisma } from "@/lib/db";
@@ -19,6 +18,7 @@ import {
   readSession,
   refreshSessionPath,
 } from "@/lib/mercadolibre/session";
+import { countListingsByStatus } from "@/lib/mercadolibre/listing-status";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 
 export default async function DashboardPage() {
@@ -51,10 +51,9 @@ export default async function DashboardPage() {
   } | null = null;
 
   try {
-    const allIds = await fetchAllUserItemIds(token, userId);
-    const [allItems, allSales, warehouseStocks, stockAttentionAcks] =
-      await Promise.all([
-        fetchItemsByIdsBatched(token, allIds),
+    const allItems = await fetchOperationalListings(token, userId);
+    const allIds = allItems.map((item) => item.id);
+    const [allSales, warehouseStocks, stockAttentionAcks] = await Promise.all([
         fetchUnitsSoldForItemsInWindowBatched(
           token,
           userId,
@@ -76,7 +75,7 @@ export default async function DashboardPage() {
             purchaseLeadTimeDays: true,
           },
         }),
-      ]);
+    ]);
 
     purchaseLeadTimeByItem = Object.fromEntries(
       warehouseStocks.map((s) => [s.mlItemId, s.purchaseLeadTimeDays]),
@@ -104,6 +103,7 @@ export default async function DashboardPage() {
   }
 
   const total = items.length;
+  const statusCounts = countListingsByStatus(items);
 
   const catalogItems = items.filter((i) => i.catalog_listing === true);
   const ownItems = items.filter((i) => i.catalog_listing !== true);
@@ -134,7 +134,11 @@ export default async function DashboardPage() {
             Anúncios
           </h1>
           <p className="mt-2 max-w-3xl text-[15px] leading-relaxed text-[var(--muted-foreground)]">
-            {total} anúncio{total !== 1 ? "s" : ""} no total.{" "}
+            {total} anúncio{total !== 1 ? "s" : ""} no total
+            {statusCounts.paused > 0
+              ? ` (${statusCounts.paused} pausado${statusCounts.paused !== 1 ? "s" : ""} no ML)`
+              : ""}
+            .{" "}
             {catalogItems.length === 1
               ? "1 anúncio do catálogo"
               : `${catalogItems.length} anúncios do catálogo`}

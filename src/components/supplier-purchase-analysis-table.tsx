@@ -20,6 +20,10 @@ import type {
   PurchaseRecommendation,
   PurchaseStatus,
 } from "@/lib/purchase-analysis";
+import {
+  ListingStatusBadge,
+  listingRowMutedClass,
+} from "@/components/listing-status-badge";
 import { MetricWithHint } from "@/components/metric-with-hint";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -343,6 +347,11 @@ export function SupplierPurchaseAnalysisTable({
                         "border-b border-[var(--border)] transition-colors last:border-0 hover:bg-[var(--muted)]/40",
                         analysis.purchaseStatus === "urgente" &&
                           "bg-rose-50/30",
+                        listingRowMutedClass(
+                          row.item.status,
+                          row.mlStock,
+                          row.warehouseStock,
+                        ),
                       )}
                     >
                       <td className="max-w-[10.5rem] align-middle px-2.5 py-3">
@@ -417,6 +426,11 @@ export function SupplierPurchaseAnalysisTable({
                                 ) : null}
                               </TooltipContent>
                             </Tooltip>
+                            <ListingStatusBadge
+                              status={row.item.status}
+                              mlStock={row.mlStock}
+                              warehouseStock={row.warehouseStock}
+                            />
                             {row.categoryName ? (
                               <Badge
                                 className="mt-0.5 h-4 max-w-full truncate border-sky-200/80 bg-sky-50 px-1.5 text-[10px] font-normal text-sky-900"

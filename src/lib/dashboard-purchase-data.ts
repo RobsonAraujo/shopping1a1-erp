@@ -1,7 +1,7 @@
 import { stockPlanningConfig } from "@/config/stock-planning";
 import {
-  fetchAllUserItemIds,
   fetchCategoriesByIds,
+  fetchOperationalListingIds,
   fetchItemsByIdsBatched,
   fetchUnitsSoldForItemsInWindowBatched,
 } from "@/lib/mercadolibre/api";
@@ -71,7 +71,7 @@ export async function loadDashboardPurchaseData(
   const windowDays = stockPlanningConfig.salesAverageWindowDays;
   const dateField = stockPlanningConfig.salesWindowDateField;
 
-  const allIds = await fetchAllUserItemIds(token, userId, { status: "active" });
+  const allIds = await fetchOperationalListingIds(token, userId);
   const [items, salesByItem, warehouseStocks, acknowledgements, snapshots] =
     await Promise.all([
       fetchItemsByIdsBatched(token, allIds),

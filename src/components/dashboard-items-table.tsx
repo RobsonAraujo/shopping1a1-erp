@@ -8,7 +8,12 @@ import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { getItemSku } from "@/lib/mercadolibre/item-sku";
 import { computeStockPlanningDisplay } from "@/lib/stock-planning";
 import type { ItemBody } from "@/lib/mercadolibre/types";
+import {
+  ListingStatusBadge,
+  listingRowMutedClass,
+} from "@/components/listing-status-badge";
 import { MetricWithHint } from "@/components/metric-with-hint";
+import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
 import { Card } from "@/components/ui/card";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -67,8 +72,9 @@ export function DashboardItemsTable({
                   const sold = salesByItem[item.id] ?? 0;
                   const imageUrl = bestItemImageUrl(item);
                   const sku = getItemSku(item);
+                  const mlStock = mlAvailableStockUnits(item);
                   const plan = computeStockPlanningDisplay(
-                    item.available_quantity,
+                    mlStock,
                     sold,
                     w,
                     stockPlanningConfig,
@@ -76,7 +82,10 @@ export function DashboardItemsTable({
                   return (
                     <tr
                       key={item.id}
-                      className="border-b border-[var(--border)] transition-colors last:border-0 hover:bg-[var(--muted)]/40"
+                      className={cn(
+                        "border-b border-[var(--border)] transition-colors last:border-0 hover:bg-[var(--muted)]/40",
+                        listingRowMutedClass(item.status, mlStock),
+                      )}
                     >
                       <td className="align-top px-4 py-3.5">
                         <Link
@@ -113,11 +122,15 @@ export function DashboardItemsTable({
                               {sku ?? "Sem SKU"}
                             </span>
                             <span
-                              className="mt-0.5 block   text-xs  text-[var(--muted-foreground)]"
+                              className="mt-0.5 block text-xs text-[var(--muted-foreground)]"
                               title={item.title}
                             >
                               {item.title}
                             </span>
+                            <ListingStatusBadge
+                              status={item.status}
+                              mlStock={mlStock}
+                            />
                           </span>
                         </Link>
                       </td>
@@ -125,7 +138,7 @@ export function DashboardItemsTable({
                         {item.id}
                       </td>
                       <td className="align-top px-4 py-3.5 tabular-nums">
-                        {item.available_quantity}
+                        {mlStock}
                       </td>
                       <td className="hidden align-top px-4 py-3.5 tabular-nums lg:table-cell">
                         {item.currency_id}{" "}
