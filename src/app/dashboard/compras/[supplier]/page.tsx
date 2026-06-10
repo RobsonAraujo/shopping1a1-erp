@@ -8,7 +8,7 @@ import {
   loadDashboardPurchaseData,
   type PurchaseAnalysisItemRow,
 } from "@/lib/dashboard-purchase-data";
-import { decodeSupplierParam } from "@/lib/purchase-analysis";
+import { decodeSupplierParam, supplierPathSegment } from "@/lib/purchase-analysis";
 import { SupplierPurchaseAnalysisView } from "@/components/supplier-purchase-analysis-view";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -40,7 +40,6 @@ export default async function SupplierPurchasePage({ params }: PageProps) {
   let loadError: string | null = null;
   let supplierRows: PurchaseAnalysisItemRow[] = [];
   let supplierMissing = false;
-
   try {
     const data = await loadDashboardPurchaseData(token, userId);
     supplierRows = filterRowsBySupplier(data.rows, supplierParam);
@@ -87,7 +86,10 @@ export default async function SupplierPurchasePage({ params }: PageProps) {
         </p>
       </div>
 
-      <SupplierPurchaseAnalysisView rows={supplierRows} />
+      <SupplierPurchaseAnalysisView
+        rows={supplierRows}
+        supplierParam={supplierPathSegment(supplier)}
+      />
     </div>
   );
 }

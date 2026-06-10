@@ -75,9 +75,16 @@ export type ItemMultigetEntry =
 
 export type OrderSearchOrderItem = {
   quantity?: number;
+  unit_price?: number;
+  currency_id?: string;
   item?: { id?: string };
   /** Em algumas respostas o id do anúncio vem no nível da linha */
   item_id?: string;
+};
+
+export type ItemRevenueByMonth = {
+  lastMonth: number;
+  currentMonth: number;
 };
 
 export type OrderSearchOrder = {

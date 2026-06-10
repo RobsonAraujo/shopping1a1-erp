@@ -10,14 +10,25 @@ import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
 import { getItemSku, getSkuSupplier } from "@/lib/mercadolibre/item-sku";
 import {
   buildPurchasePlan,
-  comparePurchaseAnalysisRows,
   computePurchaseAnalysis,
-  decodeSupplierParam,
-  type PurchaseAnalysisResult,
 } from "@/lib/purchase-analysis";
+import type {
+  PurchaseAnalysisItemRow,
+  SupplierSummary,
+} from "@/lib/purchase-analysis-rows";
 import { prisma } from "@/lib/db";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import type { StockAttentionAcknowledgementView } from "@/components/dashboard-attention-panel";
+
+export type {
+  PurchaseAnalysisItemRow,
+  SupplierSummary,
+} from "@/lib/purchase-analysis-rows";
+export {
+  filterRowsBySupplier,
+  mergeSupplierRevenueIntoRows,
+  sumSupplierRevenue,
+} from "@/lib/purchase-analysis-rows";
 
 export type WarehouseStockRow = {
   quantity: number;
@@ -25,35 +36,6 @@ export type WarehouseStockRow = {
   lastPurchasePrice: number | null;
   minAcceptablePrice: number | null;
   targetCoverageDays: number | null;
-};
-
-export type PurchaseAnalysisItemRow = {
-  item: ItemBody;
-  sku: string | null;
-  supplier: string;
-  mlStock: number;
-  warehouseStock: number;
-  totalStock: number;
-  unitsSold: number;
-  purchaseLeadTimeDays: number;
-  plan: ReturnType<typeof buildPurchasePlan>;
-  analysis: PurchaseAnalysisResult;
-  catalogStatus: string | null;
-  categoryName: string | null;
-  categoryPath: string | null;
-  lastPurchasePrice: number | null;
-  minAcceptablePrice: number | null;
-  targetCoverageDays: number | null;
-};
-
-export type SupplierSummary = {
-  supplier: string;
-  totalProducts: number;
-  urgentCount: number;
-  highRotationCount: number;
-  noSalesCount: number;
-  suggestedUnitsTotal: number;
-  hasActiveAlert: boolean;
 };
 
 function hasValidPurchaseAck(
@@ -200,6 +182,8 @@ export async function loadDashboardPurchaseData(
       categoryPath: category
         ? formatCategoryPath(category)
         : (item.category_id ?? null),
+      revenueLastMonth: 0,
+      revenueCurrentMonth: 0,
       lastPurchasePrice: warehouse?.lastPurchasePrice ?? null,
       minAcceptablePrice: warehouse?.minAcceptablePrice ?? null,
       targetCoverageDays: warehouse?.targetCoverageDays ?? null,
@@ -289,25 +273,3 @@ export function buildSupplierSummaries(
   return sortable.map(({ urgentForSort: _urgentForSort, ...summary }) => summary);
 }
 
-export function filterRowsBySupplier(
-  rows: PurchaseAnalysisItemRow[],
-  supplierParam: string,
-): PurchaseAnalysisItemRow[] {
-  const supplier = decodeSupplierParam(supplierParam);
-  return rows
-    .filter((row) => row.supplier === supplier)
-    .sort((a, b) =>
-      comparePurchaseAnalysisRows(
-        {
-          purchaseIsOverdue: a.plan.purchaseIsOverdue,
-          unitsSoldInWindow: a.unitsSold,
-          suggestedQty: a.analysis.suggestedQty,
-        },
-        {
-          purchaseIsOverdue: b.plan.purchaseIsOverdue,
-          unitsSoldInWindow: b.unitsSold,
-          suggestedQty: b.analysis.suggestedQty,
-        },
-      ),
-    );
-}

@@ -1,4 +1,10 @@
+import { stockPlanningConfig } from "@/config/stock-planning";
 import { getMercadoLibreConfig } from "./config";
+import {
+  getCalendarMonthLabels,
+  getCalendarMonthRanges,
+  type CalendarMonthLabels,
+} from "./revenue-periods";
 import type {
   CategoryBody,
   ItemBody,
@@ -170,6 +176,115 @@ function quantityFromOrderLine(line: { quantity?: unknown }): number {
     return Number.isFinite(n) ? Math.max(0, n) : 0;
   }
   return 0;
+}
+
+function revenueFromOrderLine(line: {
+  quantity?: unknown;
+  unit_price?: unknown;
+}): number {
+  const qty = quantityFromOrderLine(line);
+  const price = line.unit_price;
+  if (typeof price !== "number" || !Number.isFinite(price) || price < 0) {
+    return 0;
+  }
+  return price * qty;
+}
+
+/**
+ * Faturamento bruto por anúncio (`unit_price × quantity`) em pedidos não cancelados
+ * na janela, via `/orders/search` paginado (sem filtro por item).
+ */
+export async function fetchRevenueByItemInDateRange(
+  accessToken: string,
+  sellerId: number,
+  from: Date,
+  to: Date,
+  dateField: SalesWindowDateField = stockPlanningConfig.salesWindowDateField,
+): Promise<Record<string, number>> {
+  const { apiBase } = getMercadoLibreConfig();
+  const fromStr = from.toISOString();
+  const toStr = to.toISOString();
+  const revenueByItem: Record<string, number> = {};
+  let offset = 0;
+  const limit = 50;
+  let total = Infinity;
+
+  while (offset < total) {
+    const u = new URL(`${apiBase}/orders/search`);
+    u.searchParams.set("seller", String(sellerId));
+    setOrderDateRange(u, dateField, fromStr, toStr);
+    u.searchParams.set("offset", String(offset));
+    u.searchParams.set("limit", String(limit));
+    u.searchParams.set("sort", "date_desc");
+    u.searchParams.set("display", "complete");
+
+    const res = await fetch(u.toString(), {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(`orders/search failed: ${res.status} ${t}`);
+    }
+
+    const data = (await res.json()) as OrderSearchResponse;
+    const reported = data.paging?.total;
+    total =
+      reported != null && reported >= 0
+        ? reported
+        : ((data.results?.length ?? 0) > 0 ? Infinity : 0);
+
+    const batch = data.results ?? [];
+    for (const order of batch) {
+      if (order.status === "cancelled") continue;
+      for (const line of order.order_items ?? []) {
+        const itemId = listingIdFromOrderLine(line);
+        if (!itemId) continue;
+        const lineRevenue = revenueFromOrderLine(line);
+        if (lineRevenue <= 0) continue;
+        revenueByItem[itemId] = (revenueByItem[itemId] ?? 0) + lineRevenue;
+      }
+    }
+
+    if (batch.length === 0) break;
+    offset += limit;
+    if (batch.length < limit) break;
+  }
+
+  return revenueByItem;
+}
+
+export type RevenueByCalendarMonths = {
+  lastMonth: Record<string, number>;
+  currentMonth: Record<string, number>;
+  monthLabels: CalendarMonthLabels;
+};
+
+export async function fetchRevenueByItemForCalendarMonths(
+  accessToken: string,
+  sellerId: number,
+): Promise<RevenueByCalendarMonths> {
+  const ranges = getCalendarMonthRanges();
+  const [lastMonth, currentMonth] = await Promise.all([
+    fetchRevenueByItemInDateRange(
+      accessToken,
+      sellerId,
+      ranges.lastMonth.from,
+      ranges.lastMonth.to,
+    ),
+    fetchRevenueByItemInDateRange(
+      accessToken,
+      sellerId,
+      ranges.currentMonth.from,
+      ranges.currentMonth.to,
+    ),
+  ]);
+
+  return {
+    lastMonth,
+    currentMonth,
+    monthLabels: getCalendarMonthLabels(ranges),
+  };
 }
 
 /**

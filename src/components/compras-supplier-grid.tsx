@@ -11,7 +11,7 @@ import {
 import type {
   PurchaseAnalysisItemRow,
   SupplierSummary,
-} from "@/lib/dashboard-purchase-data";
+} from "@/lib/purchase-analysis-rows";
 import {
   buildPurchaseAnalysisInputFromRow,
   computePurchaseAnalysis,

@@ -3,11 +3,17 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { Check, Copy, ExternalLink, ImageOff, Settings } from "lucide-react";
-import type { PurchaseAnalysisItemRow } from "@/lib/dashboard-purchase-data";
+import type { PurchaseAnalysisItemRow } from "@/lib/purchase-analysis-rows";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { formatSellerListingStartedLabel } from "@/lib/mercadolibre/listing-dates";
+import {
+  formatRevenueBRL,
+  getCalendarMonthLabels,
+  getCalendarMonthRanges,
+  REVENUE_TOOLTIP_HINT,
+} from "@/lib/mercadolibre/revenue-periods";
 import type {
   PurchasePerformanceTier,
   PurchaseRecommendation,
@@ -17,6 +23,11 @@ import { MetricWithHint } from "@/components/metric-with-hint";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Tooltip,
   TooltipContent,
@@ -167,6 +178,63 @@ function CopyableTooltipRow({
         {copied ? `${label} copiado` : `Copiar ${label.toLowerCase()}`}
       </span>
     </button>
+  );
+}
+
+function ItemRevenueBadge({
+  lastMonth,
+  currentMonth,
+}: {
+  lastMonth: number;
+  currentMonth: number;
+}) {
+  const monthLabels = useMemo(
+    () => getCalendarMonthLabels(getCalendarMonthRanges()),
+    [],
+  );
+
+  if (lastMonth <= 0 && currentMonth <= 0) return null;
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="mt-0.5 inline-flex h-4 max-w-full min-w-0 cursor-pointer items-center truncate rounded-md border border-emerald-300/90 bg-emerald-50 px-1.5 text-[10px] font-medium text-emerald-900 underline decoration-emerald-400/50 decoration-dotted underline-offset-2 transition-all hover:border-emerald-400 hover:bg-emerald-100 hover:decoration-emerald-600/70 hover:shadow-sm active:bg-emerald-200/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 data-[state=open]:border-emerald-400 data-[state=open]:bg-emerald-100"
+          aria-label={`Faturamento mês anterior: ${formatRevenueBRL(lastMonth)}. Toque para ver detalhes.`}
+        >
+          <span className="truncate tabular-nums">
+            {formatRevenueBRL(lastMonth)}
+          </span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="top" align="start" className="w-52 space-y-2 p-2.5">
+        <p className="text-[11px] font-medium text-[var(--foreground)]">
+          Faturamento
+        </p>
+        <div className="space-y-1.5">
+          <div className="flex items-baseline justify-between gap-3 text-[11px]">
+            <span className="text-[var(--muted-foreground)]">
+              {monthLabels.lastMonth}
+            </span>
+            <span className="shrink-0 font-medium tabular-nums text-emerald-900">
+              {formatRevenueBRL(lastMonth)}
+            </span>
+          </div>
+          <div className="flex items-baseline justify-between gap-3 text-[11px]">
+            <span className="text-[var(--muted-foreground)]">
+              {monthLabels.currentMonth}
+            </span>
+            <span className="shrink-0 font-medium tabular-nums text-emerald-900">
+              {formatRevenueBRL(currentMonth)}
+            </span>
+          </div>
+        </div>
+        <p className="text-[10px] leading-snug text-[var(--muted-foreground)]">
+          {REVENUE_TOOLTIP_HINT}
+        </p>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -341,6 +409,10 @@ export function SupplierPurchaseAnalysisTable({
                                 {row.categoryName}
                               </Badge>
                             ) : null}
+                            <ItemRevenueBadge
+                              lastMonth={row.revenueLastMonth}
+                              currentMonth={row.revenueCurrentMonth}
+                            />
                             {catalogLabel ? (
                               <Badge
                                 variant="outline"

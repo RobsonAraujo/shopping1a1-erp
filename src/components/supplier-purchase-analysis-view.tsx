@@ -1,7 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
-import type { PurchaseAnalysisItemRow } from "@/lib/dashboard-purchase-data";
+import { useEffect, useMemo, useState } from "react";
+import {
+  mergeSupplierRevenueIntoRows,
+  type PurchaseAnalysisItemRow,
+} from "@/lib/purchase-analysis-rows";
 import {
   buildPurchaseAnalysisInputFromRow,
   computePurchaseAnalysis,
@@ -12,10 +15,28 @@ import {
 } from "@/components/purchase-coverage-buffer";
 import { SupplierPurchaseAnalysisTable } from "@/components/supplier-purchase-analysis-table";
 import { Card, CardContent } from "@/components/ui/card";
-
+import type { CalendarMonthLabels } from "@/lib/mercadolibre/revenue-periods";
+import {
+  formatRevenueBRL,
+  getCalendarMonthLabels,
+  getCalendarMonthRanges,
+  REVENUE_TOOLTIP_HINT,
+} from "@/lib/mercadolibre/revenue-periods";
 type SupplierPurchaseAnalysisViewProps = {
   rows: PurchaseAnalysisItemRow[];
+  supplierParam: string;
 };
+
+type RevenueLoadState =
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | {
+      status: "ready";
+      monthLabels: CalendarMonthLabels;
+      supplierRevenueLastMonth: number;
+      supplierRevenueCurrentMonth: number;
+      rowsWithRevenue: PurchaseAnalysisItemRow[];
+    };
 
 function recomputeRowsWithBuffer(
   rows: PurchaseAnalysisItemRow[],
@@ -29,14 +50,117 @@ function recomputeRowsWithBuffer(
   }));
 }
 
+const revenueCardClassName =
+  "border-violet-500/40 bg-violet-600 text-white shadow-sm";
+
+function RevenueCardSkeleton({ label }: { label: string }) {
+  return (
+    <Card className={revenueCardClassName}>
+      <CardContent className="p-4">
+        <p className="text-sm text-violet-100">{label}</p>
+        <div
+          className="mt-2 h-8 w-32 animate-pulse rounded-md bg-violet-500/60"
+          aria-hidden
+        />
+        <div
+          className="mt-2 h-3 w-24 animate-pulse rounded-md bg-violet-500/50"
+          aria-hidden
+        />
+        <span className="sr-only">Carregando faturamento</span>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function SupplierPurchaseAnalysisView({
   rows,
+  supplierParam,
 }: SupplierPurchaseAnalysisViewProps) {
   const { bufferDays, setBufferDays } = usePurchaseCoverageBufferDays();
+  const [revenueState, setRevenueState] = useState<RevenueLoadState>({
+    status: "loading",
+  });
+
+  const pendingMonthLabels = useMemo(
+    () => getCalendarMonthLabels(getCalendarMonthRanges()),
+    [],
+  );
+
+  const itemIdsKey = useMemo(
+    () => rows.map((row) => row.item.id).join(","),
+    [rows],
+  );
+
+  useEffect(() => {
+    if (rows.length === 0) {
+      setRevenueState({
+        status: "ready",
+        monthLabels: pendingMonthLabels,
+        supplierRevenueLastMonth: 0,
+        supplierRevenueCurrentMonth: 0,
+        rowsWithRevenue: rows,
+      });
+      return;
+    }
+
+    let cancelled = false;
+    setRevenueState({ status: "loading" });
+
+    const itemIds = rows.map((row) => row.item.id).join(",");
+    const url = `/api/compras/${encodeURIComponent(supplierParam)}/revenue?itemIds=${encodeURIComponent(itemIds)}`;
+
+    fetch(url)
+      .then(async (res) => {
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          monthLabels?: CalendarMonthLabels;
+          lastMonth?: Record<string, number>;
+          currentMonth?: Record<string, number>;
+          totals?: { lastMonth: number; currentMonth: number };
+        };
+        if (!res.ok) {
+          throw new Error(
+            data.error ?? "Não foi possível carregar faturamento",
+          );
+        }
+        if (cancelled) return;
+
+        const rowsWithRevenue = mergeSupplierRevenueIntoRows(
+          rows,
+          data.lastMonth ?? {},
+          data.currentMonth ?? {},
+        );
+
+        setRevenueState({
+          status: "ready",
+          monthLabels: data.monthLabels ?? pendingMonthLabels,
+          supplierRevenueLastMonth: data.totals?.lastMonth ?? 0,
+          supplierRevenueCurrentMonth: data.totals?.currentMonth ?? 0,
+          rowsWithRevenue,
+        });
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        setRevenueState({
+          status: "error",
+          message:
+            e instanceof Error
+              ? e.message
+              : "Não foi possível carregar faturamento",
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [supplierParam, itemIdsKey, rows, pendingMonthLabels]);
+
+  const baseRows =
+    revenueState.status === "ready" ? revenueState.rowsWithRevenue : rows;
 
   const computedRows = useMemo(
-    () => recomputeRowsWithBuffer(rows, bufferDays),
-    [rows, bufferDays],
+    () => recomputeRowsWithBuffer(baseRows, bufferDays),
+    [baseRows, bufferDays],
   );
 
   const urgentCount = computedRows.filter(
@@ -51,6 +175,11 @@ export function SupplierPurchaseAnalysisView({
   const suggestedUnitsTotal = computedRows
     .filter((r) => r.analysis.recommendation === "comprar")
     .reduce((sum, r) => sum + r.analysis.suggestedQty, 0);
+
+  const revenueMonthLabels =
+    revenueState.status === "ready"
+      ? revenueState.monthLabels
+      : pendingMonthLabels;
 
   return (
     <div className="space-y-6">
@@ -94,6 +223,54 @@ export function SupplierPurchaseAnalysisView({
             </p>
           </CardContent>
         </Card>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        {revenueState.status === "loading" ? (
+          <>
+            <RevenueCardSkeleton
+              label={`Faturamento — ${revenueMonthLabels.lastMonth}`}
+            />
+            <RevenueCardSkeleton
+              label={`Faturamento — ${revenueMonthLabels.currentMonth}`}
+            />
+          </>
+        ) : revenueState.status === "error" ? (
+          <Card className="sm:col-span-2 border-amber-200/80 bg-amber-50/50">
+            <CardContent className="p-4 text-sm text-amber-950">
+              {revenueState.message}
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            <Card className={revenueCardClassName} title={REVENUE_TOOLTIP_HINT}>
+              <CardContent className="p-4">
+                <p className="text-sm text-violet-100">
+                  Faturamento — {revenueState.monthLabels.lastMonth}
+                </p>
+                <p className="mt-1 text-2xl font-bold tabular-nums text-white">
+                  {formatRevenueBRL(revenueState.supplierRevenueLastMonth)}
+                </p>
+                <p className="mt-1 text-xs text-violet-200/90">
+                  Bruto via Mercado Livre
+                </p>
+              </CardContent>
+            </Card>
+            <Card className={revenueCardClassName} title={REVENUE_TOOLTIP_HINT}>
+              <CardContent className="p-4">
+                <p className="text-sm text-violet-100">
+                  Faturamento — {revenueState.monthLabels.currentMonth}
+                </p>
+                <p className="mt-1 text-2xl font-bold tabular-nums text-white">
+                  {formatRevenueBRL(revenueState.supplierRevenueCurrentMonth)}
+                </p>
+                <p className="mt-1 text-xs text-violet-200/90">
+                  Bruto via Mercado Livre
+                </p>
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
 
       <SupplierPurchaseAnalysisTable rows={computedRows} />
