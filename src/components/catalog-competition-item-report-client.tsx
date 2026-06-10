@@ -47,7 +47,7 @@ function fmtMinutes(minutes: number): string {
   return `${h}h ${m}m`;
 }
 
-function statusClass(status: string): string {
+function statusClass(status: string | null): string {
   if (status === "winning") {
     return "inline-flex rounded-md bg-emerald-600 px-2 py-0.5 font-semibold text-white";
   }
