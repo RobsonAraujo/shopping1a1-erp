@@ -191,21 +191,27 @@ function revenueFromOrderLine(line: {
   return price * qty;
 }
 
+export type ItemOrderMetricsByListing = {
+  revenueByItem: Record<string, number>;
+  unitsByItem: Record<string, number>;
+};
+
 /**
- * Faturamento bruto por anúncio (`unit_price × quantity`) em pedidos não cancelados
- * na janela, via `/orders/search` paginado (sem filtro por item).
+ * Faturamento bruto e unidades vendidas por anúncio em pedidos pagos na janela,
+ * via `/orders/search` paginado (sem filtro por item).
  */
-export async function fetchRevenueByItemInDateRange(
+export async function fetchOrderMetricsByItemInDateRange(
   accessToken: string,
   sellerId: number,
   from: Date,
   to: Date,
   dateField: SalesWindowDateField = stockPlanningConfig.salesWindowDateField,
-): Promise<Record<string, number>> {
+): Promise<ItemOrderMetricsByListing> {
   const { apiBase } = getMercadoLibreConfig();
   const fromStr = from.toISOString();
   const toStr = to.toISOString();
   const revenueByItem: Record<string, number> = {};
+  const unitsByItem: Record<string, number> = {};
   let offset = 0;
   const limit = 50;
   let total = Infinity;
@@ -213,6 +219,7 @@ export async function fetchRevenueByItemInDateRange(
   while (offset < total) {
     const u = new URL(`${apiBase}/orders/search`);
     u.searchParams.set("seller", String(sellerId));
+    u.searchParams.set("order.status", "paid");
     setOrderDateRange(u, dateField, fromStr, toStr);
     u.searchParams.set("offset", String(offset));
     u.searchParams.set("limit", String(limit));
@@ -241,9 +248,14 @@ export async function fetchRevenueByItemInDateRange(
       for (const line of order.order_items ?? []) {
         const itemId = listingIdFromOrderLine(line);
         if (!itemId) continue;
+        const qty = quantityFromOrderLine(line);
+        if (qty > 0) {
+          unitsByItem[itemId] = (unitsByItem[itemId] ?? 0) + qty;
+        }
         const lineRevenue = revenueFromOrderLine(line);
-        if (lineRevenue <= 0) continue;
-        revenueByItem[itemId] = (revenueByItem[itemId] ?? 0) + lineRevenue;
+        if (lineRevenue > 0) {
+          revenueByItem[itemId] = (revenueByItem[itemId] ?? 0) + lineRevenue;
+        }
       }
     }
 
@@ -252,8 +264,34 @@ export async function fetchRevenueByItemInDateRange(
     if (batch.length < limit) break;
   }
 
-  return revenueByItem;
+  return { revenueByItem, unitsByItem };
 }
+
+/** Faturamento bruto por anúncio na janela. */
+export async function fetchRevenueByItemInDateRange(
+  accessToken: string,
+  sellerId: number,
+  from: Date,
+  to: Date,
+  dateField: SalesWindowDateField = stockPlanningConfig.salesWindowDateField,
+): Promise<Record<string, number>> {
+  const metrics = await fetchOrderMetricsByItemInDateRange(
+    accessToken,
+    sellerId,
+    from,
+    to,
+    dateField,
+  );
+  return metrics.revenueByItem;
+}
+
+export type ItemOrderMetricsByCalendarMonths = {
+  revenueLastMonth: Record<string, number>;
+  revenueCurrentMonth: Record<string, number>;
+  unitsLastMonth: Record<string, number>;
+  unitsCurrentMonth: Record<string, number>;
+  monthLabels: CalendarMonthLabels;
+};
 
 export type RevenueByCalendarMonths = {
   lastMonth: Record<string, number>;
@@ -261,19 +299,19 @@ export type RevenueByCalendarMonths = {
   monthLabels: CalendarMonthLabels;
 };
 
-export async function fetchRevenueByItemForCalendarMonths(
+export async function fetchItemOrderMetricsForCalendarMonths(
   accessToken: string,
   sellerId: number,
-): Promise<RevenueByCalendarMonths> {
+): Promise<ItemOrderMetricsByCalendarMonths> {
   const ranges = getCalendarMonthRanges();
-  const [lastMonth, currentMonth] = await Promise.all([
-    fetchRevenueByItemInDateRange(
+  const [lastMonthMetrics, currentMonthMetrics] = await Promise.all([
+    fetchOrderMetricsByItemInDateRange(
       accessToken,
       sellerId,
       ranges.lastMonth.from,
       ranges.lastMonth.to,
     ),
-    fetchRevenueByItemInDateRange(
+    fetchOrderMetricsByItemInDateRange(
       accessToken,
       sellerId,
       ranges.currentMonth.from,
@@ -282,9 +320,26 @@ export async function fetchRevenueByItemForCalendarMonths(
   ]);
 
   return {
-    lastMonth,
-    currentMonth,
+    revenueLastMonth: lastMonthMetrics.revenueByItem,
+    revenueCurrentMonth: currentMonthMetrics.revenueByItem,
+    unitsLastMonth: lastMonthMetrics.unitsByItem,
+    unitsCurrentMonth: currentMonthMetrics.unitsByItem,
     monthLabels: getCalendarMonthLabels(ranges),
+  };
+}
+
+export async function fetchRevenueByItemForCalendarMonths(
+  accessToken: string,
+  sellerId: number,
+): Promise<RevenueByCalendarMonths> {
+  const metrics = await fetchItemOrderMetricsForCalendarMonths(
+    accessToken,
+    sellerId,
+  );
+  return {
+    lastMonth: metrics.revenueLastMonth,
+    currentMonth: metrics.revenueCurrentMonth,
+    monthLabels: metrics.monthLabels,
   };
 }
 

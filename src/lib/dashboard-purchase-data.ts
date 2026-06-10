@@ -184,6 +184,8 @@ export async function loadDashboardPurchaseData(
         : (item.category_id ?? null),
       revenueLastMonth: 0,
       revenueCurrentMonth: 0,
+      unitsSoldLastMonth: 0,
+      unitsSoldCurrentMonth: 0,
       lastPurchasePrice: warehouse?.lastPurchasePrice ?? null,
       minAcceptablePrice: warehouse?.minAcceptablePrice ?? null,
       targetCoverageDays: warehouse?.targetCoverageDays ?? null,

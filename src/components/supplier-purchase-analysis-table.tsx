@@ -11,6 +11,7 @@ import { buildMercadoLivreItemMetricsUrl } from "@/lib/mercadolibre/item-metrics
 import { formatSellerListingStartedLabel } from "@/lib/mercadolibre/listing-dates";
 import {
   formatRevenueBRL,
+  formatUnitsSold,
   getCalendarMonthLabels,
   getCalendarMonthRanges,
   REVENUE_TOOLTIP_HINT,
@@ -190,10 +191,14 @@ function ItemRevenueBadge({
   itemId,
   lastMonth,
   currentMonth,
+  unitsLastMonth,
+  unitsCurrentMonth,
 }: {
   itemId: string;
   lastMonth: number;
   currentMonth: number;
+  unitsLastMonth: number;
+  unitsCurrentMonth: number;
 }) {
   const monthLabels = useMemo(
     () => getCalendarMonthLabels(getCalendarMonthRanges()),
@@ -204,7 +209,13 @@ function ItemRevenueBadge({
     [itemId],
   );
 
-  if (lastMonth <= 0 && currentMonth <= 0) return null;
+  const hasLastMonth = lastMonth > 0 || unitsLastMonth > 0;
+  const hasCurrentMonth = currentMonth > 0 || unitsCurrentMonth > 0;
+  if (!hasLastMonth && !hasCurrentMonth) return null;
+
+  const badgeLabel = hasLastMonth
+    ? `${formatRevenueBRL(lastMonth)} · ${formatUnitsSold(unitsLastMonth)}`
+    : `${formatRevenueBRL(currentMonth)} · ${formatUnitsSold(unitsCurrentMonth)}`;
 
   return (
     <Popover>
@@ -212,33 +223,41 @@ function ItemRevenueBadge({
         <button
           type="button"
           className="mt-0.5 inline-flex h-4 max-w-full min-w-0 cursor-pointer items-center truncate rounded-md border border-emerald-300/90 bg-emerald-50 px-1.5 text-[10px] font-medium text-emerald-900 underline decoration-emerald-400/50 decoration-dotted underline-offset-2 transition-all hover:border-emerald-400 hover:bg-emerald-100 hover:decoration-emerald-600/70 hover:shadow-sm active:bg-emerald-200/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 data-[state=open]:border-emerald-400 data-[state=open]:bg-emerald-100"
-          aria-label={`Faturamento mês anterior: ${formatRevenueBRL(lastMonth)}. Toque para ver detalhes.`}
+          aria-label={`Mês anterior: ${formatRevenueBRL(lastMonth)}, ${formatUnitsSold(unitsLastMonth)}. Toque para ver detalhes.`}
         >
-          <span className="truncate tabular-nums">
-            {formatRevenueBRL(lastMonth)}
-          </span>
+          <span className="truncate tabular-nums">{badgeLabel}</span>
         </button>
       </PopoverTrigger>
-      <PopoverContent side="top" align="start" className="w-52 space-y-2 p-2.5">
+      <PopoverContent side="top" align="start" className="w-56 space-y-2 p-2.5">
         <p className="text-[11px] font-medium text-[var(--foreground)]">
-          Faturamento
+          Faturamento e vendas
         </p>
         <div className="space-y-1.5">
-          <div className="flex items-baseline justify-between gap-3 text-[11px]">
-            <span className="text-[var(--muted-foreground)]">
-              {monthLabels.lastMonth}
-            </span>
-            <span className="shrink-0 font-medium tabular-nums text-emerald-900">
-              {formatRevenueBRL(lastMonth)}
-            </span>
+          <div className="text-[11px]">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-[var(--muted-foreground)]">
+                {monthLabels.lastMonth}
+              </span>
+              <span className="shrink-0 font-medium tabular-nums text-emerald-900">
+                {formatRevenueBRL(lastMonth)}
+              </span>
+            </div>
+            <div className="mt-0.5 flex justify-end text-[10px] tabular-nums text-emerald-900/80">
+              {formatUnitsSold(unitsLastMonth)}
+            </div>
           </div>
-          <div className="flex items-baseline justify-between gap-3 text-[11px]">
-            <span className="text-[var(--muted-foreground)]">
-              {monthLabels.currentMonth}
-            </span>
-            <span className="shrink-0 font-medium tabular-nums text-emerald-900">
-              {formatRevenueBRL(currentMonth)}
-            </span>
+          <div className="text-[11px]">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-[var(--muted-foreground)]">
+                {monthLabels.currentMonth}
+              </span>
+              <span className="shrink-0 font-medium tabular-nums text-emerald-900">
+                {formatRevenueBRL(currentMonth)}
+              </span>
+            </div>
+            <div className="mt-0.5 flex justify-end text-[10px] tabular-nums text-emerald-900/80">
+              {formatUnitsSold(unitsCurrentMonth)}
+            </div>
           </div>
         </div>
         <p className="text-[10px] leading-snug text-[var(--muted-foreground)]">
@@ -443,6 +462,8 @@ export function SupplierPurchaseAnalysisTable({
                               itemId={row.item.id}
                               lastMonth={row.revenueLastMonth}
                               currentMonth={row.revenueCurrentMonth}
+                              unitsLastMonth={row.unitsSoldLastMonth}
+                              unitsCurrentMonth={row.unitsSoldCurrentMonth}
                             />
                             {catalogLabel ? (
                               <Badge

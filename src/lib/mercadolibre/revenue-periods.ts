@@ -144,3 +144,19 @@ export function sumRevenueForItems(
   }
   return total;
 }
+
+export function sumUnitsForItems(
+  unitsByItem: Record<string, number>,
+  itemIds: string[],
+): number {
+  let total = 0;
+  for (const id of itemIds) {
+    total += unitsByItem[id] ?? 0;
+  }
+  return total;
+}
+
+export function formatUnitsSold(value: number): string {
+  const n = Math.round(value);
+  return `${n.toLocaleString("pt-BR")} un.`;
+}

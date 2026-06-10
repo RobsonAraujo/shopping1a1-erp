@@ -22,6 +22,8 @@ export type PurchaseAnalysisItemRow = {
   categoryPath: string | null;
   revenueLastMonth: number;
   revenueCurrentMonth: number;
+  unitsSoldLastMonth: number;
+  unitsSoldCurrentMonth: number;
   lastPurchasePrice: number | null;
   minAcceptablePrice: number | null;
   targetCoverageDays: number | null;
@@ -41,11 +43,15 @@ export function mergeSupplierRevenueIntoRows(
   rows: PurchaseAnalysisItemRow[],
   lastMonth: Record<string, number>,
   currentMonth: Record<string, number>,
+  unitsLastMonth: Record<string, number> = {},
+  unitsCurrentMonth: Record<string, number> = {},
 ): PurchaseAnalysisItemRow[] {
   return rows.map((row) => ({
     ...row,
     revenueLastMonth: lastMonth[row.item.id] ?? 0,
     revenueCurrentMonth: currentMonth[row.item.id] ?? 0,
+    unitsSoldLastMonth: unitsLastMonth[row.item.id] ?? 0,
+    unitsSoldCurrentMonth: unitsCurrentMonth[row.item.id] ?? 0,
   }));
 }
 

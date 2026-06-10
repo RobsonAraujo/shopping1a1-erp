@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { fetchRevenueByItemForCalendarMonths } from "@/lib/mercadolibre/api";
+import { fetchItemOrderMetricsForCalendarMonths } from "@/lib/mercadolibre/api";
 import {
   getValidAccessToken,
   readSession,
 } from "@/lib/mercadolibre/session";
-import { sumRevenueForItems } from "@/lib/mercadolibre/revenue-periods";
+import {
+  sumRevenueForItems,
+  sumUnitsForItems,
+} from "@/lib/mercadolibre/revenue-periods";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 
 type RouteContext = {
@@ -37,19 +40,27 @@ export async function GET(request: NextRequest, context: RouteContext) {
   }
 
   try {
-    const revenue = await fetchRevenueByItemForCalendarMonths(token, userId);
+    const metrics = await fetchItemOrderMetricsForCalendarMonths(token, userId);
 
     return NextResponse.json({
-      monthLabels: revenue.monthLabels,
+      monthLabels: metrics.monthLabels,
       lastMonth: Object.fromEntries(
-        itemIds.map((id) => [id, revenue.lastMonth[id] ?? 0]),
+        itemIds.map((id) => [id, metrics.revenueLastMonth[id] ?? 0]),
       ),
       currentMonth: Object.fromEntries(
-        itemIds.map((id) => [id, revenue.currentMonth[id] ?? 0]),
+        itemIds.map((id) => [id, metrics.revenueCurrentMonth[id] ?? 0]),
+      ),
+      unitsLastMonth: Object.fromEntries(
+        itemIds.map((id) => [id, metrics.unitsLastMonth[id] ?? 0]),
+      ),
+      unitsCurrentMonth: Object.fromEntries(
+        itemIds.map((id) => [id, metrics.unitsCurrentMonth[id] ?? 0]),
       ),
       totals: {
-        lastMonth: sumRevenueForItems(revenue.lastMonth, itemIds),
-        currentMonth: sumRevenueForItems(revenue.currentMonth, itemIds),
+        lastMonth: sumRevenueForItems(metrics.revenueLastMonth, itemIds),
+        currentMonth: sumRevenueForItems(metrics.revenueCurrentMonth, itemIds),
+        unitsLastMonth: sumUnitsForItems(metrics.unitsLastMonth, itemIds),
+        unitsCurrentMonth: sumUnitsForItems(metrics.unitsCurrentMonth, itemIds),
       },
     });
   } catch (e) {

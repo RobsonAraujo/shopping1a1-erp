@@ -116,7 +116,14 @@ export function SupplierPurchaseAnalysisView({
           monthLabels?: CalendarMonthLabels;
           lastMonth?: Record<string, number>;
           currentMonth?: Record<string, number>;
-          totals?: { lastMonth: number; currentMonth: number };
+          unitsLastMonth?: Record<string, number>;
+          unitsCurrentMonth?: Record<string, number>;
+          totals?: {
+            lastMonth: number;
+            currentMonth: number;
+            unitsLastMonth?: number;
+            unitsCurrentMonth?: number;
+          };
         };
         if (!res.ok) {
           throw new Error(
@@ -129,6 +136,8 @@ export function SupplierPurchaseAnalysisView({
           rows,
           data.lastMonth ?? {},
           data.currentMonth ?? {},
+          data.unitsLastMonth ?? {},
+          data.unitsCurrentMonth ?? {},
         );
 
         setRevenueState({
