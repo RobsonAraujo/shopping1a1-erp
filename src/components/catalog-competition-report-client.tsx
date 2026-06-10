@@ -2,56 +2,61 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 type ReportResponse = {
-  windowDays: 7 | 30;
-  from: string;
-  to: string;
-  totals: { winning: number; losing: number; shared: number; unknown: number };
+  pollStats: {
+    todayCount: number;
+    lastRunAt: string | null;
+    lastRunSource: string | null;
+    timezone: string;
+  };
   items: Array<{
     mlItemId: string;
     titleSnapshot: string | null;
     skuSnapshot: string | null;
     imageUrlSnapshot: string | null;
-    totals: {
-      winning: number;
-      losing: number;
-      shared: number;
-      unknown: number;
-    };
-    timeline: Array<{
-      from: string;
-      to: string;
-      status: string;
-      minutes: number;
-      source: "event" | "snapshot";
-    }>;
+    catalogStatus: string | null;
+    catalogSellerPrice: number | null;
+    catalogPriceToWin: number | null;
+    catalogPolledAt: string | null;
   }>;
 };
 
-function fmtMinutes(minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (h <= 0) return `${m}m`;
-  return `${h}h ${m}m`;
-}
-
-function statusCellClass(status: "winning" | "losing" | "shared") {
+function statusBadgeClass(status: string | null) {
   if (status === "winning") {
-    return "inline-flex rounded-md bg-emerald-600 px-2 py-1 font-semibold text-white";
+    return "inline-flex rounded-md bg-emerald-600 px-2 py-1 text-xs font-semibold text-white";
   }
   if (status === "losing") {
-    return "inline-flex rounded-md bg-rose-600 px-2 py-1 font-semibold text-white";
+    return "inline-flex rounded-md bg-rose-600 px-2 py-1 text-xs font-semibold text-white";
   }
-  return "inline-flex rounded-md bg-amber-500 px-2 py-1 font-semibold text-white";
+  if (status === "shared") {
+    return "inline-flex rounded-md bg-amber-500 px-2 py-1 text-xs font-semibold text-white";
+  }
+  return "inline-flex rounded-md bg-[var(--muted)] px-2 py-1 text-xs font-semibold text-[var(--muted-foreground)]";
+}
+
+function statusLabel(status: string | null) {
+  if (status === "winning") return "Ganhando";
+  if (status === "losing") return "Perdendo";
+  if (status === "shared") return "Compartilhando";
+  return "Sem sinal";
+}
+
+function formatLastRun(iso: string | null, timeZone: string): string {
+  if (!iso) return "—";
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  }).format(new Date(iso));
 }
 
 export function CatalogCompetitionReportClient() {
-  const [windowKey, setWindowKey] = useState<"7d" | "30d">("7d");
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,9 +66,7 @@ export function CatalogCompetitionReportClient() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(
-        `/api/reports/catalog-competition?window=${windowKey}`,
-      );
+      const res = await fetch("/api/reports/catalog-competition");
       const json = (await res.json()) as ReportResponse | { error?: string };
       if (!res.ok) {
         setError(
@@ -88,7 +91,10 @@ export function CatalogCompetitionReportClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       });
-      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      const json = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        changed?: number;
+      };
       if (!res.ok) {
         setError(json.error ?? "Falha ao coletar snapshot.");
         return;
@@ -103,48 +109,53 @@ export function CatalogCompetitionReportClient() {
 
   useEffect(() => {
     void loadReport();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [windowKey]);
-
-  const ranking = useMemo(() => {
-    if (!data) return [];
-    return [...data.items].sort((a, b) => {
-      const scoreA = a.totals.losing * 10 + a.totals.shared * 3 - a.totals.winning;
-      const scoreB = b.totals.losing * 10 + b.totals.shared * 3 - b.totals.winning;
-      if (scoreA !== scoreB) return scoreB - scoreA;
-      return b.timeline.length - a.timeline.length;
-    });
-  }, [data]);
+  }, []);
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant={windowKey === "7d" ? "default" : "outline"}
-          size="sm"
-          onClick={() => setWindowKey("7d")}
-          disabled={loading}
-        >
-          Últimos 7 dias
-        </Button>
-        <Button
-          variant={windowKey === "30d" ? "default" : "outline"}
-          size="sm"
-          onClick={() => setWindowKey("30d")}
-          disabled={loading}
-        >
-          Últimos 30 dias
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void collectSnapshot()}
-          disabled={refreshing}
-        >
-          <RefreshCw className="mr-1.5 size-4" />
-          {refreshing ? "Atualizando..." : "Coletar snapshot agora"}
-        </Button>
-      </div>
+      {data ? (
+        <Card className="border-[var(--border)] bg-[var(--muted)]/20">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
+            <div className="text-sm">
+              <span className="font-medium">Coletas hoje:</span>{" "}
+              <span className="text-lg font-semibold">
+                {data.pollStats.todayCount}
+              </span>
+              <span className="ml-3 text-[var(--muted-foreground)]">
+                Última coleta às{" "}
+                {formatLastRun(
+                  data.pollStats.lastRunAt,
+                  data.pollStats.timezone,
+                )}
+                {data.pollStats.lastRunSource
+                  ? ` (${data.pollStats.lastRunSource === "cron" ? "cron" : "manual"})`
+                  : ""}
+              </span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void collectSnapshot()}
+              disabled={refreshing}
+            >
+              <RefreshCw className="mr-1.5 size-4" />
+              {refreshing ? "Atualizando..." : "Coletar snapshot agora"}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void collectSnapshot()}
+            disabled={refreshing}
+          >
+            <RefreshCw className="mr-1.5 size-4" />
+            {refreshing ? "Atualizando..." : "Coletar snapshot agora"}
+          </Button>
+        </div>
+      )}
 
       {error ? (
         <Card className="border-red-200 bg-red-50/70">
@@ -154,78 +165,31 @@ export function CatalogCompetitionReportClient() {
         </Card>
       ) : null}
 
-      {data ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Ganhando</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <span className="inline-flex rounded-md bg-emerald-600 px-2.5 py-1 text-2xl font-semibold text-white">
-                {fmtMinutes(data.totals.winning)}
-              </span>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Perdendo</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <span className="inline-flex rounded-md bg-rose-600 px-2.5 py-1 text-2xl font-semibold text-white">
-                {fmtMinutes(data.totals.losing)}
-              </span>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Compartilhando</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <span className="inline-flex rounded-md bg-amber-500 px-2.5 py-1 text-2xl font-semibold text-white">
-                {fmtMinutes(data.totals.shared)}
-              </span>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Sem sinal</CardTitle>
-            </CardHeader>
-            <CardContent className="text-2xl font-semibold">
-              {fmtMinutes(data.totals.unknown)}
-            </CardContent>
-          </Card>
-        </div>
-      ) : null}
-
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Catálogo anúncios </CardTitle>
+          <CardTitle className="text-base">Catálogo anúncios</CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
             <p className="text-sm text-[var(--muted-foreground)]">
               Carregando...
             </p>
-          ) : ranking.length === 0 ? (
+          ) : !data || data.items.length === 0 ? (
             <p className="text-sm text-[var(--muted-foreground)]">
               Sem dados de catálogo ainda. Clique em &quot;Coletar snapshot
-              agora&quot;.
+              agora&quot; ou aguarde o cron do GitHub Actions.
             </p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[48rem] text-left text-sm">
+              <table className="w-full min-w-[40rem] text-left text-sm">
                 <thead className="border-b border-[var(--border)] text-xs text-[var(--muted-foreground)]">
                   <tr>
                     <th className="py-2 pr-3">Item</th>
-                    <th className="py-2 pr-3">Ganhando</th>
-                    <th className="py-2 pr-3">Perdendo</th>
-                    <th className="py-2 pr-3">Compartilhando</th>
-                    <th className="py-2 pr-3">Mudanças</th>
+                    <th className="py-2 pr-3">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {ranking.map((row) => {
-                    return (
+                  {data.items.map((row) => (
                     <tr
                       key={row.mlItemId}
                       className="border-b border-[var(--border)]"
@@ -250,7 +214,7 @@ export function CatalogCompetitionReportClient() {
                             <div className="truncate font-medium text-[var(--primary)] group-hover:underline">
                               {row.skuSnapshot ?? "Sem SKU"}
                             </div>
-                            <div className="truncate max-w-[400px] text-xs text-[var(--muted-foreground)]">
+                            <div className="max-w-[400px] truncate text-xs text-[var(--muted-foreground)]">
                               {row.titleSnapshot ?? "Sem título sincronizado"}
                             </div>
                             <div className="font-mono text-[11px] text-[var(--muted-foreground)]">
@@ -260,24 +224,12 @@ export function CatalogCompetitionReportClient() {
                         </Link>
                       </td>
                       <td className="py-2 pr-3">
-                        <span className={statusCellClass("winning")}>
-                          {fmtMinutes(row.totals.winning)}
+                        <span className={statusBadgeClass(row.catalogStatus)}>
+                          {statusLabel(row.catalogStatus)}
                         </span>
                       </td>
-                      <td className="py-2 pr-3">
-                        <span className={statusCellClass("losing")}>
-                          {fmtMinutes(row.totals.losing)}
-                        </span>
-                      </td>
-                      <td className="py-2 pr-3">
-                        <span className={statusCellClass("shared")}>
-                          {fmtMinutes(row.totals.shared)}
-                        </span>
-                      </td>
-                      <td className="py-2 pr-3">{row.timeline.length}</td>
                     </tr>
-                    );
-                  })}
+                  ))}
                 </tbody>
               </table>
             </div>

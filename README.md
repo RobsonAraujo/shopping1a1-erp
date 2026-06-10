@@ -76,6 +76,8 @@ Optional:
 
 - `MERCADOLIBRE_AUTH_BASE` — defaults to `https://auth.mercadolivre.com.br`.
 - `MERCADOLIBRE_API_BASE` — defaults to `https://api.mercadolibre.com`.
+- `CRON_SECRET` — long random secret that protects `POST /api/cron/catalog-competition` (GitHub Actions sends `Authorization: Bearer …`). Generate with `openssl rand -base64 32`.
+- `CRON_ML_USER_ID` — optional Mercado Livre seller id for the cron job. If omitted, the app uses the first row in `ml_seller_credentials`.
 - `CATALOG_COMPETITION_WEBHOOK_URL`, `CATALOG_COMPETITION_ITEM_ID`, `CATALOG_COMPETITION_ML_USER_ID`, `CATALOG_COMPETITION_STATUS` — used only by `scripts/simulate-catalog-competition-webhook.ts`.
 
 ## Learn More
@@ -120,3 +122,35 @@ Operational notes:
 - If the ML API call fails temporarily, the route responds **200** with `skipped` so Mercado Livre does not retry aggressively; database write failures return **500** so the notification can be retried.
 
 Reports use **snapshots only** (plus a baseline snapshot before the window) so timelines stay correct when you only persist on change.
+
+## Catalog competition cron (GitHub Actions)
+
+The catalog report no longer depends on the Mercado Livre webhook. A GitHub Actions workflow calls your deployed app every 10 minutes and polls all catalog listings via the Mercado Livre API.
+
+### How it works
+
+1. Workflow [`.github/workflows/catalog-competition-cron.yml`](.github/workflows/catalog-competition-cron.yml) runs on schedule (`*/10 * * * *` UTC) or manually (**Actions → Catalog competition cron → Run workflow**).
+2. It sends `POST {APP_URL}/api/cron/catalog-competition` with `Authorization: Bearer {CRON_SECRET}`.
+3. The endpoint resolves the seller access token from `ml_seller_credentials`, polls `price_to_win` + item price for every catalog listing, and **always** updates `listings.catalogStatus`, `catalogSellerPrice`, `catalogPriceToWin`, and `catalogPolledAt`.
+4. A row in `catalog_competition_snapshots` is inserted **only when status changed** (or on first observation).
+5. Each run is logged in `catalog_competition_poll_runs`. The main report shows **Coletas hoje: N** (successful runs today in `America/Sao_Paulo`).
+
+### Production setup
+
+1. Deploy with `CRON_SECRET`, `ENCRYPTION_KEY`, Mercado Livre OAuth credentials, and at least one successful seller login (so tokens exist in `ml_seller_credentials`).
+2. Optionally set `CRON_ML_USER_ID` if you have multiple sellers stored.
+3. In the GitHub repo: **Settings → Secrets and variables → Actions**:
+   - `APP_URL` — public app URL (e.g. `https://your-app.vercel.app`, no trailing slash required)
+   - `CRON_SECRET` — same value as in production `.env`
+4. Commit the workflow file and run it once manually from Actions.
+5. Open `/dashboard/catalog-report` and confirm **Coletas hoje** increments after a successful run.
+
+### Manual collection
+
+The **Coletar snapshot agora** button on `/dashboard/catalog-report` uses the same poll service (`manual_poll`) and the same rule: snapshots only on status change.
+
+### Notes
+
+- GitHub scheduled workflows use **UTC** and may start 1–5 minutes late on free tiers.
+- If `todayCount` does not increase, check the Actions log and the JSON response from `/api/cron/catalog-competition`.
+- The ML webhook handler remains available as a bonus path; the cron is the primary data source.

@@ -4,6 +4,7 @@ import {
   type CompetitionStatus,
   deriveStatusFromPriceToWin,
   extractPriceToWin,
+  extractSellerPrice,
 } from "@/lib/catalog-competition";
 import { fetchItemById, fetchItemPriceToWin } from "@/lib/mercadolibre/api";
 import type { ItemBody } from "@/lib/mercadolibre/types";
@@ -169,15 +170,24 @@ async function createSnapshotWithRetry(data: {
   mlItemId: string;
   status: CompetitionStatus;
   source: "webhook";
+  sellerPrice: number | null;
   priceToWin: number | null;
   snapshotAt: Date;
   rawResponse: unknown;
 }) {
+  const sellerPrice =
+    data.sellerPrice === null ? null : String(data.sellerPrice);
+  const priceToWin = data.priceToWin === null ? null : String(data.priceToWin);
+
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       return await prisma.catalogCompetitionSnapshot.create({
         data: {
-          ...data,
+          mlItemId: data.mlItemId,
+          status: data.status,
+          source: data.source,
+          sellerPrice,
+          priceToWin,
           snapshotAt: new Date(data.snapshotAt.getTime() + attempt),
           rawResponse: jsonSafe(data.rawResponse),
         },
@@ -327,6 +337,7 @@ export async function POST(request: NextRequest) {
   };
   const status = deriveStatusFromPriceToWin(pricePayload);
   const priceToWin = extractPriceToWin(pricePayload);
+  const sellerPrice = extractSellerPrice(pricePayload, itemDetails);
 
   try {
     const [latest, existingListing] = await Promise.all([
@@ -379,6 +390,7 @@ export async function POST(request: NextRequest) {
       mlItemId: itemId,
       status,
       source: "webhook",
+      sellerPrice,
       priceToWin,
       snapshotAt,
       rawResponse,

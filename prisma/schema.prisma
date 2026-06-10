@@ -18,6 +18,11 @@ model Listing {
   catalogListing Boolean?  @map("catalog_listing")
   lastSyncedAt   DateTime? @map("last_synced_at")
   activeOnMl     Boolean   @default(true) @map("active_on_ml")
+  /// Último status de competição confirmado pelo poll (mesmo sem novo snapshot).
+  catalogStatus       CatalogCompetitionStatus? @map("catalog_status")
+  catalogSellerPrice  Decimal?                  @map("catalog_seller_price") @db.Decimal(18, 2)
+  catalogPriceToWin   Decimal?                  @map("catalog_price_to_win") @db.Decimal(18, 2)
+  catalogPolledAt     DateTime?                 @map("catalog_polled_at")
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
@@ -40,6 +45,7 @@ enum CatalogCompetitionSource {
   webhook
   missed_feed
   manual_poll
+  cron
 }
 
 enum StockAttentionKind {
@@ -51,6 +57,7 @@ model CatalogCompetitionSnapshot {
   id           String                   @id @default(cuid())
   mlItemId     String                   @map("ml_item_id")
   status       CatalogCompetitionStatus
+  sellerPrice  Decimal?                 @map("seller_price") @db.Decimal(18, 2)
   priceToWin   Decimal?                 @map("price_to_win") @db.Decimal(18, 2)
   snapshotAt   DateTime                 @default(now()) @map("snapshot_at")
   source       CatalogCompetitionSource @default(manual_poll)
@@ -62,6 +69,20 @@ model CatalogCompetitionSnapshot {
   @@index([snapshotAt(sort: Desc)])
   @@index([mlItemId, snapshotAt(sort: Desc)])
   @@map("catalog_competition_snapshots")
+}
+
+/// Log de execuções do poll de competição de catálogo (cron ou manual).
+model CatalogCompetitionPollRun {
+  id           String                   @id @default(cuid())
+  ranAt        DateTime                 @default(now()) @map("ran_at")
+  source       CatalogCompetitionSource
+  itemsChecked Int                      @default(0) @map("items_checked")
+  itemsChanged Int                      @default(0) @map("items_changed")
+  ok           Boolean                  @default(true)
+  errorSummary String?                  @map("error_summary") @db.Text
+
+  @@index([ranAt(sort: Desc)])
+  @@map("catalog_competition_poll_runs")
 }
 
 /// Estoque físico no galpão (1:1 com listing).

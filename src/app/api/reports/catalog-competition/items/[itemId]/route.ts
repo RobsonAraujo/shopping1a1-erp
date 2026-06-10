@@ -2,12 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { reportsConfig } from "@/config/reports";
 import { prisma } from "@/lib/db";
-import { buildTimeline, type CompetitionPoint } from "@/lib/catalog-competition";
+import {
+  buildTimeline,
+  catalogStatusLabel,
+  decimalToNumber,
+  extractSellerPriceFromRawResponse,
+  formatCatalogMoney,
+  type CompetitionPoint,
+  type CompetitionStatus,
+} from "@/lib/catalog-competition";
 import { getValidAccessToken } from "@/lib/mercadolibre/session";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 
 type RouteContext = { params: Promise<{ itemId: string }> };
-const STATUS_CARRY_MAX_MS = 6 * 60 * 60 * 1000;
+
+const STALE_POLL_MS = 30 * 60 * 1000;
 
 function parseDateParam(v: string | null): Date | null {
   if (!v) return null;
@@ -126,32 +135,20 @@ function splitIntervalByDay(
   return segments;
 }
 
-function applyCarryWindow(
-  points: CompetitionPoint[],
-  maxCarryMs: number,
-): CompetitionPoint[] {
-  if (points.length <= 1) return points;
-
-  const ordered = [...points].sort((a, b) => a.at.getTime() - b.at.getTime());
-  const bounded: CompetitionPoint[] = [];
-
-  for (let i = 0; i < ordered.length; i += 1) {
-    const curr = ordered[i];
-    const next = ordered[i + 1];
-    bounded.push(curr);
-
-    if (!next) continue;
-    const gapMs = next.at.getTime() - curr.at.getTime();
-    if (gapMs > maxCarryMs) {
-      bounded.push({
-        at: new Date(curr.at.getTime() + maxCarryMs),
-        status: "unknown",
-        source: curr.source,
-      });
-    }
-  }
-
-  return bounded.sort((a, b) => a.at.getTime() - b.at.getTime());
+function snapshotToPoint(
+  at: Date,
+  status: CompetitionStatus,
+  sellerPrice: unknown,
+  priceToWin: unknown,
+  rawResponse?: unknown,
+): CompetitionPoint {
+  return {
+    at,
+    status,
+    sellerPrice: extractSellerPriceFromRawResponse(rawResponse ?? null, sellerPrice),
+    priceToWin: decimalToNumber(priceToWin),
+    source: "snapshot",
+  };
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
@@ -191,6 +188,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
         skuSnapshot: true,
         imageUrlSnapshot: true,
         catalogListing: true,
+        catalogPolledAt: true,
+        catalogStatus: true,
+        catalogSellerPrice: true,
+        catalogPriceToWin: true,
       },
     });
     if (!listing || listing.catalogListing !== true) {
@@ -200,49 +201,152 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const [baseline, snapshots] = await Promise.all([
       prisma.catalogCompetitionSnapshot.findFirst({
         where: { mlItemId: itemId, snapshotAt: { lt: from } },
-        select: { snapshotAt: true, status: true },
+        select: {
+          snapshotAt: true,
+          status: true,
+          sellerPrice: true,
+          priceToWin: true,
+          rawResponse: true,
+        },
         orderBy: { snapshotAt: "desc" },
       }),
       prisma.catalogCompetitionSnapshot.findMany({
         where: { mlItemId: itemId, snapshotAt: { gte: from, lte: to } },
-        select: { snapshotAt: true, status: true },
+        select: {
+          snapshotAt: true,
+          status: true,
+          sellerPrice: true,
+          priceToWin: true,
+          rawResponse: true,
+        },
         orderBy: { snapshotAt: "asc" },
       }),
     ]);
 
     const points: CompetitionPoint[] = [];
+    const firstSnapshotAt = snapshots[0]?.snapshotAt.getTime();
     if (
       baseline &&
-      from.getTime() - baseline.snapshotAt.getTime() <= STATUS_CARRY_MAX_MS
+      (snapshots.length === 0 ||
+        (firstSnapshotAt !== undefined && firstSnapshotAt > from.getTime()))
     ) {
-      const firstAt = snapshots[0]?.snapshotAt.getTime();
-      if (snapshots.length === 0 || (firstAt !== undefined && firstAt > from.getTime())) {
-        points.push({
-          at: from,
-          status: baseline.status,
-          source: "snapshot",
-        });
-      }
+      points.push(
+        snapshotToPoint(
+          from,
+          baseline.status,
+          baseline.sellerPrice,
+          baseline.priceToWin,
+          baseline.rawResponse,
+        ),
+      );
     }
     for (const s of snapshots) {
-      points.push({
-        at: s.snapshotAt,
-        status: s.status,
-        source: "snapshot",
-      });
+      points.push(
+        snapshotToPoint(
+          s.snapshotAt,
+          s.status,
+          s.sellerPrice,
+          s.priceToWin,
+          s.rawResponse,
+        ),
+      );
     }
-    const boundedPoints = applyCarryWindow(points, STATUS_CARRY_MAX_MS);
-    const latestPointAt = boundedPoints[boundedPoints.length - 1]?.at ?? null;
-    const timelineEnd = latestPointAt
-      ? new Date(Math.min(to.getTime(), latestPointAt.getTime() + STATUS_CARRY_MAX_MS))
-      : from;
-    const timeline = buildTimeline(boundedPoints, from, timelineEnd);
+
+    const now = Date.now();
+    const polledAt = listing.catalogPolledAt;
+    const pollIsStale =
+      !polledAt || now - polledAt.getTime() > STALE_POLL_MS;
+    const hasObservedData =
+      points.length > 0 ||
+      (polledAt !== null && polledAt.getTime() >= from.getTime());
+
+    let timelineEnd = to;
+    if (pollIsStale) {
+      if (points.length > 0) {
+        const lastPoint = [...points].sort(
+          (a, b) => b.at.getTime() - a.at.getTime(),
+        )[0];
+        timelineEnd = new Date(
+          Math.min(to.getTime(), lastPoint.at.getTime() + STALE_POLL_MS),
+        );
+      } else if (polledAt) {
+        timelineEnd = new Date(
+          Math.min(to.getTime(), polledAt.getTime() + STALE_POLL_MS),
+        );
+      }
+    }
+
+    let timeline = buildTimeline(points, from, timelineEnd);
+
+    if (!hasObservedData) {
+      timeline = {
+        intervals: [
+          {
+            from: from.toISOString(),
+            to: to.toISOString(),
+            status: "unknown",
+            minutes: Math.max(
+              0,
+              Math.round((to.getTime() - from.getTime()) / 60000),
+            ),
+            sellerPrice: null,
+            priceToWin: null,
+            source: "snapshot",
+          },
+        ],
+        totals: {
+          winning: 0,
+          losing: 0,
+          shared: 0,
+          unknown: Math.max(
+            0,
+            Math.round((to.getTime() - from.getTime()) / 60000),
+          ),
+        },
+      };
+    } else if (pollIsStale && timelineEnd.getTime() < to.getTime()) {
+      const unknownMinutes = Math.max(
+        0,
+        Math.round((to.getTime() - timelineEnd.getTime()) / 60000),
+      );
+      if (unknownMinutes > 0) {
+        timeline.intervals.push({
+          from: timelineEnd.toISOString(),
+          to: to.toISOString(),
+          status: "unknown",
+          minutes: unknownMinutes,
+          sellerPrice: null,
+          priceToWin: null,
+          source: "snapshot",
+        });
+        timeline.totals.unknown += unknownMinutes;
+      }
+    }
+
+    const visibleIntervals = timeline.intervals.filter(
+      (interval) => interval.status !== "unknown",
+    );
 
     const grouped = new Map<
       string,
-      { label: string; entries: Array<{ from: string; to: string; status: string; minutes: number; source: "event" | "snapshot" }> }
+      {
+        label: string;
+        entries: Array<{
+          from: string;
+          to: string;
+          status: string;
+          statusLabel: string;
+          minutes: number;
+          sellerPrice: number | null;
+          priceToWin: number | null;
+          sellerPriceLabel: string | null;
+          priceToWinLabel: string | null;
+          source: "event" | "snapshot";
+        }>;
+      }
     >();
-    for (const interval of timeline.intervals) {
+
+    for (const interval of visibleIntervals) {
       const fromDate = new Date(interval.from);
       const toDate = new Date(interval.to);
       const segments = splitIntervalByDay(fromDate, toDate, tz);
@@ -256,7 +360,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
           from: fromFmt.time,
           to: toFmt.time,
           status: interval.status,
+          statusLabel: catalogStatusLabel(interval.status),
           minutes: segment.minutes,
+          sellerPrice: interval.sellerPrice,
+          priceToWin: interval.priceToWin,
+          sellerPriceLabel: formatCatalogMoney(interval.sellerPrice),
+          priceToWinLabel: formatCatalogMoney(interval.priceToWin),
           source: interval.source,
         });
         grouped.set(key, existing);
@@ -271,11 +380,16 @@ export async function GET(request: NextRequest, context: RouteContext) {
       from: from.toISOString(),
       to: to.toISOString(),
       timezone: tz,
+      catalogPolledAt: polledAt?.toISOString() ?? null,
+      pollIsStale,
       item: {
         mlItemId: listing.mlItemId,
         titleSnapshot: listing.titleSnapshot,
         skuSnapshot: listing.skuSnapshot,
         imageUrlSnapshot: listing.imageUrlSnapshot,
+        catalogStatus: listing.catalogStatus,
+        catalogSellerPrice: decimalToNumber(listing.catalogSellerPrice),
+        catalogPriceToWin: decimalToNumber(listing.catalogPriceToWin),
       },
       totals: timeline.totals,
       days,
@@ -287,4 +401,3 @@ export async function GET(request: NextRequest, context: RouteContext) {
     });
   }
 }
-

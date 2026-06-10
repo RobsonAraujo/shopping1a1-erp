@@ -3,6 +3,8 @@ export type CompetitionStatus = "winning" | "losing" | "shared" | "unknown";
 export type CompetitionPoint = {
   at: Date;
   status: CompetitionStatus;
+  sellerPrice: number | null;
+  priceToWin: number | null;
   source: "event" | "snapshot";
 };
 
@@ -51,6 +53,19 @@ export function deriveStatusFromPriceToWin(payload: Record<string, unknown>): Co
   return "unknown";
 }
 
+export function parseMoneyValue(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const n = Number(value.replace(",", "."));
+    if (Number.isFinite(n)) return n;
+  }
+  if (typeof value === "object" && value !== null) {
+    const amount = (value as { amount?: unknown }).amount;
+    if (amount !== undefined) return parseMoneyValue(amount);
+  }
+  return null;
+}
+
 export function extractPriceToWin(payload: Record<string, unknown>): number | null {
   const candidates = [
     payload.price_to_win,
@@ -59,13 +74,56 @@ export function extractPriceToWin(payload: Record<string, unknown>): number | nu
     payload.price,
   ];
   for (const c of candidates) {
-    if (typeof c === "number" && Number.isFinite(c)) return c;
-    if (typeof c === "string") {
-      const n = Number(c.replace(",", "."));
-      if (Number.isFinite(n)) return n;
-    }
+    const parsed = parseMoneyValue(c);
+    if (parsed !== null) return parsed;
   }
   return null;
+}
+
+export function extractSellerPrice(
+  pricePayload?: Record<string, unknown> | null,
+  item?: { price?: unknown } | null,
+): number | null {
+  if (pricePayload) {
+    const fromPayload = parseMoneyValue(
+      pricePayload.current_price ??
+        pricePayload.currentPrice ??
+        pricePayload.item_price,
+    );
+    if (fromPayload !== null) return fromPayload;
+  }
+  if (item) {
+    const fromItem = parseMoneyValue(item.price);
+    if (fromItem !== null) return fromItem;
+  }
+  return null;
+}
+
+export function decimalToNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+export function extractSellerPriceFromRawResponse(
+  rawResponse: unknown,
+  storedSellerPrice: unknown,
+): number | null {
+  const stored = decimalToNumber(storedSellerPrice);
+  if (stored !== null) return stored;
+  if (!rawResponse || typeof rawResponse !== "object") return null;
+
+  const raw = rawResponse as Record<string, unknown>;
+  const pricePayload =
+    raw.priceToWin && typeof raw.priceToWin === "object"
+      ? (raw.priceToWin as Record<string, unknown>)
+      : null;
+  const item =
+    raw.item && typeof raw.item === "object"
+      ? (raw.item as { price?: unknown })
+      : null;
+
+  return extractSellerPrice(pricePayload, item);
 }
 
 export function buildTimeline(
@@ -82,6 +140,8 @@ export function buildTimeline(
     to: string;
     status: CompetitionStatus;
     minutes: number;
+    sellerPrice: number | null;
+    priceToWin: number | null;
     source: "event" | "snapshot";
   }> = [];
   const totals: Record<CompetitionStatus, number> = {
@@ -105,10 +165,27 @@ export function buildTimeline(
       to: end.toISOString(),
       status: curr.status,
       minutes,
+      sellerPrice: curr.sellerPrice,
+      priceToWin: curr.priceToWin,
       source: curr.source,
     });
   }
 
   return { intervals, totals };
+}
+
+export function formatCatalogMoney(value: number | null): string | null {
+  if (value === null) return null;
+  return value.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+}
+
+export function catalogStatusLabel(status: CompetitionStatus): string {
+  if (status === "winning") return "Ganhando";
+  if (status === "losing") return "Perdendo";
+  if (status === "shared") return "Compartilhando";
+  return "Sem sinal";
 }
 

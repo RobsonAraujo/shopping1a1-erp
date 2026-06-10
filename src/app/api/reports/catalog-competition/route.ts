@@ -1,147 +1,57 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
-import { buildTimeline, type CompetitionPoint } from "@/lib/catalog-competition";
+import { getCatalogPollStats } from "@/lib/catalog-competition-poll-stats";
 import { getValidAccessToken } from "@/lib/mercadolibre/session";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 
-function parseWindowDays(v: string | null): 7 | 30 {
-  return v === "30d" ? 30 : 7;
-}
-
-function hourlyBreakdown(intervals: Array<{ from: string; to: string; status: string }>) {
-  const out: Record<string, { winning: number; losing: number; shared: number; unknown: number }> = {};
-  for (let h = 0; h < 24; h += 1) {
-    out[String(h).padStart(2, "0")] = { winning: 0, losing: 0, shared: 0, unknown: 0 };
-  }
-
-  for (const interval of intervals) {
-    const from = new Date(interval.from);
-    const to = new Date(interval.to);
-    let cursor = new Date(from);
-    while (cursor < to) {
-      const bucketStart = new Date(cursor);
-      bucketStart.setMinutes(0, 0, 0);
-      const nextHour = new Date(bucketStart);
-      nextHour.setHours(nextHour.getHours() + 1);
-      const end = nextHour < to ? nextHour : to;
-      const mins = Math.max(0, Math.round((end.getTime() - cursor.getTime()) / 60000));
-      const key = String(bucketStart.getHours()).padStart(2, "0");
-      const status =
-        interval.status === "winning" ||
-        interval.status === "losing" ||
-        interval.status === "shared"
-          ? interval.status
-          : "unknown";
-      out[key][status] += mins;
-      cursor = end;
-    }
-  }
-  return out;
-}
-
-export async function GET(request: NextRequest) {
+export async function GET() {
   const cookieStore = await cookies();
   const token = await getValidAccessToken(cookieStore);
   if (!token) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const windowDays = parseWindowDays(request.nextUrl.searchParams.get("window"));
-  const itemId = request.nextUrl.searchParams.get("itemId");
-  const to = new Date();
-  const from = new Date(to.getTime() - windowDays * 24 * 60 * 60 * 1000);
-
   try {
-    const listings = await prisma.listing.findMany({
-      where: {
-        catalogListing: true,
-        ...(itemId ? { mlItemId: itemId } : {}),
-      },
-      select: {
-        mlItemId: true,
-        titleSnapshot: true,
-        skuSnapshot: true,
-        imageUrlSnapshot: true,
-      },
-      orderBy: { updatedAt: "desc" },
-    });
-    const itemIds = listings.map((l) => l.mlItemId);
-    if (itemIds.length === 0) {
-      return NextResponse.json({
-        windowDays,
-        from: from.toISOString(),
-        to: to.toISOString(),
-        totals: { winning: 0, losing: 0, shared: 0, unknown: 0 },
-        items: [],
-      });
-    }
+    const [listings, pollStats] = await Promise.all([
+      prisma.listing.findMany({
+        where: { catalogListing: true },
+        select: {
+          mlItemId: true,
+          titleSnapshot: true,
+          skuSnapshot: true,
+          imageUrlSnapshot: true,
+          catalogStatus: true,
+          catalogSellerPrice: true,
+          catalogPriceToWin: true,
+          catalogPolledAt: true,
+        },
+      }),
+      getCatalogPollStats(),
+    ]);
 
-    const snapshots = await prisma.catalogCompetitionSnapshot.findMany({
-      where: {
-        mlItemId: { in: itemIds },
-        snapshotAt: { gte: from, lte: to },
-      },
-      select: { mlItemId: true, snapshotAt: true, status: true },
-    });
-    const baselineSnapshots = await prisma.catalogCompetitionSnapshot.findMany({
-      where: {
-        mlItemId: { in: itemIds },
-        snapshotAt: { lt: from },
-      },
-      select: { mlItemId: true, snapshotAt: true, status: true },
-      orderBy: { snapshotAt: "desc" },
-      distinct: ["mlItemId"],
-    });
-
-    const totals = { winning: 0, losing: 0, shared: 0, unknown: 0 };
-    const items = listings.map((listing) => {
-      const inWindow = snapshots
-        .filter((s) => s.mlItemId === listing.mlItemId)
-        .sort((a, b) => a.snapshotAt.getTime() - b.snapshotAt.getTime());
-      const baseline = baselineSnapshots.find((s) => s.mlItemId === listing.mlItemId);
-      const points: CompetitionPoint[] = [];
-      if (baseline) {
-        const firstAt = inWindow[0]?.snapshotAt.getTime();
-        if (inWindow.length === 0 || (firstAt !== undefined && firstAt > from.getTime())) {
-          points.push({
-            at: from,
-            status: baseline.status,
-            source: "snapshot",
-          });
-        }
-      }
-      for (const s of inWindow) {
-        points.push({
-          at: s.snapshotAt,
-          status: s.status,
-          source: "snapshot",
-        });
-      }
-      const timeline = buildTimeline(points, from, to);
-      totals.winning += timeline.totals.winning;
-      totals.losing += timeline.totals.losing;
-      totals.shared += timeline.totals.shared;
-      totals.unknown += timeline.totals.unknown;
-
-      return {
+    const items = listings
+      .map((listing) => ({
         mlItemId: listing.mlItemId,
         titleSnapshot: listing.titleSnapshot,
         skuSnapshot: listing.skuSnapshot,
         imageUrlSnapshot: listing.imageUrlSnapshot,
-        totals: timeline.totals,
-        timeline: timeline.intervals,
-        hourly: hourlyBreakdown(timeline.intervals),
-      };
-    });
+        catalogStatus: listing.catalogStatus,
+        catalogSellerPrice: listing.catalogSellerPrice
+          ? Number(listing.catalogSellerPrice)
+          : null,
+        catalogPriceToWin: listing.catalogPriceToWin
+          ? Number(listing.catalogPriceToWin)
+          : null,
+        catalogPolledAt: listing.catalogPolledAt?.toISOString() ?? null,
+      }))
+      .sort((a, b) => {
+        const skuA = (a.skuSnapshot ?? a.titleSnapshot ?? a.mlItemId).toLowerCase();
+        const skuB = (b.skuSnapshot ?? b.titleSnapshot ?? b.mlItemId).toLowerCase();
+        return skuA.localeCompare(skuB, "pt-BR");
+      });
 
-    return NextResponse.json({
-      windowDays,
-      from: from.toISOString(),
-      to: to.toISOString(),
-      totals,
-      items,
-    });
+    return NextResponse.json({ items, pollStats });
   } catch (e) {
     logServerError("api/reports/catalog-competition", e);
     return NextResponse.json(apiErrorPayload(e, "catalog_report_failed"), {
@@ -149,4 +59,3 @@ export async function GET(request: NextRequest) {
     });
   }
 }
-

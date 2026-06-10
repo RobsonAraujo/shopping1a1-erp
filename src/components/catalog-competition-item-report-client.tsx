@@ -10,11 +10,16 @@ type DetailResponse = {
   from: string;
   to: string;
   timezone: string;
+  catalogPolledAt: string | null;
+  pollIsStale: boolean;
   item: {
     mlItemId: string;
     titleSnapshot: string | null;
     skuSnapshot: string | null;
     imageUrlSnapshot: string | null;
+    catalogStatus: string | null;
+    catalogSellerPrice: number | null;
+    catalogPriceToWin: number | null;
   };
   totals: { winning: number; losing: number; shared: number; unknown: number };
   days: Array<{
@@ -24,7 +29,12 @@ type DetailResponse = {
       from: string;
       to: string;
       status: string;
+      statusLabel: string;
       minutes: number;
+      sellerPrice: number | null;
+      priceToWin: number | null;
+      sellerPriceLabel: string | null;
+      priceToWinLabel: string | null;
       source: "event" | "snapshot";
     }>;
   }>;
@@ -57,8 +67,32 @@ function segmentClass(status: string): string {
   return "bg-slate-400";
 }
 
+function statusLabel(status: string | null) {
+  if (status === "winning") return "Ganhando";
+  if (status === "losing") return "Perdendo";
+  if (status === "shared") return "Compartilhando";
+  return "Sem sinal";
+}
+
 function isoDateInput(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: reportsConfig.catalogCompetitionTimezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+}
+
+function priceLine(entry: DetailResponse["days"][number]["entries"][number]): string {
+  const parts: string[] = [];
+  if (entry.sellerPriceLabel) {
+    parts.push(`meu preço ${entry.sellerPriceLabel}`);
+  }
+  if (entry.priceToWinLabel) {
+    parts.push(`para ganhar ${entry.priceToWinLabel}`);
+  }
+  if (parts.length === 0) return "";
+  return ` — ${parts.join(" · ")}`;
 }
 
 export function CatalogCompetitionItemReportClient({ itemId }: { itemId: string }) {
@@ -202,8 +236,13 @@ export function CatalogCompetitionItemReportClient({ itemId }: { itemId: string 
                 ) : null}
               </span>
               <div className="min-w-0">
-                <div className="truncate text-base font-semibold">
-                  {data.item.skuSnapshot ?? "Sem SKU"}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="truncate text-base font-semibold">
+                    {data.item.skuSnapshot ?? "Sem SKU"}
+                  </div>
+                  <span className={statusClass(data.item.catalogStatus)}>
+                    {statusLabel(data.item.catalogStatus)}
+                  </span>
                 </div>
                 <div className="truncate text-sm text-[var(--muted-foreground)]">
                   {data.item.titleSnapshot ?? "Sem título sincronizado"}
@@ -215,12 +254,52 @@ export function CatalogCompetitionItemReportClient({ itemId }: { itemId: string 
             </div>
             <p className="mt-3 text-xs text-[var(--muted-foreground)]">
               Fuso: {data.timezone} · Total observado: {fmtMinutes(totalMinutes)}
+              {data.pollIsStale ? " · coleta atrasada (>30 min)" : ""}
+              {data.item.catalogSellerPrice !== null ||
+              data.item.catalogPriceToWin !== null ? (
+                <>
+                  {" · "}
+                  {data.item.catalogSellerPrice !== null
+                    ? `meu preço ${data.item.catalogSellerPrice.toLocaleString("pt-BR", {
+                        style: "currency",
+                        currency: "BRL",
+                      })}`
+                    : null}
+                  {data.item.catalogSellerPrice !== null &&
+                  data.item.catalogPriceToWin !== null
+                    ? " · "
+                    : null}
+                  {data.item.catalogPriceToWin !== null
+                    ? `para ganhar ${data.item.catalogPriceToWin.toLocaleString("pt-BR", {
+                        style: "currency",
+                        currency: "BRL",
+                      })}`
+                    : null}
+                </>
+              ) : null}
             </p>
           </CardContent>
         </Card>
       ) : null}
 
       <div className="space-y-4">
+        {data && data.days.length === 0 ? (
+          <Card>
+            <CardContent className="pt-6 text-sm text-[var(--muted-foreground)]">
+              Nenhum período com status observado no intervalo selecionado.
+              {data.item.catalogStatus ? (
+                <>
+                  {" "}
+                  Status atual:{" "}
+                  <span className={statusClass(data.item.catalogStatus)}>
+                    {statusLabel(data.item.catalogStatus)}
+                  </span>
+                  .
+                </>
+              ) : null}
+            </CardContent>
+          </Card>
+        ) : null}
         {data?.days.map((day) => (
           <Card key={day.dayKey}>
             <CardHeader>
@@ -245,9 +324,9 @@ export function CatalogCompetitionItemReportClient({ itemId }: { itemId: string 
                             key={`${day.dayKey}-bar-${idx}`}
                             className={segmentClass(entry.status)}
                             style={{ width: `${widthPct}%` }}
-                            title={`${entry.status}: ${entry.from} - ${entry.to} (${fmtMinutes(
+                            title={`${entry.statusLabel}: ${entry.from} - ${entry.to} (${fmtMinutes(
                               entry.minutes,
-                            )})`}
+                            )})${priceLine(entry)}`}
                           />
                         );
                       })}
@@ -256,15 +335,10 @@ export function CatalogCompetitionItemReportClient({ itemId }: { itemId: string 
                   {day.entries.map((entry, idx) => (
                     <p key={`${day.dayKey}-${idx}`} className="text-sm">
                       <span className={statusClass(entry.status)}>
-                        {entry.status === "winning"
-                          ? "Ganhando"
-                          : entry.status === "losing"
-                            ? "Perdendo"
-                            : entry.status === "shared"
-                              ? "Compartilhando"
-                              : "Sem sinal"}
+                        {entry.statusLabel}
                       </span>{" "}
-                      das {entry.from} até {entry.to} ({fmtMinutes(entry.minutes)})
+                      das {entry.from} às {entry.to}
+                      {priceLine(entry)}
                     </p>
                   ))}
                 </>
@@ -276,4 +350,3 @@ export function CatalogCompetitionItemReportClient({ itemId }: { itemId: string 
     </div>
   );
 }
-
