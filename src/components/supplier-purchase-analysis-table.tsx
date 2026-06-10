@@ -7,6 +7,7 @@ import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { Check, Copy, ExternalLink, ImageOff, Settings } from "lucide-react";
 import type { PurchaseAnalysisItemRow } from "@/lib/purchase-analysis-rows";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
+import { buildMercadoLivreItemMetricsUrl } from "@/lib/mercadolibre/item-metrics-url";
 import { formatSellerListingStartedLabel } from "@/lib/mercadolibre/listing-dates";
 import {
   formatRevenueBRL,
@@ -182,15 +183,21 @@ function CopyableTooltipRow({
 }
 
 function ItemRevenueBadge({
+  itemId,
   lastMonth,
   currentMonth,
 }: {
+  itemId: string;
   lastMonth: number;
   currentMonth: number;
 }) {
   const monthLabels = useMemo(
     () => getCalendarMonthLabels(getCalendarMonthRanges()),
     [],
+  );
+  const metricsUrl = useMemo(
+    () => buildMercadoLivreItemMetricsUrl(itemId),
+    [itemId],
   );
 
   if (lastMonth <= 0 && currentMonth <= 0) return null;
@@ -233,6 +240,15 @@ function ItemRevenueBadge({
         <p className="text-[10px] leading-snug text-[var(--muted-foreground)]">
           {REVENUE_TOOLTIP_HINT}
         </p>
+        <a
+          href={metricsUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-[10px] font-medium text-sky-700 transition-colors hover:text-sky-900 hover:underline"
+        >
+          Métricas no ML — {monthLabels.lastMonth}
+          <ExternalLink className="size-3 shrink-0" aria-hidden />
+        </a>
       </PopoverContent>
     </Popover>
   );
@@ -410,6 +426,7 @@ export function SupplierPurchaseAnalysisTable({
                               </Badge>
                             ) : null}
                             <ItemRevenueBadge
+                              itemId={row.item.id}
                               lastMonth={row.revenueLastMonth}
                               currentMonth={row.revenueCurrentMonth}
                             />
