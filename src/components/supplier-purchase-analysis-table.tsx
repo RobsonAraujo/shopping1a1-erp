@@ -4,7 +4,14 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
-import { Check, Copy, ExternalLink, ImageOff, Settings } from "lucide-react";
+import {
+  Check,
+  Copy,
+  ExternalLink,
+  ImageOff,
+  LineChart,
+  Settings,
+} from "lucide-react";
 import type { PurchaseAnalysisItemRow } from "@/lib/purchase-analysis-rows";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { buildMercadoLivreItemMetricsUrl } from "@/lib/mercadolibre/item-metrics-url";
@@ -285,6 +292,14 @@ function catalogStatusLabel(status: string | null): string | null {
   return "Desconhecido";
 }
 
+function catalogReportHref(itemId: string) {
+  return `/dashboard/catalog-report/${itemId}`;
+}
+
+function showCatalogReportLink(row: PurchaseAnalysisItemRow): boolean {
+  return row.item.catalog_listing === true || row.catalogStatus !== null;
+}
+
 type SupplierPurchaseAnalysisTableProps = {
   rows: PurchaseAnalysisItemRow[];
   showCostColumns?: boolean;
@@ -355,6 +370,7 @@ export function SupplierPurchaseAnalysisTable({
                 rows.map((row) => {
                   const { analysis } = row;
                   const catalogLabel = catalogStatusLabel(row.catalogStatus);
+                  const showCatalogLink = showCatalogReportLink(row);
                   const imageUrl = bestItemImageUrl(row.item);
                   const listingStarted = formatSellerListingStartedLabel(
                     row.item,
@@ -465,14 +481,19 @@ export function SupplierPurchaseAnalysisTable({
                               unitsLastMonth={row.unitsSoldLastMonth}
                               unitsCurrentMonth={row.unitsSoldCurrentMonth}
                             />
-                            {catalogLabel ? (
-                              <Badge
-                                variant="outline"
-                                className="mt-1 h-4 max-w-full truncate px-1 text-[9px]"
-                                title={catalogLabel}
+                            {showCatalogLink ? (
+                              <Link
+                                href={catalogReportHref(row.item.id)}
+                                className="mt-1 inline-flex max-w-full hover:underline"
+                                title="Ver timeline de catálogo"
                               >
-                                {catalogLabel}
-                              </Badge>
+                                <Badge
+                                  variant="outline"
+                                  className="h-4 max-w-full truncate px-1 text-[9px]"
+                                >
+                                  {catalogLabel ?? "Catálogo"}
+                                </Badge>
+                              </Link>
                             ) : null}
                           </span>
                         </div>
@@ -580,6 +601,20 @@ export function SupplierPurchaseAnalysisTable({
                           >
                             <Settings className="size-4" aria-hidden />
                           </Button>
+                          {showCatalogLink ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-auto min-h-8 max-w-[5.5rem] shrink gap-1 whitespace-normal px-1.5 py-1.5 text-center leading-tight"
+                              asChild
+                            >
+                              <Link href={catalogReportHref(row.item.id)}>
+                                <LineChart className="size-3.5 shrink-0" aria-hidden />
+                                <span>Relatório catálogo</span>
+                              </Link>
+                            </Button>
+                          ) : null}
                           <Button
                             type="button"
                             variant="outline"
