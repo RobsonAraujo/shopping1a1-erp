@@ -159,11 +159,6 @@ prisma migrate deploy && next build
 
 In the DevCenter, add the production Redirect URI (same as `MERCADOLIBRE_REDIRECT_URI`).
 
-Optional webhook (supplement to cron):
-
-- URL: `https://YOUR-DOMAIN.vercel.app/api/ml/notifications/catalog-competition`
-- Topic: `catalog_item_competition_status`
-
 ### 4. First login in production
 
 Open the deployed app and log in with Mercado Livre. This writes tokens to `ml_seller_credentials`. Without it, the cron returns a token error.
@@ -193,17 +188,17 @@ Each poll:
 
 1. Calls `GET /items/{id}/price_to_win` for every catalog listing.
 2. **Always** updates `listings` (`catalogStatus`, prices, `catalogPolledAt`).
-3. Inserts into `catalog_competition_snapshots` when there is **no snapshot yet** or when **status changed**.
+3. Inserts into `catalog_competition_snapshots` when **any** of:
+   - first observation for the item
+   - **status changed** vs latest snapshot
+   - **no snapshot today** in `America/Sao_Paulo` (daily heartbeat)
+   - **seller or price-to-win changed** vs latest snapshot (even if status is the same)
 
 Timelines at `/dashboard/catalog-report/[itemId]` use snapshots plus a baseline before the selected window.
 
-### ML webhook (optional)
-
-The handler at `/api/ml/notifications/catalog-competition` also stores snapshots when status changes. Tokens come from the database (same OAuth flow). Useful as a supplement; cron is the primary source.
-
 ### Browser push (optional)
 
-With `VAPID_*` configured, the dashboard bell enables OS-level alerts (e.g. listing started losing catalog competition). Pushes are triggered by the catalog **webhook**, not the cron.
+With `VAPID_*` configured, the dashboard bell enables OS-level alerts in the browser. Not tied to the catalog cron.
 
 ---
 

@@ -1,4 +1,69 @@
+import { reportsConfig } from "@/config/reports";
+import { getZonedParts } from "@/lib/report-timezone";
+
 export type CompetitionStatus = "winning" | "losing" | "shared" | "unknown";
+
+export type LatestCatalogSnapshot = {
+  status: CompetitionStatus;
+  sellerPrice: number | null;
+  priceToWin: number | null;
+  snapshotAt: Date;
+};
+
+const PRICE_EPSILON = 0.001;
+
+export function dayKeyInTimezone(
+  date: Date,
+  timeZone: string = reportsConfig.catalogCompetitionTimezone,
+): string {
+  const parts = getZonedParts(date, timeZone);
+  const y = String(parts.year);
+  const m = String(parts.month).padStart(2, "0");
+  const d = String(parts.day).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+export function catalogPricesEqual(
+  a: number | null,
+  b: number | null,
+): boolean {
+  if (a === null && b === null) return true;
+  if (a === null || b === null) return false;
+  return Math.abs(a - b) < PRICE_EPSILON;
+}
+
+export function catalogPricesChanged(
+  latest: LatestCatalogSnapshot,
+  sellerPrice: number | null,
+  priceToWin: number | null,
+): boolean {
+  return (
+    !catalogPricesEqual(latest.sellerPrice, sellerPrice) ||
+    !catalogPricesEqual(latest.priceToWin, priceToWin)
+  );
+}
+
+export function shouldRecordCatalogSnapshot(params: {
+  latest: LatestCatalogSnapshot | null;
+  polledAt: Date;
+  status: CompetitionStatus;
+  sellerPrice: number | null;
+  priceToWin: number | null;
+  timeZone?: string;
+}): boolean {
+  const timeZone = params.timeZone ?? reportsConfig.catalogCompetitionTimezone;
+  const { latest, polledAt, status, sellerPrice, priceToWin } = params;
+
+  if (!latest) return true;
+  if (latest.status !== status) return true;
+  if (
+    dayKeyInTimezone(latest.snapshotAt, timeZone) !==
+    dayKeyInTimezone(polledAt, timeZone)
+  ) {
+    return true;
+  }
+  return catalogPricesChanged(latest, sellerPrice, priceToWin);
+}
 
 export type CompetitionPoint = {
   at: Date;

@@ -1,8 +1,11 @@
+import { reportsConfig } from "@/config/reports";
 import {
+  decimalToNumber,
   deriveStatusFromPriceToWin,
   extractPriceToWin,
   extractSellerPrice,
-  type CompetitionStatus,
+  shouldRecordCatalogSnapshot,
+  type LatestCatalogSnapshot,
 } from "@/lib/catalog-competition";
 import { prisma } from "@/lib/db";
 import {
@@ -31,29 +34,35 @@ function decimalOrNull(value: number | null): string | null {
   return String(value);
 }
 
-function shouldRecordSnapshot(
-  previousSnapshotStatus: CompetitionStatus | null,
-  currentStatus: CompetitionStatus,
-): boolean {
-  // Baseline when there is no snapshot yet, or when competition status changed.
-  return (
-    previousSnapshotStatus === null || previousSnapshotStatus !== currentStatus
-  );
-}
-
-async function loadLatestSnapshotStatusByItemId(
+async function loadLatestSnapshotByItemId(
   itemIds: string[],
-): Promise<Record<string, CompetitionStatus>> {
+): Promise<Record<string, LatestCatalogSnapshot>> {
   if (itemIds.length === 0) return {};
 
   const rows = await prisma.catalogCompetitionSnapshot.findMany({
     where: { mlItemId: { in: itemIds } },
     orderBy: { snapshotAt: "desc" },
     distinct: ["mlItemId"],
-    select: { mlItemId: true, status: true },
+    select: {
+      mlItemId: true,
+      status: true,
+      sellerPrice: true,
+      priceToWin: true,
+      snapshotAt: true,
+    },
   });
 
-  return Object.fromEntries(rows.map((row) => [row.mlItemId, row.status]));
+  return Object.fromEntries(
+    rows.map((row) => [
+      row.mlItemId,
+      {
+        status: row.status,
+        sellerPrice: decimalToNumber(row.sellerPrice),
+        priceToWin: decimalToNumber(row.priceToWin),
+        snapshotAt: row.snapshotAt,
+      },
+    ]),
+  );
 }
 
 export async function pollCatalogCompetitionForSeller(
@@ -84,7 +93,7 @@ export async function pollCatalogCompetitionForSeller(
   const items = await fetchItemsByIdsBatched(accessToken, ids, 20);
   const itemById = Object.fromEntries(items.map((item) => [item.id, item]));
 
-  const latestSnapshotStatusById = await loadLatestSnapshotStatusByItemId(ids);
+  const latestSnapshotById = await loadLatestSnapshotByItemId(ids);
 
   let changed = 0;
   const errors: string[] = [];
@@ -101,11 +110,14 @@ export async function pollCatalogCompetitionForSeller(
       const sku = item ? getItemSku(item) : null;
       const imageUrl = item ? bestItemImageUrl(item) : null;
 
-      const previousSnapshotStatus = latestSnapshotStatusById[itemId] ?? null;
-      const recordSnapshot = shouldRecordSnapshot(
-        previousSnapshotStatus,
+      const recordSnapshot = shouldRecordCatalogSnapshot({
+        latest: latestSnapshotById[itemId] ?? null,
+        polledAt,
         status,
-      );
+        sellerPrice,
+        priceToWin,
+        timeZone: reportsConfig.catalogCompetitionTimezone,
+      });
 
       await prisma.$transaction(async (tx) => {
         await tx.listing.upsert({
