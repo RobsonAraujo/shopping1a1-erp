@@ -10,8 +10,13 @@ import { getItemSku, groupBySkuSupplier } from "@/lib/mercadolibre/item-sku";
 import { SupplierGroupHeader } from "@/components/supplier-group-header";
 import { computeStockPlanningDisplay } from "@/lib/stock-planning";
 import type { ItemBody } from "@/lib/mercadolibre/types";
+import { AttentionPanelCollapseToggle } from "@/components/attention-panel-collapse-toggle";
 import { DashboardAttentionPurchasePanel } from "@/components/dashboard-attention-purchase-panel";
 import { ItemListSearch } from "@/components/item-list-search";
+import {
+  DASHBOARD_ATTENTION_FULL_OPEN_KEY,
+  usePersistedOpen,
+} from "@/hooks/use-persisted-open";
 import { filterByItemListSearch } from "@/lib/item-list-search";
 import { ListingStatusBadge } from "@/components/listing-status-badge";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
@@ -48,6 +53,7 @@ type AttentionSectionProps = {
   countVariant: "warning" | "secondary";
   rows: AttentionRow[];
   mode: "full" | "purchase";
+  collapseStorageKey: string;
   onAcknowledge: (itemId: string, kind: StockAttentionKind) => Promise<boolean>;
 };
 
@@ -57,8 +63,10 @@ function AttentionSection({
   countVariant,
   rows,
   mode,
+  collapseStorageKey,
   onAcknowledge,
 }: AttentionSectionProps) {
+  const { open, toggle } = usePersistedOpen(collapseStorageKey, false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const buttonLabel = mode === "full" ? "Já enviei/agendei" : "Já comprei";
@@ -96,13 +104,21 @@ function AttentionSection({
             {description}
           </CardDescription>
         </div>
-        {rows.length > 0 ? (
-          <Badge variant={countVariant} className="shrink-0 px-3 py-1 text-sm">
-            {rows.length} {rows.length === 1 ? "anúncio" : "anúncios"}
-          </Badge>
-        ) : null}
+        <div className="flex shrink-0 items-center gap-2">
+          {rows.length > 0 ? (
+            <Badge variant={countVariant} className="px-3 py-1 text-sm">
+              {rows.length} {rows.length === 1 ? "anúncio" : "anúncios"}
+            </Badge>
+          ) : null}
+          <AttentionPanelCollapseToggle
+            open={open}
+            onToggle={toggle}
+            panelLabel={title}
+          />
+        </div>
       </CardHeader>
 
+      {open ? (
       <CardContent className="pb-4">
         {error ? (
           <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
@@ -294,6 +310,7 @@ function AttentionSection({
           </ul>
         )}
       </CardContent>
+      ) : null}
     </Card>
   );
 }
@@ -468,6 +485,7 @@ export function DashboardAttentionPanel({
           countVariant="warning"
           rows={filteredFullRows}
           mode="full"
+          collapseStorageKey={DASHBOARD_ATTENTION_FULL_OPEN_KEY}
           onAcknowledge={acknowledge}
         />
         <DashboardAttentionPurchasePanel

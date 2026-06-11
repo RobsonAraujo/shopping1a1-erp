@@ -4,6 +4,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { ImageOff, ShoppingCart } from "lucide-react";
+import { AttentionPanelCollapseToggle } from "@/components/attention-panel-collapse-toggle";
+import {
+  DASHBOARD_ATTENTION_PURCHASE_OPEN_KEY,
+  usePersistedOpen,
+} from "@/hooks/use-persisted-open";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { getItemSku, groupBySkuSupplier } from "@/lib/mercadolibre/item-sku";
 import { SupplierGroupHeader } from "@/components/supplier-group-header";
@@ -36,6 +41,11 @@ export function DashboardAttentionPurchasePanel({
   rows: PurchaseAttentionRow[];
   onAcknowledge: (itemId: string, kind: StockAttentionKind) => Promise<boolean>;
 }) {
+  const panelTitle = "Precisa comprar reposição de estoque";
+  const { open, toggle } = usePersistedOpen(
+    DASHBOARD_ATTENTION_PURCHASE_OPEN_KEY,
+    false,
+  );
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,7 +75,7 @@ export function DashboardAttentionPurchasePanel({
               <ShoppingCart className="size-5" aria-hidden />
             </span>
             <CardTitle className="text-lg text-[var(--primary)]">
-              Precisa comprar reposição de estoque
+              {panelTitle}
             </CardTitle>
           </div>
           <CardDescription className="max-w-2xl text-sm leading-relaxed">
@@ -73,13 +83,21 @@ export function DashboardAttentionPurchasePanel({
             Full.
           </CardDescription>
         </div>
-        {rows.length > 0 ? (
-          <Badge variant="secondary" className="shrink-0 px-3 py-1 text-sm">
-            {rows.length} {rows.length === 1 ? "anúncio" : "anúncios"}
-          </Badge>
-        ) : null}
+        <div className="flex shrink-0 items-center gap-2">
+          {rows.length > 0 ? (
+            <Badge variant="secondary" className="px-3 py-1 text-sm">
+              {rows.length} {rows.length === 1 ? "anúncio" : "anúncios"}
+            </Badge>
+          ) : null}
+          <AttentionPanelCollapseToggle
+            open={open}
+            onToggle={toggle}
+            panelLabel={panelTitle}
+          />
+        </div>
       </CardHeader>
 
+      {open ? (
       <CardContent className="pb-4">
         {error ? (
           <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
@@ -254,6 +272,7 @@ export function DashboardAttentionPurchasePanel({
           </ul>
         )}
       </CardContent>
+      ) : null}
     </Card>
   );
 }
