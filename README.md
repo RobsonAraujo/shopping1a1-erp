@@ -1,156 +1,228 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# shopping1a1-erp
 
-## Getting Started
+Internal ERP for Mercado Livre operations: inventory, purchasing, catalog competition reporting, and optional browser alerts.
 
-### Local database (Docker)
+Stack: **Next.js**, **PostgreSQL**, **Prisma**, Mercado Livre OAuth.
 
-The project ships with a PostgreSQL 16 container for local development. Start it in the background:
+---
+
+## Prerequisites
+
+- Node.js 20+
+- Docker (local Postgres only)
+- App created in the [Mercado Livre DevCenter](https://developers.mercadolivre.com.br/)
+
+---
+
+## Local development
+
+From-scratch checklist:
 
 ```bash
+# 1. Dependencies
+npm install
+
+# 2. Environment variables
+cp .env.example .env
+# Fill in MERCADOLIBRE_* and ENCRYPTION_KEY (see below)
+
+# 3. Local database
 docker compose up -d
+
+# 4. Database schema
+npm run db:migrate
+
+# 5. App
+npm run dev
 ```
 
-Stop the database (data is kept in the `pgdata` volume):
+Open [http://localhost:3000](http://localhost:3000), log in with Mercado Livre, and use the dashboard.
+
+### Local Postgres (Docker)
+
+| Field    | Value         |
+|----------|---------------|
+| Host     | `localhost`   |
+| Port     | `5433`        |
+| User     | `erp`         |
+| Password | `erp`         |
+| Database | `shopping1a1` |
 
 ```bash
-docker compose down
+docker compose up -d      # start
+docker compose down       # stop (keeps data)
+docker compose down -v    # stop and wipe data
 ```
 
-To stop and wipe all local data:
+Default `DATABASE_URL` (already in `.env.example`):
 
-```bash
-docker compose down -v
 ```
-
-Connection details (also in `.env.example`):
-
-- Host: `localhost`
-- Port: `5433` (mapped from container port `5432`)
-- User / password: `erp` / `erp`
-- Database: `shopping1a1`
-
-Set `DATABASE_URL` in `.env` to:
-
-```bash
 postgresql://erp:erp@localhost:5433/shopping1a1?schema=public
 ```
 
-On first setup (or after pulling new migrations), apply the schema:
+### Generate local secrets
 
 ```bash
-npm run db:migrate
+# ENCRYPTION_KEY and CRON_SECRET (can differ in dev; use distinct values in prod)
+openssl rand -base64 32
+
+# VAPID (optional — only if testing browser push)
+npx web-push generate-vapid-keys
 ```
 
-### Development server
+### Mercado Livre (dev)
 
-With the database running and `.env` configured, start the app:
+In the ML app, register this Redirect URI:
+
+```
+http://localhost:3000/api/auth/mercadolibre/callback
+```
+
+It must match `MERCADOLIBRE_REDIRECT_URI` in `.env` **exactly**.
+
+Login requests `scope=offline_access read write` to obtain a `refresh_token` and persist credentials in `ml_seller_credentials` (encrypted with `ENCRYPTION_KEY`).
+
+### Cron in dev (optional)
+
+The catalog cron runs via GitHub Actions against your public app URL. Locally you can:
+
+- use the **Coletar snapshot agora** button on `/dashboard/catalog-report`, or
+- call the endpoint manually (if `CRON_SECRET` is in `.env`):
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+curl -X POST "http://localhost:3000/api/cron/catalog-competition" \
+  -H "Authorization: Bearer YOUR_CRON_SECRET"
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
 ## Environment variables
 
-Copy `.env.example` to `.env` and fill the values before running the app.
+Copy `.env.example` → `.env`. Full reference is in that file.
 
-Required:
+| Variable | Dev | Prod | Description |
+|----------|:---:|:---:|-------------|
+| `DATABASE_URL` | ✓ | ✓ | PostgreSQL |
+| `MERCADOLIBRE_CLIENT_ID` | ✓ | ✓ | ML OAuth |
+| `MERCADOLIBRE_CLIENT_SECRET` | ✓ | ✓ | ML OAuth |
+| `MERCADOLIBRE_REDIRECT_URI` | ✓ | ✓ | OAuth callback (environment URL) |
+| `ENCRYPTION_KEY` | ✓ | ✓ | Encrypts ML tokens in the database |
+| `CRON_SECRET` | optional | ✓ | Protects `/api/cron/catalog-competition` |
+| `CRON_ML_USER_ID` | — | optional | Fixed seller for cron (multiple sellers) |
+| `VAPID_*` | optional | optional | Browser push (dashboard bell icon) |
+| `MERCADOLIBRE_AUTH_BASE` | — | — | Override (default: Brazil) |
+| `MERCADOLIBRE_API_BASE` | — | — | Override (default: `api.mercadolibre.com`) |
 
-- `DATABASE_URL` — PostgreSQL connection string used by Prisma.
-- `MERCADOLIBRE_CLIENT_ID`, `MERCADOLIBRE_CLIENT_SECRET`, `MERCADOLIBRE_REDIRECT_URI` — Mercado Livre OAuth app credentials.
-- `ENCRYPTION_KEY` — long random secret used to encrypt stored Mercado Livre access and refresh tokens. Generate one with `openssl rand -base64 32`. Do not rotate it without a migration path to re-encrypt existing rows.
-- `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` — Web Push credentials used for browser push notifications. Generate the keypair with `npx web-push generate-vapid-keys`; `VAPID_SUBJECT` should be a contact identity such as `mailto:admin@example.com` or `https://shopping1a1.vercel.app`.
+**GitHub Actions** (not in `.env` — repository secrets):
 
-Optional:
+| Secret | Value |
+|--------|-------|
+| `APP_URL` | Public app URL, e.g. `https://your-app.vercel.app` |
+| `CRON_SECRET` | Same value as on Vercel |
 
-- `MERCADOLIBRE_AUTH_BASE` — defaults to `https://auth.mercadolivre.com.br`.
-- `MERCADOLIBRE_API_BASE` — defaults to `https://api.mercadolibre.com`.
-- `CRON_SECRET` — long random secret that protects `POST /api/cron/catalog-competition` (GitHub Actions sends `Authorization: Bearer …`). Generate with `openssl rand -base64 32`.
-- `CRON_ML_USER_ID` — optional Mercado Livre seller id for the cron job. If omitted, the app uses the first row in `ml_seller_credentials`.
-- `CATALOG_COMPETITION_WEBHOOK_URL`, `CATALOG_COMPETITION_ITEM_ID`, `CATALOG_COMPETITION_ML_USER_ID`, `CATALOG_COMPETITION_STATUS` — used only by `scripts/simulate-catalog-competition-webhook.ts`.
+---
 
-## Learn More
+## Production (Vercel)
 
-To learn more about Next.js, take a look at the following resources:
+From-scratch checklist:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 1. PostgreSQL
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Create a managed Postgres instance (Neon, Supabase, Vercel Postgres, etc.) and note the connection string.
 
-## Deploy on Vercel
+### 2. Deploy to Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Connect the repository and set **Environment Variables** (Production):
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `DATABASE_URL`
+- `MERCADOLIBRE_CLIENT_ID`, `MERCADOLIBRE_CLIENT_SECRET`
+- `MERCADOLIBRE_REDIRECT_URI` → `https://YOUR-DOMAIN.vercel.app/api/auth/mercadolibre/callback`
+- `ENCRYPTION_KEY` → generate **before** the first prod login
+- `CRON_SECRET`
+- `VAPID_*` → only if you want browser push
 
-## Mercado Livre OAuth (login)
+**Build:** the project runs `prisma generate` on `postinstall`. Migrations do **not** run automatically. After the first deploy, apply the schema:
 
-- `MERCADOLIBRE_REDIRECT_URI` must match **exactly** the Redirect URI registered in the ML app (for example `https://your-domain.com/api/auth/mercadolibre/callback`).
-- The authorization URL requests `scope=offline_access read write` so the token exchange returns a `refresh_token` (see [ML authentication docs](https://developers.mercadolivre.com.br/pt_br/autenticacao-e-autorizacao)). After changing scopes, sellers may need to log in again (or revoke the app once and re-authorize).
+```bash
+DATABASE_URL="postgresql://..." npx prisma migrate deploy
+```
 
-## Catalog competition webhook
+Or set the Vercel Build Command to:
 
-Notifications for `catalog_item_competition_status` only carry metadata. The handler calls `GET /items/{id}/price_to_win` and inserts a row in `catalog_competition_snapshots` **only when your derived status changed** vs the latest snapshot.
+```
+prisma migrate deploy && next build
+```
 
-### OAuth tokens in the database (no fixed access token env)
+(with `DATABASE_URL` already configured on the project).
 
-After a successful Mercado Livre login, the app stores the seller’s `refresh_token` and `access_token` in PostgreSQL table `ml_seller_credentials`, **encrypted at rest** with **AES-256-GCM** using `ENCRYPTION_KEY` (see [`src/lib/app-secret-crypto.ts`](src/lib/app-secret-crypto.ts)). If Mercado Livre omits `refresh_token` on a later exchange, the OAuth callback **reuses the refresh token from the existing session cookie** so the row can still be written (`mergeTokensWithExistingRefresh` in [`src/lib/mercadolibre/session.ts`](src/lib/mercadolibre/session.ts)).
+### 3. Mercado Livre (prod)
 
-The webhook reads the notification `user_id`, loads credentials for that seller, decrypts the refresh token, refreshes the access token when needed, then calls `price_to_win`.
+In the DevCenter, add the production Redirect URI (same as `MERCADOLIBRE_REDIRECT_URI`).
 
-Required environment variables for this flow:
+Optional webhook (supplement to cron):
 
-- `ENCRYPTION_KEY` — long random secret (used with scrypt to derive the AES key). **Do not rotate** without a migration path to re-encrypt existing rows.
-- `MERCADOLIBRE_CLIENT_ID`, `MERCADOLIBRE_CLIENT_SECRET`, and `MERCADOLIBRE_REDIRECT_URI` — required for OAuth login and token refresh.
+- URL: `https://YOUR-DOMAIN.vercel.app/api/ml/notifications/catalog-competition`
+- Topic: `catalog_item_competition_status`
 
-Operational notes:
+### 4. First login in production
 
-- Until at least one login has persisted credentials, the webhook responds **200** with `skipped: "no_stored_credentials"`.
-- If `ENCRYPTION_KEY` is missing, the webhook responds **200** with `skipped: "missing_encryption_key"`.
-- If the ML API call fails temporarily, the route responds **200** with `skipped` so Mercado Livre does not retry aggressively; database write failures return **500** so the notification can be retried.
+Open the deployed app and log in with Mercado Livre. This writes tokens to `ml_seller_credentials`. Without it, the cron returns a token error.
 
-Reports use **snapshots only** (plus a baseline snapshot before the window) so timelines stay correct when you only persist on change.
+### 5. GitHub Actions (cron every 10 min)
 
-## Catalog competition cron (GitHub Actions)
+Workflow: [`.github/workflows/catalog-competition-cron.yml`](.github/workflows/catalog-competition-cron.yml)
 
-The catalog report no longer depends on the Mercado Livre webhook. A GitHub Actions workflow calls your deployed app every 10 minutes and polls all catalog listings via the Mercado Livre API.
+**Repository → Settings → Secrets and variables → Actions → New repository secret:**
 
-### How it works
+- `APP_URL` — Vercel app URL
+- `CRON_SECRET` — same value as on Vercel
 
-1. Workflow [`.github/workflows/catalog-competition-cron.yml`](.github/workflows/catalog-competition-cron.yml) runs on schedule (`*/10 * * * *` UTC) or manually (**Actions → Catalog competition cron → Run workflow**).
-2. It sends `POST {APP_URL}/api/cron/catalog-competition` with `Authorization: Bearer {CRON_SECRET}`.
-3. The endpoint resolves the seller access token from `ml_seller_credentials`, polls `price_to_win` + item price for every catalog listing, and **always** updates `listings.catalogStatus`, `catalogSellerPrice`, `catalogPriceToWin`, and `catalogPolledAt`.
-4. A row in `catalog_competition_snapshots` is inserted **only when status changed** (or on first observation).
-5. Each run is logged in `catalog_competition_poll_runs`. The main report shows **Coletas hoje: N** (successful runs today in `America/Sao_Paulo`).
+Run manually: **Actions → Catalog competition cron → Run workflow**.
 
-### Production setup
+Confirm on `/dashboard/catalog-report` that **Coletas hoje** increments.
 
-1. Deploy with `CRON_SECRET`, `ENCRYPTION_KEY`, Mercado Livre OAuth credentials, and at least one successful seller login (so tokens exist in `ml_seller_credentials`).
-2. Optionally set `CRON_ML_USER_ID` if you have multiple sellers stored.
-3. In the GitHub repo: **Settings → Secrets and variables → Actions**:
-   - `APP_URL` — public app URL (e.g. `https://your-app.vercel.app`, no trailing slash required)
-   - `CRON_SECRET` — same value as in production `.env`
-4. Commit the workflow file and run it once manually from Actions.
-5. Open `/dashboard/catalog-report` and confirm **Coletas hoje** increments after a successful run.
+---
 
-### Manual collection
+## Catalog competition report
 
-The **Coletar snapshot agora** button on `/dashboard/catalog-report` uses the same poll service (`manual_poll`) and the same rule: snapshots only on status change.
+Primary data source: **cron** (GitHub Actions) or the manual button on the dashboard.
 
-### Notes
+Each poll:
 
-- GitHub scheduled workflows use **UTC** and may start 1–5 minutes late on free tiers.
-- If `todayCount` does not increase, check the Actions log and the JSON response from `/api/cron/catalog-competition`.
-- The ML webhook handler remains available as a bonus path; the cron is the primary data source.
+1. Calls `GET /items/{id}/price_to_win` for every catalog listing.
+2. **Always** updates `listings` (`catalogStatus`, prices, `catalogPolledAt`).
+3. Inserts into `catalog_competition_snapshots` when there is **no snapshot yet** or when **status changed**.
+
+Timelines at `/dashboard/catalog-report/[itemId]` use snapshots plus a baseline before the selected window.
+
+### ML webhook (optional)
+
+The handler at `/api/ml/notifications/catalog-competition` also stores snapshots when status changes. Tokens come from the database (same OAuth flow). Useful as a supplement; cron is the primary source.
+
+### Browser push (optional)
+
+With `VAPID_*` configured, the dashboard bell enables OS-level alerts (e.g. listing started losing catalog competition). Pushes are triggered by the catalog **webhook**, not the cron.
+
+---
+
+## npm scripts
+
+| Command | Purpose |
+|---------|---------|
+| `npm run dev` | Development server |
+| `npm run build` | Production build |
+| `npm run db:migrate` | Dev migrations (`prisma migrate dev`) |
+| `npm run db:generate` | Regenerate Prisma client after `schema.prisma` changes |
+
+---
+
+## Troubleshooting
+
+| Symptom | Check |
+|---------|-------|
+| Prisma `Unknown field …` | Run `npm run db:generate` and restart the dev server |
+| ML login fails | `MERCADOLIBRE_REDIRECT_URI` matches DevCenter |
+| Cron 401 | `CRON_SECRET` matches on Vercel and GitHub |
+| Cron 503 / no token | ML login done in that environment; stable `ENCRYPTION_KEY` |
+| Empty snapshots after poll | First poll creates a baseline; same status as before does not create a new snapshot |
+| **Coletas hoje** not increasing | GitHub Actions log + JSON response from the cron endpoint |
