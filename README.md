@@ -168,9 +168,11 @@ Optional webhook (supplement to cron):
 
 Open the deployed app and log in with Mercado Livre. This writes tokens to `ml_seller_credentials`. Without it, the cron returns a token error.
 
-### 5. GitHub Actions (cron every 10 min)
+### 5. GitHub Actions (cron ~every 10 min)
 
 Workflow: [`.github/workflows/catalog-competition-cron.yml`](.github/workflows/catalog-competition-cron.yml)
+
+Schedule runs at **:07, :17, :27, :37, :47, :57 UTC** (off-peak minutes to reduce GitHub queue delays). In `America/Sao_Paulo` that is roughly 10 minutes after those clock times minus 3 hours.
 
 **Repository → Settings → Secrets and variables → Actions → New repository secret:**
 

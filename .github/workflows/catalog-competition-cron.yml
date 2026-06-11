@@ -2,7 +2,8 @@ name: Catalog competition cron
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    # UTC. ~every 10 min at off-peak minutes (avoids :00/:15/:30/:45 GitHub queue spikes).
+    - cron: "7,17,27,37,47,57 * * * *"
   workflow_dispatch:
 
 jobs:
