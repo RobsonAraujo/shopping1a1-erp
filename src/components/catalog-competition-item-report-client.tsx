@@ -83,16 +83,84 @@ function isoDateInput(d: Date): string {
   }).format(d);
 }
 
-function priceLine(entry: DetailResponse["days"][number]["entries"][number]): string {
+function priceTooltip(entry: DetailResponse["days"][number]["entries"][number]): string {
   const parts: string[] = [];
-  if (entry.sellerPriceLabel) {
-    parts.push(`meu preço ${entry.sellerPriceLabel}`);
-  }
-  if (entry.priceToWinLabel) {
-    parts.push(`para ganhar ${entry.priceToWinLabel}`);
-  }
+  if (entry.sellerPriceLabel) parts.push(`meu preço ${entry.sellerPriceLabel}`);
+  if (entry.priceToWinLabel) parts.push(`para ganhar ${entry.priceToWinLabel}`);
   if (parts.length === 0) return "";
   return ` — ${parts.join(" · ")}`;
+}
+
+function PriceTags({
+  sellerPriceLabel,
+  priceToWinLabel,
+  compact = false,
+}: {
+  sellerPriceLabel: string | null;
+  priceToWinLabel: string | null;
+  compact?: boolean;
+}) {
+  if (!sellerPriceLabel && !priceToWinLabel) return null;
+
+  const chipClass = compact
+    ? "inline-flex items-center gap-1 rounded-md bg-[var(--background)] px-2 py-0.5 text-xs ring-1 ring-[var(--border)]"
+    : "inline-flex items-center gap-1.5 rounded-md bg-[var(--background)] px-2.5 py-1 text-xs ring-1 ring-[var(--border)]";
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {sellerPriceLabel ? (
+        <span className={chipClass}>
+          <span className="text-[var(--muted-foreground)]">Meu preço</span>
+          <span className="font-semibold tabular-nums text-[var(--foreground)]">
+            {sellerPriceLabel}
+          </span>
+        </span>
+      ) : null}
+      {priceToWinLabel ? (
+        <span className={chipClass}>
+          <span className="text-[var(--muted-foreground)]">Para ganhar</span>
+          <span className="font-semibold tabular-nums text-[var(--primary)]">
+            {priceToWinLabel}
+          </span>
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function TimelineEntryRow({
+  entry,
+}: {
+  entry: DetailResponse["days"][number]["entries"][number];
+}) {
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--muted)]/15 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        <span className={statusClass(entry.status)}>{entry.statusLabel}</span>
+        <span className="text-sm text-[var(--muted-foreground)]">
+          das{" "}
+          <span className="font-medium tabular-nums text-[var(--foreground)]">
+            {entry.from}
+          </span>{" "}
+          às{" "}
+          <span className="font-medium tabular-nums text-[var(--foreground)]">
+            {entry.to}
+          </span>
+          {entry.minutes > 0 ? (
+            <span className="ml-1.5 text-xs">({fmtMinutes(entry.minutes)})</span>
+          ) : null}
+        </span>
+      </div>
+      <PriceTags
+        sellerPriceLabel={entry.sellerPriceLabel}
+        priceToWinLabel={entry.priceToWinLabel}
+      />
+    </div>
+  );
+}
+
+function formatMoney(value: number): string {
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 export function CatalogCompetitionItemReportClient({ itemId }: { itemId: string }) {
@@ -252,32 +320,28 @@ export function CatalogCompetitionItemReportClient({ itemId }: { itemId: string 
                 </div>
               </div>
             </div>
-            <p className="mt-3 text-xs text-[var(--muted-foreground)]">
-              Fuso: {data.timezone} · Total observado: {fmtMinutes(totalMinutes)}
-              {data.pollIsStale ? " · coleta atrasada (>30 min)" : ""}
+            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-[var(--muted-foreground)]">
+              <span>
+                Fuso: {data.timezone} · Total observado: {fmtMinutes(totalMinutes)}
+                {data.pollIsStale ? " · coleta atrasada (>30 min)" : ""}
+              </span>
               {data.item.catalogSellerPrice !== null ||
               data.item.catalogPriceToWin !== null ? (
-                <>
-                  {" · "}
-                  {data.item.catalogSellerPrice !== null
-                    ? `meu preço ${data.item.catalogSellerPrice.toLocaleString("pt-BR", {
-                        style: "currency",
-                        currency: "BRL",
-                      })}`
-                    : null}
-                  {data.item.catalogSellerPrice !== null &&
-                  data.item.catalogPriceToWin !== null
-                    ? " · "
-                    : null}
-                  {data.item.catalogPriceToWin !== null
-                    ? `para ganhar ${data.item.catalogPriceToWin.toLocaleString("pt-BR", {
-                        style: "currency",
-                        currency: "BRL",
-                      })}`
-                    : null}
-                </>
+                <PriceTags
+                  compact
+                  sellerPriceLabel={
+                    data.item.catalogSellerPrice !== null
+                      ? formatMoney(data.item.catalogSellerPrice)
+                      : null
+                  }
+                  priceToWinLabel={
+                    data.item.catalogPriceToWin !== null
+                      ? formatMoney(data.item.catalogPriceToWin)
+                      : null
+                  }
+                />
               ) : null}
-            </p>
+            </div>
           </CardContent>
         </Card>
       ) : null}
@@ -326,21 +390,17 @@ export function CatalogCompetitionItemReportClient({ itemId }: { itemId: string 
                             style={{ width: `${widthPct}%` }}
                             title={`${entry.statusLabel}: ${entry.from} - ${entry.to} (${fmtMinutes(
                               entry.minutes,
-                            )})${priceLine(entry)}`}
+                            )})${priceTooltip(entry)}`}
                           />
                         );
                       })}
                     </div>
                   </div>
-                  {day.entries.map((entry, idx) => (
-                    <p key={`${day.dayKey}-${idx}`} className="text-sm">
-                      <span className={statusClass(entry.status)}>
-                        {entry.statusLabel}
-                      </span>{" "}
-                      das {entry.from} às {entry.to}
-                      {priceLine(entry)}
-                    </p>
-                  ))}
+                  <div className="space-y-2">
+                    {day.entries.map((entry, idx) => (
+                      <TimelineEntryRow key={`${day.dayKey}-${idx}`} entry={entry} />
+                    ))}
+                  </div>
                 </>
               )}
             </CardContent>

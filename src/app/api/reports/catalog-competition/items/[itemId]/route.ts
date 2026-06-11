@@ -57,7 +57,7 @@ function formatInTz(d: Date, timeZone: string) {
     timeZone,
     hour: "2-digit",
     minute: "2-digit",
-    hour12: true,
+    hour12: false,
   }).format(d);
   const dayKey = new Intl.DateTimeFormat("en-CA", {
     timeZone,
