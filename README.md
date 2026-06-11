@@ -84,7 +84,7 @@ Login requests `scope=offline_access read write` to obtain a `refresh_token` and
 
 ### Cron in dev (optional)
 
-The catalog cron runs via GitHub Actions against your public app URL. Locally you can:
+In production, the catalog cron runs via [cron-job.org](https://cron-job.org). Locally you can:
 
 - use the **Coletar snapshot agora** button on `/dashboard/catalog-report`, or
 - call the endpoint manually (if `CRON_SECRET` is in `.env`):
@@ -112,13 +112,6 @@ Copy `.env.example` → `.env`. Full reference is in that file.
 | `VAPID_*` | optional | optional | Browser push (dashboard bell icon) |
 | `MERCADOLIBRE_AUTH_BASE` | — | — | Override (default: Brazil) |
 | `MERCADOLIBRE_API_BASE` | — | — | Override (default: `api.mercadolibre.com`) |
-
-**GitHub Actions** (not in `.env` — repository secrets):
-
-| Secret | Value |
-|--------|-------|
-| `APP_URL` | Public app URL, e.g. `https://your-app.vercel.app` |
-| `CRON_SECRET` | Same value as on Vercel |
 
 ---
 
@@ -163,26 +156,31 @@ In the DevCenter, add the production Redirect URI (same as `MERCADOLIBRE_REDIREC
 
 Open the deployed app and log in with Mercado Livre. This writes tokens to `ml_seller_credentials`. Without it, the cron returns a token error.
 
-### 5. GitHub Actions (cron ~every 10 min)
+### 5. cron-job.org (catalog poll ~every 10 min)
 
-Workflow: [`.github/workflows/catalog-competition-cron.yml`](.github/workflows/catalog-competition-cron.yml)
+Create a job at [cron-job.org](https://console.cron-job.org) that calls your deployed app:
 
-Schedule runs at **:07, :17, :27, :37, :47, :57 UTC** (off-peak minutes to reduce GitHub queue delays). In `America/Sao_Paulo` that is roughly 10 minutes after those clock times minus 3 hours.
+| Field | Value |
+|-------|--------|
+| URL | `https://YOUR-DOMAIN.vercel.app/api/cron/catalog-competition` |
+| Method | `POST` |
+| Schedule | Every 10 minutes |
+| Header | `Authorization: Bearer YOUR_CRON_SECRET` (same value as on Vercel) |
+| Header | `Content-Type: application/json` |
+| Body | `{}` or empty |
+| Timeout | 60s or higher (poll may take a while with many listings) |
 
-**Repository → Settings → Secrets and variables → Actions → New repository secret:**
+Use **Execute now** once and confirm a JSON response like `{"ok":true,"checked":N,"changed":M}`.
 
-- `APP_URL` — Vercel app URL
-- `CRON_SECRET` — same value as on Vercel
+Enable failure notifications in cron-job.org (email) so you know if a run fails.
 
-Run manually: **Actions → Catalog competition cron → Run workflow**.
-
-Confirm on `/dashboard/catalog-report` that **Coletas hoje** increments.
+Confirm on `/dashboard/catalog-report` that **Coletas hoje** increments after a successful run.
 
 ---
 
 ## Catalog competition report
 
-Primary data source: **cron** (GitHub Actions) or the manual button on the dashboard.
+Primary data source: **cron** (cron-job.org) or the manual button on the dashboard.
 
 Each poll:
 
@@ -233,7 +231,7 @@ Mock sales load automatically in development when `.mock/catalog-report-sales.js
 |---------|-------|
 | Prisma `Unknown field …` | Run `npm run db:generate` and restart the dev server |
 | ML login fails | `MERCADOLIBRE_REDIRECT_URI` matches DevCenter |
-| Cron 401 | `CRON_SECRET` matches on Vercel and GitHub |
+| Cron 401 | `CRON_SECRET` in cron-job.org Authorization header matches Vercel |
 | Cron 503 / no token | ML login done in that environment; stable `ENCRYPTION_KEY` |
 | Empty snapshots after poll | First poll creates a baseline; same status as before does not create a new snapshot |
-| **Coletas hoje** not increasing | GitHub Actions log + JSON response from the cron endpoint |
+| **Coletas hoje** not increasing | cron-job.org execution history + JSON response from the cron endpoint |

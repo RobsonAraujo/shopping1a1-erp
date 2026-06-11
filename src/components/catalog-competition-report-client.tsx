@@ -177,7 +177,7 @@ export function CatalogCompetitionReportClient() {
           ) : !data || data.items.length === 0 ? (
             <p className="text-sm text-[var(--muted-foreground)]">
               Sem dados de catálogo ainda. Clique em &quot;Coletar snapshot
-              agora&quot; ou aguarde o cron do GitHub Actions.
+              agora&quot; ou aguarde a próxima coleta automática.
             </p>
           ) : (
             <div className="overflow-x-auto">
