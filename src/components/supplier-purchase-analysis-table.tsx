@@ -276,7 +276,7 @@ function ItemRevenueBadge({
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1 text-[10px] font-medium text-sky-700 transition-colors hover:text-sky-900 hover:underline"
         >
-          Métricas no ML — {monthLabels.lastMonth}
+          Métricas no ML — últimos 30 dias
           <ExternalLink className="size-3 shrink-0" aria-hidden />
         </a>
       </PopoverContent>
@@ -612,7 +612,10 @@ export function SupplierPurchaseAnalysisTable({
                               asChild
                             >
                               <Link href={catalogReportHref(row.item.id)}>
-                                <LineChart className="size-3.5 shrink-0" aria-hidden />
+                                <LineChart
+                                  className="size-3.5 shrink-0"
+                                  aria-hidden
+                                />
                                 <span>Relatório catálogo</span>
                               </Link>
                             </Button>
