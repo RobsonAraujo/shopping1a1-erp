@@ -90,6 +90,8 @@ export type ItemRevenueByMonth = {
 export type OrderSearchOrder = {
   /** Ex.: `paid`, `cancelled` — usamos para excluir cancelados na soma de vendas */
   status?: string;
+  date_closed?: string;
+  date_created?: string;
   order_items?: OrderSearchOrderItem[];
 };
 

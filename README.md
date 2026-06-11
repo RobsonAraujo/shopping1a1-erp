@@ -213,6 +213,20 @@ With `VAPID_*` configured, the dashboard bell enables OS-level alerts (e.g. list
 | `npm run build` | Production build |
 | `npm run db:migrate` | Dev migrations (`prisma migrate dev`) |
 | `npm run db:generate` | Regenerate Prisma client after `schema.prisma` changes |
+| `npm run seed:catalog-demo` | Seed timeline snapshots + mock sales for local catalog report UI |
+
+### Local catalog report demo
+
+To preview timeline + per-status sales without real ML orders:
+
+```bash
+npm run seed:catalog-demo
+# optional: npm run seed:catalog-demo -- MLB1234567890
+```
+
+Then run `npm run seed:catalog-demo` and restart `npm run dev`. Open `/dashboard/catalog-report/<ITEM_ID>` (default: `MLB4561866095`).
+
+Mock sales load automatically in development when `.mock/catalog-report-sales.json` exists. Set `CATALOG_MOCK_SALES=0` to use the real Mercado Livre orders API instead.
 
 ---
 

@@ -11,7 +11,12 @@ import {
   type CompetitionPoint,
   type CompetitionStatus,
 } from "@/lib/catalog-competition";
-import { getValidAccessToken } from "@/lib/mercadolibre/session";
+import { getValidAccessToken, readSession } from "@/lib/mercadolibre/session";
+import {
+  countItemSaleEventsBetween,
+  fetchItemSaleEventsInDateRange,
+} from "@/lib/mercadolibre/api";
+import { loadCatalogMockSaleEvents } from "@/lib/catalog-report-mock-sales";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 
 type RouteContext = { params: Promise<{ itemId: string }> };
@@ -327,6 +332,30 @@ export async function GET(request: NextRequest, context: RouteContext) {
       (interval) => interval.status !== "unknown",
     );
 
+    const { userId } = readSession(cookieStore);
+    let saleEvents: Awaited<ReturnType<typeof fetchItemSaleEventsInDateRange>> =
+      [];
+
+    const mockSales = await loadCatalogMockSaleEvents(itemId);
+    if (mockSales) {
+      saleEvents = mockSales;
+    } else if (userId) {
+      try {
+        saleEvents = await fetchItemSaleEventsInDateRange(
+          token,
+          userId,
+          itemId,
+          from,
+          to,
+        );
+      } catch (e) {
+        logServerError(
+          `api/reports/catalog-competition/items/[itemId] sales item=${itemId}`,
+          e,
+        );
+      }
+    }
+
     const grouped = new Map<
       string,
       {
@@ -341,6 +370,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
           priceToWin: number | null;
           sellerPriceLabel: string | null;
           priceToWinLabel: string | null;
+          unitsSold: number;
           source: "event" | "snapshot";
         }>;
       }
@@ -366,6 +396,11 @@ export async function GET(request: NextRequest, context: RouteContext) {
           priceToWin: interval.priceToWin,
           sellerPriceLabel: formatCatalogMoney(interval.sellerPrice),
           priceToWinLabel: formatCatalogMoney(interval.priceToWin),
+          unitsSold: countItemSaleEventsBetween(
+            saleEvents,
+            segment.from,
+            segment.to,
+          ),
           source: interval.source,
         });
         grouped.set(key, existing);
@@ -374,7 +409,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     const days = [...grouped.entries()]
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([dayKey, data]) => ({ dayKey, label: data.label, entries: data.entries }));
+      .map(([dayKey, data]) => ({
+        dayKey,
+        label: data.label,
+        unitsSold: data.entries.reduce((sum, entry) => sum + entry.unitsSold, 0),
+        entries: data.entries,
+      }));
 
     return NextResponse.json({
       from: from.toISOString(),

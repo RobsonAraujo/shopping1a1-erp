@@ -25,6 +25,7 @@ type DetailResponse = {
   days: Array<{
     dayKey: string;
     label: string;
+    unitsSold: number;
     entries: Array<{
       from: string;
       to: string;
@@ -35,6 +36,7 @@ type DetailResponse = {
       priceToWin: number | null;
       sellerPriceLabel: string | null;
       priceToWinLabel: string | null;
+      unitsSold: number;
       source: "event" | "snapshot";
     }>;
   }>;
@@ -83,12 +85,43 @@ function isoDateInput(d: Date): string {
   }).format(d);
 }
 
+function formatUnitsSold(units: number): string {
+  if (units === 0) return "0 vendas";
+  if (units === 1) return "1 venda";
+  return `${units} vendas`;
+}
+
 function priceTooltip(entry: DetailResponse["days"][number]["entries"][number]): string {
   const parts: string[] = [];
+  parts.push(formatUnitsSold(entry.unitsSold));
   if (entry.sellerPriceLabel) parts.push(`meu preço ${entry.sellerPriceLabel}`);
   if (entry.priceToWinLabel) parts.push(`para ganhar ${entry.priceToWinLabel}`);
-  if (parts.length === 0) return "";
   return ` — ${parts.join(" · ")}`;
+}
+
+function SalesChip({
+  units,
+  compact = false,
+}: {
+  units: number;
+  compact?: boolean;
+}) {
+  const chipClass = compact
+    ? "inline-flex items-center gap-1 rounded-md bg-[var(--background)] px-2 py-0.5 text-xs ring-1 ring-[var(--border)]"
+    : "inline-flex items-center gap-1.5 rounded-md bg-[var(--background)] px-2.5 py-1 text-xs ring-1 ring-[var(--border)]";
+
+  return (
+    <span className={chipClass}>
+      <span className="text-[var(--muted-foreground)]">Vendas</span>
+      <span
+        className={`font-semibold tabular-nums ${
+          units > 0 ? "text-[var(--foreground)]" : "text-[var(--muted-foreground)]"
+        }`}
+      >
+        {formatUnitsSold(units)}
+      </span>
+    </span>
+  );
 }
 
 function PriceTags({
@@ -151,10 +184,13 @@ function TimelineEntryRow({
           ) : null}
         </span>
       </div>
-      <PriceTags
-        sellerPriceLabel={entry.sellerPriceLabel}
-        priceToWinLabel={entry.priceToWinLabel}
-      />
+      <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+        <SalesChip units={entry.unitsSold} />
+        <PriceTags
+          sellerPriceLabel={entry.sellerPriceLabel}
+          priceToWinLabel={entry.priceToWinLabel}
+        />
+      </div>
     </div>
   );
 }
@@ -366,8 +402,20 @@ export function CatalogCompetitionItemReportClient({ itemId }: { itemId: string 
         ) : null}
         {data?.days.map((day) => (
           <Card key={day.dayKey}>
-            <CardHeader>
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
               <CardTitle className="text-base capitalize">{day.label}</CardTitle>
+              <span className="text-sm text-[var(--muted-foreground)]">
+                Total do dia:{" "}
+                <span
+                  className={`font-semibold tabular-nums ${
+                    day.unitsSold > 0
+                      ? "text-[var(--foreground)]"
+                      : "text-[var(--muted-foreground)]"
+                  }`}
+                >
+                  {formatUnitsSold(day.unitsSold)}
+                </span>
+              </span>
             </CardHeader>
             <CardContent className="space-y-2">
               {day.entries.length === 0 ? (

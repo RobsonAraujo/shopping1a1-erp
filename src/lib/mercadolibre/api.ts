@@ -12,6 +12,7 @@ import type {
   ItemPriceToWinResponse,
   ItemMultigetEntry,
   ItemsSearchResponse,
+  OrderSearchOrder,
   OrderSearchResponse,
   UserMe,
 } from "./types";
@@ -405,6 +406,104 @@ async function fetchUnitsSoldForOneItem(
     if (batch.length < limit) break;
   }
 
+  return sum;
+}
+
+export type ItemSaleEvent = {
+  at: Date;
+  units: number;
+};
+
+function orderTimestamp(
+  order: OrderSearchOrder,
+  dateField: SalesWindowDateField,
+): Date | null {
+  const raw =
+    dateField === "date_closed" ? order.date_closed : order.date_created;
+  if (typeof raw !== "string") return null;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Paid order lines for one listing with timestamp (for status-interval sales). */
+export async function fetchItemSaleEventsInDateRange(
+  accessToken: string,
+  sellerId: number,
+  itemId: string,
+  from: Date,
+  to: Date,
+  dateField: SalesWindowDateField = stockPlanningConfig.salesWindowDateField,
+): Promise<ItemSaleEvent[]> {
+  const { apiBase } = getMercadoLibreConfig();
+  const fromStr = from.toISOString();
+  const toStr = to.toISOString();
+  const events: ItemSaleEvent[] = [];
+  let offset = 0;
+  const limit = 50;
+  let total = Infinity;
+
+  while (offset < total) {
+    const u = new URL(`${apiBase}/orders/search`);
+    u.searchParams.set("seller", String(sellerId));
+    u.searchParams.set("item", itemId);
+    u.searchParams.set("order.status", "paid");
+    setOrderDateRange(u, dateField, fromStr, toStr);
+    u.searchParams.set("offset", String(offset));
+    u.searchParams.set("limit", String(limit));
+    u.searchParams.set("sort", "date_desc");
+    u.searchParams.set("display", "complete");
+
+    const res = await fetch(u.toString(), {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(`orders/search failed: ${res.status} ${t}`);
+    }
+
+    const data = (await res.json()) as OrderSearchResponse;
+    const reported = data.paging?.total;
+    total =
+      reported != null && reported >= 0
+        ? reported
+        : ((data.results?.length ?? 0) > 0 ? Infinity : 0);
+
+    const batch = data.results ?? [];
+    for (const order of batch) {
+      if (order.status === "cancelled") continue;
+      const at = orderTimestamp(order, dateField);
+      if (!at) continue;
+      for (const line of order.order_items ?? []) {
+        if (listingIdFromOrderLine(line) !== itemId) continue;
+        const units = quantityFromOrderLine(line);
+        if (units <= 0) continue;
+        events.push({ at, units });
+      }
+    }
+
+    if (batch.length === 0) break;
+    offset += limit;
+    if (batch.length < limit) break;
+  }
+
+  return events;
+}
+
+export function countItemSaleEventsBetween(
+  events: ItemSaleEvent[],
+  from: Date,
+  to: Date,
+): number {
+  const fromMs = from.getTime();
+  const toMs = to.getTime();
+  let sum = 0;
+  for (const event of events) {
+    const t = event.at.getTime();
+    if (t >= fromMs && t < toMs) {
+      sum += event.units;
+    }
+  }
   return sum;
 }
 
