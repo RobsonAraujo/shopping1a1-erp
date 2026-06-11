@@ -2,7 +2,14 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Fragment, useCallback, useEffect, useId, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+} from "react";
 import { HelpCircle, ImageOff, Pencil, Settings } from "lucide-react";
 import {
   ListingStatusBadge,
@@ -17,7 +24,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  ItemListSearch,
+  itemListSearchEmptyMessage,
+} from "@/components/item-list-search";
 import { groupBySkuSupplier } from "@/lib/mercadolibre/item-sku";
+import { filterByItemListSearch } from "@/lib/item-list-search";
 import { cn } from "@/lib/utils";
 
 const MAX_LEAD_DAYS = 365;
@@ -56,19 +68,39 @@ function leadTimeToForm(days: number | null): {
 
 export function InventoryStockTable({ rows }: InventoryStockTableProps) {
   const router = useRouter();
+  const [searchQuery, setSearchQuery] = useState("");
   const [editId, setEditId] = useState<string | null>(null);
   const [settingsId, setSettingsId] = useState<string | null>(null);
+  const filteredRows = useMemo(
+    () =>
+      filterByItemListSearch(rows, searchQuery, (row) => ({
+        sku: row.sku,
+        title: row.title,
+        mlItemId: row.mlItemId,
+      })),
+    [rows, searchQuery],
+  );
   const editing = editId
     ? (rows.find((r) => r.mlItemId === editId) ?? null)
     : null;
   const settingsRow = settingsId
     ? (rows.find((r) => r.mlItemId === settingsId) ?? null)
     : null;
-  const supplierGroups = groupBySkuSupplier(rows, (row) => row.sku);
+  const supplierGroups = useMemo(
+    () => groupBySkuSupplier(filteredRows, (row) => row.sku),
+    [filteredRows],
+  );
 
   return (
     <TooltipProvider delayDuration={200}>
-      <Card className="overflow-hidden p-0 shadow-sm">
+      <div className="space-y-3">
+        <ItemListSearch
+          value={searchQuery}
+          onChange={setSearchQuery}
+          filteredCount={filteredRows.length}
+          totalCount={rows.length}
+        />
+        <Card className="overflow-hidden p-0 shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[52rem] text-left text-sm">
             <thead className="border-b border-[var(--border)] bg-[var(--muted)]/80">
@@ -111,13 +143,15 @@ export function InventoryStockTable({ rows }: InventoryStockTableProps) {
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 ? (
+              {filteredRows.length === 0 ? (
                 <tr>
                   <td
                     colSpan={6}
                     className="px-4 py-12 text-center text-[var(--muted-foreground)]"
                   >
-                    Nenhum anúncio nesta página.
+                    {rows.length === 0
+                      ? "Nenhum anúncio nesta página."
+                      : itemListSearchEmptyMessage(searchQuery)}
                   </td>
                 </tr>
               ) : (
@@ -275,6 +309,7 @@ export function InventoryStockTable({ rows }: InventoryStockTableProps) {
           }}
         />
       ) : null}
+      </div>
     </TooltipProvider>
   );
 }

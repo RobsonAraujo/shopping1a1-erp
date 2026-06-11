@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { AlertTriangle, ImageOff, LayoutGrid } from "lucide-react";
 import { stockPlanningConfig } from "@/config/stock-planning";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
@@ -11,6 +11,8 @@ import { SupplierGroupHeader } from "@/components/supplier-group-header";
 import { computeStockPlanningDisplay } from "@/lib/stock-planning";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import { DashboardAttentionPurchasePanel } from "@/components/dashboard-attention-purchase-panel";
+import { ItemListSearch } from "@/components/item-list-search";
+import { filterByItemListSearch } from "@/lib/item-list-search";
 import { ListingStatusBadge } from "@/components/listing-status-badge";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
 import { MetricWithHint } from "@/components/metric-with-hint";
@@ -310,6 +312,7 @@ export function DashboardAttentionPanel({
   acknowledgements: StockAttentionAcknowledgementView[];
 }) {
   const w = stockPlanningConfig.salesAverageWindowDays;
+  const [searchQuery, setSearchQuery] = useState("");
   const [optimisticHidden, setOptimisticHidden] = useState<Set<string>>(
     () => new Set(),
   );
@@ -429,19 +432,46 @@ export function DashboardAttentionPanel({
       warehouseStock,
     }));
 
+  const attentionSearchFields = (row: { item: ItemBody }) => ({
+    sku: getItemSku(row.item),
+    title: row.item.title,
+    mlItemId: row.item.id,
+  });
+
+  const filteredFullRows = useMemo(
+    () => filterByItemListSearch(fullRows, searchQuery, attentionSearchFields),
+    [fullRows, searchQuery],
+  );
+
+  const filteredPurchaseRows = useMemo(
+    () =>
+      filterByItemListSearch(purchaseRows, searchQuery, attentionSearchFields),
+    [purchaseRows, searchQuery],
+  );
+
+  const totalAttentionCount = fullRows.length + purchaseRows.length;
+
   return (
     <TooltipProvider delayDuration={200}>
       <section id="prioridades" className="scroll-mt-24 space-y-4">
+        {totalAttentionCount > 0 ? (
+          <ItemListSearch
+            value={searchQuery}
+            onChange={setSearchQuery}
+            filteredCount={filteredFullRows.length + filteredPurchaseRows.length}
+            totalCount={totalAttentionCount}
+          />
+        ) : null}
         <AttentionSection
           title="Precisa enviar para Full"
           description="A data para iniciar busca/agendamento de envio ao Full chegou ou passou."
           countVariant="warning"
-          rows={fullRows}
+          rows={filteredFullRows}
           mode="full"
           onAcknowledge={acknowledge}
         />
         <DashboardAttentionPurchasePanel
-          rows={purchaseRows}
+          rows={filteredPurchaseRows}
           onAcknowledge={acknowledge}
         />
       </section>

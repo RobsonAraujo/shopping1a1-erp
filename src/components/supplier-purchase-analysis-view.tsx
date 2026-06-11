@@ -13,8 +13,13 @@ import {
   PurchaseCoverageBufferControl,
   usePurchaseCoverageBufferDays,
 } from "@/components/purchase-coverage-buffer";
+import {
+  ItemListSearch,
+  itemListSearchEmptyMessage,
+} from "@/components/item-list-search";
 import { SupplierPurchaseAnalysisTable } from "@/components/supplier-purchase-analysis-table";
 import { Card, CardContent } from "@/components/ui/card";
+import { filterByItemListSearch } from "@/lib/item-list-search";
 import type { CalendarMonthLabels } from "@/lib/mercadolibre/revenue-periods";
 import {
   formatRevenueBRL,
@@ -77,6 +82,7 @@ export function SupplierPurchaseAnalysisView({
   supplierParam,
 }: SupplierPurchaseAnalysisViewProps) {
   const { bufferDays, setBufferDays } = usePurchaseCoverageBufferDays();
+  const [searchQuery, setSearchQuery] = useState("");
   const [revenueState, setRevenueState] = useState<RevenueLoadState>({
     status: "loading",
   });
@@ -170,6 +176,17 @@ export function SupplierPurchaseAnalysisView({
   const computedRows = useMemo(
     () => recomputeRowsWithBuffer(baseRows, bufferDays),
     [baseRows, bufferDays],
+  );
+
+  const filteredRows = useMemo(
+    () =>
+      filterByItemListSearch(computedRows, searchQuery, (row) => ({
+        sku: row.sku,
+        title: row.item.title,
+        mlItemId: row.item.id,
+        extra: [row.categoryName, row.categoryPath],
+      })),
+    [computedRows, searchQuery],
   );
 
   const urgentCount = computedRows.filter(
@@ -282,7 +299,17 @@ export function SupplierPurchaseAnalysisView({
         )}
       </div>
 
-      <SupplierPurchaseAnalysisTable rows={computedRows} />
+      <ItemListSearch
+        value={searchQuery}
+        onChange={setSearchQuery}
+        filteredCount={filteredRows.length}
+        totalCount={computedRows.length}
+      />
+
+      <SupplierPurchaseAnalysisTable
+        rows={filteredRows}
+        emptyMessage={itemListSearchEmptyMessage(searchQuery)}
+      />
     </div>
   );
 }

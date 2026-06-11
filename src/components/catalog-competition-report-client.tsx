@@ -2,10 +2,15 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
+import {
+  ItemListSearch,
+  itemListSearchEmptyMessage,
+} from "@/components/item-list-search";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { filterByItemListSearch } from "@/lib/item-list-search";
 
 type ReportResponse = {
   pollStats: {
@@ -61,6 +66,18 @@ export function CatalogCompetitionReportClient() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<ReportResponse | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const filteredItems = useMemo(
+    () =>
+      data
+        ? filterByItemListSearch(data.items, searchQuery, (row) => ({
+            sku: row.skuSnapshot,
+            title: row.titleSnapshot,
+            mlItemId: row.mlItemId,
+          }))
+        : [],
+    [data, searchQuery],
+  );
 
   async function loadReport() {
     setLoading(true);
@@ -166,8 +183,16 @@ export function CatalogCompetitionReportClient() {
       ) : null}
 
       <Card>
-        <CardHeader>
+        <CardHeader className="space-y-4">
           <CardTitle className="text-base">Catálogo anúncios</CardTitle>
+          {data && data.items.length > 0 ? (
+            <ItemListSearch
+              value={searchQuery}
+              onChange={setSearchQuery}
+              filteredCount={filteredItems.length}
+              totalCount={data.items.length}
+            />
+          ) : null}
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -179,6 +204,10 @@ export function CatalogCompetitionReportClient() {
               Sem dados de catálogo ainda. Clique em &quot;Coletar snapshot
               agora&quot; ou aguarde a próxima coleta automática.
             </p>
+          ) : filteredItems.length === 0 ? (
+            <p className="text-sm text-[var(--muted-foreground)]">
+              {itemListSearchEmptyMessage(searchQuery)}
+            </p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[40rem] text-left text-sm">
@@ -189,7 +218,7 @@ export function CatalogCompetitionReportClient() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.items.map((row) => (
+                  {filteredItems.map((row) => (
                     <tr
                       key={row.mlItemId}
                       className="border-b border-[var(--border)]"

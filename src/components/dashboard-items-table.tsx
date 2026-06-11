@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useMemo, useState } from "react";
 import { ImageOff } from "lucide-react";
 import { stockPlanningConfig } from "@/config/stock-planning";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
@@ -14,8 +15,13 @@ import {
 } from "@/components/listing-status-badge";
 import { MetricWithHint } from "@/components/metric-with-hint";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
+import {
+  ItemListSearch,
+  itemListSearchEmptyMessage,
+} from "@/components/item-list-search";
 import { Card } from "@/components/ui/card";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { filterByItemListSearch } from "@/lib/item-list-search";
 import { cn } from "@/lib/utils";
 
 export function DashboardItemsTable({
@@ -26,10 +32,27 @@ export function DashboardItemsTable({
   salesByItem: Record<string, number>;
 }) {
   const w = stockPlanningConfig.salesAverageWindowDays;
+  const [searchQuery, setSearchQuery] = useState("");
+  const filteredItems = useMemo(
+    () =>
+      filterByItemListSearch(items, searchQuery, (item) => ({
+        sku: getItemSku(item),
+        title: item.title,
+        mlItemId: item.id,
+      })),
+    [items, searchQuery],
+  );
 
   return (
     <TooltipProvider delayDuration={200}>
-      <Card className="overflow-hidden p-0 shadow-sm">
+      <div className="space-y-3">
+        <ItemListSearch
+          value={searchQuery}
+          onChange={setSearchQuery}
+          filteredCount={filteredItems.length}
+          totalCount={items.length}
+        />
+        <Card className="overflow-hidden p-0 shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[60rem] text-left text-sm">
             <thead className="border-b border-[var(--border)] bg-[var(--muted)]/80">
@@ -58,17 +81,19 @@ export function DashboardItemsTable({
               </tr>
             </thead>
             <tbody>
-              {items.length === 0 ? (
+              {filteredItems.length === 0 ? (
                 <tr>
                   <td
                     colSpan={7}
                     className="px-4 py-12 text-center text-[var(--muted-foreground)]"
                   >
-                    Nenhum anúncio nesta categoria nesta página.
+                    {items.length === 0
+                      ? "Nenhum anúncio nesta categoria nesta página."
+                      : itemListSearchEmptyMessage(searchQuery)}
                   </td>
                 </tr>
               ) : (
-                items.map((item) => {
+                filteredItems.map((item) => {
                   const sold = salesByItem[item.id] ?? 0;
                   const imageUrl = bestItemImageUrl(item);
                   const sku = getItemSku(item);
@@ -177,6 +202,7 @@ export function DashboardItemsTable({
           </table>
         </div>
       </Card>
+      </div>
     </TooltipProvider>
   );
 }

@@ -303,11 +303,13 @@ function showCatalogReportLink(row: PurchaseAnalysisItemRow): boolean {
 type SupplierPurchaseAnalysisTableProps = {
   rows: PurchaseAnalysisItemRow[];
   showCostColumns?: boolean;
+  emptyMessage?: string;
 };
 
 export function SupplierPurchaseAnalysisTable({
   rows,
   showCostColumns = true,
+  emptyMessage = "Nenhum produto neste fornecedor.",
 }: SupplierPurchaseAnalysisTableProps) {
   const router = useRouter();
   const [settingsId, setSettingsId] = useState<string | null>(null);
@@ -363,7 +365,7 @@ export function SupplierPurchaseAnalysisTable({
                     colSpan={showCostColumns ? 10 : 9}
                     className="px-4 py-12 text-center text-[var(--muted-foreground)]"
                   >
-                    Nenhum produto neste fornecedor.
+                    {emptyMessage}
                   </td>
                 </tr>
               ) : (
