@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
+  Calculator,
   ChartNoAxesColumn,
   LogOut,
   Package,
@@ -89,6 +90,12 @@ export default async function DashboardLayout({
                 <Link href="/dashboard/catalog-report" className="gap-2">
                   <ChartNoAxesColumn className="size-4" aria-hidden />
                   Relatório catálogo
+                </Link>
+              </Button>
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/dashboard/avaliacao-financeira" className="gap-2">
+                  <Calculator className="size-4" aria-hidden />
+                  Avaliação financeira
                 </Link>
               </Button>
               {/* <Button variant="ghost" size="sm" asChild>

@@ -42,7 +42,17 @@ export type ItemBody = {
   date_created?: string;
   /** Categoria do anúncio (ex.: MLB1051). */
   category_id?: string;
+  /** Tipo de anúncio (ex.: gold_special = Clássico, gold_pro = Premium). */
+  listing_type_id?: string;
   permalink: string;
+  /** Dimensões para frete: "HxWxL,peso_g" quando exposto pela API. */
+  dimensions?: string;
+  shipping?: {
+    free_shipping?: boolean;
+    mode?: string;
+    logistic_type?: string;
+    dimensions?: string;
+  };
   /** Catálogo compartilhado (ML) vs anúncio clássico do vendedor */
   catalog_listing?: boolean;
   /** Miniatura (baixa resolução); prefira `pictures` ou `bestItemImageUrl` */

@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  Calculator,
   ChartNoAxesColumn,
   LogOut,
   Menu,
@@ -39,6 +40,12 @@ const navItems = [
     label: "Relatório catálogo",
     description: "Veja mudanças de competição no catálogo",
     icon: ChartNoAxesColumn,
+  },
+  {
+    href: "/dashboard/avaliacao-financeira",
+    label: "Avaliação financeira",
+    description: "Margem de contribuição por anúncio",
+    icon: Calculator,
   },
 ];
 
