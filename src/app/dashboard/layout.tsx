@@ -5,12 +5,14 @@ import { redirect } from "next/navigation";
 import {
   ChartNoAxesColumn,
   LayoutGrid,
+  LineChart,
   LogOut,
   Package,
   ShoppingCart,
   TrendingUp,
   Warehouse,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { fetchMe } from "@/lib/mercadolibre/api";
 import { PushNotificationToggle } from "@/components/push-notification-toggle";
 import { MobileDashboardMenu } from "@/components/mobile-dashboard-menu";
@@ -47,7 +49,7 @@ export default async function DashboardLayout({
   return (
     <div className="flex min-h-full flex-col bg-[var(--background)]">
       <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[var(--card)]/85 backdrop-blur-md supports-[backdrop-filter]:bg-[var(--card)]/75">
-        <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 sm:py-3.5">
+        <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6">
           <div className="flex items-center justify-between gap-3">
             <Link
               href="/dashboard"
@@ -92,7 +94,7 @@ export default async function DashboardLayout({
             </div>
           </div>
           <nav
-            className="mt-2 hidden flex-wrap items-center gap-1 sm:flex"
+            className="mt-3 hidden flex-wrap items-center gap-1 border-t border-[var(--border)] pt-3 sm:flex"
             aria-label="Principal"
           >
             <Button variant="ghost" size="sm" asChild>
@@ -130,6 +132,15 @@ export default async function DashboardLayout({
               <Link href="/dashboard/lucratividade" className="gap-2">
                 <TrendingUp className="size-4" aria-hidden />
                 Lucratividade
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/dashboard/dre" className="gap-2">
+                <LineChart className="size-4" aria-hidden />
+                DRE
+                <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                  Beta
+                </Badge>
               </Link>
             </Button>
           </nav>

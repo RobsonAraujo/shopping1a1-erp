@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import {
   ChartNoAxesColumn,
   LayoutGrid,
+  LineChart,
   LogOut,
   Menu,
   Package,
@@ -15,6 +16,7 @@ import {
   Warehouse,
   X,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 const navItems = [
@@ -53,6 +55,13 @@ const navItems = [
     label: "Lucratividade",
     description: "Margem de contribuição por anúncio",
     icon: TrendingUp,
+  },
+  {
+    href: "/dashboard/dre",
+    label: "DRE",
+    description: "Demonstrativo de resultado mensal",
+    icon: LineChart,
+    badge: "Beta",
   },
 ];
 
@@ -184,8 +193,13 @@ export function MobileDashboardMenu() {
                 >
                   <Icon className="mt-0.5 size-5 shrink-0" aria-hidden />
                   <span className="min-w-0">
-                    <span className="block font-medium leading-none">
+                    <span className="flex items-center gap-2 font-medium leading-none">
                       {item.label}
+                      {"badge" in item && item.badge ? (
+                        <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                          {item.badge}
+                        </Badge>
+                      ) : null}
                     </span>
                     <span className="mt-1.5 block text-xs leading-snug text-[var(--muted-foreground)]">
                       {item.description}

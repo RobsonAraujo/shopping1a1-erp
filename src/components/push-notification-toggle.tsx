@@ -158,14 +158,14 @@ export function PushNotificationToggle() {
         size="sm"
         onClick={() => void (enabled ? disablePush() : enablePush())}
         disabled={disabled}
-        title={title}
+        title={title ?? statusText ?? undefined}
         aria-label={
           enabled ? "Alertas de catálogo ativos" : "Ativar alertas de catálogo"
         }
-        className="h-9 w-9 gap-0 p-0 lg:h-9 lg:w-auto lg:gap-2 lg:px-3"
+        className="h-9 w-9 shrink-0 gap-0 p-0 lg:w-auto lg:gap-2 lg:px-3"
       >
         {enabled ? <Bell className="size-4" /> : <BellOff className="size-4" />}
-        <span className="hidden lg:inline">
+        <span className="hidden max-w-[11rem] truncate lg:inline">
           {enabled ? "Alertas de catálogo ativos" : "Ativar alertas de catálogo"}
         </span>
       </Button>

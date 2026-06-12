@@ -154,3 +154,42 @@ model PushSubscription {
   @@index([mlUserId])
   @@map("push_subscriptions")
 }
+
+/// Item de custo fixo do DRE (nome global; valor por mês em DreCostMonthValue).
+model DreCostItem {
+  id          String              @id @default(cuid())
+  name        String
+  sortOrder   Int                 @default(0) @map("sort_order")
+  active      Boolean             @default(true)
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+  monthValues DreCostMonthValue[]
+
+  @@map("dre_cost_items")
+}
+
+model DreCostMonthValue {
+  id         String      @id @default(cuid())
+  costItemId String      @map("cost_item_id")
+  year       Int
+  month      Int
+  amount     Decimal     @db.Decimal(18, 2)
+  costItem   DreCostItem @relation(fields: [costItemId], references: [id], onDelete: Cascade)
+
+  @@unique([costItemId, year, month])
+  @@index([year, month])
+  @@map("dre_cost_month_values")
+}
+
+/// Snapshot mensal do DRE após sync (linhas ML + ERP + ADS).
+model DreMonthSnapshot {
+  id       String   @id @default(cuid())
+  year     Int
+  month    Int
+  syncedAt DateTime @map("synced_at")
+  payload  Json
+
+  @@unique([year, month])
+  @@index([year, month])
+  @@map("dre_month_snapshots")
+}

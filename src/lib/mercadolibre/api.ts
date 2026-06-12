@@ -197,6 +197,121 @@ export type ItemOrderMetricsByListing = {
   unitsByItem: Record<string, number>;
 };
 
+export type PaidOrderLine = {
+  itemId: string;
+  quantity: number;
+  revenue: number;
+};
+
+async function fetchOrdersInDateRange(
+  accessToken: string,
+  sellerId: number,
+  from: Date,
+  to: Date,
+  options: {
+    dateField?: SalesWindowDateField;
+    orderStatus?: string;
+  } = {},
+): Promise<OrderSearchOrder[]> {
+  const { apiBase } = getMercadoLibreConfig();
+  const fromStr = from.toISOString();
+  const toStr = to.toISOString();
+  const dateField =
+    options.dateField ?? stockPlanningConfig.salesWindowDateField;
+  const orders: OrderSearchOrder[] = [];
+  let offset = 0;
+  const limit = 50;
+  let total = Infinity;
+
+  while (offset < total) {
+    const u = new URL(`${apiBase}/orders/search`);
+    u.searchParams.set("seller", String(sellerId));
+    if (options.orderStatus) {
+      u.searchParams.set("order.status", options.orderStatus);
+    }
+    setOrderDateRange(u, dateField, fromStr, toStr);
+    u.searchParams.set("offset", String(offset));
+    u.searchParams.set("limit", String(limit));
+    u.searchParams.set("sort", "date_desc");
+    u.searchParams.set("display", "complete");
+
+    const res = await fetch(u.toString(), {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(`orders/search failed: ${res.status} ${t}`);
+    }
+
+    const data = (await res.json()) as OrderSearchResponse;
+    const reported = data.paging?.total;
+    total =
+      reported != null && reported >= 0
+        ? reported
+        : ((data.results?.length ?? 0) > 0 ? Infinity : 0);
+
+    const batch = data.results ?? [];
+    orders.push(...batch);
+
+    if (batch.length === 0) break;
+    offset += limit;
+    if (batch.length < limit) break;
+  }
+
+  return orders;
+}
+
+function paidOrderLinesFromOrders(orders: OrderSearchOrder[]): PaidOrderLine[] {
+  const lines: PaidOrderLine[] = [];
+  for (const order of orders) {
+    if (order.status === "cancelled") continue;
+    for (const line of order.order_items ?? []) {
+      const itemId = listingIdFromOrderLine(line);
+      if (!itemId) continue;
+      const quantity = quantityFromOrderLine(line);
+      const revenue = revenueFromOrderLine(line);
+      if (quantity <= 0 && revenue <= 0) continue;
+      lines.push({ itemId, quantity, revenue });
+    }
+  }
+  return lines;
+}
+
+export async function fetchPaidOrderLinesInDateRange(
+  accessToken: string,
+  sellerId: number,
+  from: Date,
+  to: Date,
+  dateField: SalesWindowDateField = stockPlanningConfig.salesWindowDateField,
+): Promise<PaidOrderLine[]> {
+  const orders = await fetchOrdersInDateRange(accessToken, sellerId, from, to, {
+    dateField,
+    orderStatus: "paid",
+  });
+  return paidOrderLinesFromOrders(orders);
+}
+
+export async function fetchCancelledOrderRevenueInDateRange(
+  accessToken: string,
+  sellerId: number,
+  from: Date,
+  to: Date,
+  dateField: SalesWindowDateField = stockPlanningConfig.salesWindowDateField,
+): Promise<number> {
+  const orders = await fetchOrdersInDateRange(accessToken, sellerId, from, to, {
+    dateField,
+    orderStatus: "cancelled",
+  });
+  let total = 0;
+  for (const order of orders) {
+    for (const line of order.order_items ?? []) {
+      total += revenueFromOrderLine(line);
+    }
+  }
+  return Math.round(total * 100) / 100;
+}
+
 /**
  * Faturamento bruto e unidades vendidas por anúncio em pedidos pagos na janela,
  * via `/orders/search` paginado (sem filtro por item).

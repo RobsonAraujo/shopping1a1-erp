@@ -14,8 +14,26 @@ function createPrismaClient(): PrismaClient {
   return new PrismaClient({ adapter });
 }
 
-export const prisma = globalForPrisma.prisma ?? createPrismaClient();
-
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
+/** Cliente em cache do hot-reload pode ser anterior ao `prisma generate` do DRE. */
+function prismaClientHasDreModels(client: PrismaClient): boolean {
+  const delegate = (
+    client as PrismaClient & {
+      dreCostItem?: { findMany?: unknown };
+    }
+  ).dreCostItem;
+  return typeof delegate?.findMany === "function";
 }
+
+function getPrismaClient(): PrismaClient {
+  const cached = globalForPrisma.prisma;
+  if (cached && prismaClientHasDreModels(cached)) {
+    return cached;
+  }
+  const client = createPrismaClient();
+  if (process.env.NODE_ENV !== "production") {
+    globalForPrisma.prisma = client;
+  }
+  return client;
+}
+
+export const prisma = getPrismaClient();

@@ -62,6 +62,24 @@ function formatYmd(parts: { year: number; month: number; day: number }): string 
   return `${parts.year}-${m}-${d}`;
 }
 
+export function getProductAdsDateRangeForMonth(
+  year: number,
+  month: number,
+  timeZone: string = reportsConfig.catalogCompetitionTimezone,
+): { dateFrom: string; dateTo: string } {
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const dateFrom = formatYmd({ year, month, day: 1 });
+
+  const todayParts = getZonedParts(new Date(), timeZone);
+  const isCurrentMonth =
+    todayParts.year === year && todayParts.month === month;
+  const dateTo = isCurrentMonth
+    ? formatYmd(todayParts)
+    : formatYmd({ year, month, day: daysInMonth });
+
+  return { dateFrom, dateTo };
+}
+
 export function getProductAdsDateRange(
   periodDays = PRODUCT_ADS_PERIOD_DAYS,
   timeZone: string = reportsConfig.catalogCompetitionTimezone,
@@ -210,4 +228,28 @@ export async function fetchProductAdsMetricsByItem(
   }
 
   return out;
+}
+
+export async function fetchTotalAdsCostForMonth(
+  accessToken: string,
+  year: number,
+  month: number,
+  siteId = "MLB",
+): Promise<number> {
+  const advertiserId = await fetchPadsAdvertiserId(accessToken, siteId);
+  if (advertiserId === null) return 0;
+
+  const { dateFrom, dateTo } = getProductAdsDateRangeForMonth(year, month);
+  const metrics = await fetchProductAdsMetricsByItem(accessToken, {
+    advertiserId,
+    siteId,
+    dateFrom,
+    dateTo,
+  });
+
+  let total = 0;
+  for (const row of metrics.values()) {
+    total += row.cost;
+  }
+  return Math.round(total * 100) / 100;
 }

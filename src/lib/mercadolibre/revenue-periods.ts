@@ -52,6 +52,58 @@ function localDateTimeToUtc(
   return new Date(utcGuess - offsetMs);
 }
 
+export function getZonedYearMonth(
+  date: Date = new Date(),
+  timeZone: string = reportsConfig.catalogCompetitionTimezone,
+): { year: number; month: number } {
+  const parts = getZonedParts(date, timeZone);
+  return { year: parts.year, month: parts.month };
+}
+
+export function isCurrentCalendarMonth(
+  year: number,
+  month: number,
+  timeZone: string = reportsConfig.catalogCompetitionTimezone,
+): boolean {
+  const now = getZonedYearMonth(new Date(), timeZone);
+  return now.year === year && now.month === month;
+}
+
+/** Intervalo UTC de um mês civil no fuso informado (mês corrente termina em `now`). */
+export function getCalendarMonthRange(
+  year: number,
+  month: number,
+  timeZone: string = reportsConfig.catalogCompetitionTimezone,
+): CalendarDateRange {
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const from = localDateTimeToUtc(year, month, 1, 0, 0, 0, 0, timeZone);
+  const isCurrent = isCurrentCalendarMonth(year, month, timeZone);
+  const to = isCurrent
+    ? new Date()
+    : localDateTimeToUtc(year, month, daysInMonth, 23, 59, 59, 999, timeZone);
+  return { from, to };
+}
+
+const MONTH_SHORT_PT = [
+  "jan.",
+  "fev.",
+  "mar.",
+  "abr.",
+  "mai.",
+  "jun.",
+  "jul.",
+  "ago.",
+  "set.",
+  "out.",
+  "nov.",
+  "dez.",
+] as const;
+
+export function formatDreMonthLabel(month: number): string {
+  if (month < 1 || month > 12) return String(month);
+  return MONTH_SHORT_PT[month - 1];
+}
+
 export function getCalendarMonthRanges(
   timeZone: string = reportsConfig.catalogCompetitionTimezone,
 ): CalendarMonthRanges {
