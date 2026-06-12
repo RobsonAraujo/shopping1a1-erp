@@ -17,6 +17,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  MaskedMoneyField,
+  MaskedPercentField,
+} from "@/components/financial-cost-input-fields";
+import {
   formatFinancialMoney,
   formatFinancialPercent,
 } from "@/lib/financial-margin";
@@ -288,26 +292,18 @@ function FinancialDetailModal({
   onSaved: () => void;
 }) {
   const labelId = useId();
-  const [lastPurchasePrice, setLastPurchasePrice] = useState(
-    row.productCost != null ? String(row.productCost) : "",
-  );
-  const [extraCosts, setExtraCosts] = useState(
-    row.extraCosts != null ? String(row.extraCosts) : "",
-  );
-  const [taxRatePercent, setTaxRatePercent] = useState(
-    row.taxRatePercent != null ? String(row.taxRatePercent) : "",
+  const [productCost, setProductCost] = useState<number | null>(row.productCost);
+  const [extraCosts, setExtraCosts] = useState<number | null>(row.extraCosts);
+  const [taxRatePercent, setTaxRatePercent] = useState<number | null>(
+    row.taxRatePercent,
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setLastPurchasePrice(
-      row.productCost != null ? String(row.productCost) : "",
-    );
-    setExtraCosts(row.extraCosts != null ? String(row.extraCosts) : "");
-    setTaxRatePercent(
-      row.taxRatePercent != null ? String(row.taxRatePercent) : "",
-    );
+    setProductCost(row.productCost);
+    setExtraCosts(row.extraCosts);
+    setTaxRatePercent(row.taxRatePercent);
   }, [row.mlItemId, row.productCost, row.extraCosts, row.taxRatePercent]);
 
   const handleBackdrop = useCallback(
@@ -325,36 +321,7 @@ function FinancialDetailModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  function parseOptionalMoney(value: string): number | null | "invalid" {
-    const trimmed = value.trim();
-    if (trimmed === "") return null;
-    const n = Number(trimmed.replace(",", "."));
-    if (!Number.isFinite(n) || n < 0) return "invalid";
-    return n;
-  }
-
-  function parseOptionalPercent(value: string): number | null | "invalid" {
-    const trimmed = value.trim();
-    if (trimmed === "") return null;
-    const n = Number(trimmed.replace(",", "."));
-    if (!Number.isFinite(n) || n < 0 || n > 100) return "invalid";
-    return n;
-  }
-
   async function submit() {
-    const productCost = parseOptionalMoney(lastPurchasePrice);
-    const extras = parseOptionalMoney(extraCosts);
-    const tax = parseOptionalPercent(taxRatePercent);
-
-    if (
-      productCost === "invalid" ||
-      extras === "invalid" ||
-      tax === "invalid"
-    ) {
-      setError("Informe valores válidos ou deixe em branco.");
-      return;
-    }
-
     setError(null);
     setSaving(true);
     try {
@@ -365,8 +332,8 @@ function FinancialDetailModal({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             lastPurchasePrice: productCost,
-            extraCosts: extras,
-            taxRatePercent: tax,
+            extraCosts,
+            taxRatePercent,
           }),
         },
       );
@@ -502,51 +469,27 @@ function FinancialDetailModal({
           <div className="mt-6 space-y-3 border-t border-[var(--border)] pt-6">
             <h3 className="text-sm font-semibold">Custos editáveis</h3>
             <div className="grid gap-3 sm:grid-cols-3">
-              <div className="space-y-1">
-                <label
-                  htmlFor="product-cost"
-                  className="block text-sm font-medium"
-                >
-                  Custo do produto (R$)
-                </label>
-                <input
-                  id="product-cost"
-                  type="text"
-                  inputMode="decimal"
-                  value={lastPurchasePrice}
-                  onChange={(e) => setLastPurchasePrice(e.target.value)}
-                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
-                />
-              </div>
-              <div className="space-y-1">
-                <label
-                  htmlFor="extra-costs"
-                  className="block text-sm font-medium"
-                >
-                  Custos extras (R$)
-                </label>
-                <input
-                  id="extra-costs"
-                  type="text"
-                  inputMode="decimal"
-                  value={extraCosts}
-                  onChange={(e) => setExtraCosts(e.target.value)}
-                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
-                />
-              </div>
-              <div className="space-y-1">
-                <label htmlFor="tax-rate" className="block text-sm font-medium">
-                  Alíquota impostos (%)
-                </label>
-                <input
-                  id="tax-rate"
-                  type="text"
-                  inputMode="decimal"
-                  value={taxRatePercent}
-                  onChange={(e) => setTaxRatePercent(e.target.value)}
-                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
-                />
-              </div>
+              <MaskedMoneyField
+                key={`product-cost-${row.mlItemId}`}
+                id="product-cost"
+                label="Custo do produto"
+                value={productCost}
+                onValueChange={setProductCost}
+              />
+              <MaskedMoneyField
+                key={`extra-costs-${row.mlItemId}`}
+                id="extra-costs"
+                label="Custos extras"
+                value={extraCosts}
+                onValueChange={setExtraCosts}
+              />
+              <MaskedPercentField
+                key={`tax-rate-${row.mlItemId}`}
+                id="tax-rate"
+                label="Alíquota impostos"
+                value={taxRatePercent}
+                onValueChange={setTaxRatePercent}
+              />
             </div>
           </div>
 
