@@ -94,7 +94,12 @@ export function FinancialEvaluationClient() {
     <div className="space-y-6">
       <Card className="border-[var(--border)]">
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0 pb-4">
-          <CardTitle className="text-lg">Anúncios ativos e pausados</CardTitle>
+          <div>
+            <CardTitle className="text-lg">Anúncios ativos e pausados</CardTitle>
+            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+              Margem pós ADS usa TACOS dos últimos 7 dias (Product Ads ML).
+            </p>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <ItemListSearch
               value={searchQuery}
@@ -138,7 +143,7 @@ export function FinancialEvaluationClient() {
 
           {data && filteredItems.length > 0 ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] border-collapse text-sm">
+              <table className="w-full min-w-[900px] border-collapse text-sm">
                 <thead>
                   <tr className="border-b border-[var(--border)] text-left text-[var(--muted-foreground)]">
                     <th className="px-2 py-2 font-medium">Produto</th>
@@ -150,12 +155,23 @@ export function FinancialEvaluationClient() {
                     <th className="px-2 py-2 font-medium text-right">
                       Margem R$
                     </th>
+                    <th
+                      className="px-2 py-2 font-medium text-right"
+                      title="Margem de contribuição menos TACOS (últimos 7 dias)"
+                    >
+                      Pós ADS %
+                    </th>
+                    <th className="px-2 py-2 font-medium text-right">
+                      Pós ADS R$
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredItems.map((row) => {
                     const marginValue = row.breakdown?.marginValue ?? null;
                     const marginPercent = row.breakdown?.marginPercent ?? null;
+                    const afterAdsPercent = row.marginAfterAdsPercent;
+                    const afterAdsValue = row.marginAfterAdsValue;
                     return (
                       <tr
                         key={row.mlItemId}
@@ -211,6 +227,33 @@ export function FinancialEvaluationClient() {
                           )}
                         >
                           {formatFinancialMoney(marginValue)}
+                        </td>
+                        <td
+                          className={cn(
+                            "px-2 py-3 text-right font-medium",
+                            marginTone(afterAdsPercent),
+                          )}
+                        >
+                          {row.adsMetricsAvailable
+                            ? formatFinancialPercent(afterAdsPercent)
+                            : "—"}
+                          {row.adsMetricsAvailable &&
+                          row.tacosPercent != null &&
+                          row.tacosPercent > 0 ? (
+                            <div className="text-xs font-normal text-[var(--muted-foreground)]">
+                              TACOS {formatFinancialPercent(row.tacosPercent)}
+                            </div>
+                          ) : null}
+                        </td>
+                        <td
+                          className={cn(
+                            "px-2 py-3 text-right font-medium",
+                            marginTone(afterAdsValue),
+                          )}
+                        >
+                          {row.adsMetricsAvailable
+                            ? formatFinancialMoney(afterAdsValue)
+                            : "—"}
                         </td>
                       </tr>
                     );
@@ -399,6 +442,28 @@ function FinancialDetailModal({
             </div>
           ) : null}
 
+          {row.adsMetricsAvailable ? (
+            <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--muted)]/20 px-3 py-2 text-sm">
+              <span className="font-medium">Product Ads</span>
+              <span className="text-[var(--muted-foreground)]">
+                {" "}
+                · últimos {row.adsPeriodDays} dias
+                {row.tacosPercent != null
+                  ? ` · TACOS ${formatFinancialPercent(row.tacosPercent)}`
+                  : ""}
+                {row.acosPercent != null
+                  ? ` · ACOS ${formatFinancialPercent(row.acosPercent)}`
+                  : ""}
+                {row.adsCost != null && row.adsCost > 0
+                  ? ` · gasto ${formatFinancialMoney(row.adsCost)}`
+                  : ""}
+                {row.adsCostPerUnit != null && row.adsCostPerUnit > 0
+                  ? ` · ${formatFinancialMoney(row.adsCostPerUnit)}/un.`
+                  : ""}
+              </span>
+            </div>
+          ) : null}
+
           {row.breakdown ? (
             <div className="mt-6 overflow-x-auto">
               <table className="w-full border-collapse text-sm">
@@ -415,7 +480,9 @@ function FinancialDetailModal({
                       key={line.key}
                       className={cn(
                         "border-b border-[var(--border)]",
-                        line.key === "margin" && "font-semibold",
+                        (line.key === "margin" || line.key === "marginAfterAds") &&
+                          "font-semibold",
+                        line.key === "ads" && "text-[var(--muted-foreground)]",
                       )}
                     >
                       <td className="py-2 pr-4">{line.label}</td>

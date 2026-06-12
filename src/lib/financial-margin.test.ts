@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { computeFinancialMargin, roundMoney } from "./financial-margin";
+import {
+  computeFinancialMargin,
+  computeMarginAfterAds,
+  roundMoney,
+} from "./financial-margin";
 
 describe("computeFinancialMargin", () => {
   it("calculates Cabo 10m example margins", () => {
@@ -37,5 +41,51 @@ describe("computeFinancialMargin", () => {
     assert.equal(result.isComplete, false);
     assert.ok(result.missingFields.includes("productCost"));
     assert.equal(result.marginValue, roundMoney(100 - (10 + 5 + 0 + 10)));
+  });
+});
+
+describe("computeMarginAfterAds", () => {
+  it("subtracts TACOS from margin percent for table display", () => {
+    const margin = computeFinancialMargin({
+      salePrice: 100,
+      mlFeeAmount: 10,
+      shippingCost: 5,
+      productCost: 50,
+      extraCosts: 0,
+      taxRatePercent: 0,
+    });
+
+    const afterAds = computeMarginAfterAds({
+      marginBreakdown: margin,
+      tacosPercent: 7,
+      adsCost: 7,
+      unitsSold: 1,
+    });
+
+    assert.ok(afterAds);
+    assert.equal(afterAds.marginAfterAdsPercent, 28);
+    assert.equal(afterAds.marginAfterAdsValue, 28);
+  });
+
+  it("returns zero ads deduction when TACOS is zero", () => {
+    const margin = computeFinancialMargin({
+      salePrice: 33.17,
+      mlFeeAmount: 4.31,
+      shippingCost: 6.65,
+      productCost: 11.97,
+      extraCosts: 0.3,
+      taxRatePercent: 12.25,
+    });
+
+    const afterAds = computeMarginAfterAds({
+      marginBreakdown: margin,
+      tacosPercent: 0,
+      adsCost: 0,
+      unitsSold: 0,
+    });
+
+    assert.ok(afterAds);
+    assert.equal(afterAds.marginAfterAdsPercent, margin.marginPercent);
+    assert.equal(afterAds.marginAfterAdsValue, margin.marginValue);
   });
 });

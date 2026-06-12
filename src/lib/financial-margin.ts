@@ -6,7 +6,9 @@ export type FinancialMarginLineKey =
   | "tax"
   | "totalCosts"
   | "salePrice"
-  | "margin";
+  | "margin"
+  | "ads"
+  | "marginAfterAds";
 
 export type FinancialMarginLine = {
   key: FinancialMarginLineKey;
@@ -162,5 +164,81 @@ export function computeFinancialMargin(
     listingTypeLabel: input.listingTypeLabel ?? null,
     isComplete: missingFields.length === 0,
     missingFields,
+  };
+}
+
+export type MarginAfterAdsInput = {
+  marginBreakdown: FinancialMarginBreakdown;
+  tacosPercent: number | null;
+  adsCost: number | null;
+  unitsSold: number | null;
+};
+
+export type MarginAfterAdsResult = {
+  marginAfterAdsPercent: number | null;
+  marginAfterAdsValue: number | null;
+  adsCostPerUnit: number | null;
+  adsCostImputed: number | null;
+  extendedLines: FinancialMarginLine[];
+};
+
+export function computeMarginAfterAds(
+  input: MarginAfterAdsInput,
+): MarginAfterAdsResult | null {
+  const { marginBreakdown, tacosPercent, adsCost, unitsSold } = input;
+  const salePrice = marginBreakdown.salePrice;
+  const marginPercent = marginBreakdown.marginPercent;
+  const marginValue = marginBreakdown.marginValue;
+
+  if (marginPercent === null) {
+    return null;
+  }
+
+  const tacos = tacosPercent ?? 0;
+  const marginAfterAdsPercent =
+    marginPercent !== null ? roundMoney(marginPercent - tacos) : null;
+
+  let adsCostPerUnit: number | null = null;
+  let adsCostImputed: number | null = null;
+
+  if (adsCost !== null && adsCost > 0) {
+    if (unitsSold !== null && unitsSold > 0) {
+      adsCostPerUnit = roundMoney(adsCost / unitsSold);
+    }
+    if (salePrice > 0 && tacosPercent !== null) {
+      adsCostImputed = roundMoney(salePrice * (tacosPercent / 100));
+    }
+  } else {
+    adsCostImputed = 0;
+    adsCostPerUnit = 0;
+  }
+
+  const adsDeduction =
+    adsCostPerUnit !== null && adsCostPerUnit > 0
+      ? adsCostPerUnit
+      : (adsCostImputed ?? 0);
+
+  const marginAfterAdsValue = roundMoney(marginValue - adsDeduction);
+
+  const adsLine: FinancialMarginLine = {
+    key: "ads",
+    label: "Publicidade (TACOS)",
+    value: adsDeduction,
+    percentOfSale: percentOfSale(adsDeduction, salePrice),
+  };
+
+  const marginAfterAdsLine: FinancialMarginLine = {
+    key: "marginAfterAds",
+    label: "Margem após ADS",
+    value: marginAfterAdsValue,
+    percentOfSale: percentOfSale(marginAfterAdsValue, salePrice),
+  };
+
+  return {
+    marginAfterAdsPercent,
+    marginAfterAdsValue,
+    adsCostPerUnit,
+    adsCostImputed,
+    extendedLines: [...marginBreakdown.lines, adsLine, marginAfterAdsLine],
   };
 }

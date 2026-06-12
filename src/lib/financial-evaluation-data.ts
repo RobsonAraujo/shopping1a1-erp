@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import {
   computeFinancialMargin,
+  computeMarginAfterAds,
   listingTypeLabelFromId,
   type FinancialMarginBreakdown,
 } from "@/lib/financial-margin";
@@ -16,6 +17,13 @@ import {
   siteIdFromItemId,
 } from "@/lib/mercadolibre/listing-fees";
 import { fetchItemSalePrice } from "@/lib/mercadolibre/item-sale-price";
+import {
+  fetchPadsAdvertiserId,
+  fetchProductAdsMetricsByItem,
+  getProductAdsDateRange,
+  PRODUCT_ADS_PERIOD_DAYS,
+  type ItemAdMetrics,
+} from "@/lib/mercadolibre/product-ads-metrics";
 import { fetchSellerShippingCost } from "@/lib/mercadolibre/seller-shipping-cost";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 
@@ -37,6 +45,17 @@ export type FinancialEvaluationRow = {
   mlFeeAmount: number | null;
   shippingCost: number | null;
   breakdown: FinancialMarginBreakdown | null;
+  acosPercent: number | null;
+  tacosPercent: number | null;
+  adsCost: number | null;
+  adsUnitsSold: number | null;
+  adsCostPerUnit: number | null;
+  adsPeriodDays: number;
+  marginAfterAdsPercent: number | null;
+  marginAfterAdsValue: number | null;
+  hasActiveAds: boolean;
+  adsStatus: string | null;
+  adsMetricsAvailable: boolean;
   errors: string[];
   warnings: string[];
 };
@@ -76,6 +95,122 @@ function isOperationalStatus(status: string | undefined): boolean {
   return status === "active" || status === "paused";
 }
 
+function applyAdsToRow(
+  row: Omit<
+    FinancialEvaluationRow,
+    | "acosPercent"
+    | "tacosPercent"
+    | "adsCost"
+    | "adsUnitsSold"
+    | "adsCostPerUnit"
+    | "adsPeriodDays"
+    | "marginAfterAdsPercent"
+    | "marginAfterAdsValue"
+    | "hasActiveAds"
+    | "adsStatus"
+    | "adsMetricsAvailable"
+  >,
+  adMetrics: ItemAdMetrics | undefined,
+  adsMetricsAvailable: boolean,
+): FinancialEvaluationRow {
+  const warnings = [...row.warnings];
+
+  if (!adsMetricsAvailable) {
+    return {
+      ...row,
+      acosPercent: null,
+      tacosPercent: null,
+      adsCost: null,
+      adsUnitsSold: null,
+      adsCostPerUnit: null,
+      adsPeriodDays: PRODUCT_ADS_PERIOD_DAYS,
+      marginAfterAdsPercent: null,
+      marginAfterAdsValue: null,
+      hasActiveAds: false,
+      adsStatus: null,
+      adsMetricsAvailable: false,
+      warnings,
+    };
+  }
+
+  if (!adMetrics) {
+    warnings.push("Sem Product Ads no período (TACOS considerado 0%).");
+    const afterAds =
+      row.breakdown &&
+      computeMarginAfterAds({
+        marginBreakdown: row.breakdown,
+        tacosPercent: 0,
+        adsCost: 0,
+        unitsSold: 0,
+      });
+
+    return {
+      ...row,
+      breakdown: afterAds
+        ? { ...row.breakdown!, lines: afterAds.extendedLines }
+        : row.breakdown,
+      acosPercent: null,
+      tacosPercent: 0,
+      adsCost: 0,
+      adsUnitsSold: 0,
+      adsCostPerUnit: 0,
+      adsPeriodDays: PRODUCT_ADS_PERIOD_DAYS,
+      marginAfterAdsPercent: afterAds?.marginAfterAdsPercent ?? null,
+      marginAfterAdsValue: afterAds?.marginAfterAdsValue ?? null,
+      hasActiveAds: false,
+      adsStatus: null,
+      adsMetricsAvailable: true,
+      warnings,
+    };
+  }
+
+  const hasActiveAds =
+    adMetrics.status === "active" || adMetrics.status === "paused";
+  const tacosPercent = adMetrics.tacosPercent;
+
+  if (adMetrics.cost > 0 && tacosPercent === null) {
+    warnings.push("Gasto em ADS sem vendas no período; TACOS indisponível.");
+  }
+  if (
+    adMetrics.unitsQuantity > 0 &&
+    adMetrics.unitsQuantity < 3 &&
+    tacosPercent !== null
+  ) {
+    warnings.push("Poucas vendas no período; TACOS pode variar bastante.");
+  }
+  if (adMetrics.status === "idle") {
+    warnings.push("Anúncio disponível para ADS, mas sem campanha ativa.");
+  }
+
+  const afterAds =
+    row.breakdown &&
+    computeMarginAfterAds({
+      marginBreakdown: row.breakdown,
+      tacosPercent: tacosPercent ?? 0,
+      adsCost: adMetrics.cost,
+      unitsSold: adMetrics.unitsQuantity,
+    });
+
+  return {
+    ...row,
+    breakdown: afterAds
+      ? { ...row.breakdown!, lines: afterAds.extendedLines }
+      : row.breakdown,
+    acosPercent: adMetrics.acosPercent,
+    tacosPercent,
+    adsCost: adMetrics.cost,
+    adsUnitsSold: adMetrics.unitsQuantity,
+    adsCostPerUnit: afterAds?.adsCostPerUnit ?? null,
+    adsPeriodDays: PRODUCT_ADS_PERIOD_DAYS,
+    marginAfterAdsPercent: afterAds?.marginAfterAdsPercent ?? null,
+    marginAfterAdsValue: afterAds?.marginAfterAdsValue ?? null,
+    hasActiveAds,
+    adsStatus: adMetrics.status,
+    adsMetricsAvailable: true,
+    warnings,
+  };
+}
+
 async function buildRowForItem(
   accessToken: string,
   userId: number,
@@ -85,7 +220,22 @@ async function buildRowForItem(
     extraCosts: unknown;
     taxRatePercent: unknown;
   } | null,
-): Promise<FinancialEvaluationRow> {
+): Promise<
+  Omit<
+    FinancialEvaluationRow,
+    | "acosPercent"
+    | "tacosPercent"
+    | "adsCost"
+    | "adsUnitsSold"
+    | "adsCostPerUnit"
+    | "adsPeriodDays"
+    | "marginAfterAdsPercent"
+    | "marginAfterAdsValue"
+    | "hasActiveAds"
+    | "adsStatus"
+    | "adsMetricsAvailable"
+  >
+> {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -204,6 +354,31 @@ async function buildRowForItem(
   };
 }
 
+async function loadAdsMetricsByItem(
+  accessToken: string,
+  siteId: string,
+  itemIds?: string[],
+): Promise<{ map: Map<string, ItemAdMetrics>; available: boolean }> {
+  try {
+    const advertiserId = await fetchPadsAdvertiserId(accessToken, siteId);
+    if (!advertiserId) {
+      return { map: new Map(), available: true };
+    }
+
+    const { dateFrom, dateTo } = getProductAdsDateRange();
+    const map = await fetchProductAdsMetricsByItem(accessToken, {
+      advertiserId,
+      siteId,
+      dateFrom,
+      dateTo,
+      itemIds,
+    });
+    return { map, available: true };
+  } catch {
+    return { map: new Map(), available: false };
+  }
+}
+
 export async function loadFinancialEvaluationRows(
   accessToken: string,
   userId: number,
@@ -216,7 +391,11 @@ export async function loadFinancialEvaluationRows(
 
   if (listingIds.length === 0) return [];
 
-  const [items, stockRows] = await Promise.all([
+  const siteId = listingIds[0]
+    ? siteIdFromItemId(listingIds[0])
+    : "MLB";
+
+  const [items, stockRows, adsLoad] = await Promise.all([
     fetchItemsByIdsBatched(accessToken, listingIds),
     prisma.warehouseStock.findMany({
       where: { mlItemId: { in: listingIds } },
@@ -227,6 +406,7 @@ export async function loadFinancialEvaluationRows(
         taxRatePercent: true,
       },
     }),
+    loadAdsMetricsByItem(accessToken, siteId, listingIds),
   ]);
 
   const stockByItemId = new Map(stockRows.map((row) => [row.mlItemId, row]));
@@ -234,7 +414,7 @@ export async function loadFinancialEvaluationRows(
     isOperationalStatus(item.status),
   );
 
-  const rows = await mapWithConcurrency(
+  const baseRows = await mapWithConcurrency(
     operationalItems,
     5,
     async (item) =>
@@ -245,6 +425,20 @@ export async function loadFinancialEvaluationRows(
         stockByItemId.get(item.id) ?? null,
       ),
   );
+
+  const rows = baseRows.map((row) => {
+    const withAds = applyAdsToRow(
+      row,
+      adsLoad.map.get(row.mlItemId),
+      adsLoad.available,
+    );
+    if (!adsLoad.available) {
+      withAds.warnings.push(
+        "Métricas de Product Ads indisponíveis; margem pós ADS não calculada.",
+      );
+    }
+    return withAds;
+  });
 
   return rows.sort((a, b) => {
     const keyA = (a.sku ?? a.title ?? a.mlItemId).toLowerCase();
