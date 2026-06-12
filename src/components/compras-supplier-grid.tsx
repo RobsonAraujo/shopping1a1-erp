@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   AlertTriangle,
   ChevronRight,
@@ -21,6 +21,11 @@ import {
   PurchaseCoverageBufferControl,
   usePurchaseCoverageBufferDays,
 } from "@/components/purchase-coverage-buffer";
+import {
+  ItemListSearch,
+  itemListSearchEmptyMessage,
+} from "@/components/item-list-search";
+import { normalizeItemListSearchQuery } from "@/lib/item-list-search";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -107,6 +112,15 @@ export function ComprasSupplierGrid({
   rows,
 }: ComprasSupplierGridProps) {
   const { bufferDays, setBufferDays } = usePurchaseCoverageBufferDays();
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredSummaries = useMemo(() => {
+    const normalized = normalizeItemListSearchQuery(searchQuery);
+    if (!normalized) return summaries;
+    return summaries.filter((summary) =>
+      summary.supplier.toLowerCase().includes(normalized),
+    );
+  }, [summaries, searchQuery]);
 
   const suggestedBySupplier = useMemo(() => {
     const map = new Map<string, number>();
@@ -182,8 +196,11 @@ export function ComprasSupplierGrid({
               Fornecedores
             </h2>
             <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-              {summaries.length}{" "}
-              {summaries.length === 1 ? "fornecedor" : "fornecedores"}
+              {filteredSummaries.length}{" "}
+              {filteredSummaries.length === 1 ? "fornecedor" : "fornecedores"}
+              {searchQuery.trim() && filteredSummaries.length !== summaries.length
+                ? ` (de ${summaries.length})`
+                : ""}
               {overview.alertCount > 0
                 ? ` · ${overview.alertCount} com alerta de compra`
                 : ""}
@@ -191,8 +208,23 @@ export function ComprasSupplierGrid({
           </div>
         </div>
 
+        <ItemListSearch
+          value={searchQuery}
+          onChange={setSearchQuery}
+          filteredCount={filteredSummaries.length}
+          totalCount={summaries.length}
+          placeholder="Buscar fornecedor…"
+          entitySingular="fornecedor"
+          entityPlural="fornecedores"
+        />
+
+        {filteredSummaries.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--muted)]/30 px-4 py-8 text-center text-sm text-[var(--muted-foreground)]">
+            {itemListSearchEmptyMessage(searchQuery, "fornecedor")}
+          </p>
+        ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {summaries.map((summary) => {
+          {filteredSummaries.map((summary) => {
             const hasAlert = summary.hasActiveAlert;
             const suggestedUnitsTotal =
               suggestedBySupplier.get(summary.supplier) ??
@@ -282,6 +314,7 @@ export function ComprasSupplierGrid({
             );
           })}
         </div>
+        )}
       </section>
     </div>
   );

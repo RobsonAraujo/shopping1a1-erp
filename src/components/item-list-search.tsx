@@ -13,6 +13,8 @@ type ItemListSearchProps = {
   filteredCount?: number;
   totalCount?: number;
   placeholder?: string;
+  entitySingular?: string;
+  entityPlural?: string;
   className?: string;
 };
 
@@ -22,6 +24,8 @@ export function ItemListSearch({
   filteredCount,
   totalCount,
   placeholder = "Buscar por SKU, nome ou ID MLB…",
+  entitySingular = "anúncio",
+  entityPlural = "anúncios",
   className,
 }: ItemListSearchProps) {
   const inputId = useId();
@@ -62,16 +66,19 @@ export function ItemListSearch({
       </div>
       {showCount ? (
         <p className="text-xs text-[var(--muted-foreground)]">
-          {filteredCount} de {totalCount} anúncio
-          {totalCount === 1 ? "" : "s"}
+          {filteredCount} de {totalCount}{" "}
+          {totalCount === 1 ? entitySingular : entityPlural}
         </p>
       ) : null}
     </div>
   );
 }
 
-export function itemListSearchEmptyMessage(query: string): string {
+export function itemListSearchEmptyMessage(
+  query: string,
+  entitySingular = "anúncio",
+): string {
   const trimmed = query.trim();
-  if (!trimmed) return "Nenhum anúncio nesta lista.";
-  return `Nenhum anúncio encontrado para "${trimmed}".`;
+  if (!trimmed) return `Nenhum ${entitySingular} nesta lista.`;
+  return `Nenhum resultado encontrado para "${trimmed}".`;
 }
