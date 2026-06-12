@@ -611,7 +611,10 @@ export function SupplierPurchaseAnalysisTable({
                               className="h-auto min-h-8 max-w-[5.5rem] shrink gap-1 whitespace-normal px-1.5 py-1.5 text-center leading-tight"
                               asChild
                             >
-                              <Link href={catalogReportHref(row.item.id)}>
+                              <Link
+                                href={catalogReportHref(row.item.id)}
+                                target="blank"
+                              >
                                 <LineChart
                                   className="size-3.5 shrink-0"
                                   aria-hidden
