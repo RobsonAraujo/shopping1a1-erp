@@ -25,6 +25,11 @@ import {
   valueToneClass,
   type DreTableRow,
 } from "@/lib/dre-table-rows";
+import { reportsConfig } from "@/config/reports";
+import {
+  formatCalendarRangeYmd,
+  getCalendarMonthRange,
+} from "@/lib/mercadolibre/revenue-periods";
 import { cn } from "@/lib/utils";
 
 type DreYearTableProps = {
@@ -114,19 +119,34 @@ function MonthAlertsTooltip({
 }
 
 function MonthSyncTooltip({
+  year,
   month,
   children,
 }: {
+  year: number;
   month: DreMonthView;
   children: ReactNode;
 }) {
+  const civilRange = getCalendarMonthRange(
+    year,
+    month.month,
+    reportsConfig.catalogCompetitionTimezone,
+  );
+  const civilPeriod = formatCalendarRangeYmd(
+    civilRange,
+    reportsConfig.catalogCompetitionTimezone,
+  );
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>{children}</TooltipTrigger>
       <TooltipContent side="bottom" align="center" className="text-left">
         <p className="font-medium">{month.label}</p>
         <p className="mt-1 text-[var(--muted-foreground)]">
-          {formatSyncTime(month.syncedAt)}
+          Período civil: {civilPeriod.from} → {civilPeriod.to}
+        </p>
+        <p className="mt-1 text-[var(--muted-foreground)]">
+          Sync: {formatSyncTime(month.syncedAt)}
         </p>
         {month.isCurrentMonth ? (
           <p className="mt-1 text-[var(--muted-foreground)]">Mês atual</p>
@@ -413,10 +433,12 @@ function getYearTotalForRow(
 }
 
 function MonthHeaderCell({
+  year,
   month,
   syncing,
   onSync,
 }: {
+  year: number;
   month: DreMonthView;
   syncing: boolean;
   onSync: () => void;
@@ -432,7 +454,7 @@ function MonthHeaderCell({
       )}
     >
       <div className="flex items-center justify-center gap-0.5">
-        <MonthSyncTooltip month={month}>
+        <MonthSyncTooltip year={year} month={month}>
           <span
             className={cn(
               "cursor-default text-[10px] font-semibold tracking-wider text-[var(--muted-foreground)]",
@@ -500,6 +522,7 @@ export function DreYearTable({
             {data.months.map((month) => (
               <MonthHeaderCell
                 key={month.month}
+                year={data.year}
                 month={month}
                 syncing={syncingMonths.has(month.month)}
                 onSync={() => onSyncMonth(month.month)}

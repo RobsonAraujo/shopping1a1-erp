@@ -1,4 +1,5 @@
 import { stockPlanningConfig } from "@/config/stock-planning";
+import { reportsConfig } from "@/config/reports";
 import { prisma } from "@/lib/db";
 import { logServerError } from "@/lib/server-public-error";
 import {
@@ -22,9 +23,10 @@ import {
 } from "@/lib/mercadolibre/listing-fees";
 import { fetchTotalAdsCostForMonth } from "@/lib/mercadolibre/product-ads-metrics";
 import {
+  formatCalendarRangeYmd,
   getCalendarMonthRange,
   isCurrentCalendarMonth,
-  type CalendarDateRange,
+  isMlBillingPeriodCivilMonth,
 } from "@/lib/mercadolibre/revenue-periods";
 import { fetchSellerShippingCost } from "@/lib/mercadolibre/seller-shipping-cost";
 
@@ -209,7 +211,8 @@ export async function buildDreMonthSnapshot(
   year: number,
   month: number,
 ): Promise<DreMonthSnapshotPayload> {
-  const calendarRange = getCalendarMonthRange(year, month);
+  const timeZone = reportsConfig.catalogCompetitionTimezone;
+  const calendarRange = getCalendarMonthRange(year, month, timeZone);
   const syncWarnings: string[] = [];
 
   let billing: Awaited<ReturnType<typeof fetchMlBillingSummaryForMonth>> = null;
@@ -222,45 +225,40 @@ export async function buildDreMonthSnapshot(
     );
   }
 
-  const orderRange = billing?.billingPeriod ?? calendarRange;
+  const billingAlignsWithCivil =
+    billing?.billingPeriod !== null &&
+    billing?.billingPeriod !== undefined &&
+    isMlBillingPeriodCivilMonth(
+      billing.billingPeriod,
+      year,
+      month,
+      timeZone,
+    );
+
+  if (billing?.billingPeriod && !billingAlignsWithCivil) {
+    const mlPeriod = formatCalendarRangeYmd(billing.billingPeriod, timeZone);
+    syncWarnings.push(
+      `Fatura ML (key ${year}-${String(month).padStart(2, "0")}-01) cobre ${mlPeriod.from} → ${mlPeriod.to}; tarifas e frete vêm dos pedidos do mês civil.`,
+    );
+  }
+
   const { orderLines, revenueMl: ordersRevenueMl } =
-    await fetchOrderDataForRange(accessToken, sellerId, orderRange);
+    await fetchOrderDataForRange(accessToken, sellerId, calendarRange);
+
+  const revenueMl = ordersRevenueMl;
 
   let adsCost = 0;
-  if (billing && billing.adsCost > 0) {
-    adsCost = billing.adsCost;
-  } else {
-    try {
-      adsCost = await fetchTotalAdsCostForMonth(accessToken, year, month);
-    } catch (error) {
-      logServerError("dre-month-data ads", error);
+  try {
+    adsCost = await fetchTotalAdsCostForMonth(accessToken, year, month);
+  } catch (error) {
+    logServerError("dre-month-data ads", error);
+    if (billing && billing.adsCost > 0 && billingAlignsWithCivil) {
+      adsCost = billing.adsCost;
+    } else {
       syncWarnings.push(
         "Não foi possível carregar o gasto com campanhas ADS neste mês.",
       );
     }
-  }
-
-  const revenueMl =
-    billing?.revenueMl !== null && billing?.revenueMl !== undefined
-      ? billing.revenueMl
-      : ordersRevenueMl;
-
-  if (
-    billing?.revenueMl !== null &&
-    billing?.revenueMl !== undefined &&
-    Math.abs(billing.revenueMl - ordersRevenueMl) > 1
-  ) {
-    syncWarnings.push(
-      "Faturamento alinhado ao período de faturamento ML (pode diferir do mês civil).",
-    );
-  }
-
-  if (billing?.billingPeriod) {
-    const from = billing.billingPeriod.from.toISOString().slice(0, 10);
-    const to = billing.billingPeriod.to.toISOString().slice(0, 10);
-    syncWarnings.push(
-      `Período de faturamento ML: ${from} → ${to} (key ${year}-${String(month).padStart(2, "0")}-01).`,
-    );
   }
 
   const erpCosts = await computeErpCostsFromOrderLines(orderLines);
@@ -278,7 +276,7 @@ export async function buildDreMonthSnapshot(
   const billingHasMappedLines =
     billing !== null && !isBillingSummaryEmpty(billing);
 
-  if (billingHasMappedLines) {
+  if (billingHasMappedLines && billingAlignsWithCivil) {
     billingSource = "billing";
     saleFeeMl = billing!.saleFee;
     sellerShippingMl = billing!.sellerShipping;
@@ -301,6 +299,32 @@ export async function buildDreMonthSnapshot(
     if (isPartial) {
       isPartial = saleFeeMl === 0 && sellerShippingMl === 0;
     }
+  } else if (billingHasMappedLines && !billingAlignsWithCivil) {
+    billingSource = "fallback";
+    try {
+      const fallback = await estimateMlCostsFallback(
+        accessToken,
+        sellerId,
+        calendarRange.from,
+        calendarRange.to,
+        orderLines,
+      );
+      saleFeeMl = fallback.saleFeeMl;
+      sellerShippingMl = fallback.sellerShippingMl;
+      cancelledSalesMl = fallback.cancelledSalesMl;
+      partialReturnsMl = fallback.partialReturnsMl;
+      fullShippingMl = billing!.fullShipping;
+      fullStorageMl = billing!.fullStorage;
+      fullNonComplianceMl = billing!.fullNonCompliance;
+      syncWarnings.push(
+        "Custos Full (envios, armazenamento, inconformidades) da fatura ML do ciclo próximo a este mês.",
+      );
+    } catch (error) {
+      logServerError("dre-month-data ml-fallback", error);
+      syncWarnings.push(
+        "Não foi possível estimar tarifas e frete do Mercado Livre.",
+      );
+    }
   } else {
     if (billing !== null && revenueMl > 0) {
       syncWarnings.push(
@@ -316,8 +340,8 @@ export async function buildDreMonthSnapshot(
       const fallback = await estimateMlCostsFallback(
         accessToken,
         sellerId,
-        orderRange.from,
-        orderRange.to,
+        calendarRange.from,
+        calendarRange.to,
         orderLines,
       );
       saleFeeMl = fallback.saleFeeMl;

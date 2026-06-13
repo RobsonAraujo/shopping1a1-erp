@@ -104,6 +104,34 @@ export function getCalendarMonthRange(
   return { from, to };
 }
 
+/** Formata intervalo como YYYY-MM-DD no fuso informado. */
+export function formatCalendarRangeYmd(
+  range: CalendarDateRange,
+  timeZone: string = reportsConfig.catalogCompetitionTimezone,
+): { from: string; to: string } {
+  const fmt = (date: Date) =>
+    date.toLocaleDateString("en-CA", { timeZone });
+  return { from: fmt(range.from), to: fmt(range.to) };
+}
+
+/**
+ * O DRE usa mês civil (dia 1 → último dia). O ciclo de faturamento ML costuma
+ * ser deslocado (ex.: 05/12 → 05/01 para a key 2026-01-01).
+ */
+export function isMlBillingPeriodCivilMonth(
+  billingPeriod: CalendarDateRange,
+  year: number,
+  month: number,
+  timeZone: string = reportsConfig.catalogCompetitionTimezone,
+): boolean {
+  const civil = formatCalendarRangeYmd(
+    getCalendarMonthRange(year, month, timeZone),
+    timeZone,
+  );
+  const billing = formatCalendarRangeYmd(billingPeriod, timeZone);
+  return civil.from === billing.from && civil.to === billing.to;
+}
+
 const MONTH_SHORT_PT = [
   "jan.",
   "fev.",
