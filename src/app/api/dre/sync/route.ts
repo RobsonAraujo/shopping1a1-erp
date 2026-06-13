@@ -10,6 +10,7 @@ import {
   getValidAccessToken,
   readSession,
 } from "@/lib/mercadolibre/session";
+import { isDreMonthSyncable } from "@/lib/mercadolibre/revenue-periods";
 
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies();
@@ -39,6 +40,13 @@ export async function POST(request: NextRequest) {
     month > 12
   ) {
     return NextResponse.json({ error: "Invalid year or month" }, { status: 400 });
+  }
+
+  if (!isDreMonthSyncable(year, month)) {
+    return NextResponse.json(
+      { error: "Não é possível sincronizar meses futuros." },
+      { status: 400 },
+    );
   }
 
   try {

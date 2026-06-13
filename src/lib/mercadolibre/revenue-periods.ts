@@ -69,6 +69,26 @@ export function isCurrentCalendarMonth(
   return now.year === year && now.month === month;
 }
 
+/** Mês ainda não iniciou no fuso informado (não pode sincronizar). */
+export function isFutureCalendarMonth(
+  year: number,
+  month: number,
+  timeZone: string = reportsConfig.catalogCompetitionTimezone,
+): boolean {
+  const now = getZonedYearMonth(new Date(), timeZone);
+  if (year > now.year) return true;
+  if (year < now.year) return false;
+  return month > now.month;
+}
+
+export function isDreMonthSyncable(
+  year: number,
+  month: number,
+  timeZone: string = reportsConfig.catalogCompetitionTimezone,
+): boolean {
+  return !isFutureCalendarMonth(year, month, timeZone);
+}
+
 /** Intervalo UTC de um mês civil no fuso informado (mês corrente termina em `now`). */
 export function getCalendarMonthRange(
   year: number,

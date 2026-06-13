@@ -12,7 +12,7 @@ import {
   formatFinancialPercent,
 } from "@/lib/financial-margin";
 import type { DreYearView } from "@/lib/dre-year-data";
-import { getZonedYearMonth } from "@/lib/mercadolibre/revenue-periods";
+import { getZonedYearMonth, isDreMonthSyncable } from "@/lib/mercadolibre/revenue-periods";
 
 export function DreClient() {
   const currentYear = useMemo(() => getZonedYearMonth().year, []);
@@ -52,6 +52,10 @@ export function DreClient() {
 
   const syncMonth = useCallback(
     async (month: number): Promise<boolean> => {
+      if (!isDreMonthSyncable(year, month)) {
+        return true;
+      }
+
       setSyncingMonths((prev) => new Set(prev).add(month));
       try {
         const res = await fetch("/api/dre/sync", {
@@ -85,6 +89,7 @@ export function DreClient() {
     const failures: number[] = [];
     try {
       for (let month = 1; month <= 12; month += 1) {
+        if (!isDreMonthSyncable(year, month)) continue;
         const ok = await syncMonth(month);
         if (!ok) failures.push(month);
       }
@@ -96,7 +101,7 @@ export function DreClient() {
     } finally {
       setSyncingAll(false);
     }
-  }, [syncMonth]);
+  }, [syncMonth, year]);
 
   const handleFixedCostChange = useCallback(
     async (costItemId: string, month: number, amount: number | null) => {
@@ -111,12 +116,10 @@ export function DreClient() {
           setError(await readApiError(res, "dre_cost_value_failed"));
           return;
         }
-        const refreshed = await fetch(`/api/dre?year=${year}`);
-        if (!refreshed.ok) {
-          setError(await readApiError(refreshed, "dre_load_failed"));
-          return;
+        const json = (await res.json()) as { year?: DreYearView };
+        if (json.year) {
+          setData(json.year);
         }
-        setData((await refreshed.json()) as DreYearView);
       } catch {
         setError("Falha de rede ao salvar o custo fixo.");
       }

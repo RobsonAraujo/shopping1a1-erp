@@ -183,22 +183,40 @@ export function buildDreTableRows(
   return rows;
 }
 
-export function rowBackgroundClass(kind: DreRowKind): string {
-  if (kind === "entrada-total" || kind === "resultado") {
-    return "bg-emerald-50/90 dark:bg-emerald-950/25";
+export function rowBackgroundClass(row: DreTableRow): string {
+  if (row.type === "fixed-cost") {
+    return "bg-[var(--card)]";
   }
-  if (kind === "custo-total" || kind === "custo-detail") {
-    return "bg-rose-50/90 dark:bg-rose-950/25";
+  if (row.kind === "entrada-detail" || row.kind === "custo-detail") {
+    return "bg-[var(--card)]";
+  }
+  if (row.kind === "entrada-total" || row.kind === "resultado") {
+    return "bg-emerald-200/95 text-emerald-950 dark:bg-emerald-900/55 dark:text-emerald-50";
+  }
+  if (row.kind === "custo-total") {
+    return "bg-rose-200/95 text-rose-950 dark:bg-rose-900/55 dark:text-rose-50";
   }
   return "bg-[var(--card)]";
+}
+
+export function rowLabelClass(row: DreTableRow): string {
+  if (row.type === "fixed-cost") return "text-sm";
+  if (row.kind === "entrada-detail" || row.kind === "custo-detail") {
+    return "text-sm text-[var(--foreground)]";
+  }
+  if (row.kind === "resultado") return "text-sm font-bold";
+  if (row.kind === "entrada-total" || row.kind === "custo-total") {
+    return "text-sm font-semibold";
+  }
+  return "text-sm";
 }
 
 export function valueToneClass(value: number | null | undefined): string {
   if (value === null || value === undefined) {
     return "text-[var(--muted-foreground)]";
   }
-  if (value > 0) return "text-emerald-700 dark:text-emerald-400";
-  if (value < 0) return "text-rose-700 dark:text-rose-400";
+  if (value > 0) return "text-emerald-800 dark:text-emerald-300";
+  if (value < 0) return "text-rose-800 dark:text-rose-300";
   return "text-[var(--muted-foreground)]";
 }
 

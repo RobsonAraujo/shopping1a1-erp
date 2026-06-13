@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { NumericFormat } from "react-number-format";
-import { RefreshCw } from "lucide-react";
+import { Pencil, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -13,6 +14,7 @@ import {
   buildDreTableRows,
   getCellValue,
   rowBackgroundClass,
+  rowLabelClass,
   valueToneClass,
   type DreTableRow,
 } from "@/lib/dre-table-rows";
@@ -57,38 +59,93 @@ function SourceTag({ source }: { source?: string }) {
   );
 }
 
-function DreMoneyInput({
+function DreFixedCostCell({
   value,
+  override,
+  label,
   onCommit,
 }: {
   value: number | null;
-  onCommit: (value: number | null) => void;
+  override: number | null;
+  label: string;
+  onCommit: (amount: number | null) => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<number | null>(value);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!editing) setDraft(value);
+  }, [value, editing]);
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [editing]);
+
+  function commit(next: number | null) {
+    setEditing(false);
+    if (next !== value) {
+      onCommit(next);
+    }
+  }
+
+  if (editing) {
+    return (
+      <NumericFormat
+        getInputRef={inputRef}
+        value={draft ?? ""}
+        onValueChange={(values) => {
+          setDraft(values.floatValue ?? null);
+        }}
+        onBlur={() => commit(draft)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            setDraft(value);
+            setEditing(false);
+          }
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit(draft);
+          }
+        }}
+        thousandSeparator="."
+        decimalSeparator=","
+        prefix="R$ "
+        decimalScale={2}
+        allowNegative={false}
+        className="w-full min-w-[5.5rem] rounded border border-[var(--border)] bg-[var(--background)] px-1.5 py-1 text-right text-xs tabular-nums"
+      />
+    );
+  }
+
+  const displayAmount = value === null ? null : -value;
+  const inherited = override === null && value !== null;
+
   return (
-    <NumericFormat
-      key={`${value ?? "empty"}`}
-      defaultValue={value ?? undefined}
-      onBlur={(e) => {
-        const raw = e.target.value
-          .replace(/R\$\s?/g, "")
-          .replace(/\./g, "")
-          .replace(",", ".");
-        const parsed = raw.trim() === "" ? null : Number(raw);
-        if (parsed === null) {
-          onCommit(null);
-          return;
-        }
-        if (Number.isFinite(parsed) && parsed >= 0) {
-          onCommit(parsed);
-        }
-      }}
-      thousandSeparator="."
-      decimalSeparator=","
-      prefix="R$ "
-      decimalScale={2}
-      allowNegative={false}
-      className="w-full min-w-[5.5rem] rounded border border-[var(--border)] bg-[var(--background)] px-1.5 py-1 text-right text-xs tabular-nums"
-    />
+    <div className="flex items-center justify-end gap-0.5">
+      <span
+        className={cn(
+          "text-sm tabular-nums",
+          inherited && "text-[var(--muted-foreground)]",
+        )}
+        title={inherited ? "Valor herdado do mês anterior" : undefined}
+      >
+        {formatFinancialMoney(displayAmount)}
+      </span>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        className="size-7 shrink-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+        aria-label={`Editar ${label}`}
+        onClick={() => setEditing(true)}
+      >
+        <Pencil className="size-3.5" aria-hidden />
+      </Button>
+    </div>
   );
 }
 
@@ -105,16 +162,7 @@ function renderLabelCell(row: DreTableRow) {
 
   return (
     <div className={cn("flex min-w-[12rem] items-center", indent && "pl-4")}>
-      <span
-        className={cn(
-          "text-sm",
-          row.kind === "resultado" && "font-bold",
-          (row.kind === "entrada-total" || row.kind === "custo-total") &&
-            "font-semibold",
-        )}
-      >
-        {label}
-      </span>
+      <span className={rowLabelClass(row)}>{label}</span>
       <SourceTag source={source} />
     </div>
   );
@@ -127,9 +175,12 @@ function renderValueCell(
 ) {
   if (row.type === "fixed-cost") {
     const stored = month.fixedCostValues[row.costItemId];
+    const override = month.fixedCostOverrides[row.costItemId];
     return (
-      <DreMoneyInput
+      <DreFixedCostCell
         value={stored}
+        override={override}
+        label={`${row.label} (${month.label})`}
         onCommit={(amount) =>
           onFixedCostChange(row.costItemId, month.month, amount)
         }
@@ -249,6 +300,11 @@ export function DreYearTable({
               >
                 <div className="flex flex-col items-center gap-1">
                   <span className="font-semibold capitalize">{month.label}</span>
+                  {month.isFutureMonth ? (
+                    <Badge variant="muted" className="text-[10px]">
+                      Futuro
+                    </Badge>
+                  ) : null}
                   {month.isCurrentMonth ? (
                     <Badge variant="secondary" className="text-[10px]">
                       Em andamento
@@ -268,22 +324,31 @@ export function DreYearTable({
                       Avisos
                     </Badge>
                   ) : null}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`Sincronizar ${month.label}`}
-                    disabled={syncingMonths.has(month.month)}
-                    onClick={() => onSyncMonth(month.month)}
-                  >
-                    <RefreshCw
-                      className={cn(
-                        "size-3.5",
-                        syncingMonths.has(month.month) && "animate-spin",
-                      )}
+                  {month.canSync ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Sincronizar ${month.label}`}
+                      disabled={syncingMonths.has(month.month)}
+                      onClick={() => onSyncMonth(month.month)}
+                    >
+                      <RefreshCw
+                        className={cn(
+                          "size-3.5",
+                          syncingMonths.has(month.month) && "animate-spin",
+                        )}
+                        aria-hidden
+                      />
+                    </Button>
+                  ) : (
+                    <span
+                      className="inline-flex size-7 items-center justify-center text-[var(--muted-foreground)]"
                       aria-hidden
-                    />
-                  </Button>
+                    >
+                      —
+                    </span>
+                  )}
                   <span className="text-[10px] font-normal text-[var(--muted-foreground)]">
                     {formatSyncTime(month.syncedAt)}
                   </span>
@@ -297,9 +362,9 @@ export function DreYearTable({
         </thead>
         <tbody>
           {rows.map((row) => {
-            const kind = row.type === "fixed-cost" ? row.kind : row.kind;
-            const bg = rowBackgroundClass(kind);
-            const isResult = kind === "resultado";
+            const bg = rowBackgroundClass(row);
+            const isResult =
+              row.type === "static" && row.kind === "resultado";
 
             return (
               <tr

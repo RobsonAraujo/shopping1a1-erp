@@ -80,8 +80,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const yearView = await loadDreYearView(year);
-    const monthView = yearView.months.find((row) => row.month === month);
-    return NextResponse.json({ month: monthView });
+    return NextResponse.json({ year: yearView });
   } catch (e) {
     logServerError("api/dre/cost-values PUT", e);
     return NextResponse.json(apiErrorPayload(e, "dre_cost_value_failed"), {
