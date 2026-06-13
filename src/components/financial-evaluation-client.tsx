@@ -78,13 +78,13 @@ export function FinancialEvaluationClient() {
       if (!res.ok) {
         setError(
           (json as { error?: string }).error ??
-            "Falha ao carregar avaliação financeira.",
+            "Falha ao carregar lucratividade.",
         );
         return;
       }
       setData((json as ApiResponse).items);
     } catch {
-      setError("Falha de rede ao carregar avaliação financeira.");
+      setError("Falha de rede ao carregar lucratividade.");
     } finally {
       setLoading(false);
     }

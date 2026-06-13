@@ -97,7 +97,7 @@ model WarehouseStock {
   minAcceptablePrice    Decimal? @map("min_acceptable_price") @db.Decimal(18, 2)
   /// Override opcional dos dias de cobertura alvo na análise de compra.
   targetCoverageDays    Int?     @map("target_coverage_days")
-  /// Custos extras por unidade (embalagem etc.) para avaliação financeira.
+  /// Custos extras por unidade (embalagem etc.) para lucratividade.
   extraCosts            Decimal? @map("extra_costs") @db.Decimal(18, 2)
   /// Alíquota de impostos % sobre preço de venda.
   taxRatePercent        Decimal? @map("tax_rate_percent") @db.Decimal(8, 4)

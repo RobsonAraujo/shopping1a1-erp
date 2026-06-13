@@ -5,12 +5,13 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  Calculator,
   ChartNoAxesColumn,
+  LayoutGrid,
   LogOut,
   Menu,
   Package,
   ShoppingCart,
+  TrendingUp,
   Warehouse,
   X,
 } from "lucide-react";
@@ -22,6 +23,12 @@ const navItems = [
     label: "Anúncios",
     description: "Gerencie os anúncios do Mercado Livre",
     icon: Package,
+  },
+  {
+    href: "/dashboard/resumo",
+    label: "Resumo",
+    description: "Painéis operacionais e alertas rápidos",
+    icon: LayoutGrid,
   },
   {
     href: "/dashboard/inventory",
@@ -42,10 +49,10 @@ const navItems = [
     icon: ChartNoAxesColumn,
   },
   {
-    href: "/dashboard/avaliacao-financeira",
-    label: "Avaliação financeira",
+    href: "/dashboard/lucratividade",
+    label: "Lucratividade",
     description: "Margem de contribuição por anúncio",
-    icon: Calculator,
+    icon: TrendingUp,
   },
 ];
 

@@ -151,7 +151,7 @@ export function PushNotificationToggle() {
         : statusText ?? undefined;
 
   return (
-    <div className="flex flex-col items-end gap-1">
+    <div className="flex shrink-0 flex-col items-end gap-1">
       <Button
         type="button"
         variant={enabled ? "default" : "outline"}
@@ -162,15 +162,15 @@ export function PushNotificationToggle() {
         aria-label={
           enabled ? "Alertas de catálogo ativos" : "Ativar alertas de catálogo"
         }
-        className="h-10 w-10 gap-0 p-0 sm:h-9 sm:w-auto sm:gap-2 sm:px-3"
+        className="h-9 w-9 gap-0 p-0 lg:h-9 lg:w-auto lg:gap-2 lg:px-3"
       >
         {enabled ? <Bell className="size-4" /> : <BellOff className="size-4" />}
-        <span className="hidden sm:inline">
+        <span className="hidden lg:inline">
           {enabled ? "Alertas de catálogo ativos" : "Ativar alertas de catálogo"}
         </span>
       </Button>
       {statusText ? (
-        <span className="max-w-[14rem] text-right text-[11px] leading-tight text-[var(--muted-foreground)]">
+        <span className="hidden max-w-[14rem] text-right text-[11px] leading-tight text-[var(--muted-foreground)] xl:block">
           {statusText}
         </span>
       ) : null}
