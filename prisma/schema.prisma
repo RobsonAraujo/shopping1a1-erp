@@ -155,17 +155,24 @@ model PushSubscription {
   @@map("push_subscriptions")
 }
 
-/// Item de custo fixo do DRE (nome global; valor por mês em DreCostMonthValue).
+/// Item de custo manual do DRE (fixo ou operacional; valor por mês em DreCostMonthValue).
 model DreCostItem {
   id          String              @id @default(cuid())
   name        String
+  section     DreCostSection      @default(FIXED)
   sortOrder   Int                 @default(0) @map("sort_order")
   active      Boolean             @default(true)
   createdAt   DateTime            @default(now()) @map("created_at")
   updatedAt   DateTime            @updatedAt @map("updated_at")
   monthValues DreCostMonthValue[]
 
+  @@index([section, active])
   @@map("dre_cost_items")
+}
+
+enum DreCostSection {
+  FIXED       @map("fixed")
+  OPERATIONAL @map("operational")
 }
 
 model DreCostMonthValue {

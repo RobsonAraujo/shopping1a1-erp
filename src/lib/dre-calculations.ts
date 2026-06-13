@@ -8,6 +8,9 @@ export type DreLineAmounts = {
   productCostErp: number;
   taxErp: number;
   sellerShippingMl: number;
+  fullShippingMl: number;
+  fullStorageMl: number;
+  fullNonComplianceMl: number;
 };
 
 export type DreBillingSource = "billing" | "fallback";
@@ -20,10 +23,13 @@ export type DreMonthSnapshotPayload = DreLineAmounts & {
   syncWarnings: string[];
 };
 
-export type DreFixedCostInput = {
+export type DreManualCostInput = {
   costItemId: string;
   amount: number;
 };
+
+/** @deprecated use DreManualCostInput */
+export type DreFixedCostInput = DreManualCostInput;
 
 export type DreComputedTotals = {
   totalEntrada: number;
@@ -31,19 +37,23 @@ export type DreComputedTotals = {
   margemContribuicao: number;
   margemContribuicaoPercent: number | null;
   totalCustoFixoManual: number;
+  totalCustoOperacionalManual: number;
   adsCost: number;
   totalCustoFixo: number;
   lucroLiquido: number;
   lucroLiquidoPercent: number | null;
 };
 
-const OPERATIONAL_KEYS: (keyof DreLineAmounts)[] = [
+const OPERATIONAL_LINE_KEYS: (keyof DreLineAmounts)[] = [
   "cancelledSalesMl",
   "saleFeeMl",
   "partialReturnsMl",
   "productCostErp",
   "taxErp",
   "sellerShippingMl",
+  "fullShippingMl",
+  "fullStorageMl",
+  "fullNonComplianceMl",
 ];
 
 export function percentOfRevenue(
@@ -57,16 +67,25 @@ export function percentOfRevenue(
 export function computeDreTotals(
   lines: DreLineAmounts,
   adsCost: number,
-  fixedCosts: DreFixedCostInput[],
+  fixedCosts: DreManualCostInput[],
+  operationalCosts: DreManualCostInput[] = [],
 ): DreComputedTotals {
   const revenueMl = roundMoney(Math.max(0, lines.revenueMl));
   const totalEntrada = revenueMl;
 
   let totalCustoOperacional = 0;
-  for (const key of OPERATIONAL_KEYS) {
+  for (const key of OPERATIONAL_LINE_KEYS) {
     totalCustoOperacional += lines[key] ?? 0;
   }
-  totalCustoOperacional = roundMoney(totalCustoOperacional);
+
+  let totalCustoOperacionalManual = 0;
+  for (const row of operationalCosts) {
+    totalCustoOperacionalManual += Math.max(0, row.amount);
+  }
+  totalCustoOperacionalManual = roundMoney(-totalCustoOperacionalManual);
+  totalCustoOperacional = roundMoney(
+    totalCustoOperacional + totalCustoOperacionalManual,
+  );
 
   const margemContribuicao = roundMoney(totalEntrada + totalCustoOperacional);
   const margemContribuicaoPercent = percentOfRevenue(
@@ -91,6 +110,7 @@ export function computeDreTotals(
     margemContribuicao,
     margemContribuicaoPercent,
     totalCustoFixoManual,
+    totalCustoOperacionalManual,
     adsCost: ads,
     totalCustoFixo,
     lucroLiquido,
@@ -109,11 +129,15 @@ export function sumYearLineAmounts(
     productCostErp: 0,
     taxErp: 0,
     sellerShippingMl: 0,
+    fullShippingMl: 0,
+    fullStorageMl: 0,
+    fullNonComplianceMl: 0,
   };
   for (const month of months) {
-    for (const key of Object.keys(out) as (keyof DreLineAmounts)[]) {
+    for (const key of OPERATIONAL_LINE_KEYS) {
       out[key] = roundMoney(out[key] + (month[key] ?? 0));
     }
+    out.revenueMl = roundMoney(out.revenueMl + (month.revenueMl ?? 0));
   }
   return out;
 }

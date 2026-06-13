@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
-import { DreFixedCostsModal } from "@/components/dre-fixed-costs-modal";
+import { DreCostItemsModal } from "@/components/dre-fixed-costs-modal";
 import { DreYearTable } from "@/components/dre-year-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,7 +21,9 @@ export function DreClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(true);
-  const [costsModalOpen, setCostsModalOpen] = useState(false);
+  const [fixedCostsModalOpen, setFixedCostsModalOpen] = useState(false);
+  const [operationalCostsModalOpen, setOperationalCostsModalOpen] =
+    useState(false);
   const [syncingMonths, setSyncingMonths] = useState<Set<number>>(new Set());
   const [syncingAll, setSyncingAll] = useState(false);
 
@@ -103,7 +105,7 @@ export function DreClient() {
     }
   }, [syncMonth, year]);
 
-  const handleFixedCostChange = useCallback(
+  const handleManualCostChange = useCallback(
     async (costItemId: string, month: number, amount: number | null) => {
       setError(null);
       try {
@@ -121,7 +123,7 @@ export function DreClient() {
           setData(json.year);
         }
       } catch {
-        setError("Falha de rede ao salvar o custo fixo.");
+        setError("Falha de rede ao salvar o valor.");
       }
     },
     [year],
@@ -160,9 +162,16 @@ export function DreClient() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => setCostsModalOpen(true)}
+            onClick={() => setOperationalCostsModalOpen(true)}
           >
-            Gerenciar custos fixos
+            Custos operacionais
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setFixedCostsModalOpen(true)}
+          >
+            Custos fixos
           </Button>
           <Button
             type="button"
@@ -250,15 +259,31 @@ export function DreClient() {
           syncingMonths={syncingMonths}
           onSyncMonth={(month) => void syncMonth(month)}
           onFixedCostChange={(costItemId, month, amount) =>
-            void handleFixedCostChange(costItemId, month, amount)
+            void handleManualCostChange(costItemId, month, amount)
+          }
+          onOperationalCostChange={(costItemId, month, amount) =>
+            void handleManualCostChange(costItemId, month, amount)
           }
         />
       ) : null}
 
-      <DreFixedCostsModal
-        open={costsModalOpen}
+      <DreCostItemsModal
+        open={fixedCostsModalOpen}
+        section="fixed"
+        title="Custos fixos"
+        description="Cadastre itens globais e informe o valor de cada um por mês na tabela."
         costItems={data?.costItems ?? []}
-        onClose={() => setCostsModalOpen(false)}
+        onClose={() => setFixedCostsModalOpen(false)}
+        onChanged={() => void loadYear(year)}
+        onError={setError}
+      />
+      <DreCostItemsModal
+        open={operationalCostsModalOpen}
+        section="operational"
+        title="Custos operacionais"
+        description="Itens extras de custo operacional (além das linhas ML). Valores por mês na tabela."
+        costItems={data?.operationalCostItems ?? []}
+        onClose={() => setOperationalCostsModalOpen(false)}
         onChanged={() => void loadYear(year)}
         onError={setError}
       />

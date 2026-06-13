@@ -42,9 +42,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { name?: string };
+  let body: { name?: string; section?: "fixed" | "operational" };
   try {
-    body = (await request.json()) as { name?: string };
+    body = (await request.json()) as { name?: string; section?: "fixed" | "operational" };
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
@@ -54,13 +54,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
   }
 
+  const section = body.section === "operational" ? "OPERATIONAL" : "FIXED";
+
   try {
     const maxSort = await prisma.dreCostItem.aggregate({
+      where: { section, active: true },
       _max: { sortOrder: true },
     });
     const item = await prisma.dreCostItem.create({
       data: {
         name,
+        section,
         sortOrder: (maxSort._max.sortOrder ?? 0) + 1,
       },
       select: { id: true, name: true, sortOrder: true },

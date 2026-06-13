@@ -6,21 +6,29 @@ import { Button } from "@/components/ui/button";
 import { readApiError } from "@/lib/api-client-error";
 import type { DreCostItemView } from "@/lib/dre-year-data";
 
-type DreFixedCostsModalProps = {
+export type DreCostSection = "fixed" | "operational";
+
+type DreCostItemsModalProps = {
   open: boolean;
+  section: DreCostSection;
+  title: string;
+  description: string;
   costItems: DreCostItemView[];
   onClose: () => void;
   onChanged: () => void;
   onError?: (message: string) => void;
 };
 
-export function DreFixedCostsModal({
+export function DreCostItemsModal({
   open,
+  section,
+  title,
+  description,
   costItems,
   onClose,
   onChanged,
   onError,
-}: DreFixedCostsModalProps) {
+}: DreCostItemsModalProps) {
   const titleId = useId();
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -55,7 +63,7 @@ export function DreFixedCostsModal({
       const res = await fetch("/api/dre/cost-items", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, section }),
       });
       if (!res.ok) {
         const message = await readApiError(res, "dre_cost_item_create_failed");
@@ -66,7 +74,7 @@ export function DreFixedCostsModal({
       setNewName("");
       onChanged();
     } catch {
-      const message = "Falha de rede ao adicionar custo fixo.";
+      const message = "Falha de rede ao adicionar item.";
       setError(message);
       onError?.(message);
     } finally {
@@ -94,7 +102,7 @@ export function DreFixedCostsModal({
       setEditingId(null);
       onChanged();
     } catch {
-      const message = "Falha de rede ao renomear custo fixo.";
+      const message = "Falha de rede ao renomear item.";
       setError(message);
       onError?.(message);
     } finally {
@@ -103,7 +111,7 @@ export function DreFixedCostsModal({
   }
 
   async function removeItem(id: string) {
-    if (!window.confirm("Remover este custo fixo?")) return;
+    if (!window.confirm("Remover este item?")) return;
     setBusy(true);
     setError(null);
     try {
@@ -118,7 +126,7 @@ export function DreFixedCostsModal({
       }
       onChanged();
     } catch {
-      const message = "Falha de rede ao remover custo fixo.";
+      const message = "Falha de rede ao remover item.";
       setError(message);
       onError?.(message);
     } finally {
@@ -141,11 +149,10 @@ export function DreFixedCostsModal({
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 id={titleId} className="text-lg font-semibold text-[var(--primary)]">
-              Custos fixos
+              {title}
             </h2>
             <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-              Cadastre itens globais e informe o valor de cada um por mês na
-              tabela.
+              {description}
             </p>
           </div>
           <Button type="button" variant="ghost" size="icon-sm" onClick={onClose}>
@@ -158,7 +165,7 @@ export function DreFixedCostsModal({
             type="text"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            placeholder="Ex.: Aluguel"
+            placeholder="Ex.: Embalagens"
             className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
             disabled={busy}
           />
@@ -177,7 +184,7 @@ export function DreFixedCostsModal({
         <ul className="mt-4 max-h-64 space-y-2 overflow-y-auto">
           {costItems.length === 0 ? (
             <li className="text-sm text-[var(--muted-foreground)]">
-              Nenhum custo fixo cadastrado.
+              Nenhum item cadastrado.
             </li>
           ) : (
             costItems.map((item) => (
@@ -247,3 +254,6 @@ export function DreFixedCostsModal({
     </div>
   );
 }
+
+/** @deprecated use DreCostItemsModal */
+export const DreFixedCostsModal = DreCostItemsModal;

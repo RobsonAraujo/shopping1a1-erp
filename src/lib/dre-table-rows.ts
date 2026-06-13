@@ -20,6 +20,9 @@ export type DreStaticRowId =
   | "productCostErp"
   | "taxErp"
   | "sellerShippingMl"
+  | "fullShippingMl"
+  | "fullStorageMl"
+  | "fullNonComplianceMl"
   | "margemContribuicao"
   | "totalCustoFixo"
   | "adsCost"
@@ -38,6 +41,15 @@ export type DreTableRow =
     }
   | {
       type: "fixed-cost";
+      id: string;
+      costItemId: string;
+      kind: "custo-detail";
+      label: string;
+      source: "manual";
+      indent: true;
+    }
+  | {
+      type: "operational-cost";
       id: string;
       costItemId: string;
       kind: "custo-detail";
@@ -124,6 +136,33 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
   },
   {
     type: "static",
+    id: "fullShippingMl",
+    kind: "custo-detail",
+    label: "Full - Envios",
+    source: "ml",
+    indent: true,
+    lineKey: "fullShippingMl",
+  },
+  {
+    type: "static",
+    id: "fullStorageMl",
+    kind: "custo-detail",
+    label: "Full - Armazenamento",
+    source: "ml",
+    indent: true,
+    lineKey: "fullStorageMl",
+  },
+  {
+    type: "static",
+    id: "fullNonComplianceMl",
+    kind: "custo-detail",
+    label: "Full - Inconformidades",
+    source: "ml",
+    indent: true,
+    lineKey: "fullNonComplianceMl",
+  },
+  {
+    type: "static",
     id: "margemContribuicao",
     kind: "resultado",
     label: "(=) MARGEM DE CONTRIBUIÇÃO",
@@ -154,11 +193,30 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
 
 export function buildDreTableRows(
   costItems: DreCostItemView[],
+  operationalCostItems: DreCostItemView[],
   showDetails: boolean,
 ): DreTableRow[] {
   const rows: DreTableRow[] = [];
   for (const row of DRE_STATIC_ROWS) {
     if (!showDetails && row.indent) continue;
+
+    if (row.id === "margemContribuicao") {
+      if (showDetails) {
+        for (const item of operationalCostItems) {
+          rows.push({
+            type: "operational-cost",
+            id: `operational-${item.id}`,
+            costItemId: item.id,
+            kind: "custo-detail",
+            label: item.name,
+            source: "manual",
+            indent: true,
+          });
+        }
+      }
+      rows.push(row);
+      continue;
+    }
 
     if (row.id === "totalCustoFixo") {
       rows.push(row);
@@ -184,7 +242,7 @@ export function buildDreTableRows(
 }
 
 export function rowBackgroundClass(row: DreTableRow): string {
-  if (row.type === "fixed-cost") {
+  if (row.type === "fixed-cost" || row.type === "operational-cost") {
     return "bg-[var(--card)]";
   }
   if (row.kind === "entrada-detail" || row.kind === "custo-detail") {
@@ -200,7 +258,9 @@ export function rowBackgroundClass(row: DreTableRow): string {
 }
 
 export function rowLabelClass(row: DreTableRow): string {
-  if (row.type === "fixed-cost") return "text-sm";
+  if (row.type === "fixed-cost" || row.type === "operational-cost") {
+    return "text-sm";
+  }
   if (row.kind === "entrada-detail" || row.kind === "custo-detail") {
     return "text-sm text-[var(--foreground)]";
   }
@@ -226,6 +286,14 @@ export function getCellValue(
 ): { amount: number | null; percent: number | null } {
   if (row.type === "fixed-cost") {
     const raw = month.fixedCostValues[row.costItemId];
+    return {
+      amount: raw === null || raw === undefined ? null : -raw,
+      percent: null,
+    };
+  }
+
+  if (row.type === "operational-cost") {
+    const raw = month.operationalCostValues[row.costItemId];
     return {
       amount: raw === null || raw === undefined ? null : -raw,
       percent: null,
@@ -260,7 +328,7 @@ export function getCellValue(
         percent: totals?.lucroLiquidoPercent ?? null,
       };
     default:
-      if (row.lineKey && month.lines) {
+      if (row.type === "static" && row.lineKey && month.lines) {
         return { amount: month.lines[row.lineKey], percent: null };
       }
       return { amount: null, percent: null };
@@ -268,6 +336,48 @@ export function getCellValue(
 }
 
 export function isDetailRow(row: DreTableRow): boolean {
-  if (row.type === "fixed-cost") return true;
+  if (row.type === "fixed-cost" || row.type === "operational-cost") {
+    return true;
+  }
   return Boolean(row.indent);
+}
+
+export const DRE_MONTH_HEADER_COLORS = [
+  "bg-sky-100/90 dark:bg-sky-950/50",
+  "bg-indigo-100/90 dark:bg-indigo-950/50",
+  "bg-violet-100/90 dark:bg-violet-950/50",
+  "bg-fuchsia-100/90 dark:bg-fuchsia-950/50",
+  "bg-pink-100/90 dark:bg-pink-950/50",
+  "bg-rose-100/90 dark:bg-rose-950/50",
+  "bg-orange-100/90 dark:bg-orange-950/50",
+  "bg-amber-100/90 dark:bg-amber-950/50",
+  "bg-lime-100/90 dark:bg-lime-950/50",
+  "bg-emerald-100/90 dark:bg-emerald-950/50",
+  "bg-teal-100/90 dark:bg-teal-950/50",
+  "bg-cyan-100/90 dark:bg-cyan-950/50",
+] as const;
+
+export function dreMonthHeaderColorClass(month: number): string {
+  if (month < 1 || month > 12) return "bg-[var(--muted)]/40";
+  return DRE_MONTH_HEADER_COLORS[month - 1];
+}
+
+export const DRE_MONTH_SHORT = [
+  "Jan",
+  "Fev",
+  "Mar",
+  "Abr",
+  "Mai",
+  "Jun",
+  "Jul",
+  "Ago",
+  "Set",
+  "Out",
+  "Nov",
+  "Dez",
+] as const;
+
+export function dreMonthShortLabel(month: number): string {
+  if (month < 1 || month > 12) return String(month);
+  return DRE_MONTH_SHORT[month - 1];
 }

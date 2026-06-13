@@ -12,6 +12,8 @@ import {
 import type { DreMonthView, DreYearView } from "@/lib/dre-year-data";
 import {
   buildDreTableRows,
+  dreMonthHeaderColorClass,
+  dreMonthShortLabel,
   getCellValue,
   rowBackgroundClass,
   rowLabelClass,
@@ -26,6 +28,11 @@ type DreYearTableProps = {
   syncingMonths: Set<number>;
   onSyncMonth: (month: number) => void;
   onFixedCostChange: (
+    costItemId: string,
+    month: number,
+    amount: number | null,
+  ) => void;
+  onOperationalCostChange: (
     costItemId: string,
     month: number,
     amount: number | null,
@@ -59,7 +66,7 @@ function SourceTag({ source }: { source?: string }) {
   );
 }
 
-function DreFixedCostCell({
+function DreManualCostCell({
   value,
   override,
   label,
@@ -150,19 +157,20 @@ function DreFixedCostCell({
 }
 
 function renderLabelCell(row: DreTableRow) {
-  const label =
-    row.type === "fixed-cost" ? row.label : row.label;
   const source =
-    row.type === "fixed-cost"
+    row.type === "fixed-cost" || row.type === "operational-cost"
       ? row.source
       : row.type === "static"
         ? row.source
         : undefined;
-  const indent = row.type === "fixed-cost" ? row.indent : row.indent;
+  const indent =
+    row.type === "fixed-cost" ||
+    row.type === "operational-cost" ||
+    (row.type === "static" && row.indent);
 
   return (
     <div className={cn("flex min-w-[12rem] items-center", indent && "pl-4")}>
-      <span className={rowLabelClass(row)}>{label}</span>
+      <span className={rowLabelClass(row)}>{row.label}</span>
       <SourceTag source={source} />
     </div>
   );
@@ -172,12 +180,13 @@ function renderValueCell(
   row: DreTableRow,
   month: DreMonthView,
   onFixedCostChange: DreYearTableProps["onFixedCostChange"],
+  onOperationalCostChange: DreYearTableProps["onOperationalCostChange"],
 ) {
   if (row.type === "fixed-cost") {
     const stored = month.fixedCostValues[row.costItemId];
     const override = month.fixedCostOverrides[row.costItemId];
     return (
-      <DreFixedCostCell
+      <DreManualCostCell
         value={stored}
         override={override}
         label={`${row.label} (${month.label})`}
@@ -188,18 +197,36 @@ function renderValueCell(
     );
   }
 
+  if (row.type === "operational-cost") {
+    const stored = month.operationalCostValues[row.costItemId];
+    const override = month.operationalCostOverrides[row.costItemId];
+    return (
+      <DreManualCostCell
+        value={stored}
+        override={override}
+        label={`${row.label} (${month.label})`}
+        onCommit={(amount) =>
+          onOperationalCostChange(row.costItemId, month.month, amount)
+        }
+      />
+    );
+  }
+
   const { amount, percent } = getCellValue(row, month);
-  const showPercent = row.showPercent;
+  const showPercent = row.type === "static" && row.showPercent;
 
   return (
     <div className="text-right tabular-nums">
       <div
         className={cn(
           "text-sm",
-          row.kind === "resultado" && "font-bold",
-          (row.kind === "entrada-total" || row.kind === "custo-total") &&
+          row.type === "static" && row.kind === "resultado" && "font-bold",
+          row.type === "static" &&
+            (row.kind === "entrada-total" || row.kind === "custo-total") &&
             "font-semibold",
-          row.kind === "resultado" ? valueToneClass(amount) : "",
+          row.type === "static" && row.kind === "resultado"
+            ? valueToneClass(amount)
+            : "",
         )}
       >
         {formatFinancialMoney(amount)}
@@ -222,6 +249,19 @@ function getYearTotalForRow(
     let hasAny = false;
     for (const month of data.months) {
       const v = month.fixedCostValues[row.costItemId];
+      if (v !== null && v !== undefined) {
+        sum += v;
+        hasAny = true;
+      }
+    }
+    return { amount: hasAny ? -sum : null, percent: null };
+  }
+
+  if (row.type === "operational-cost") {
+    let sum = 0;
+    let hasAny = false;
+    for (const month of data.months) {
+      const v = month.operationalCostValues[row.costItemId];
       if (v !== null && v !== undefined) {
         sum += v;
         hasAny = true;
@@ -264,7 +304,7 @@ function getYearTotalForRow(
         percent: totals.lucroLiquidoPercent,
       };
     default:
-      if (row.lineKey) {
+      if (row.type === "static" && row.lineKey) {
         const sum = data.months.reduce(
           (s, m) => s + (m.lines?.[row.lineKey!] ?? 0),
           0,
@@ -276,49 +316,84 @@ function getYearTotalForRow(
   }
 }
 
+function monthHeaderStateClass(month: DreMonthView): string {
+  if (month.isFutureMonth) {
+    return "ring-1 ring-[var(--border)] opacity-60";
+  }
+  if (month.isCurrentMonth) {
+    return "ring-2 ring-emerald-500/70 shadow-sm";
+  }
+  if (month.syncedAt) {
+    return "ring-1 ring-emerald-600/30";
+  }
+  return "ring-1 ring-amber-500/40";
+}
+
 export function DreYearTable({
   data,
   showDetails,
   syncingMonths,
   onSyncMonth,
   onFixedCostChange,
+  onOperationalCostChange,
 }: DreYearTableProps) {
-  const rows = buildDreTableRows(data.costItems, showDetails);
+  const rows = buildDreTableRows(
+    data.costItems,
+    data.operationalCostItems,
+    showDetails,
+  );
 
   return (
     <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
-      <table className="w-full min-w-[64rem] border-collapse text-sm">
+      <table className="w-full min-w-[72rem] border-collapse text-sm">
         <thead>
-          <tr className="border-b border-[var(--border)] bg-[var(--muted)]/40">
+          <tr className="border-b border-[var(--border)]">
             <th className="sticky left-0 z-20 min-w-[14rem] bg-[var(--muted)]/95 px-3 py-3 text-left font-semibold backdrop-blur-sm">
               Linha
             </th>
             {data.months.map((month) => (
               <th
                 key={month.month}
-                className="min-w-[6.5rem] px-2 py-2 text-center align-bottom"
+                className={cn(
+                  "min-w-[7rem] px-1.5 py-2 text-center align-bottom",
+                  dreMonthHeaderColorClass(month.month),
+                )}
               >
-                <div className="flex flex-col items-center gap-1">
-                  <span className="font-semibold capitalize">{month.label}</span>
-                  {month.isFutureMonth ? (
-                    <Badge variant="muted" className="text-[10px]">
-                      Futuro
-                    </Badge>
-                  ) : null}
-                  {month.isCurrentMonth ? (
-                    <Badge variant="secondary" className="text-[10px]">
-                      Em andamento
-                    </Badge>
-                  ) : null}
-                  {month.isPartial ? (
-                    <Badge variant="warning" className="text-[10px]">
-                      Parcial
-                    </Badge>
-                  ) : null}
+                <div
+                  className={cn(
+                    "mx-auto flex max-w-[6.75rem] flex-col items-center gap-1.5 rounded-lg px-1.5 py-2",
+                    monthHeaderStateClass(month),
+                  )}
+                >
+                  <span className="text-sm font-bold tracking-wide">
+                    {dreMonthShortLabel(month.month)}
+                  </span>
+                  <div className="flex min-h-[1.25rem] flex-wrap items-center justify-center gap-1">
+                    {month.isFutureMonth ? (
+                      <Badge variant="muted" className="text-[10px]">
+                        Futuro
+                      </Badge>
+                    ) : null}
+                    {month.isCurrentMonth ? (
+                      <Badge variant="secondary" className="text-[10px]">
+                        Atual
+                      </Badge>
+                    ) : null}
+                    {month.isPartial ? (
+                      <Badge variant="warning" className="text-[10px]">
+                        Parcial
+                      </Badge>
+                    ) : null}
+                    {month.billingSource === "fallback" && month.syncedAt ? (
+                      <Badge variant="outline" className="text-[10px]">
+                        Estimado
+                      </Badge>
+                    ) : null}
+                  </div>
                   {month.syncWarnings.length > 0 ? (
                     <Badge
                       variant="outline"
-                      className="max-w-[6rem] truncate text-[10px]"
+                      className="max-w-full truncate text-[10px]"
                       title={month.syncWarnings.join("\n")}
                     >
                       Avisos
@@ -329,6 +404,7 @@ export function DreYearTable({
                       type="button"
                       variant="ghost"
                       size="icon-sm"
+                      className="size-7 bg-[var(--background)]/70"
                       aria-label={`Sincronizar ${month.label}`}
                       disabled={syncingMonths.has(month.month)}
                       onClick={() => onSyncMonth(month.month)}
@@ -355,7 +431,7 @@ export function DreYearTable({
                 </div>
               </th>
             ))}
-            <th className="min-w-[6.5rem] px-2 py-3 text-center font-semibold">
+            <th className="min-w-[6.5rem] bg-[var(--muted)]/40 px-2 py-3 text-center font-semibold">
               Total
             </th>
           </tr>
@@ -368,7 +444,11 @@ export function DreYearTable({
 
             return (
               <tr
-                key={row.type === "fixed-cost" ? row.id : row.id}
+                key={
+                  row.type === "fixed-cost" || row.type === "operational-cost"
+                    ? row.id
+                    : row.id
+                }
                 className={cn(
                   "border-b border-[var(--border)]/60",
                   bg,
@@ -385,12 +465,24 @@ export function DreYearTable({
                   {renderLabelCell(row)}
                 </td>
                 {data.months.map((month) => (
-                  <td key={month.month} className="px-2 py-2 align-middle">
-                    {renderValueCell(row, month, onFixedCostChange)}
+                  <td
+                    key={month.month}
+                    className={cn(
+                      "px-2 py-2 align-middle",
+                      dreMonthHeaderColorClass(month.month),
+                      "bg-opacity-20",
+                    )}
+                  >
+                    {renderValueCell(
+                      row,
+                      month,
+                      onFixedCostChange,
+                      onOperationalCostChange,
+                    )}
                   </td>
                 ))}
                 <td className="px-2 py-2 align-middle">
-                  {row.type === "fixed-cost" ? (
+                  {row.type === "fixed-cost" || row.type === "operational-cost" ? (
                     <div className="text-right text-sm tabular-nums text-[var(--muted-foreground)]">
                       {formatFinancialMoney(
                         getYearTotalForRow(row, data).amount,
