@@ -63,7 +63,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     type: "static",
     id: "totalEntrada",
     kind: "entrada-total",
-    label: "(+) TOTAL ENTRADA",
+    label: "(+) Entrada",
   },
   {
     type: "static",
@@ -78,13 +78,13 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     type: "static",
     id: "totalCustoOperacional",
     kind: "custo-total",
-    label: "(-) TOTAL CUSTO OPERACIONAL",
+    label: "(-) Custo operacional",
   },
   {
     type: "static",
     id: "cancelledSalesMl",
     kind: "custo-detail",
-    label: "Vendas canceladas ML",
+    label: "Canceladas ML",
     source: "ml",
     indent: true,
     lineKey: "cancelledSalesMl",
@@ -93,7 +93,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     type: "static",
     id: "saleFeeMl",
     kind: "custo-detail",
-    label: "Tarifa de venda ML",
+    label: "Tarifa ML",
     source: "ml",
     indent: true,
     lineKey: "saleFeeMl",
@@ -102,7 +102,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     type: "static",
     id: "partialReturnsMl",
     kind: "custo-detail",
-    label: "Devolução parcial ML",
+    label: "Devolução ML",
     source: "ml",
     indent: true,
     lineKey: "partialReturnsMl",
@@ -111,7 +111,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     type: "static",
     id: "productCostErp",
     kind: "custo-detail",
-    label: "Custo dos produtos ML",
+    label: "Custo produto",
     source: "erp",
     indent: true,
     lineKey: "productCostErp",
@@ -129,7 +129,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     type: "static",
     id: "sellerShippingMl",
     kind: "custo-detail",
-    label: "Frete vendedor ML",
+    label: "Frete vendedor",
     source: "ml",
     indent: true,
     lineKey: "sellerShippingMl",
@@ -138,7 +138,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     type: "static",
     id: "fullShippingMl",
     kind: "custo-detail",
-    label: "Full - Envios",
+    label: "Full envios",
     source: "ml",
     indent: true,
     lineKey: "fullShippingMl",
@@ -147,7 +147,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     type: "static",
     id: "fullStorageMl",
     kind: "custo-detail",
-    label: "Full - Armazenamento",
+    label: "Full armazém",
     source: "ml",
     indent: true,
     lineKey: "fullStorageMl",
@@ -156,7 +156,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     type: "static",
     id: "fullNonComplianceMl",
     kind: "custo-detail",
-    label: "Full - Inconformidades",
+    label: "Full inconform.",
     source: "ml",
     indent: true,
     lineKey: "fullNonComplianceMl",
@@ -165,14 +165,14 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     type: "static",
     id: "margemContribuicao",
     kind: "resultado",
-    label: "(=) MARGEM DE CONTRIBUIÇÃO",
+    label: "(=) Margem contrib.",
     showPercent: true,
   },
   {
     type: "static",
     id: "totalCustoFixo",
     kind: "custo-total",
-    label: "(-) TOTAL CUSTO FIXO",
+    label: "(-) Custo fixo",
   },
   {
     type: "static",
@@ -186,7 +186,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     type: "static",
     id: "lucroLiquido",
     kind: "resultado",
-    label: "(=) LUCRO LÍQUIDO",
+    label: "(=) Lucro líquido",
     showPercent: true,
   },
 ];
@@ -259,16 +259,16 @@ export function rowBackgroundClass(row: DreTableRow): string {
 
 export function rowLabelClass(row: DreTableRow): string {
   if (row.type === "fixed-cost" || row.type === "operational-cost") {
-    return "text-sm";
+    return "text-xs leading-tight";
   }
   if (row.kind === "entrada-detail" || row.kind === "custo-detail") {
-    return "text-sm text-[var(--foreground)]";
+    return "text-xs leading-tight text-[var(--foreground)]";
   }
-  if (row.kind === "resultado") return "text-sm font-bold";
+  if (row.kind === "resultado") return "text-xs font-bold leading-tight";
   if (row.kind === "entrada-total" || row.kind === "custo-total") {
-    return "text-sm font-semibold";
+    return "text-xs font-semibold leading-tight";
   }
-  return "text-sm";
+  return "text-xs leading-tight";
 }
 
 export function valueToneClass(value: number | null | undefined): string {
@@ -363,18 +363,18 @@ export function dreMonthHeaderColorClass(month: number): string {
 }
 
 export const DRE_MONTH_SHORT = [
-  "Jan",
-  "Fev",
-  "Mar",
-  "Abr",
-  "Mai",
-  "Jun",
-  "Jul",
-  "Ago",
-  "Set",
-  "Out",
-  "Nov",
-  "Dez",
+  "JAN",
+  "FEV",
+  "MAR",
+  "ABR",
+  "MAI",
+  "JUN",
+  "JUL",
+  "AGO",
+  "SET",
+  "OUT",
+  "NOV",
+  "DEZ",
 ] as const;
 
 export function dreMonthShortLabel(month: number): string {

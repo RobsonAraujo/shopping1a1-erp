@@ -132,17 +132,17 @@ export function DreClient() {
   const syncedCount = data?.months.filter((m) => m.syncedAt).length ?? 0;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="text-sm font-medium" htmlFor="dre-year">
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="text-xs font-medium text-[var(--muted-foreground)]" htmlFor="dre-year">
             Ano
           </label>
           <select
             id="dre-year"
             value={year}
             onChange={(e) => setYear(Number(e.target.value))}
-            className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
+            className="rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1.5 text-xs"
           >
             {yearOptions.map((y) => (
               <option key={y} value={y}>
@@ -151,10 +151,12 @@ export function DreClient() {
             ))}
           </select>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5">
           <Button
             type="button"
             variant="outline"
+            size="sm"
+            className="h-8 text-xs"
             onClick={() => setShowDetails((v) => !v)}
           >
             {showDetails ? "Ocultar detalhes" : "Mostrar detalhes"}
@@ -162,6 +164,8 @@ export function DreClient() {
           <Button
             type="button"
             variant="outline"
+            size="sm"
+            className="h-8 text-xs"
             onClick={() => setOperationalCostsModalOpen(true)}
           >
             Custos operacionais
@@ -169,6 +173,8 @@ export function DreClient() {
           <Button
             type="button"
             variant="outline"
+            size="sm"
+            className="h-8 text-xs"
             onClick={() => setFixedCostsModalOpen(true)}
           >
             Custos fixos
@@ -176,6 +182,8 @@ export function DreClient() {
           <Button
             type="button"
             variant="secondary"
+            size="sm"
+            className="h-8 text-xs"
             disabled={syncingAll || loading}
             onClick={() => void syncAllMonths()}
           >
@@ -189,50 +197,50 @@ export function DreClient() {
       </div>
 
       {data?.yearTotals ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-[var(--muted-foreground)]">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <Card className="shadow-sm">
+            <CardHeader className="px-3 pb-1 pt-3">
+              <CardTitle className="text-xs font-medium text-[var(--muted-foreground)]">
                 Faturamento (ano)
               </CardTitle>
             </CardHeader>
-            <CardContent className="text-lg font-semibold">
+            <CardContent className="px-3 pb-3 text-base font-semibold">
               {formatFinancialMoney(data.yearTotals.totalEntrada)}
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-[var(--muted-foreground)]">
+          <Card className="shadow-sm">
+            <CardHeader className="px-3 pb-1 pt-3">
+              <CardTitle className="text-xs font-medium text-[var(--muted-foreground)]">
                 Margem de contribuição
               </CardTitle>
             </CardHeader>
-            <CardContent className="text-lg font-semibold">
+            <CardContent className="px-3 pb-3 text-base font-semibold">
               {formatFinancialMoney(data.yearTotals.margemContribuicao)}{" "}
-              <span className="text-sm font-normal text-[var(--muted-foreground)]">
+              <span className="text-xs font-normal text-[var(--muted-foreground)]">
                 ({formatFinancialPercent(data.yearTotals.margemContribuicaoPercent)})
               </span>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-[var(--muted-foreground)]">
+          <Card className="shadow-sm">
+            <CardHeader className="px-3 pb-1 pt-3">
+              <CardTitle className="text-xs font-medium text-[var(--muted-foreground)]">
                 Lucro líquido
               </CardTitle>
             </CardHeader>
-            <CardContent className="text-lg font-semibold">
+            <CardContent className="px-3 pb-3 text-base font-semibold">
               {formatFinancialMoney(data.yearTotals.lucroLiquido)}{" "}
-              <span className="text-sm font-normal text-[var(--muted-foreground)]">
+              <span className="text-xs font-normal text-[var(--muted-foreground)]">
                 ({formatFinancialPercent(data.yearTotals.lucroLiquidoPercent)})
               </span>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-[var(--muted-foreground)]">
+          <Card className="shadow-sm">
+            <CardHeader className="px-3 pb-1 pt-3">
+              <CardTitle className="text-xs font-medium text-[var(--muted-foreground)]">
                 Meses sincronizados
               </CardTitle>
             </CardHeader>
-            <CardContent className="text-lg font-semibold">
+            <CardContent className="px-3 pb-3 text-base font-semibold">
               {syncedCount} / 12
             </CardContent>
           </Card>

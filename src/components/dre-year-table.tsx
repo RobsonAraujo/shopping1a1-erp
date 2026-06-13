@@ -1,10 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NumericFormat } from "react-number-format";
-import { Pencil, RefreshCw } from "lucide-react";
+import { AlertCircle, Pencil, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   formatFinancialMoney,
   formatFinancialPercent,
@@ -12,7 +18,6 @@ import {
 import type { DreMonthView, DreYearView } from "@/lib/dre-year-data";
 import {
   buildDreTableRows,
-  dreMonthHeaderColorClass,
   dreMonthShortLabel,
   getCellValue,
   rowBackgroundClass,
@@ -40,13 +45,98 @@ type DreYearTableProps = {
 };
 
 function formatSyncTime(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "Nunca sincronizado";
   return new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
     month: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(iso));
+}
+
+function getMonthAlertMessages(month: DreMonthView): string[] {
+  const messages: string[] = [];
+
+  if (month.isPartial) {
+    messages.push(
+      "Período parcial — mês em andamento ou custos ML ainda incompletos.",
+    );
+  }
+  if (month.billingSource === "fallback" && month.syncedAt) {
+    messages.push(
+      "Custos ML estimados pelos pedidos (faturamento oficial indisponível ou incompleto).",
+    );
+  }
+  messages.push(...month.syncWarnings);
+
+  return messages;
+}
+
+function MonthAlertsTooltip({
+  month,
+  messages,
+}: {
+  month: DreMonthView;
+  messages: string[];
+}) {
+  if (messages.length === 0) return null;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex size-4 shrink-0 items-center justify-center rounded-full text-amber-600 hover:bg-amber-50 hover:text-amber-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+          aria-label={`Ver avisos de ${month.label}`}
+        >
+          <AlertCircle className="size-3" aria-hidden />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent
+        side="bottom"
+        align="center"
+        className="max-w-[18rem] space-y-2 text-left"
+      >
+        <p className="font-semibold text-[var(--foreground)]">
+          Avisos — {month.label}
+        </p>
+        <ul className="list-disc space-y-1 pl-4 text-[11px] leading-snug">
+          {messages.map((message) => (
+            <li key={message}>{message}</li>
+          ))}
+        </ul>
+        <p className="border-t border-[var(--border)] pt-2 text-[10px] text-[var(--muted-foreground)]">
+          Última sync: {formatSyncTime(month.syncedAt)}
+        </p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function MonthSyncTooltip({
+  month,
+  children,
+}: {
+  month: DreMonthView;
+  children: ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="bottom" align="center" className="text-left">
+        <p className="font-medium">{month.label}</p>
+        <p className="mt-1 text-[var(--muted-foreground)]">
+          {formatSyncTime(month.syncedAt)}
+        </p>
+        {month.isCurrentMonth ? (
+          <p className="mt-1 text-[var(--muted-foreground)]">Mês atual</p>
+        ) : null}
+        {month.isFutureMonth ? (
+          <p className="mt-1 text-[var(--muted-foreground)]">Mês futuro</p>
+        ) : null}
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 function SourceTag({ source }: { source?: string }) {
@@ -60,7 +150,10 @@ function SourceTag({ source }: { source?: string }) {
           ? "ADS"
           : "Manual";
   return (
-    <Badge variant="outline" className="ml-2 px-1.5 py-0 text-[10px] font-normal">
+    <Badge
+      variant="outline"
+      className="ml-1 px-1 py-0 text-[9px] font-normal leading-none"
+    >
       {label}
     </Badge>
   );
@@ -123,7 +216,7 @@ function DreManualCostCell({
         prefix="R$ "
         decimalScale={2}
         allowNegative={false}
-        className="w-full min-w-[5.5rem] rounded border border-[var(--border)] bg-[var(--background)] px-1.5 py-1 text-right text-xs tabular-nums"
+        className="w-full rounded border border-[var(--border)] bg-[var(--background)] px-1 py-0.5 text-right text-[11px] tabular-nums"
       />
     );
   }
@@ -132,10 +225,10 @@ function DreManualCostCell({
   const inherited = override === null && value !== null;
 
   return (
-    <div className="flex items-center justify-end gap-0.5">
+    <div className="flex items-center justify-end gap-0">
       <span
         className={cn(
-          "text-sm tabular-nums",
+          "text-[11px] tabular-nums leading-tight",
           inherited && "text-[var(--muted-foreground)]",
         )}
         title={inherited ? "Valor herdado do mês anterior" : undefined}
@@ -146,11 +239,11 @@ function DreManualCostCell({
         type="button"
         variant="ghost"
         size="icon-sm"
-        className="size-7 shrink-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+        className="size-5 shrink-0 p-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
         aria-label={`Editar ${label}`}
         onClick={() => setEditing(true)}
       >
-        <Pencil className="size-3.5" aria-hidden />
+        <Pencil className="size-3" aria-hidden />
       </Button>
     </div>
   );
@@ -169,8 +262,11 @@ function renderLabelCell(row: DreTableRow) {
     (row.type === "static" && row.indent);
 
   return (
-    <div className={cn("flex min-w-[12rem] items-center", indent && "pl-4")}>
-      <span className={rowLabelClass(row)}>{row.label}</span>
+    <div
+      className={cn("flex min-w-0 items-center truncate", indent && "pl-2.5")}
+      title={row.label}
+    >
+      <span className={cn(rowLabelClass(row), "truncate")}>{row.label}</span>
       <SourceTag source={source} />
     </div>
   );
@@ -215,11 +311,13 @@ function renderValueCell(
   const { amount, percent } = getCellValue(row, month);
   const showPercent = row.type === "static" && row.showPercent;
 
+  const moneyLabel = formatFinancialMoney(amount);
+
   return (
-    <div className="text-right tabular-nums">
+    <div className="text-right tabular-nums leading-tight">
       <div
         className={cn(
-          "text-sm",
+          "truncate text-[11px]",
           row.type === "static" && row.kind === "resultado" && "font-bold",
           row.type === "static" &&
             (row.kind === "entrada-total" || row.kind === "custo-total") &&
@@ -228,11 +326,12 @@ function renderValueCell(
             ? valueToneClass(amount)
             : "",
         )}
+        title={moneyLabel}
       >
-        {formatFinancialMoney(amount)}
+        {moneyLabel}
       </div>
       {showPercent ? (
-        <div className={cn("text-xs", valueToneClass(percent))}>
+        <div className={cn("text-[10px]", valueToneClass(percent))}>
           {formatFinancialPercent(percent)}
         </div>
       ) : null}
@@ -278,10 +377,7 @@ function getYearTotalForRow(
       return { amount: totals.totalEntrada, percent: null };
     case "revenueMl":
       return {
-        amount: data.months.reduce(
-          (s, m) => s + (m.lines?.revenueMl ?? 0),
-          0,
-        ),
+        amount: data.months.reduce((s, m) => s + (m.lines?.revenueMl ?? 0), 0),
         percent: null,
       };
     case "totalCustoOperacional":
@@ -316,17 +412,59 @@ function getYearTotalForRow(
   }
 }
 
-function monthHeaderStateClass(month: DreMonthView): string {
-  if (month.isFutureMonth) {
-    return "ring-1 ring-[var(--border)] opacity-60";
-  }
-  if (month.isCurrentMonth) {
-    return "ring-2 ring-emerald-500/70 shadow-sm";
-  }
-  if (month.syncedAt) {
-    return "ring-1 ring-emerald-600/30";
-  }
-  return "ring-1 ring-amber-500/40";
+function MonthHeaderCell({
+  month,
+  syncing,
+  onSync,
+}: {
+  month: DreMonthView;
+  syncing: boolean;
+  onSync: () => void;
+}) {
+  const alertMessages = getMonthAlertMessages(month);
+  const hasAlert = alertMessages.length > 0;
+
+  return (
+    <th
+      className={cn(
+        "border-b border-[var(--border)] bg-white px-0 py-1 text-center font-normal",
+        month.isFutureMonth && "opacity-45",
+      )}
+    >
+      <div className="flex items-center justify-center gap-0.5">
+        <MonthSyncTooltip month={month}>
+          <span
+            className={cn(
+              "cursor-default text-[10px] font-semibold tracking-wider text-[var(--muted-foreground)]",
+              month.isCurrentMonth && "text-[var(--primary)]",
+              !month.syncedAt && !month.isFutureMonth && "text-amber-700",
+            )}
+          >
+            {dreMonthShortLabel(month.month)}
+          </span>
+        </MonthSyncTooltip>
+        {hasAlert ? (
+          <MonthAlertsTooltip month={month} messages={alertMessages} />
+        ) : null}
+        {month.canSync ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="size-5 shrink-0 p-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+            aria-label={`Sincronizar ${month.label}`}
+            disabled={syncing}
+            onClick={onSync}
+          >
+            <RefreshCw
+              className={cn("size-3", syncing && "animate-spin")}
+              aria-hidden
+            />
+          </Button>
+        ) : null}
+      </div>
+    </th>
+  );
 }
 
 export function DreYearTable({
@@ -344,94 +482,30 @@ export function DreYearTable({
   );
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
-      <table className="w-full min-w-[72rem] border-collapse text-sm">
+    <TooltipProvider delayDuration={200}>
+      <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-white shadow-sm">
+        <table className="w-full table-fixed border-collapse text-xs">
+        <colgroup>
+          <col style={{ width: "13%" }} />
+          {data.months.map((month) => (
+            <col key={month.month} style={{ width: `${67 / 12}%` }} />
+          ))}
+          <col style={{ width: "7%" }} />
+        </colgroup>
         <thead>
-          <tr className="border-b border-[var(--border)]">
-            <th className="sticky left-0 z-20 min-w-[14rem] bg-[var(--muted)]/95 px-3 py-3 text-left font-semibold backdrop-blur-sm">
+          <tr>
+            <th className="sticky left-0 z-20 border-b border-[var(--border)] bg-white px-2 py-1 text-left text-[10px] font-medium text-[var(--muted-foreground)]">
               Linha
             </th>
             {data.months.map((month) => (
-              <th
+              <MonthHeaderCell
                 key={month.month}
-                className={cn(
-                  "min-w-[7rem] px-1.5 py-2 text-center align-bottom",
-                  dreMonthHeaderColorClass(month.month),
-                )}
-              >
-                <div
-                  className={cn(
-                    "mx-auto flex max-w-[6.75rem] flex-col items-center gap-1.5 rounded-lg px-1.5 py-2",
-                    monthHeaderStateClass(month),
-                  )}
-                >
-                  <span className="text-sm font-bold tracking-wide">
-                    {dreMonthShortLabel(month.month)}
-                  </span>
-                  <div className="flex min-h-[1.25rem] flex-wrap items-center justify-center gap-1">
-                    {month.isFutureMonth ? (
-                      <Badge variant="muted" className="text-[10px]">
-                        Futuro
-                      </Badge>
-                    ) : null}
-                    {month.isCurrentMonth ? (
-                      <Badge variant="secondary" className="text-[10px]">
-                        Atual
-                      </Badge>
-                    ) : null}
-                    {month.isPartial ? (
-                      <Badge variant="warning" className="text-[10px]">
-                        Parcial
-                      </Badge>
-                    ) : null}
-                    {month.billingSource === "fallback" && month.syncedAt ? (
-                      <Badge variant="outline" className="text-[10px]">
-                        Estimado
-                      </Badge>
-                    ) : null}
-                  </div>
-                  {month.syncWarnings.length > 0 ? (
-                    <Badge
-                      variant="outline"
-                      className="max-w-full truncate text-[10px]"
-                      title={month.syncWarnings.join("\n")}
-                    >
-                      Avisos
-                    </Badge>
-                  ) : null}
-                  {month.canSync ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      className="size-7 bg-[var(--background)]/70"
-                      aria-label={`Sincronizar ${month.label}`}
-                      disabled={syncingMonths.has(month.month)}
-                      onClick={() => onSyncMonth(month.month)}
-                    >
-                      <RefreshCw
-                        className={cn(
-                          "size-3.5",
-                          syncingMonths.has(month.month) && "animate-spin",
-                        )}
-                        aria-hidden
-                      />
-                    </Button>
-                  ) : (
-                    <span
-                      className="inline-flex size-7 items-center justify-center text-[var(--muted-foreground)]"
-                      aria-hidden
-                    >
-                      —
-                    </span>
-                  )}
-                  <span className="text-[10px] font-normal text-[var(--muted-foreground)]">
-                    {formatSyncTime(month.syncedAt)}
-                  </span>
-                </div>
-              </th>
+                month={month}
+                syncing={syncingMonths.has(month.month)}
+                onSync={() => onSyncMonth(month.month)}
+              />
             ))}
-            <th className="min-w-[6.5rem] bg-[var(--muted)]/40 px-2 py-3 text-center font-semibold">
+            <th className="border-b border-[var(--border)] bg-[var(--muted)]/30 px-1 py-1 text-center text-[10px] font-semibold text-[var(--muted-foreground)]">
               Total
             </th>
           </tr>
@@ -439,8 +513,7 @@ export function DreYearTable({
         <tbody>
           {rows.map((row) => {
             const bg = rowBackgroundClass(row);
-            const isResult =
-              row.type === "static" && row.kind === "resultado";
+            const isResult = row.type === "static" && row.kind === "resultado";
 
             return (
               <tr
@@ -450,29 +523,16 @@ export function DreYearTable({
                     : row.id
                 }
                 className={cn(
-                  "border-b border-[var(--border)]/60",
+                  "border-b border-[var(--border)]/50",
                   bg,
-                  isResult && "border-t-2 border-t-[var(--border)]",
+                  isResult && "border-t border-t-[var(--border)]",
                 )}
               >
-                <td
-                  className={cn(
-                    "sticky left-0 z-10 px-3 py-2",
-                    bg,
-                    "backdrop-blur-sm",
-                  )}
-                >
+                <td className={cn("sticky left-0 z-10 px-2 py-1", bg)}>
                   {renderLabelCell(row)}
                 </td>
                 {data.months.map((month) => (
-                  <td
-                    key={month.month}
-                    className={cn(
-                      "px-2 py-2 align-middle",
-                      dreMonthHeaderColorClass(month.month),
-                      "bg-opacity-20",
-                    )}
-                  >
+                  <td key={month.month} className="px-0.5 py-1 align-middle">
                     {renderValueCell(
                       row,
                       month,
@@ -481,9 +541,10 @@ export function DreYearTable({
                     )}
                   </td>
                 ))}
-                <td className="px-2 py-2 align-middle">
-                  {row.type === "fixed-cost" || row.type === "operational-cost" ? (
-                    <div className="text-right text-sm tabular-nums text-[var(--muted-foreground)]">
+                <td className="bg-[var(--muted)]/15 px-1 py-1 align-middle">
+                  {row.type === "fixed-cost" ||
+                  row.type === "operational-cost" ? (
+                    <div className="text-right text-[11px] tabular-nums text-[var(--muted-foreground)]">
                       {formatFinancialMoney(
                         getYearTotalForRow(row, data).amount,
                       )}
@@ -492,10 +553,10 @@ export function DreYearTable({
                     (() => {
                       const { amount, percent } = getYearTotalForRow(row, data);
                       return (
-                        <div className="text-right tabular-nums">
+                        <div className="text-right tabular-nums leading-tight">
                           <div
                             className={cn(
-                              "text-sm font-semibold",
+                              "text-[11px] font-semibold",
                               isResult ? valueToneClass(amount) : "",
                             )}
                           >
@@ -504,7 +565,7 @@ export function DreYearTable({
                           {row.type === "static" && row.showPercent ? (
                             <div
                               className={cn(
-                                "text-xs",
+                                "text-[10px]",
                                 valueToneClass(percent),
                               )}
                             >
@@ -520,7 +581,8 @@ export function DreYearTable({
             );
           })}
         </tbody>
-      </table>
-    </div>
+        </table>
+      </div>
+    </TooltipProvider>
   );
 }
