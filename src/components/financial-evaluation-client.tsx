@@ -219,21 +219,20 @@ function MinPriceTableCell({
     return <span className="text-[var(--muted-foreground)]">—</span>;
   }
 
-  if (suggestion.alreadyMeetsTarget) {
-    return (
-      <span
-        className="font-medium text-emerald-600"
-        title={`Preço atual já atinge meta de ${formatFinancialPercent(targetMarginPercent)}`}
-      >
-        OK
-      </span>
-    );
-  }
+  const meetsOrBeatsTarget = suggestion.alreadyMeetsTarget;
+  const needsHigherPrice =
+    suggestion.minSalePrice !== null &&
+    suggestion.minSalePrice > row.salePrice + 0.005;
 
   return (
     <span
-      className="font-medium tabular-nums text-amber-700 dark:text-amber-500"
-      title={`Mínimo para ${formatFinancialPercent(targetMarginPercent)} de ${marginBasisLabel(marginBasis)}`}
+      className={cn(
+        "font-medium tabular-nums",
+        meetsOrBeatsTarget && !needsHigherPrice
+          ? "text-emerald-600"
+          : "text-amber-700 dark:text-amber-500",
+      )}
+      title={`Mínimo para ${formatFinancialPercent(targetMarginPercent)} de ${marginBasisLabel(marginBasis)} · atual ${formatFinancialMoney(row.salePrice)} (${formatFinancialPercent(suggestion.currentMarginPercent)})`}
     >
       {formatFinancialMoney(suggestion.minSalePrice)}
     </span>
@@ -647,12 +646,14 @@ function MarginPriceSuggestion({
   } else if (suggestion.reason === "impossible") {
     message = `Com os custos atuais, não é possível atingir ${targetLabel} de ${basisLabel}.`;
     toneClass = "border-rose-200 bg-rose-50 text-rose-800";
-  } else if (suggestion.alreadyMeetsTarget) {
-    message = `O preço atual (${formatFinancialMoney(row.salePrice)}) já atinge ${targetLabel} de ${basisLabel} (${formatFinancialPercent(suggestion.currentMarginPercent)}).`;
-    toneClass = "border-emerald-200 bg-emerald-50 text-emerald-900";
   } else {
-    message = `Para ter ${targetLabel} de ${basisLabel}, o preço final precisa ser pelo menos ${formatFinancialMoney(suggestion.minSalePrice)}. Preço atual: ${formatFinancialMoney(row.salePrice)} (${formatFinancialPercent(suggestion.currentMarginPercent)}).`;
-    toneClass = "border-sky-200 bg-sky-50 text-sky-900";
+    const aboveTargetNote = suggestion.alreadyMeetsTarget
+      ? " Você já está acima da meta."
+      : "";
+    message = `Preço mínimo para ${targetLabel} de ${basisLabel}: ${formatFinancialMoney(suggestion.minSalePrice)}. Preço atual: ${formatFinancialMoney(row.salePrice)} (${formatFinancialPercent(suggestion.currentMarginPercent)}).${aboveTargetNote}`;
+    toneClass = suggestion.alreadyMeetsTarget
+      ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+      : "border-sky-200 bg-sky-50 text-sky-900";
   }
 
   return (
