@@ -139,8 +139,51 @@ function marginTone(margin: number | null | undefined): string {
   return "text-[var(--muted-foreground)]";
 }
 
+const currentSectionClass = "bg-[var(--muted)]/10";
+
 const decisionSectionClass =
-  "ml-4 border-l-2 border-[var(--border)] bg-[var(--muted)]/20 pl-4";
+  "ml-4 border-l-2 border-sky-200 bg-sky-50/80 pl-4 dark:border-sky-800 dark:bg-sky-950/30";
+
+function sectionGroupPill(variant: "current" | "decision") {
+  return cn(
+    "inline-block rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide",
+    variant === "current"
+      ? "bg-[var(--muted)]/40 text-[var(--muted-foreground)]"
+      : "bg-sky-100 text-sky-900 dark:bg-sky-900/50 dark:text-sky-100",
+  );
+}
+
+function StackedMarginCell({
+  percent,
+  value,
+  sublabel,
+  unavailable,
+}: {
+  percent: number | null;
+  value: number | null;
+  sublabel?: string | null;
+  unavailable?: boolean;
+}) {
+  if (unavailable) {
+    return <span className="text-[var(--muted-foreground)]">—</span>;
+  }
+
+  return (
+    <div className="text-right">
+      <div className={cn("font-semibold", marginTone(percent))}>
+        {formatFinancialPercent(percent)}
+      </div>
+      <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+        {formatFinancialMoney(value)}
+      </div>
+      {sublabel ? (
+        <div className="mt-0.5 text-[10px] text-[var(--muted-foreground)]">
+          {sublabel}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function MinPriceTableCell({
   row,
@@ -281,46 +324,10 @@ export function FinancialEvaluationClient() {
           <div>
             <CardTitle className="text-lg">Anúncios ativos e pausados</CardTitle>
             <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-              Margem pós ADS usa TACOS dos últimos 7 dias. À direita, sugestão de
-              preço para a meta configurada.
+              Clique em um anúncio para ver o detalhamento completo.
             </p>
           </div>
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="w-36">
-              <MaskedPercentField
-                id="target-margin-percent"
-                label="Meta de margem"
-                value={targetMarginPercent}
-                onValueChange={(value) => {
-                  if (value !== null && Number.isFinite(value)) {
-                    setTargetMarginPercent(value);
-                  }
-                }}
-              />
-            </div>
-            <div className="space-y-1">
-              <span className="block text-sm font-medium">Base da meta</span>
-              <div className="flex rounded-lg border border-[var(--border)] p-0.5">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={marginBasis === "contribution" ? "default" : "ghost"}
-                  className="h-8 rounded-md px-3 text-xs"
-                  onClick={() => setMarginBasis("contribution")}
-                >
-                  Contribuição
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={marginBasis === "afterAds" ? "default" : "ghost"}
-                  className="h-8 rounded-md px-3 text-xs"
-                  onClick={() => setMarginBasis("afterAds")}
-                >
-                  Pós ADS
-                </Button>
-              </div>
-            </div>
+          <div className="flex flex-wrap items-center gap-2">
             <ItemListSearch
               value={searchQuery}
               onChange={setSearchQuery}
@@ -362,45 +369,106 @@ export function FinancialEvaluationClient() {
           ) : null}
 
           {data && filteredItems.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1020px] border-collapse text-sm">
+            <>
+              <div className="mb-4 flex flex-wrap items-end justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--muted)]/15 px-3 py-2">
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  Sugestão usa meta de{" "}
+                  <span className="font-medium text-[var(--foreground)]">
+                    {formatFinancialPercent(targetMarginPercent)}
+                  </span>{" "}
+                  ({marginBasisLabel(marginBasis)}). Pós ADS: TACOS dos últimos
+                  7 dias.
+                </p>
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="w-36">
+                    <MaskedPercentField
+                      id="target-margin-percent"
+                      label="Meta de margem"
+                      value={targetMarginPercent}
+                      onValueChange={(value) => {
+                        if (value !== null && Number.isFinite(value)) {
+                          setTargetMarginPercent(value);
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <span className="block text-sm font-medium">Base da meta</span>
+                    <div className="flex rounded-lg border border-[var(--border)] bg-[var(--background)] p-0.5">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={
+                          marginBasis === "contribution" ? "default" : "ghost"
+                        }
+                        className="h-8 rounded-md px-3 text-xs"
+                        onClick={() => setMarginBasis("contribution")}
+                      >
+                        Contribuição
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={marginBasis === "afterAds" ? "default" : "ghost"}
+                        className="h-8 rounded-md px-3 text-xs"
+                        onClick={() => setMarginBasis("afterAds")}
+                      >
+                        Pós ADS
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+              <table className="w-full min-w-[900px] border-collapse text-sm">
                 <thead>
                   <tr className="text-left text-[var(--muted-foreground)]">
                     <th colSpan={3} className="px-2 pt-2" />
                     <th
-                      colSpan={4}
-                      className="px-2 pt-2 pb-1 text-center text-xs font-semibold uppercase tracking-wide"
+                      colSpan={2}
+                      className={cn(
+                        currentSectionClass,
+                        "px-2 pt-2 pb-1 text-center",
+                      )}
                     >
-                      Situação atual
+                      <span className={sectionGroupPill("current")}>
+                        Situação atual
+                      </span>
                     </th>
                     <th
                       colSpan={1}
                       className={cn(
                         decisionSectionClass,
-                        "px-2 pt-2 pb-1 text-center text-xs font-semibold uppercase tracking-wide",
+                        "px-2 pt-2 pb-1 text-center",
                       )}
                     >
-                      Para decidir
+                      <span className={sectionGroupPill("decision")}>
+                        Para decidir
+                      </span>
                     </th>
                   </tr>
                   <tr className="border-b border-[var(--border)] text-left text-[var(--muted-foreground)]">
                     <th className="px-2 py-2 font-medium">Produto</th>
                     <th className="px-2 py-2 font-medium">Tipo</th>
                     <th className="px-2 py-2 font-medium text-right">Preço</th>
-                    <th className="px-2 py-2 font-medium text-right">
-                      Margem %
-                    </th>
-                    <th className="px-2 py-2 font-medium text-right">
-                      Margem R$
+                    <th
+                      className={cn(
+                        currentSectionClass,
+                        "px-2 py-2 font-medium text-right",
+                      )}
+                      title="Margem de contribuição (% em destaque, R$ abaixo)"
+                    >
+                      Margem
                     </th>
                     <th
-                      className="px-2 py-2 font-medium text-right"
+                      className={cn(
+                        currentSectionClass,
+                        "px-2 py-2 font-medium text-right",
+                      )}
                       title="Margem de contribuição menos TACOS (últimos 7 dias)"
                     >
-                      Pós ADS %
-                    </th>
-                    <th className="px-2 py-2 font-medium text-right">
-                      Pós ADS R$
+                      Pós ADS
                     </th>
                     <th
                       className={cn(
@@ -419,6 +487,12 @@ export function FinancialEvaluationClient() {
                     const marginPercent = row.breakdown?.marginPercent ?? null;
                     const afterAdsPercent = row.marginAfterAdsPercent;
                     const afterAdsValue = row.marginAfterAdsValue;
+                    const tacosSublabel =
+                      row.adsMetricsAvailable &&
+                      row.tacosPercent != null &&
+                      row.tacosPercent > 0
+                        ? `TACOS ${formatFinancialPercent(row.tacosPercent)}`
+                        : null;
                     return (
                       <tr
                         key={row.mlItemId}
@@ -459,48 +533,19 @@ export function FinancialEvaluationClient() {
                             </div>
                           ) : null}
                         </td>
-                        <td
-                          className={cn(
-                            "px-2 py-3 text-right font-medium",
-                            marginTone(marginPercent),
-                          )}
-                        >
-                          {formatFinancialPercent(marginPercent)}
+                        <td className={cn(currentSectionClass, "px-2 py-3")}>
+                          <StackedMarginCell
+                            percent={marginPercent}
+                            value={marginValue}
+                          />
                         </td>
-                        <td
-                          className={cn(
-                            "px-2 py-3 text-right font-medium",
-                            marginTone(marginValue),
-                          )}
-                        >
-                          {formatFinancialMoney(marginValue)}
-                        </td>
-                        <td
-                          className={cn(
-                            "px-2 py-3 text-right font-medium",
-                            marginTone(afterAdsPercent),
-                          )}
-                        >
-                          {row.adsMetricsAvailable
-                            ? formatFinancialPercent(afterAdsPercent)
-                            : "—"}
-                          {row.adsMetricsAvailable &&
-                          row.tacosPercent != null &&
-                          row.tacosPercent > 0 ? (
-                            <div className="text-xs font-normal text-[var(--muted-foreground)]">
-                              TACOS {formatFinancialPercent(row.tacosPercent)}
-                            </div>
-                          ) : null}
-                        </td>
-                        <td
-                          className={cn(
-                            "px-2 py-3 text-right font-medium",
-                            marginTone(afterAdsValue),
-                          )}
-                        >
-                          {row.adsMetricsAvailable
-                            ? formatFinancialMoney(afterAdsValue)
-                            : "—"}
+                        <td className={cn(currentSectionClass, "px-2 py-3")}>
+                          <StackedMarginCell
+                            percent={afterAdsPercent}
+                            value={afterAdsValue}
+                            sublabel={tacosSublabel}
+                            unavailable={!row.adsMetricsAvailable}
+                          />
                         </td>
                         <td
                           className={cn(
@@ -520,6 +565,7 @@ export function FinancialEvaluationClient() {
                 </tbody>
               </table>
             </div>
+            </>
           ) : null}
         </CardContent>
       </Card>
