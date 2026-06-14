@@ -4,6 +4,8 @@ import {
   computeMarginAfterAds,
   listingTypeLabelFromId,
   type FinancialMarginBreakdown,
+  type MarginBasis,
+  type MinSalePriceResult,
 } from "@/lib/financial-margin";
 import {
   fetchItemsByIdsBatched,
@@ -27,6 +29,7 @@ import {
 } from "@/lib/mercadolibre/product-ads-metrics";
 import { fetchSellerShippingCost } from "@/lib/mercadolibre/seller-shipping-cost";
 import type { ItemBody } from "@/lib/mercadolibre/types";
+import { refineMinSalePriceForTargetMargin } from "@/lib/refine-min-sale-price";
 
 export type FinancialEvaluationRow = {
   mlItemId: string;
@@ -61,6 +64,10 @@ export type FinancialEvaluationRow = {
   adsMetricsAvailable: boolean;
   errors: string[];
   warnings: string[];
+  minSalePriceForTarget?: MinSalePriceResult | null;
+  minSalePriceTargetPercent?: number | null;
+  minSalePriceMarginBasis?: MarginBasis | null;
+  minSalePriceRefined?: boolean;
 };
 
 function decimalToNumber(value: unknown): number | null {
@@ -415,10 +422,91 @@ async function loadAdsMetricsByItem(
   }
 }
 
+async function applyMinPriceRefinement(
+  accessToken: string,
+  userId: number,
+  row: FinancialEvaluationRow,
+  item: ItemBody,
+  targetMarginPercent: number,
+  marginBasis: MarginBasis,
+): Promise<FinancialEvaluationRow> {
+  if (
+    row.mlFeeAmount === null ||
+    row.shippingCost === null ||
+    !row.breakdown ||
+    row.salePrice <= 0
+  ) {
+    return {
+      ...row,
+      minSalePriceForTarget: null,
+      minSalePriceTargetPercent: targetMarginPercent,
+      minSalePriceMarginBasis: marginBasis,
+      minSalePriceRefined: false,
+    };
+  }
+
+  const afterAds =
+    row.adsMetricsAvailable && marginBasis === "afterAds"
+      ? computeMarginAfterAds({
+          marginBreakdown: row.breakdown,
+          tacosPercent: row.tacosPercent,
+          adsCost: row.adsCost,
+          unitsSold: row.adsUnitsSold,
+        })
+      : null;
+
+  const refined = await refineMinSalePriceForTargetMargin(
+    accessToken,
+    userId,
+    item,
+    {
+      salePrice: row.salePrice,
+      mlFeeAmount: row.mlFeeAmount,
+      mlFeeRebate: row.mlFeeRebate ?? 0,
+      shippingCost: row.shippingCost,
+      productCost: row.productCost,
+      extraCosts: row.extraCosts,
+      taxRatePercent: row.taxRatePercent,
+      targetMarginPercent,
+      marginBasis,
+      tacosPercent: row.tacosPercent,
+      currentContributionMarginPercent: row.breakdown.marginPercent,
+      currentAfterAdsMarginPercent: afterAds?.marginAfterAdsPercent ?? null,
+    },
+    {
+      mlFeeRebate: row.mlFeeRebate ?? 0,
+      productCost: row.productCost ?? 0,
+      extraCosts: row.extraCosts ?? 0,
+      taxRatePercent: row.taxRatePercent ?? 0,
+      listingTypeLabel: row.listingTypeLabel,
+      marginBasis,
+      tacosPercent: row.tacosPercent,
+      adsCost: row.adsCost,
+      adsUnitsSold: row.adsUnitsSold,
+      adsMetricsAvailable: row.adsMetricsAvailable,
+    },
+    item.currency_id ?? null,
+  );
+
+  const { refined: isRefined, ...minSalePriceForTarget } = refined;
+
+  return {
+    ...row,
+    minSalePriceForTarget,
+    minSalePriceTargetPercent: targetMarginPercent,
+    minSalePriceMarginBasis: marginBasis,
+    minSalePriceRefined: isRefined,
+  };
+}
+
 export async function loadFinancialEvaluationRows(
   accessToken: string,
   userId: number,
-  options?: { itemIds?: string[] },
+  options?: {
+    itemIds?: string[];
+    targetMarginPercent?: number;
+    marginBasis?: MarginBasis;
+  },
 ): Promise<FinancialEvaluationRow[]> {
   const listingIds =
     options?.itemIds && options.itemIds.length > 0
@@ -476,7 +564,32 @@ export async function loadFinancialEvaluationRows(
     return withAds;
   });
 
-  return rows.sort((a, b) => {
+  const itemById = new Map(operationalItems.map((item) => [item.id, item]));
+
+  const targetMarginPercent = options?.targetMarginPercent;
+  const marginBasis = options?.marginBasis ?? "contribution";
+  const shouldRefineMinPrice =
+    targetMarginPercent !== undefined &&
+    Number.isFinite(targetMarginPercent) &&
+    targetMarginPercent >= 0 &&
+    targetMarginPercent <= 100;
+
+  const rowsWithMinPrice = shouldRefineMinPrice
+    ? await mapWithConcurrency(rows, 3, async (row) => {
+        const item = itemById.get(row.mlItemId);
+        if (!item) return row;
+        return applyMinPriceRefinement(
+          accessToken,
+          userId,
+          row,
+          item,
+          targetMarginPercent,
+          marginBasis,
+        );
+      })
+    : rows;
+
+  return rowsWithMinPrice.sort((a, b) => {
     const keyA = (a.sku ?? a.title ?? a.mlItemId).toLowerCase();
     const keyB = (b.sku ?? b.title ?? b.mlItemId).toLowerCase();
     return keyA.localeCompare(keyB, "pt-BR");

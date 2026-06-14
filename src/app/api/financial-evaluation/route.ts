@@ -24,9 +24,24 @@ export async function GET(request: NextRequest) {
         .filter(Boolean)
     : undefined;
 
+  const targetMarginParam = request.nextUrl.searchParams.get("targetMarginPercent");
+  const targetMarginPercent =
+    targetMarginParam !== null ? Number(targetMarginParam) : undefined;
+  const marginBasisParam = request.nextUrl.searchParams.get("marginBasis");
+  const marginBasis =
+    marginBasisParam === "afterAds" || marginBasisParam === "contribution"
+      ? marginBasisParam
+      : undefined;
+
   try {
     const items = await loadFinancialEvaluationRows(token, userId, {
       itemIds,
+      targetMarginPercent:
+        targetMarginPercent !== undefined &&
+        Number.isFinite(targetMarginPercent)
+          ? targetMarginPercent
+          : undefined,
+      marginBasis,
     });
     return NextResponse.json({ items });
   } catch (e) {

@@ -7,9 +7,10 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
 } from "react";
-import { ExternalLink, RefreshCw } from "lucide-react";
+import { Calculator, ExternalLink, RefreshCw } from "lucide-react";
 import {
   ItemListSearch,
   itemListSearchEmptyMessage,
@@ -72,6 +73,43 @@ type CostOverrides = {
   extraCosts: number | null;
   taxRatePercent: number | null;
 };
+
+type MinPriceSuggestion = MinSalePriceResult & {
+  refined?: boolean;
+};
+
+function costsMatchRow(costs: CostOverrides, row: FinancialEvaluationRow): boolean {
+  return (
+    costs.productCost === row.productCost &&
+    costs.extraCosts === row.extraCosts &&
+    costs.taxRatePercent === row.taxRatePercent
+  );
+}
+
+function resolveMinPriceSuggestion(
+  row: FinancialEvaluationRow,
+  targetMarginPercent: number,
+  marginBasis: MarginBasis,
+  costs: CostOverrides,
+): MinPriceSuggestion {
+  const serverMatches =
+    costsMatchRow(costs, row) &&
+    row.minSalePriceForTarget &&
+    row.minSalePriceTargetPercent === targetMarginPercent &&
+    row.minSalePriceMarginBasis === marginBasis;
+
+  if (serverMatches && row.minSalePriceForTarget) {
+    return {
+      ...row.minSalePriceForTarget,
+      refined: row.minSalePriceRefined ?? false,
+    };
+  }
+
+  return {
+    ...buildMinPriceSuggestion(row, targetMarginPercent, marginBasis, costs),
+    refined: false,
+  };
+}
 
 function buildMinPriceSuggestion(
   row: FinancialEvaluationRow,
@@ -188,24 +226,56 @@ function StackedMarginCell({
   );
 }
 
+type MinPricesApiResponse = {
+  targetMarginPercent: number;
+  marginBasis: MarginBasis;
+  patches: Array<{
+    mlItemId: string;
+    minSalePriceForTarget: MinSalePriceResult | null;
+    minSalePriceTargetPercent: number | null;
+    minSalePriceMarginBasis: MarginBasis | null;
+    minSalePriceRefined: boolean;
+  }>;
+};
+
+function MinPriceCellSkeleton() {
+  return (
+    <div
+      className="ml-auto h-4 w-16 animate-pulse rounded bg-sky-200/80 dark:bg-sky-800/50"
+      aria-hidden
+    />
+  );
+}
+
 function MinPriceTableCell({
   row,
   targetMarginPercent,
   marginBasis,
+  refining,
+  showProportionalWhileStale,
 }: {
   row: FinancialEvaluationRow;
   targetMarginPercent: number;
   marginBasis: MarginBasis;
+  refining?: boolean;
+  showProportionalWhileStale?: boolean;
 }) {
   const suggestion = useMemo(
     () =>
-      buildMinPriceSuggestion(row, targetMarginPercent, marginBasis, {
+      resolveMinPriceSuggestion(row, targetMarginPercent, marginBasis, {
         productCost: row.productCost,
         extraCosts: row.extraCosts,
         taxRatePercent: row.taxRatePercent,
       }),
     [row, targetMarginPercent, marginBasis],
   );
+
+  if (refining) {
+    return <MinPriceCellSkeleton />;
+  }
+
+  const isProportionalFallback =
+    showProportionalWhileStale && !suggestion.refined;
 
   if (suggestion.reason === "missing_product_cost") {
     return (
@@ -232,9 +302,14 @@ function MinPriceTableCell({
           ? "text-emerald-600"
           : "text-amber-700 dark:text-amber-500",
       )}
-      title={`Mínimo para ${formatFinancialPercent(targetMarginPercent)} de ${marginBasisLabel(marginBasis)} · atual ${formatFinancialMoney(row.salePrice)} (${formatFinancialPercent(suggestion.currentMarginPercent)})`}
+      title={`Mínimo para ${formatFinancialPercent(targetMarginPercent)} de ${marginBasisLabel(marginBasis)} · atual ${formatFinancialMoney(row.salePrice)} (${formatFinancialPercent(suggestion.currentMarginPercent)})${suggestion.refined ? " · taxa e frete ML no preço sugerido" : isProportionalFallback ? " · estimativa proporcional (clique em Atualizar)" : " · estimativa proporcional"}`}
     >
       {formatFinancialMoney(suggestion.minSalePrice)}
+      {isProportionalFallback ? (
+        <span className="ml-1 text-[10px] font-normal text-[var(--muted-foreground)]">
+          ~
+        </span>
+      ) : null}
     </span>
   );
 }
@@ -249,6 +324,19 @@ export function FinancialEvaluationClient() {
     readStoredTargetMargin,
   );
   const [marginBasis, setMarginBasis] = useState(readStoredMarginBasis);
+  const [refiningMinPrices, setRefiningMinPrices] = useState(false);
+  const [minPriceError, setMinPriceError] = useState<string | null>(null);
+  const [appliedTargetMargin, setAppliedTargetMargin] = useState<number | null>(
+    null,
+  );
+  const [appliedMarginBasis, setAppliedMarginBasis] =
+    useState<MarginBasis | null>(null);
+  const initialMinPriceRefineDone = useRef(false);
+
+  const minPriceStale =
+    data !== null &&
+    (appliedTargetMargin !== targetMarginPercent ||
+      appliedMarginBasis !== marginBasis);
 
   useEffect(() => {
     try {
@@ -301,19 +389,88 @@ export function FinancialEvaluationClient() {
           (json as { error?: string }).error ??
             "Falha ao carregar lucratividade.",
         );
-        return;
+        return null;
       }
-      setData((json as ApiResponse).items);
+      const items = (json as ApiResponse).items;
+      setData(items);
+      if (itemIds?.length) {
+        setAppliedTargetMargin(null);
+        setAppliedMarginBasis(null);
+      }
+      return items;
     } catch {
       setError("Falha de rede ao carregar lucratividade.");
+      return null;
     } finally {
       setLoading(false);
     }
   }, []);
 
+  const refineMinPrices = useCallback(
+    async (itemIds?: string[]) => {
+      setRefiningMinPrices(true);
+      setMinPriceError(null);
+      try {
+        const url = new URL(
+          "/api/financial-evaluation/min-prices",
+          window.location.origin,
+        );
+        url.searchParams.set(
+          "targetMarginPercent",
+          String(targetMarginPercent),
+        );
+        url.searchParams.set("marginBasis", marginBasis);
+        if (itemIds?.length) {
+          url.searchParams.set("itemIds", itemIds.join(","));
+        }
+        const res = await fetch(url.toString());
+        const json = (await res.json()) as
+          | MinPricesApiResponse
+          | { error?: string };
+        if (!res.ok) {
+          setMinPriceError(
+            (json as { error?: string }).error ??
+              "Falha ao calcular preços mínimos.",
+          );
+          return;
+        }
+        const { patches } = json as MinPricesApiResponse;
+        const patchById = new Map(patches.map((patch) => [patch.mlItemId, patch]));
+
+        setData((prev) => {
+          if (!prev) return prev;
+          return prev.map((row) => {
+            const patch = patchById.get(row.mlItemId);
+            if (!patch) return row;
+            return {
+              ...row,
+              minSalePriceForTarget: patch.minSalePriceForTarget,
+              minSalePriceTargetPercent: patch.minSalePriceTargetPercent,
+              minSalePriceMarginBasis: patch.minSalePriceMarginBasis,
+              minSalePriceRefined: patch.minSalePriceRefined,
+            };
+          });
+        });
+        setAppliedTargetMargin(targetMarginPercent);
+        setAppliedMarginBasis(marginBasis);
+      } catch {
+        setMinPriceError("Falha de rede ao calcular preços mínimos.");
+      } finally {
+        setRefiningMinPrices(false);
+      }
+    },
+    [targetMarginPercent, marginBasis],
+  );
+
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (!data?.length || initialMinPriceRefineDone.current) return;
+    initialMinPriceRefineDone.current = true;
+    void refineMinPrices(data.map((row) => row.mlItemId));
+  }, [data, refineMinPrices]);
 
   return (
     <div className="space-y-6">
@@ -337,13 +494,20 @@ export function FinancialEvaluationClient() {
               size="sm"
               className="gap-2"
               disabled={loading}
-              onClick={() => void loadData()}
+              onClick={() => {
+                void (async () => {
+                  const items = await loadData();
+                  if (items?.length) {
+                    await refineMinPrices(items.map((row) => row.mlItemId));
+                  }
+                })();
+              }}
             >
               <RefreshCw
                 className={cn("size-4", loading && "animate-spin")}
                 aria-hidden
               />
-              Recalcular
+              Recalcular margens
             </Button>
           </div>
         </CardHeader>
@@ -369,14 +533,27 @@ export function FinancialEvaluationClient() {
           {data && filteredItems.length > 0 ? (
             <>
               <div className="mb-4 flex flex-wrap items-end justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--muted)]/15 px-3 py-2">
-                <p className="text-xs text-[var(--muted-foreground)]">
-                  Sugestão usa meta de{" "}
-                  <span className="font-medium text-[var(--foreground)]">
-                    {formatFinancialPercent(targetMarginPercent)}
-                  </span>{" "}
-                  ({marginBasisLabel(marginBasis)}). Pós ADS: TACOS dos últimos
-                  7 dias.
-                </p>
+                <div className="min-w-0 space-y-1">
+                  <p className="text-xs text-[var(--muted-foreground)]">
+                    Sugestão usa meta de{" "}
+                    <span className="font-medium text-[var(--foreground)]">
+                      {formatFinancialPercent(targetMarginPercent)}
+                    </span>{" "}
+                    ({marginBasisLabel(marginBasis)}). Pós ADS: TACOS dos últimos
+                    7 dias.
+                  </p>
+                  {minPriceStale ? (
+                    <p className="text-xs text-amber-700 dark:text-amber-500">
+                      Meta alterada — atualize os preços mínimos com taxa e
+                      frete ML.
+                    </p>
+                  ) : null}
+                  {minPriceError ? (
+                    <p className="text-xs text-red-600" role="alert">
+                      {minPriceError}
+                    </p>
+                  ) : null}
+                </div>
                 <div className="flex flex-wrap items-end gap-2">
                   <div className="w-36">
                     <MaskedPercentField
@@ -415,6 +592,28 @@ export function FinancialEvaluationClient() {
                       </Button>
                     </div>
                   </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={minPriceStale ? "default" : "outline"}
+                    className="h-[42px] gap-2"
+                    disabled={
+                      refiningMinPrices || loading || !data?.length || !minPriceStale
+                    }
+                    onClick={() => {
+                      if (!data?.length) return;
+                      void refineMinPrices(data.map((row) => row.mlItemId));
+                    }}
+                  >
+                    <Calculator
+                      className={cn(
+                        "size-4",
+                        refiningMinPrices && "animate-pulse",
+                      )}
+                      aria-hidden
+                    />
+                    {refiningMinPrices ? "Consultando ML…" : "Atualizar P/ meta"}
+                  </Button>
                 </div>
               </div>
 
@@ -571,6 +770,8 @@ export function FinancialEvaluationClient() {
                             row={row}
                             targetMarginPercent={targetMarginPercent}
                             marginBasis={marginBasis}
+                            refining={refiningMinPrices}
+                            showProportionalWhileStale={minPriceStale}
                           />
                         </td>
                       </tr>
@@ -589,9 +790,16 @@ export function FinancialEvaluationClient() {
           row={selectedRow}
           targetMarginPercent={targetMarginPercent}
           marginBasis={marginBasis}
+          refiningMinPrices={refiningMinPrices}
+          minPriceStale={minPriceStale}
           onClose={() => setSelectedId(null)}
           onSaved={() => {
-            void loadData([selectedRow.mlItemId]);
+            void (async () => {
+              const items = await loadData([selectedRow.mlItemId]);
+              if (items?.length) {
+                await refineMinPrices([selectedRow.mlItemId]);
+              }
+            })();
           }}
         />
       ) : null}
@@ -606,6 +814,8 @@ function MarginPriceSuggestion({
   productCost,
   extraCosts,
   taxRatePercent,
+  refining,
+  minPriceStale,
 }: {
   row: FinancialEvaluationRow;
   targetMarginPercent: number;
@@ -613,10 +823,12 @@ function MarginPriceSuggestion({
   productCost: number | null;
   extraCosts: number | null;
   taxRatePercent: number | null;
+  refining?: boolean;
+  minPriceStale?: boolean;
 }) {
   const suggestion = useMemo(
     () =>
-      buildMinPriceSuggestion(row, targetMarginPercent, marginBasis, {
+      resolveMinPriceSuggestion(row, targetMarginPercent, marginBasis, {
         productCost,
         extraCosts,
         taxRatePercent,
@@ -633,6 +845,23 @@ function MarginPriceSuggestion({
 
   const basisLabel = marginBasisLabel(marginBasis);
   const targetLabel = formatFinancialPercent(targetMarginPercent);
+
+  if (refining) {
+    return (
+      <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 px-3 py-3 text-sm dark:border-sky-800 dark:bg-sky-950/30">
+        <p className="font-medium text-sky-900 dark:text-sky-100">
+          Sugestão de preço
+        </p>
+        <div className="mt-2 space-y-2">
+          <div className="h-4 w-full max-w-md animate-pulse rounded bg-sky-200/80 dark:bg-sky-800/50" />
+          <div className="h-3 w-48 animate-pulse rounded bg-sky-200/60 dark:bg-sky-800/40" />
+        </div>
+        <p className="mt-2 text-xs text-sky-800 dark:text-sky-200">
+          Consultando taxa e frete ML…
+        </p>
+      </div>
+    );
+  }
 
   let message: string;
   let toneClass = "border-[var(--border)] bg-[var(--muted)]/20 text-[var(--foreground)]";
@@ -661,7 +890,11 @@ function MarginPriceSuggestion({
       <p className="font-medium">Sugestão de preço</p>
       <p className="mt-1">{message}</p>
       <p className="mt-1 text-xs opacity-80">
-        Estimativa com taxa ML e frete proporcionais ao preço atual.
+        {suggestion.refined
+          ? "Taxa ML e frete consultados no preço sugerido (API Mercado Livre)."
+          : minPriceStale
+            ? "Estimativa proporcional — use «Atualizar P/ meta» na tabela para consultar o ML."
+            : "Estimativa com taxa ML e frete proporcionais ao preço atual."}
       </p>
     </div>
   );
@@ -671,12 +904,16 @@ function FinancialDetailModal({
   row,
   targetMarginPercent,
   marginBasis,
+  refiningMinPrices,
+  minPriceStale,
   onClose,
   onSaved,
 }: {
   row: FinancialEvaluationRow;
   targetMarginPercent: number;
   marginBasis: MarginBasis;
+  refiningMinPrices?: boolean;
+  minPriceStale?: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -827,6 +1064,8 @@ function FinancialDetailModal({
             productCost={productCost}
             extraCosts={extraCosts}
             taxRatePercent={taxRatePercent}
+            refining={refiningMinPrices}
+            minPriceStale={minPriceStale}
           />
 
           {row.breakdown ? (
