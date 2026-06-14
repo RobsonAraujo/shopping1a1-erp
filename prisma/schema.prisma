@@ -29,6 +29,7 @@ model Listing {
   warehouseStock WarehouseStock?
   competitionSnapshots CatalogCompetitionSnapshot[]
   stockAttentionAcknowledgements StockAttentionAcknowledgement[]
+  replenishmentCycles ReplenishmentCycle[]
 
   @@index([activeOnMl])
   @@map("listings")
@@ -51,6 +52,42 @@ enum CatalogCompetitionSource {
 enum StockAttentionKind {
   full
   purchase
+}
+
+enum ReplenishmentStatus {
+  attention
+  analyzing
+  quoted
+  ordered
+  in_warehouse
+  full_pending
+  completed
+}
+
+/// Ciclo operacional de reposição (compra → galpão → Full) por anúncio.
+model ReplenishmentCycle {
+  id                    String              @id @default(cuid())
+  mlItemId              String              @map("ml_item_id")
+  status                ReplenishmentStatus
+  triggerMlQty          Int                 @map("trigger_ml_qty")
+  triggerWarehouseQty   Int                 @map("trigger_warehouse_qty")
+  triggerLeadTimeDays   Int?                @map("trigger_lead_time_days")
+  triggerPurchaseAt     DateTime?           @map("trigger_purchase_at")
+  warehouseQtyAtOrder   Int?                @map("warehouse_qty_at_order")
+  suggestedQty          Int?                @map("suggested_qty")
+  notes                 String?
+  completedMlQty        Int?                @map("completed_ml_qty")
+  completedWarehouseQty Int?                @map("completed_warehouse_qty")
+  completedLeadTimeDays Int?                @map("completed_lead_time_days")
+  completedAt           DateTime?           @map("completed_at")
+  createdAt             DateTime            @default(now()) @map("created_at")
+  updatedAt             DateTime            @updatedAt @map("updated_at")
+
+  listing Listing @relation(fields: [mlItemId], references: [mlItemId], onDelete: Cascade)
+
+  @@index([mlItemId, status])
+  @@index([status])
+  @@map("replenishment_cycles")
 }
 
 model CatalogCompetitionSnapshot {

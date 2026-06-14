@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   ChartNoAxesColumn,
+  Kanban,
   LayoutGrid,
   LineChart,
   LogOut,
@@ -43,6 +44,12 @@ const navItems = [
     label: "Compras",
     description: "Analise reposição por fornecedor",
     icon: ShoppingCart,
+  },
+  {
+    href: "/dashboard/operacoes",
+    label: "Operações",
+    description: "Fluxo de compra, galpão e Full",
+    icon: Kanban,
   },
   {
     href: "/dashboard/catalog-report",

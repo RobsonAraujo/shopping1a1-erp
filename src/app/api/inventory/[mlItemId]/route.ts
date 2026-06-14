@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { fetchItemById } from "@/lib/mercadolibre/api";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import { prisma } from "@/lib/db";
+import { syncReplenishmentFromWarehouse } from "@/lib/replenishment-cycle-data";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 import {
   getValidAccessToken,
@@ -250,6 +251,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     const listingData = listingUpsertData(item);
 
+    const existingStock = await prisma.warehouseStock.findUnique({
+      where: { mlItemId },
+      select: { quantity: true },
+    });
+    const previousQty = existingStock?.quantity ?? 0;
+
     const { listing, warehouseStock } = await prisma.$transaction(
       async (tx) => {
         const listingRow = await tx.listing.upsert({
@@ -312,6 +319,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         return { listing: listingRow, warehouseStock: stockRow };
       },
     );
+
+    if (quantity !== undefined && warehouseStock.quantity > previousQty) {
+      await syncReplenishmentFromWarehouse(mlItemId, warehouseStock.quantity);
+    }
 
     return NextResponse.json({ listing, warehouseStock });
   } catch (e) {

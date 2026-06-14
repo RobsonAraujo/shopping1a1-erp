@@ -1,10 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { stockPlanningConfig } from "@/config/stock-planning";
-import {
-  DashboardAttentionPanel,
-  type StockAttentionAcknowledgementView,
-} from "@/components/dashboard-attention-panel";
+import { DashboardOperationsSummary } from "@/components/dashboard-operations-summary";
 import { DashboardItemsTable } from "@/components/dashboard-items-table";
 import { CollapsibleDashboardSection } from "@/components/collapsible-dashboard-section";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,14 +9,14 @@ import {
   fetchOperationalListings,
   fetchUnitsSoldForItemsInWindowBatched,
 } from "@/lib/mercadolibre/api";
-import { prisma } from "@/lib/db";
 import {
   getSessionAccessState,
   readSession,
   refreshSessionPath,
 } from "@/lib/mercadolibre/session";
 import { countListingsByStatus } from "@/lib/mercadolibre/listing-status";
-import type { ItemBody } from "@/lib/mercadolibre/types";
+import { loadOperationsSummary } from "@/lib/replenishment-cycle-data";
+import type { OperationsSummaryCounts } from "@/lib/replenishment-cycle";
 
 export default async function DashboardPage() {
   const cookieStore = await cookies();
@@ -39,21 +36,12 @@ export default async function DashboardPage() {
 
   let items;
   let salesByItem: Record<string, number> = {};
-  let purchaseLeadTimeByItem: Record<string, number | null> = {};
-  let warehouseStockByItem: Record<string, number> = {};
-  let acknowledgements: StockAttentionAcknowledgementView[] = [];
-  let attentionSnapshot: {
-    items: ItemBody[];
-    salesByItem: Record<string, number>;
-    purchaseLeadTimeByItem: Record<string, number | null>;
-    warehouseStockByItem: Record<string, number>;
-    acknowledgements: StockAttentionAcknowledgementView[];
-  } | null = null;
+  let operationsSummary: OperationsSummaryCounts | null = null;
 
   try {
     const allItems = await fetchOperationalListings(token, userId);
     const allIds = allItems.map((item) => item.id);
-    const [allSales, warehouseStocks, stockAttentionAcks] = await Promise.all([
+    const [allSales] = await Promise.all([
         fetchUnitsSoldForItemsInWindowBatched(
           token,
           userId,
@@ -61,38 +49,11 @@ export default async function DashboardPage() {
           windowDays,
           dateField,
         ),
-        prisma.warehouseStock.findMany({
-          where: { mlItemId: { in: allIds } },
-          select: { mlItemId: true, purchaseLeadTimeDays: true, quantity: true },
-        }),
-        prisma.stockAttentionAcknowledgement.findMany({
-          where: { mlItemId: { in: allIds } },
-          select: {
-            mlItemId: true,
-            kind: true,
-            mlAvailableQuantity: true,
-            warehouseQuantity: true,
-            purchaseLeadTimeDays: true,
-          },
-        }),
     ]);
 
-    purchaseLeadTimeByItem = Object.fromEntries(
-      warehouseStocks.map((s) => [s.mlItemId, s.purchaseLeadTimeDays]),
-    );
-    warehouseStockByItem = Object.fromEntries(
-      warehouseStocks.map((s) => [s.mlItemId, s.quantity]),
-    );
     items = allItems;
     salesByItem = allSales;
-    acknowledgements = stockAttentionAcks;
-    attentionSnapshot = {
-      items: allItems,
-      salesByItem: allSales,
-      purchaseLeadTimeByItem,
-      warehouseStockByItem,
-      acknowledgements,
-    };
+    operationsSummary = await loadOperationsSummary(token, userId);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro ao carregar anúncios";
     return (
@@ -111,18 +72,12 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-10">
-      {attentionSnapshot ? (
-        <DashboardAttentionPanel
-          items={attentionSnapshot.items}
-          salesByItem={attentionSnapshot.salesByItem}
-          purchaseLeadTimeByItem={attentionSnapshot.purchaseLeadTimeByItem}
-          warehouseStockByItem={attentionSnapshot.warehouseStockByItem}
-          acknowledgements={attentionSnapshot.acknowledgements}
-        />
+      {operationsSummary ? (
+        <DashboardOperationsSummary summary={operationsSummary} />
       ) : (
         <Card className="border-amber-200 bg-amber-50/50">
           <CardContent className="pt-6 text-sm text-amber-950">
-            Não foi possível carregar o painel de prioridades. Atualize a página
+            Não foi possível carregar o resumo de operações. Atualize a página
             ou tente de novo em instantes.
           </CardContent>
         </Card>

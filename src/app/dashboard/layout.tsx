@@ -4,6 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   ChartNoAxesColumn,
+  Kanban,
   LayoutGrid,
   LineChart,
   LogOut,
@@ -119,6 +120,12 @@ export default async function DashboardLayout({
               <Link href="/dashboard/compras" className="gap-2">
                 <ShoppingCart className="size-4" aria-hidden />
                 Compras
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/dashboard/operacoes" className="gap-2">
+                <Kanban className="size-4" aria-hidden />
+                Operações
               </Link>
             </Button>
             <Button variant="ghost" size="sm" asChild>

@@ -17,8 +17,12 @@ import type {
   SupplierSummary,
 } from "@/lib/purchase-analysis-rows";
 import { prisma } from "@/lib/db";
+import {
+  isActiveReplenishmentStatus,
+  isCompletedCycleStillValid,
+} from "@/lib/replenishment-cycle";
+import type { ReplenishmentStatus } from "@/generated/prisma/client";
 import type { ItemBody } from "@/lib/mercadolibre/types";
-import type { StockAttentionAcknowledgementView } from "@/components/dashboard-attention-panel";
 
 export type {
   PurchaseAnalysisItemRow,
@@ -38,24 +42,98 @@ export type WarehouseStockRow = {
   targetCoverageDays: number | null;
 };
 
-function hasValidPurchaseAck(
+function hasActiveReplenishmentBeyondAttention(
+  mlItemId: string,
+  cyclesByItem: Map<
+    string,
+    { activeStatus: string | null; latestCompleted: {
+      completedMlQty: number | null;
+      completedWarehouseQty: number | null;
+      completedLeadTimeDays: number | null;
+      status: string;
+    } | null }
+  >,
   item: ItemBody,
   warehouseStock: number,
   purchaseLead: number,
-  acknowledgements: StockAttentionAcknowledgementView[],
-  optimisticHidden?: Set<string>,
 ): boolean {
-  const key = `purchase:${item.id}`;
-  if (optimisticHidden?.has(key)) return true;
-  const ack = acknowledgements.find(
-    (a) => a.mlItemId === item.id && a.kind === "purchase",
+  const entry = cyclesByItem.get(mlItemId);
+  if (!entry?.activeStatus) {
+    if (entry?.latestCompleted) {
+      const completed = entry.latestCompleted;
+      if (
+        completed.status === "completed" &&
+        completed.completedMlQty !== null &&
+        completed.completedWarehouseQty !== null &&
+        isCompletedCycleStillValid(
+          {
+            id: "",
+            mlItemId,
+            status: "completed",
+            triggerMlQty: 0,
+            triggerWarehouseQty: 0,
+            triggerLeadTimeDays: null,
+            warehouseQtyAtOrder: null,
+            completedMlQty: completed.completedMlQty,
+            completedWarehouseQty: completed.completedWarehouseQty,
+            completedLeadTimeDays: completed.completedLeadTimeDays,
+            completedAt: new Date(),
+          },
+          {
+            mlQty: item.available_quantity,
+            warehouseQty: warehouseStock,
+            leadTimeDays: purchaseLead,
+          },
+        )
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+  return entry.activeStatus !== "attention";
+}
+
+function buildCyclesByItem(
+  cycles: Array<{
+    mlItemId: string;
+    status: string;
+    completedMlQty: number | null;
+    completedWarehouseQty: number | null;
+    completedLeadTimeDays: number | null;
+    updatedAt: Date;
+  }>,
+) {
+  const map = new Map<
+    string,
+    {
+      activeStatus: string | null;
+      latestCompleted: (typeof cycles)[number] | null;
+    }
+  >();
+
+  const sorted = [...cycles].sort(
+    (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
   );
-  if (!ack) return false;
-  return (
-    ack.mlAvailableQuantity === item.available_quantity &&
-    ack.warehouseQuantity === warehouseStock &&
-    (ack.purchaseLeadTimeDays ?? 0) === purchaseLead
-  );
+
+  for (const cycle of sorted) {
+    let entry = map.get(cycle.mlItemId);
+    if (!entry) {
+      entry = { activeStatus: null, latestCompleted: null };
+      map.set(cycle.mlItemId, entry);
+    }
+    if (
+      isActiveReplenishmentStatus(cycle.status as ReplenishmentStatus) &&
+      !entry.activeStatus
+    ) {
+      entry.activeStatus = cycle.status;
+    }
+    if (cycle.status === "completed" && !entry.latestCompleted) {
+      entry.latestCompleted = cycle;
+    }
+  }
+
+  return map;
 }
 
 function decimalToNumber(value: unknown): number | null {
@@ -72,7 +150,7 @@ export async function loadDashboardPurchaseData(
   const dateField = stockPlanningConfig.salesWindowDateField;
 
   const allIds = await fetchOperationalListingIds(token, userId);
-  const [items, salesByItem, warehouseStocks, acknowledgements, snapshots] =
+  const [items, salesByItem, warehouseStocks, replenishmentCycles, snapshots] =
     await Promise.all([
       fetchItemsByIdsBatched(token, allIds),
       fetchUnitsSoldForItemsInWindowBatched(
@@ -93,15 +171,17 @@ export async function loadDashboardPurchaseData(
           targetCoverageDays: true,
         },
       }),
-      prisma.stockAttentionAcknowledgement.findMany({
-        where: { mlItemId: { in: allIds }, kind: "purchase" },
+      prisma.replenishmentCycle.findMany({
+        where: { mlItemId: { in: allIds } },
         select: {
           mlItemId: true,
-          kind: true,
-          mlAvailableQuantity: true,
-          warehouseQuantity: true,
-          purchaseLeadTimeDays: true,
+          status: true,
+          completedMlQty: true,
+          completedWarehouseQty: true,
+          completedLeadTimeDays: true,
+          updatedAt: true,
         },
+        orderBy: { updatedAt: "desc" },
       }),
       prisma.catalogCompetitionSnapshot.findMany({
         where: { mlItemId: { in: allIds } },
@@ -135,6 +215,8 @@ export async function loadDashboardPurchaseData(
     ),
   ];
   const categoriesById = await fetchCategoriesByIds(token, categoryIds);
+
+  const cyclesByItem = buildCyclesByItem(replenishmentCycles);
 
   const rows: PurchaseAnalysisItemRow[] = items.map((item) => {
     const sku = getItemSku(item);
@@ -195,22 +277,24 @@ export async function loadDashboardPurchaseData(
   function needsPurchase(row: PurchaseAnalysisItemRow): boolean {
     const purchaseLead =
       warehouseById[row.item.id]?.purchaseLeadTimeDays ?? 0;
-    return (
-      row.plan.needsPurchaseAttention &&
-      !hasValidPurchaseAck(
+    if (
+      hasActiveReplenishmentBeyondAttention(
+        row.item.id,
+        cyclesByItem,
         row.item,
         row.warehouseStock,
         purchaseLead,
-        acknowledgements,
       )
-    );
+    ) {
+      return false;
+    }
+    return row.plan.needsPurchaseAttention;
   }
 
   return {
     items,
     salesByItem,
     warehouseById,
-    acknowledgements,
     rows,
     needsPurchase,
   };
