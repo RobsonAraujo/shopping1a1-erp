@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   computeFinancialMargin,
   computeMarginAfterAds,
+  computeMinSalePriceForTargetMargin,
   roundMoney,
 } from "./financial-margin";
 
@@ -122,5 +123,133 @@ describe("computeMarginAfterAds", () => {
     assert.ok(afterAds);
     assert.equal(afterAds.marginAfterAdsPercent, margin.marginPercent);
     assert.equal(afterAds.marginAfterAdsValue, margin.marginValue);
+  });
+});
+
+describe("computeMinSalePriceForTargetMargin", () => {
+  it("computes minimum price for 6% contribution margin (Cabo promo)", () => {
+    const margin = computeFinancialMargin({
+      salePrice: 26,
+      mlFeeAmount: 3.38,
+      mlFeeRebate: 1.56,
+      shippingCost: 6.65,
+      productCost: 11.97,
+      extraCosts: 0,
+      taxRatePercent: 0,
+    });
+
+    const result = computeMinSalePriceForTargetMargin({
+      salePrice: 26,
+      mlFeeAmount: 3.38,
+      mlFeeRebate: 1.56,
+      shippingCost: 6.65,
+      productCost: 11.97,
+      extraCosts: 0,
+      taxRatePercent: 0,
+      targetMarginPercent: 6,
+      marginBasis: "contribution",
+      currentContributionMarginPercent: margin.marginPercent,
+    });
+
+    assert.equal(result.reason, "ok");
+    assert.equal(result.minSalePrice, 19.49);
+    assert.equal(result.alreadyMeetsTarget, true);
+  });
+
+  it("includes TACOS when target is after ads", () => {
+    const margin = computeFinancialMargin({
+      salePrice: 100,
+      mlFeeAmount: 10,
+      shippingCost: 5,
+      productCost: 50,
+      extraCosts: 0,
+      taxRatePercent: 0,
+    });
+    const afterAds = computeMarginAfterAds({
+      marginBreakdown: margin,
+      tacosPercent: 7,
+      adsCost: 7,
+      unitsSold: 1,
+    });
+
+    const result = computeMinSalePriceForTargetMargin({
+      salePrice: 100,
+      mlFeeAmount: 10,
+      shippingCost: 5,
+      productCost: 50,
+      extraCosts: 0,
+      taxRatePercent: 0,
+      targetMarginPercent: 28,
+      marginBasis: "afterAds",
+      tacosPercent: 7,
+      currentAfterAdsMarginPercent: afterAds?.marginAfterAdsPercent ?? null,
+    });
+
+    assert.equal(result.reason, "ok");
+    assert.equal(result.minSalePrice, 100);
+    assert.equal(result.alreadyMeetsTarget, true);
+  });
+
+  it("returns impossible when denominator is non-positive", () => {
+    const result = computeMinSalePriceForTargetMargin({
+      salePrice: 26,
+      mlFeeAmount: 3.38,
+      mlFeeRebate: 1.56,
+      shippingCost: 6.65,
+      productCost: 11.97,
+      extraCosts: 0,
+      taxRatePercent: 0,
+      targetMarginPercent: 80,
+      marginBasis: "contribution",
+      currentContributionMarginPercent: 10,
+    });
+
+    assert.equal(result.reason, "impossible");
+    assert.equal(result.minSalePrice, null);
+    assert.equal(result.alreadyMeetsTarget, false);
+  });
+
+  it("returns missing_product_cost when product cost is absent", () => {
+    const result = computeMinSalePriceForTargetMargin({
+      salePrice: 100,
+      mlFeeAmount: 10,
+      shippingCost: 5,
+      productCost: null,
+      extraCosts: 0,
+      taxRatePercent: 0,
+      targetMarginPercent: 6,
+      marginBasis: "contribution",
+    });
+
+    assert.equal(result.reason, "missing_product_cost");
+    assert.equal(result.minSalePrice, null);
+  });
+
+  it("flags when current price already meets target", () => {
+    const margin = computeFinancialMargin({
+      salePrice: 33.17,
+      mlFeeAmount: 4.31,
+      shippingCost: 6.65,
+      productCost: 11.97,
+      extraCosts: 0.3,
+      taxRatePercent: 12.25,
+    });
+
+    const result = computeMinSalePriceForTargetMargin({
+      salePrice: 33.17,
+      mlFeeAmount: 4.31,
+      shippingCost: 6.65,
+      productCost: 11.97,
+      extraCosts: 0.3,
+      taxRatePercent: 12.25,
+      targetMarginPercent: 6,
+      marginBasis: "contribution",
+      currentContributionMarginPercent: margin.marginPercent,
+    });
+
+    assert.equal(result.reason, "ok");
+    assert.equal(result.alreadyMeetsTarget, true);
+    assert.ok(result.minSalePrice !== null);
+    assert.ok(result.minSalePrice! <= 33.17);
   });
 });

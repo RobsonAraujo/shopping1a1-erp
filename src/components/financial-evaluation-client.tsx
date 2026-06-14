@@ -21,8 +21,14 @@ import {
   MaskedPercentField,
 } from "@/components/financial-cost-input-fields";
 import {
+  computeFinancialMargin,
+  computeMarginAfterAds,
+  computeMinSalePriceForTargetMargin,
   formatFinancialMoney,
   formatFinancialPercent,
+  marginBasisLabel,
+  type MarginBasis,
+  type MinSalePriceResult,
 } from "@/lib/financial-margin";
 import type { FinancialEvaluationRow } from "@/lib/financial-evaluation-data";
 import { filterByItemListSearch } from "@/lib/item-list-search";
@@ -31,6 +37,98 @@ import { cn } from "@/lib/utils";
 type ApiResponse = {
   items: FinancialEvaluationRow[];
 };
+
+const TARGET_MARGIN_STORAGE_KEY = "lucratividade-target-margin";
+const MARGIN_BASIS_STORAGE_KEY = "lucratividade-margin-basis";
+const DEFAULT_TARGET_MARGIN_PERCENT = 6;
+
+function readStoredTargetMargin(): number {
+  if (typeof window === "undefined") return DEFAULT_TARGET_MARGIN_PERCENT;
+  try {
+    const raw = localStorage.getItem(TARGET_MARGIN_STORAGE_KEY);
+    if (raw === null) return DEFAULT_TARGET_MARGIN_PERCENT;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
+      return DEFAULT_TARGET_MARGIN_PERCENT;
+    }
+    return parsed;
+  } catch {
+    return DEFAULT_TARGET_MARGIN_PERCENT;
+  }
+}
+
+function readStoredMarginBasis(): MarginBasis {
+  if (typeof window === "undefined") return "contribution";
+  try {
+    const raw = localStorage.getItem(MARGIN_BASIS_STORAGE_KEY);
+    return raw === "afterAds" ? "afterAds" : "contribution";
+  } catch {
+    return "contribution";
+  }
+}
+
+type CostOverrides = {
+  productCost: number | null;
+  extraCosts: number | null;
+  taxRatePercent: number | null;
+};
+
+function buildMinPriceSuggestion(
+  row: FinancialEvaluationRow,
+  targetMarginPercent: number,
+  marginBasis: MarginBasis,
+  costs: CostOverrides,
+): MinSalePriceResult {
+  if (
+    row.mlFeeAmount === null ||
+    row.shippingCost === null ||
+    !row.breakdown ||
+    row.salePrice <= 0
+  ) {
+    return {
+      minSalePrice: null,
+      currentMarginPercent: null,
+      alreadyMeetsTarget: false,
+      reason: "incomplete",
+    };
+  }
+
+  const breakdown = computeFinancialMargin({
+    salePrice: row.salePrice,
+    mlFeeAmount: row.mlFeeAmount,
+    mlFeeRebate: row.mlFeeRebate ?? 0,
+    shippingCost: row.shippingCost,
+    productCost: costs.productCost,
+    extraCosts: costs.extraCosts,
+    taxRatePercent: costs.taxRatePercent,
+    listingTypeLabel: row.listingTypeLabel,
+  });
+
+  const afterAds =
+    row.adsMetricsAvailable && marginBasis === "afterAds"
+      ? computeMarginAfterAds({
+          marginBreakdown: breakdown,
+          tacosPercent: row.tacosPercent,
+          adsCost: row.adsCost,
+          unitsSold: row.adsUnitsSold,
+        })
+      : null;
+
+  return computeMinSalePriceForTargetMargin({
+    salePrice: row.salePrice,
+    mlFeeAmount: row.mlFeeAmount,
+    mlFeeRebate: row.mlFeeRebate ?? 0,
+    shippingCost: row.shippingCost,
+    productCost: costs.productCost,
+    extraCosts: costs.extraCosts,
+    taxRatePercent: costs.taxRatePercent,
+    targetMarginPercent,
+    marginBasis,
+    tacosPercent: row.tacosPercent,
+    currentContributionMarginPercent: breakdown.marginPercent,
+    currentAfterAdsMarginPercent: afterAds?.marginAfterAdsPercent ?? null,
+  });
+}
 
 function marginTone(margin: number | null | undefined): string {
   if (margin === null || margin === undefined) {
@@ -47,6 +145,34 @@ export function FinancialEvaluationClient() {
   const [data, setData] = useState<FinancialEvaluationRow[] | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [targetMarginPercent, setTargetMarginPercent] = useState(
+    DEFAULT_TARGET_MARGIN_PERCENT,
+  );
+  const [marginBasis, setMarginBasis] = useState<MarginBasis>("contribution");
+
+  useEffect(() => {
+    setTargetMarginPercent(readStoredTargetMargin());
+    setMarginBasis(readStoredMarginBasis());
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        TARGET_MARGIN_STORAGE_KEY,
+        String(targetMarginPercent),
+      );
+    } catch {
+      // ignore quota / private mode
+    }
+  }, [targetMarginPercent]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(MARGIN_BASIS_STORAGE_KEY, marginBasis);
+    } catch {
+      // ignore quota / private mode
+    }
+  }, [marginBasis]);
 
   const filteredItems = useMemo(
     () =>
@@ -104,7 +230,40 @@ export function FinancialEvaluationClient() {
               Margem pós ADS usa TACOS dos últimos 7 dias (Product Ads ML).
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="w-36">
+              <MaskedPercentField
+                id="target-margin-percent"
+                label="Meta de margem"
+                value={targetMarginPercent}
+                onValueChange={(value) =>
+                  setTargetMarginPercent(value ?? DEFAULT_TARGET_MARGIN_PERCENT)
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <span className="block text-sm font-medium">Base da meta</span>
+              <div className="flex rounded-lg border border-[var(--border)] p-0.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={marginBasis === "contribution" ? "default" : "ghost"}
+                  className="h-8 rounded-md px-3 text-xs"
+                  onClick={() => setMarginBasis("contribution")}
+                >
+                  Contribuição
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={marginBasis === "afterAds" ? "default" : "ghost"}
+                  className="h-8 rounded-md px-3 text-xs"
+                  onClick={() => setMarginBasis("afterAds")}
+                >
+                  Pós ADS
+                </Button>
+              </div>
+            </div>
             <ItemListSearch
               value={searchQuery}
               onChange={setSearchQuery}
@@ -272,6 +431,8 @@ export function FinancialEvaluationClient() {
       {selectedRow ? (
         <FinancialDetailModal
           row={selectedRow}
+          targetMarginPercent={targetMarginPercent}
+          marginBasis={marginBasis}
           onClose={() => setSelectedId(null)}
           onSaved={() => {
             void loadData([selectedRow.mlItemId]);
@@ -282,12 +443,82 @@ export function FinancialEvaluationClient() {
   );
 }
 
+function MarginPriceSuggestion({
+  row,
+  targetMarginPercent,
+  marginBasis,
+  productCost,
+  extraCosts,
+  taxRatePercent,
+}: {
+  row: FinancialEvaluationRow;
+  targetMarginPercent: number;
+  marginBasis: MarginBasis;
+  productCost: number | null;
+  extraCosts: number | null;
+  taxRatePercent: number | null;
+}) {
+  const suggestion = useMemo(
+    () =>
+      buildMinPriceSuggestion(row, targetMarginPercent, marginBasis, {
+        productCost,
+        extraCosts,
+        taxRatePercent,
+      }),
+    [
+      row,
+      targetMarginPercent,
+      marginBasis,
+      productCost,
+      extraCosts,
+      taxRatePercent,
+    ],
+  );
+
+  const basisLabel = marginBasisLabel(marginBasis);
+  const targetLabel = formatFinancialPercent(targetMarginPercent);
+
+  let message: string;
+  let toneClass = "border-[var(--border)] bg-[var(--muted)]/20 text-[var(--foreground)]";
+
+  if (suggestion.reason === "missing_product_cost") {
+    message = "Preencha o custo do produto para calcular o preço mínimo sugerido.";
+    toneClass = "border-amber-200 bg-amber-50 text-amber-900";
+  } else if (suggestion.reason === "incomplete") {
+    message = "Dados insuficientes para sugerir preço mínimo.";
+    toneClass = "border-[var(--border)] bg-[var(--muted)]/20 text-[var(--muted-foreground)]";
+  } else if (suggestion.reason === "impossible") {
+    message = `Com os custos atuais, não é possível atingir ${targetLabel} de ${basisLabel}.`;
+    toneClass = "border-rose-200 bg-rose-50 text-rose-800";
+  } else if (suggestion.alreadyMeetsTarget) {
+    message = `O preço atual (${formatFinancialMoney(row.salePrice)}) já atinge ${targetLabel} de ${basisLabel} (${formatFinancialPercent(suggestion.currentMarginPercent)}).`;
+    toneClass = "border-emerald-200 bg-emerald-50 text-emerald-900";
+  } else {
+    message = `Para ter ${targetLabel} de ${basisLabel}, o preço final precisa ser pelo menos ${formatFinancialMoney(suggestion.minSalePrice)}. Preço atual: ${formatFinancialMoney(row.salePrice)} (${formatFinancialPercent(suggestion.currentMarginPercent)}).`;
+    toneClass = "border-sky-200 bg-sky-50 text-sky-900";
+  }
+
+  return (
+    <div className={cn("mt-4 rounded-lg border px-3 py-2 text-sm", toneClass)}>
+      <p className="font-medium">Sugestão de preço</p>
+      <p className="mt-1">{message}</p>
+      <p className="mt-1 text-xs opacity-80">
+        Estimativa com taxa ML e frete proporcionais ao preço atual.
+      </p>
+    </div>
+  );
+}
+
 function FinancialDetailModal({
   row,
+  targetMarginPercent,
+  marginBasis,
   onClose,
   onSaved,
 }: {
   row: FinancialEvaluationRow;
+  targetMarginPercent: number;
+  marginBasis: MarginBasis;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -430,6 +661,15 @@ function FinancialDetailModal({
               </span>
             </div>
           ) : null}
+
+          <MarginPriceSuggestion
+            row={row}
+            targetMarginPercent={targetMarginPercent}
+            marginBasis={marginBasis}
+            productCost={productCost}
+            extraCosts={extraCosts}
+            taxRatePercent={taxRatePercent}
+          />
 
           {row.breakdown ? (
             <div className="mt-6 overflow-x-auto">

@@ -266,3 +266,118 @@ export function computeMarginAfterAds(
     extendedLines: [...marginBreakdown.lines, adsLine, marginAfterAdsLine],
   };
 }
+
+export type MarginBasis = "contribution" | "afterAds";
+
+export type MinSalePriceInput = {
+  salePrice: number;
+  mlFeeAmount: number;
+  mlFeeRebate?: number;
+  shippingCost: number;
+  productCost: number | null;
+  extraCosts: number | null;
+  taxRatePercent: number | null;
+  targetMarginPercent: number;
+  marginBasis: MarginBasis;
+  tacosPercent?: number | null;
+  /** Margem de contribuição atual (breakdown); usada para alreadyMeetsTarget. */
+  currentContributionMarginPercent?: number | null;
+  /** Margem pós ADS atual; usada quando marginBasis é afterAds. */
+  currentAfterAdsMarginPercent?: number | null;
+};
+
+export type MinSalePriceReason =
+  | "ok"
+  | "missing_product_cost"
+  | "impossible"
+  | "incomplete";
+
+export type MinSalePriceResult = {
+  minSalePrice: number | null;
+  currentMarginPercent: number | null;
+  alreadyMeetsTarget: boolean;
+  reason: MinSalePriceReason;
+};
+
+export function computeMinSalePriceForTargetMargin(
+  input: MinSalePriceInput,
+): MinSalePriceResult {
+  const salePrice = input.salePrice;
+  if (
+    !Number.isFinite(salePrice) ||
+    salePrice <= 0 ||
+    !Number.isFinite(input.mlFeeAmount) ||
+    !Number.isFinite(input.shippingCost)
+  ) {
+    return {
+      minSalePrice: null,
+      currentMarginPercent: null,
+      alreadyMeetsTarget: false,
+      reason: "incomplete",
+    };
+  }
+
+  if (input.productCost === null || !Number.isFinite(input.productCost)) {
+    return {
+      minSalePrice: null,
+      currentMarginPercent: null,
+      alreadyMeetsTarget: false,
+      reason: "missing_product_cost",
+    };
+  }
+
+  const mlFeeRebate = roundMoney(
+    Math.min(
+      Math.max(0, input.mlFeeRebate ?? 0),
+      Math.max(0, input.mlFeeAmount),
+    ),
+  );
+  const netMlFee = roundMoney(Math.max(0, input.mlFeeAmount - mlFeeRebate));
+  const shippingCost = roundMoney(Math.max(0, input.shippingCost));
+  const productCost = roundMoney(Math.max(0, input.productCost));
+  const extraCosts =
+    input.extraCosts !== null && Number.isFinite(input.extraCosts)
+      ? roundMoney(Math.max(0, input.extraCosts))
+      : 0;
+  const taxRate = input.taxRatePercent ?? 0;
+
+  const variableRate =
+    (netMlFee + shippingCost) / salePrice +
+    taxRate / 100 +
+    (input.marginBasis === "afterAds" ? (input.tacosPercent ?? 0) / 100 : 0);
+
+  const targetFraction = input.targetMarginPercent / 100;
+  const denominator = 1 - variableRate - targetFraction;
+
+  const currentMarginPercent =
+    input.marginBasis === "afterAds"
+      ? input.currentAfterAdsMarginPercent ?? null
+      : input.currentContributionMarginPercent ?? null;
+
+  if (denominator <= 0) {
+    return {
+      minSalePrice: null,
+      currentMarginPercent,
+      alreadyMeetsTarget: false,
+      reason: "impossible",
+    };
+  }
+
+  const fixedCosts = roundMoney(productCost + extraCosts);
+  const minSalePrice = roundMoney(fixedCosts / denominator);
+
+  const alreadyMeetsTarget =
+    currentMarginPercent !== null &&
+    currentMarginPercent >= input.targetMarginPercent;
+
+  return {
+    minSalePrice,
+    currentMarginPercent,
+    alreadyMeetsTarget,
+    reason: "ok",
+  };
+}
+
+export function marginBasisLabel(basis: MarginBasis): string {
+  return basis === "afterAds" ? "margem pós ADS" : "margem de contribuição";
+}
