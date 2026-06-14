@@ -124,6 +124,33 @@ describe("computeMarginAfterAds", () => {
     assert.equal(afterAds.marginAfterAdsPercent, margin.marginPercent);
     assert.equal(afterAds.marginAfterAdsValue, margin.marginValue);
   });
+
+  it("uses TACOS imputed on sale price when cost per ad unit differs", () => {
+    const margin = computeFinancialMargin({
+      salePrice: 47.36,
+      mlFeeAmount: 5,
+      shippingCost: 6,
+      productCost: 20,
+      extraCosts: 0,
+      taxRatePercent: 0,
+    });
+
+    const afterAds = computeMarginAfterAds({
+      marginBreakdown: margin,
+      tacosPercent: 5.68,
+      adsCost: 8.91,
+      unitsSold: 3,
+    });
+
+    assert.ok(afterAds);
+    assert.equal(afterAds.adsCostPerUnit, 2.97);
+    assert.equal(afterAds.adsCostImputed, 2.69);
+    const adsLine = afterAds.extendedLines.find((line) => line.key === "ads");
+    assert.equal(adsLine?.value, 2.69);
+    assert.equal(adsLine?.percentOfSale, 5.68);
+    assert.equal(afterAds.marginAfterAdsPercent, roundMoney(margin.marginPercent! - 5.68));
+    assert.equal(afterAds.marginAfterAdsValue, roundMoney(margin.marginValue - 2.69));
+  });
 });
 
 describe("computeMinSalePriceForTargetMargin", () => {

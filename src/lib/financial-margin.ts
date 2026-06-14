@@ -238,9 +238,11 @@ export function computeMarginAfterAds(
   }
 
   const adsDeduction =
-    adsCostPerUnit !== null && adsCostPerUnit > 0
-      ? adsCostPerUnit
-      : (adsCostImputed ?? 0);
+    tacosPercent !== null && salePrice > 0
+      ? roundMoney(salePrice * (tacosPercent / 100))
+      : adsCostPerUnit !== null && adsCostPerUnit > 0
+        ? adsCostPerUnit
+        : 0;
 
   const marginAfterAdsValue = roundMoney(marginValue - adsDeduction);
 
