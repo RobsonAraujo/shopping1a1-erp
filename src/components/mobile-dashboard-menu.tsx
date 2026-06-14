@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DRE_DISCLAIMER_MENU } from "@/lib/dre-disclaimer";
 
 const navItems = [
   {
@@ -66,9 +67,10 @@ const navItems = [
   {
     href: "/dashboard/dre",
     label: "DRE",
-    description: "Demonstrativo de resultado mensal",
+    description: DRE_DISCLAIMER_MENU,
     icon: LineChart,
-    badge: "Beta",
+    badge: "Indisponível",
+    badgeVariant: "warning" as const,
   },
 ];
 
@@ -203,7 +205,14 @@ export function MobileDashboardMenu() {
                     <span className="flex items-center gap-2 font-medium leading-none">
                       {item.label}
                       {"badge" in item && item.badge ? (
-                        <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                        <Badge
+                          variant={
+                            "badgeVariant" in item && item.badgeVariant
+                              ? item.badgeVariant
+                              : "secondary"
+                          }
+                          className="px-1.5 py-0 text-[10px]"
+                        >
                           {item.badge}
                         </Badge>
                       ) : null}

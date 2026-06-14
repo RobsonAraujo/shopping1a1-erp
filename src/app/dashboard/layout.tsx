@@ -22,6 +22,7 @@ import {
   refreshSessionPath,
 } from "@/lib/mercadolibre/session";
 import { Button } from "@/components/ui/button";
+import { DRE_DISCLAIMER_MENU } from "@/lib/dre-disclaimer";
 
 export default async function DashboardLayout({
   children,
@@ -142,11 +143,15 @@ export default async function DashboardLayout({
               </Link>
             </Button>
             <Button variant="ghost" size="sm" asChild>
-              <Link href="/dashboard/dre" className="gap-2">
+              <Link
+                href="/dashboard/dre"
+                className="gap-2"
+                title={DRE_DISCLAIMER_MENU}
+              >
                 <LineChart className="size-4" aria-hidden />
                 DRE
-                <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
-                  Beta
+                <Badge variant="warning" className="px-1.5 py-0 text-[10px]">
+                  Indisponível
                 </Badge>
               </Link>
             </Button>
