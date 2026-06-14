@@ -1,4 +1,7 @@
-import type { ReplenishmentStatus } from "@/generated/prisma/client";
+import type {
+  OperationCycleKind,
+  ReplenishmentStatus,
+} from "@/generated/prisma/client";
 
 export type ReplenishmentSnapshot = {
   mlQty: number;
@@ -9,50 +12,81 @@ export type ReplenishmentSnapshot = {
 export type ReplenishmentCycleRecord = {
   id: string;
   mlItemId: string;
+  kind: OperationCycleKind;
   status: ReplenishmentStatus;
   triggerMlQty: number;
   triggerWarehouseQty: number;
   triggerLeadTimeDays: number | null;
   warehouseQtyAtOrder: number | null;
+  mlQtyAtCollection: number | null;
   completedMlQty: number | null;
   completedWarehouseQty: number | null;
   completedLeadTimeDays: number | null;
   completedAt: Date | null;
 };
 
-export const ACTIVE_REPLENISHMENT_STATUSES: ReplenishmentStatus[] = [
+export const PURCHASE_BOARD_COLUMNS: ReplenishmentStatus[] = [
   "attention",
   "analyzing",
   "quoted",
   "ordered",
-  "in_warehouse",
-  "full_pending",
 ];
 
-export const BOARD_COLUMN_STATUSES: ReplenishmentStatus[] = [
-  ...ACTIVE_REPLENISHMENT_STATUSES,
+export const FULL_BOARD_COLUMNS: ReplenishmentStatus[] = [
+  "attention",
+  "scheduled",
+  "collected",
 ];
 
-export const REPLENISHMENT_STATUS_LABELS: Record<ReplenishmentStatus, string> =
-  {
-    attention: "Atenção",
-    analyzing: "Analisando",
-    quoted: "Orçamento",
-    ordered: "Comprado",
-    in_warehouse: "No galpão",
-    full_pending: "Enviar Full",
-    completed: "Concluído",
-  };
-
-const STATUS_ORDER: ReplenishmentStatus[] = [
+const PURCHASE_STATUS_ORDER: ReplenishmentStatus[] = [
   "attention",
   "analyzing",
   "quoted",
   "ordered",
-  "in_warehouse",
-  "full_pending",
   "completed",
 ];
+
+const FULL_STATUS_ORDER: ReplenishmentStatus[] = [
+  "attention",
+  "scheduled",
+  "collected",
+  "completed",
+];
+
+export const PURCHASE_STATUS_LABELS: Record<
+  ReplenishmentStatus,
+  string
+> = {
+  attention: "Entrada",
+  analyzing: "Analisando",
+  quoted: "Aguardando orçamento",
+  ordered: "Comprado",
+  scheduled: "Agendado",
+  collected: "Coletado",
+  completed: "Concluído",
+};
+
+export const FULL_STATUS_LABELS: Record<ReplenishmentStatus, string> = {
+  attention: "Entrada",
+  analyzing: "Analisando",
+  quoted: "Aguardando orçamento",
+  ordered: "Comprado",
+  scheduled: "Agendado",
+  collected: "Coletado",
+  completed: "Concluído",
+};
+
+export function statusLabelsForKind(
+  kind: OperationCycleKind,
+): Record<ReplenishmentStatus, string> {
+  return kind === "purchase" ? PURCHASE_STATUS_LABELS : FULL_STATUS_LABELS;
+}
+
+export function boardColumnsForKind(
+  kind: OperationCycleKind,
+): ReplenishmentStatus[] {
+  return kind === "purchase" ? PURCHASE_BOARD_COLUMNS : FULL_BOARD_COLUMNS;
+}
 
 export function isActiveReplenishmentStatus(
   status: ReplenishmentStatus,
@@ -60,17 +94,16 @@ export function isActiveReplenishmentStatus(
   return status !== "completed";
 }
 
-export function nextReplenishmentStatus(
+export function nextStatusForKind(
+  kind: OperationCycleKind,
   status: ReplenishmentStatus,
-  options?: { skipFull?: boolean },
 ): ReplenishmentStatus | null {
   if (status === "completed") return null;
-  if (status === "in_warehouse") {
-    return options?.skipFull ? "completed" : "full_pending";
-  }
-  const index = STATUS_ORDER.indexOf(status);
-  if (index < 0 || index >= STATUS_ORDER.length - 1) return null;
-  return STATUS_ORDER[index + 1] ?? null;
+  const order =
+    kind === "purchase" ? PURCHASE_STATUS_ORDER : FULL_STATUS_ORDER;
+  const index = order.indexOf(status);
+  if (index < 0 || index >= order.length - 1) return null;
+  return order[index + 1] ?? null;
 }
 
 export function replenishmentSnapshotFromCycle(
@@ -113,37 +146,69 @@ export function isCompletedCycleStillValid(
   return snapshotsMatch(completed, current);
 }
 
-export function shouldAutoAdvanceToWarehouse(
+export function shouldAutoCompletePurchaseCycle(
   cycle: ReplenishmentCycleRecord,
-  currentWarehouseQty: number,
+  current: ReplenishmentSnapshot,
+  needsPurchaseAttention: boolean,
 ): boolean {
+  if (cycle.kind !== "purchase" || cycle.status === "completed") {
+    return false;
+  }
+  if (!needsPurchaseAttention) {
+    return true;
+  }
   if (cycle.status !== "ordered") return false;
   if (cycle.warehouseQtyAtOrder === null) return false;
-  return currentWarehouseQty > cycle.warehouseQtyAtOrder;
+  return current.warehouseQty > cycle.warehouseQtyAtOrder;
 }
 
-export type CreateCycleInput = {
+export function shouldAutoCompleteFullCycle(
+  cycle: ReplenishmentCycleRecord,
+  current: ReplenishmentSnapshot,
+  needsSchedulingAttention: boolean,
+): boolean {
+  if (cycle.kind !== "full" || cycle.status === "completed") {
+    return false;
+  }
+  if (!needsSchedulingAttention) {
+    return true;
+  }
+  if (cycle.status !== "collected") return false;
+  if (cycle.mlQtyAtCollection === null) return false;
+  return current.mlQty > cycle.mlQtyAtCollection;
+}
+
+export type CreatePurchaseCycleInput = {
   needsPurchaseAttention: boolean;
-  needsSchedulingAttention: boolean;
   snapshot: ReplenishmentSnapshot;
   purchaseStartsAtMs: number | null;
   suggestedQty?: number | null;
 };
 
-export function initialStatusForNewCycle(
-  input: Pick<CreateCycleInput, "needsPurchaseAttention" | "needsSchedulingAttention">,
-): ReplenishmentStatus | null {
-  if (input.needsPurchaseAttention) return "attention";
-  if (input.needsSchedulingAttention) return "full_pending";
-  return null;
-}
+export type CreateFullCycleInput = {
+  needsSchedulingAttention: boolean;
+  snapshot: ReplenishmentSnapshot;
+};
 
-export function shouldCreateReplenishmentCycle(
-  input: CreateCycleInput,
+export function shouldCreatePurchaseCycle(
+  input: CreatePurchaseCycleInput,
   latestCompleted: ReplenishmentCycleRecord | null,
 ): boolean {
-  const initial = initialStatusForNewCycle(input);
-  if (!initial) return false;
+  if (!input.needsPurchaseAttention) return false;
+  if (
+    latestCompleted &&
+    isCompletedCycleStillValid(latestCompleted, input.snapshot)
+  ) {
+    return false;
+  }
+  return true;
+}
+
+export function shouldCreateFullCycle(
+  input: CreateFullCycleInput,
+  latestCompleted: ReplenishmentCycleRecord | null,
+): boolean {
+  if (!input.needsSchedulingAttention) return false;
   if (
     latestCompleted &&
     isCompletedCycleStillValid(latestCompleted, input.snapshot)
@@ -156,6 +221,7 @@ export function shouldCreateReplenishmentCycle(
 export type StatusTransitionPatch = {
   status: ReplenishmentStatus;
   warehouseQtyAtOrder?: number | null;
+  mlQtyAtCollection?: number | null;
   completedMlQty?: number | null;
   completedWarehouseQty?: number | null;
   completedLeadTimeDays?: number | null;
@@ -169,8 +235,20 @@ export function buildStatusTransition(
 ): StatusTransitionPatch {
   const patch: StatusTransitionPatch = { status: nextStatus };
 
-  if (nextStatus === "ordered" && cycle.warehouseQtyAtOrder === null) {
+  if (
+    cycle.kind === "purchase" &&
+    nextStatus === "ordered" &&
+    cycle.warehouseQtyAtOrder === null
+  ) {
     patch.warehouseQtyAtOrder = current.warehouseQty;
+  }
+
+  if (
+    cycle.kind === "full" &&
+    nextStatus === "collected" &&
+    cycle.mlQtyAtCollection === null
+  ) {
+    patch.mlQtyAtCollection = current.mlQty;
   }
 
   if (nextStatus === "completed") {
@@ -183,28 +261,47 @@ export function buildStatusTransition(
   return patch;
 }
 
-export type OperationsSummaryCounts = {
+export function isValidStatusForKind(
+  kind: OperationCycleKind,
+  status: ReplenishmentStatus,
+): boolean {
+  if (status === "completed") return true;
+  return boardColumnsForKind(kind).includes(status);
+}
+
+export type BoardSummaryCounts = {
   attention: number;
   analyzing: number;
   quoted: number;
   ordered: number;
-  inWarehouse: number;
-  fullPending: number;
+  scheduled: number;
+  collected: number;
   totalActive: number;
 };
 
-export function summarizeOperationsCounts(
-  statuses: ReplenishmentStatus[],
-): OperationsSummaryCounts {
-  const counts: OperationsSummaryCounts = {
+export type OperationsSummaryCounts = {
+  purchase: BoardSummaryCounts;
+  full: BoardSummaryCounts;
+  totalActive: number;
+};
+
+function emptyBoardSummary(): BoardSummaryCounts {
+  return {
     attention: 0,
     analyzing: 0,
     quoted: 0,
     ordered: 0,
-    inWarehouse: 0,
-    fullPending: 0,
+    scheduled: 0,
+    collected: 0,
     totalActive: 0,
   };
+}
+
+export function summarizeBoardCounts(
+  kind: OperationCycleKind,
+  statuses: ReplenishmentStatus[],
+): BoardSummaryCounts {
+  const counts = emptyBoardSummary();
 
   for (const status of statuses) {
     if (!isActiveReplenishmentStatus(status)) continue;
@@ -220,16 +317,36 @@ export function summarizeOperationsCounts(
         counts.quoted += 1;
         break;
       case "ordered":
-        counts.ordered += 1;
+        if (kind === "purchase") counts.ordered += 1;
         break;
-      case "in_warehouse":
-        counts.inWarehouse += 1;
+      case "scheduled":
+        if (kind === "full") counts.scheduled += 1;
         break;
-      case "full_pending":
-        counts.fullPending += 1;
+      case "collected":
+        if (kind === "full") counts.collected += 1;
         break;
     }
   }
 
   return counts;
+}
+
+export function summarizeOperationsCounts(
+  entries: Array<{ kind: OperationCycleKind; status: ReplenishmentStatus }>,
+): OperationsSummaryCounts {
+  const purchaseStatuses = entries
+    .filter((e) => e.kind === "purchase")
+    .map((e) => e.status);
+  const fullStatuses = entries
+    .filter((e) => e.kind === "full")
+    .map((e) => e.status);
+
+  const purchase = summarizeBoardCounts("purchase", purchaseStatuses);
+  const full = summarizeBoardCounts("full", fullStatuses);
+
+  return {
+    purchase,
+    full,
+    totalActive: purchase.totalActive + full.totalActive,
+  };
 }

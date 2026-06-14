@@ -44,3 +44,7 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
 }
+
+[role="tablist"] [role="tab"] {
+  cursor: pointer;
+}

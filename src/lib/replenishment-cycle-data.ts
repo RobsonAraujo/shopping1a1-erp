@@ -1,5 +1,8 @@
 import { stockPlanningConfig } from "@/config/stock-planning";
-import type { ReplenishmentStatus } from "@/generated/prisma/client";
+import type {
+  OperationCycleKind,
+  ReplenishmentStatus,
+} from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import {
   buildPurchasePlan,
@@ -7,15 +10,19 @@ import {
 } from "@/lib/purchase-analysis";
 import {
   buildStatusTransition,
-  initialStatusForNewCycle,
   isActiveReplenishmentStatus,
-  shouldAutoAdvanceToWarehouse,
-  shouldCreateReplenishmentCycle,
+  nextStatusForKind,
+  shouldAutoCompleteFullCycle,
+  shouldAutoCompletePurchaseCycle,
+  shouldCreateFullCycle,
+  shouldCreatePurchaseCycle,
+  summarizeBoardCounts,
   summarizeOperationsCounts,
   type OperationsSummaryCounts,
   type ReplenishmentSnapshot,
 } from "@/lib/replenishment-cycle";
 import {
+  fetchItemById,
   fetchItemsByIdsBatched,
   fetchOperationalListingIds,
   fetchUnitsSoldForItemsInWindowBatched,
@@ -27,9 +34,55 @@ import { computeStockPlanningDisplay } from "@/lib/stock-planning";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import type { StockPlanningDisplay } from "@/lib/stock-planning";
 
-export type ReplenishmentBoardCard = {
+function listingUpsertData(item: ItemBody) {
+  const activeOnMl = item.status === "active" || item.status === "paused";
+  return {
+    titleSnapshot: item.title,
+    catalogListing: item.catalog_listing ?? null,
+    lastSyncedAt: new Date(),
+    activeOnMl,
+  };
+}
+
+function listingCreateData(item: ItemBody) {
+  return {
+    mlItemId: item.id,
+    ...listingUpsertData(item),
+  };
+}
+
+async function upsertListingForItem(item: ItemBody): Promise<void> {
+  if (!item.id) return;
+  await prisma.listing.upsert({
+    where: { mlItemId: item.id },
+    create: listingCreateData(item),
+    update: listingUpsertData(item),
+  });
+}
+
+async function ensureListingsForItems(items: ItemBody[]): Promise<void> {
+  const chunkSize = 25;
+  for (let i = 0; i < items.length; i += chunkSize) {
+    const chunk = items.slice(i, i + chunkSize);
+    await Promise.all(chunk.map((item) => upsertListingForItem(item)));
+  }
+}
+
+let replenishmentSyncTail: Promise<void> = Promise.resolve();
+
+function withReplenishmentSyncLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = replenishmentSyncTail.then(fn);
+  replenishmentSyncTail = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+export type OperationsBoardCard = {
   cycleId: string;
   mlItemId: string;
+  kind: OperationCycleKind;
   status: ReplenishmentStatus;
   title: string;
   sku: string | null;
@@ -45,12 +98,25 @@ export type ReplenishmentBoardCard = {
   needsSchedulingAttention: boolean;
   notes: string | null;
   warehouseQtyAtOrder: number | null;
+  mlQtyAtCollection: number | null;
 };
 
-export type ReplenishmentBoardData = {
-  cards: ReplenishmentBoardCard[];
+export type SingleBoardData = {
+  cards: OperationsBoardCard[];
+  summary: ReturnType<typeof summarizeBoardCounts>;
+};
+
+export type OperationsBoardsData = {
+  purchase: SingleBoardData;
+  full: SingleBoardData;
   summary: OperationsSummaryCounts;
 };
+
+/** @deprecated Use OperationsBoardCard */
+export type ReplenishmentBoardCard = OperationsBoardCard;
+
+/** @deprecated Use OperationsBoardsData */
+export type ReplenishmentBoardData = OperationsBoardsData;
 
 function snapshotForItem(
   item: ItemBody,
@@ -123,16 +189,20 @@ function buildItemPlanningContext(
 }
 
 function toCycleRecord(
-  cycle: Awaited<ReturnType<typeof prisma.replenishmentCycle.findFirst>> & {},
+  cycle: NonNullable<
+    Awaited<ReturnType<typeof prisma.replenishmentCycle.findFirst>>
+  >,
 ) {
   return {
     id: cycle.id,
     mlItemId: cycle.mlItemId,
+    kind: cycle.kind,
     status: cycle.status,
     triggerMlQty: cycle.triggerMlQty,
     triggerWarehouseQty: cycle.triggerWarehouseQty,
     triggerLeadTimeDays: cycle.triggerLeadTimeDays,
     warehouseQtyAtOrder: cycle.warehouseQtyAtOrder,
+    mlQtyAtCollection: cycle.mlQtyAtCollection,
     completedMlQty: cycle.completedMlQty,
     completedWarehouseQty: cycle.completedWarehouseQty,
     completedLeadTimeDays: cycle.completedLeadTimeDays,
@@ -140,20 +210,21 @@ function toCycleRecord(
   };
 }
 
-async function getLatestCyclesByItem(mlItemIds: string[]) {
+type CycleEntry = {
+  active: Awaited<ReturnType<typeof prisma.replenishmentCycle.findFirst>>;
+  latestCompleted: Awaited<ReturnType<typeof prisma.replenishmentCycle.findFirst>>;
+};
+
+async function getLatestCyclesByItemAndKind(
+  mlItemIds: string[],
+  kind: OperationCycleKind,
+): Promise<Map<string, CycleEntry>> {
   const cycles = await prisma.replenishmentCycle.findMany({
-    where: { mlItemId: { in: mlItemIds } },
+    where: { mlItemId: { in: mlItemIds }, kind },
     orderBy: { updatedAt: "desc" },
   });
 
-  const map = new Map<
-    string,
-    {
-      active: (typeof cycles)[number] | null;
-      latestCompleted: (typeof cycles)[number] | null;
-    }
-  >();
-
+  const map = new Map<string, CycleEntry>();
   for (const id of mlItemIds) {
     map.set(id, { active: null, latestCompleted: null });
   }
@@ -172,7 +243,86 @@ async function getLatestCyclesByItem(mlItemIds: string[]) {
   return map;
 }
 
-export async function syncReplenishmentCyclesForItems(
+async function createCycleForItem(
+  kind: OperationCycleKind,
+  ctx: ItemPlanningContext,
+  snapshot: ReplenishmentSnapshot,
+  initialStatus: ReplenishmentStatus,
+): Promise<void> {
+  const mlItemId = ctx.item.id.trim();
+  if (!mlItemId) return;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.listing.upsert({
+      where: { mlItemId },
+      create: listingCreateData({ ...ctx.item, id: mlItemId }),
+      update: listingUpsertData(ctx.item),
+    });
+    await tx.replenishmentCycle.create({
+      data: {
+        mlItemId,
+        kind,
+        status: initialStatus,
+        triggerMlQty: snapshot.mlQty,
+        triggerWarehouseQty: snapshot.warehouseQty,
+        triggerLeadTimeDays: snapshot.leadTimeDays,
+        triggerPurchaseAt:
+          kind === "purchase" && ctx.purchasePlan.purchaseStartsAtMs
+            ? new Date(ctx.purchasePlan.purchaseStartsAtMs)
+            : null,
+        suggestedQty: kind === "purchase" ? ctx.suggestedQty : null,
+      },
+    });
+  });
+}
+
+async function maybeAutoCompletePurchaseCycle(
+  active: NonNullable<CycleEntry["active"]>,
+  ctx: ItemPlanningContext,
+  snapshot: ReplenishmentSnapshot,
+): Promise<boolean> {
+  const record = toCycleRecord(active);
+  if (
+    !shouldAutoCompletePurchaseCycle(
+      record,
+      snapshot,
+      ctx.purchasePlan.needsPurchaseAttention,
+    )
+  ) {
+    return false;
+  }
+
+  await prisma.replenishmentCycle.update({
+    where: { id: active.id },
+    data: buildStatusTransition(record, "completed", snapshot),
+  });
+  return true;
+}
+
+async function maybeAutoCompleteFullCycle(
+  active: NonNullable<CycleEntry["active"]>,
+  ctx: ItemPlanningContext,
+  snapshot: ReplenishmentSnapshot,
+): Promise<boolean> {
+  const record = toCycleRecord(active);
+  if (
+    !shouldAutoCompleteFullCycle(
+      record,
+      snapshot,
+      ctx.fullPlan.needsSchedulingAttention,
+    )
+  ) {
+    return false;
+  }
+
+  await prisma.replenishmentCycle.update({
+    where: { id: active.id },
+    data: buildStatusTransition(record, "completed", snapshot),
+  });
+  return true;
+}
+
+export async function syncPurchaseCyclesForItems(
   items: ItemBody[],
   salesByItem: Record<string, number>,
   warehouseById: Record<
@@ -190,7 +340,10 @@ export async function syncReplenishmentCyclesForItems(
     return buildItemPlanningContext(item, warehouseStock, purchaseLead, sold);
   });
 
-  const cycleMap = await getLatestCyclesByItem(items.map((item) => item.id));
+  const cycleMap = await getLatestCyclesByItemAndKind(
+    items.map((item) => item.id),
+    "purchase",
+  );
 
   for (const ctx of contexts) {
     const { active, latestCompleted } =
@@ -202,28 +355,13 @@ export async function syncReplenishmentCyclesForItems(
     );
 
     if (active) {
-      if (
-        shouldAutoAdvanceToWarehouse(
-          toCycleRecord(active),
-          ctx.warehouseStock,
-        )
-      ) {
-        await prisma.replenishmentCycle.update({
-          where: { id: active.id },
-          data: buildStatusTransition(
-            toCycleRecord(active),
-            "in_warehouse",
-            snapshot,
-          ),
-        });
-      }
+      await maybeAutoCompletePurchaseCycle(active, ctx, snapshot);
       continue;
     }
 
-    const shouldCreate = shouldCreateReplenishmentCycle(
+    const shouldCreate = shouldCreatePurchaseCycle(
       {
         needsPurchaseAttention: ctx.purchasePlan.needsPurchaseAttention,
-        needsSchedulingAttention: ctx.fullPlan.needsSchedulingAttention,
         snapshot,
         purchaseStartsAtMs: ctx.purchasePlan.purchaseStartsAtMs,
         suggestedQty: ctx.suggestedQty,
@@ -231,68 +369,212 @@ export async function syncReplenishmentCyclesForItems(
       latestCompleted ? toCycleRecord(latestCompleted) : null,
     );
 
-    if (!shouldCreate) continue;
+    if (!shouldCreate || !ctx.item.id.trim()) continue;
 
-    const initialStatus = initialStatusForNewCycle({
-      needsPurchaseAttention: ctx.purchasePlan.needsPurchaseAttention,
-      needsSchedulingAttention: ctx.fullPlan.needsSchedulingAttention,
-    });
-    if (!initialStatus) continue;
-
-    await prisma.replenishmentCycle.create({
-      data: {
-        mlItemId: ctx.item.id,
-        status: initialStatus,
-        triggerMlQty: snapshot.mlQty,
-        triggerWarehouseQty: snapshot.warehouseQty,
-        triggerLeadTimeDays: snapshot.leadTimeDays,
-        triggerPurchaseAt: ctx.purchasePlan.purchaseStartsAtMs
-          ? new Date(ctx.purchasePlan.purchaseStartsAtMs)
-          : null,
-        suggestedQty: ctx.suggestedQty,
-      },
-    });
+    await createCycleForItem("purchase", ctx, snapshot, "attention");
   }
 }
 
-export async function syncReplenishmentFromWarehouse(
+export async function syncFullCyclesForItems(
+  items: ItemBody[],
+  salesByItem: Record<string, number>,
+  warehouseById: Record<
+    string,
+    { quantity: number; purchaseLeadTimeDays: number | null }
+  >,
+): Promise<void> {
+  if (items.length === 0) return;
+
+  const contexts = items.map((item) => {
+    const warehouse = warehouseById[item.id];
+    const warehouseStock = warehouse?.quantity ?? 0;
+    const purchaseLead = warehouse?.purchaseLeadTimeDays ?? 0;
+    const sold = salesByItem[item.id] ?? 0;
+    return buildItemPlanningContext(item, warehouseStock, purchaseLead, sold);
+  });
+
+  const cycleMap = await getLatestCyclesByItemAndKind(
+    items.map((item) => item.id),
+    "full",
+  );
+
+  for (const ctx of contexts) {
+    const { active, latestCompleted } =
+      cycleMap.get(ctx.item.id) ?? { active: null, latestCompleted: null };
+    const snapshot = snapshotForItem(
+      ctx.item,
+      ctx.warehouseStock,
+      ctx.purchaseLead,
+    );
+
+    if (active) {
+      await maybeAutoCompleteFullCycle(active, ctx, snapshot);
+      continue;
+    }
+
+    const shouldCreate = shouldCreateFullCycle(
+      {
+        needsSchedulingAttention: ctx.fullPlan.needsSchedulingAttention,
+        snapshot,
+      },
+      latestCompleted ? toCycleRecord(latestCompleted) : null,
+    );
+
+    if (!shouldCreate || !ctx.item.id.trim()) continue;
+
+    await createCycleForItem("full", ctx, snapshot, "attention");
+  }
+}
+
+export async function syncOperationCyclesForItems(
+  items: ItemBody[],
+  salesByItem: Record<string, number>,
+  warehouseById: Record<
+    string,
+    { quantity: number; purchaseLeadTimeDays: number | null }
+  >,
+): Promise<void> {
+  return withReplenishmentSyncLock(async () => {
+    if (items.length === 0) return;
+    await ensureListingsForItems(items);
+    await syncPurchaseCyclesForItems(items, salesByItem, warehouseById);
+    await syncFullCyclesForItems(items, salesByItem, warehouseById);
+  });
+}
+
+/** @deprecated Use syncOperationCyclesForItems */
+export async function syncReplenishmentCyclesForItems(
+  items: ItemBody[],
+  salesByItem: Record<string, number>,
+  warehouseById: Record<
+    string,
+    { quantity: number; purchaseLeadTimeDays: number | null }
+  >,
+): Promise<void> {
+  return syncOperationCyclesForItems(items, salesByItem, warehouseById);
+}
+
+export async function syncPurchaseCycleFromWarehouse(
   mlItemId: string,
   warehouseQty: number,
+  options?: { needsPurchaseAttention?: boolean },
 ): Promise<void> {
   const active = await prisma.replenishmentCycle.findFirst({
     where: {
       mlItemId,
+      kind: "purchase",
       status: { not: "completed" },
     },
     orderBy: { updatedAt: "desc" },
   });
-  if (!active || active.status !== "ordered") return;
-  if (active.warehouseQtyAtOrder === null) return;
-  if (warehouseQty <= active.warehouseQtyAtOrder) return;
+  if (!active) return;
 
   const warehouse = await prisma.warehouseStock.findUnique({
     where: { mlItemId },
     select: { purchaseLeadTimeDays: true },
   });
 
+  const snapshot: ReplenishmentSnapshot = {
+    mlQty: active.triggerMlQty,
+    warehouseQty: warehouseQty,
+    leadTimeDays:
+      warehouse?.purchaseLeadTimeDays ?? active.triggerLeadTimeDays ?? 0,
+  };
+
+  const record = toCycleRecord(active);
+  const needsPurchaseAttention = options?.needsPurchaseAttention ?? true;
+
+  if (
+    !shouldAutoCompletePurchaseCycle(
+      record,
+      snapshot,
+      needsPurchaseAttention,
+    )
+  ) {
+    return;
+  }
+
   await prisma.replenishmentCycle.update({
     where: { id: active.id },
-    data: buildStatusTransition(
-      toCycleRecord(active),
-      "in_warehouse",
-      {
-        mlQty: active.triggerMlQty,
-        warehouseQty: warehouseQty,
-        leadTimeDays: warehouse?.purchaseLeadTimeDays ?? 0,
-      },
-    ),
+    data: buildStatusTransition(record, "completed", snapshot),
   });
 }
 
-export async function loadReplenishmentBoard(
+/** @deprecated Use syncPurchaseCycleFromWarehouse */
+export async function syncReplenishmentFromWarehouse(
+  mlItemId: string,
+  warehouseQty: number,
+): Promise<void> {
+  return syncPurchaseCycleFromWarehouse(mlItemId, warehouseQty);
+}
+
+function buildCardFromCycle(
+  cycle: Awaited<ReturnType<typeof prisma.replenishmentCycle.findMany>>[number],
+  ctx: ItemPlanningContext,
+  item: ItemBody,
+): OperationsBoardCard {
+  const sku = getItemSku(item);
+  return {
+    cycleId: cycle.id,
+    mlItemId: cycle.mlItemId,
+    kind: cycle.kind,
+    status: cycle.status,
+    title: item.title,
+    sku,
+    supplier: getSkuSupplier(sku),
+    imageUrl: bestItemImageUrl(item) ?? null,
+    mlStock: mlAvailableStockUnits(item),
+    warehouseStock: ctx.warehouseStock,
+    suggestedQty: cycle.suggestedQty,
+    purchaseIsOverdue: ctx.purchasePlan.purchaseIsOverdue,
+    searchIsOverdue: ctx.fullPlan.searchIsOverdue,
+    purchaseStartsOn: ctx.purchasePlan.purchaseStartsOn,
+    searchStartsOn: ctx.fullPlan.searchStartsOn,
+    needsSchedulingAttention: ctx.fullPlan.needsSchedulingAttention,
+    notes: cycle.notes,
+    warehouseQtyAtOrder: cycle.warehouseQtyAtOrder,
+    mlQtyAtCollection: cycle.mlQtyAtCollection,
+  };
+}
+
+async function resolveCycleSnapshot(
+  cycle: {
+    mlItemId: string;
+    triggerMlQty: number;
+    triggerWarehouseQty: number;
+    triggerLeadTimeDays: number | null;
+  },
+  accessToken?: string,
+): Promise<ReplenishmentSnapshot> {
+  const warehouse = await prisma.warehouseStock.findUnique({
+    where: { mlItemId: cycle.mlItemId },
+    select: { quantity: true, purchaseLeadTimeDays: true },
+  });
+
+  if (accessToken) {
+    const item = await fetchItemById(accessToken, cycle.mlItemId);
+    if (item) {
+      return {
+        mlQty: item.available_quantity,
+        warehouseQty: warehouse?.quantity ?? cycle.triggerWarehouseQty,
+        leadTimeDays:
+          warehouse?.purchaseLeadTimeDays ?? cycle.triggerLeadTimeDays ?? 0,
+      };
+    }
+  }
+
+  return {
+    mlQty: cycle.triggerMlQty,
+    warehouseQty: warehouse?.quantity ?? cycle.triggerWarehouseQty,
+    leadTimeDays:
+      warehouse?.purchaseLeadTimeDays ?? cycle.triggerLeadTimeDays ?? 0,
+  };
+}
+
+export async function loadOperationsBoards(
   token: string,
   userId: number,
-): Promise<ReplenishmentBoardData> {
+): Promise<OperationsBoardsData> {
   const windowDays = stockPlanningConfig.salesAverageWindowDays;
   const dateField = stockPlanningConfig.salesWindowDateField;
   const listingIds = await fetchOperationalListingIds(token, userId);
@@ -326,7 +608,7 @@ export async function loadReplenishmentBoard(
     ]),
   );
 
-  await syncReplenishmentCyclesForItems(items, salesByItem, warehouseById);
+  await syncOperationCyclesForItems(items, salesByItem, warehouseById);
 
   const activeCycles = await prisma.replenishmentCycle.findMany({
     where: {
@@ -337,7 +619,8 @@ export async function loadReplenishmentBoard(
   });
 
   const itemById = new Map(items.map((item) => [item.id, item]));
-  const cards: ReplenishmentBoardCard[] = [];
+  const purchaseCards: OperationsBoardCard[] = [];
+  const fullCards: OperationsBoardCard[] = [];
 
   for (const cycle of activeCycles) {
     const item = itemById.get(cycle.mlItemId);
@@ -353,47 +636,66 @@ export async function loadReplenishmentBoard(
       purchaseLead,
       sold,
     );
-    const sku = getItemSku(item);
+    const card = buildCardFromCycle(cycle, ctx, item);
 
-    cards.push({
-      cycleId: cycle.id,
-      mlItemId: cycle.mlItemId,
-      status: cycle.status,
-      title: item.title,
-      sku,
-      supplier: getSkuSupplier(sku),
-      imageUrl: bestItemImageUrl(item) ?? null,
-      mlStock: mlAvailableStockUnits(item),
-      warehouseStock,
-      suggestedQty: cycle.suggestedQty,
-      purchaseIsOverdue: ctx.purchasePlan.purchaseIsOverdue,
-      searchIsOverdue: ctx.fullPlan.searchIsOverdue,
-      purchaseStartsOn: ctx.purchasePlan.purchaseStartsOn,
-      searchStartsOn: ctx.fullPlan.searchStartsOn,
-      needsSchedulingAttention: ctx.fullPlan.needsSchedulingAttention,
-      notes: cycle.notes,
-      warehouseQtyAtOrder: cycle.warehouseQtyAtOrder,
-    });
+    if (cycle.kind === "purchase") {
+      purchaseCards.push(card);
+    } else {
+      fullCards.push(card);
+    }
   }
 
+  const summary = summarizeOperationsCounts(
+    activeCycles.map((cycle) => ({ kind: cycle.kind, status: cycle.status })),
+  );
+
   return {
-    cards,
-    summary: summarizeOperationsCounts(cards.map((card) => card.status)),
+    purchase: {
+      cards: purchaseCards,
+      summary: summarizeBoardCounts(
+        "purchase",
+        purchaseCards.map((c) => c.status),
+      ),
+    },
+    full: {
+      cards: fullCards,
+      summary: summarizeBoardCounts(
+        "full",
+        fullCards.map((c) => c.status),
+      ),
+    },
+    summary,
   };
+}
+
+/** @deprecated Use loadOperationsBoards */
+export async function loadReplenishmentBoard(
+  token: string,
+  userId: number,
+): Promise<OperationsBoardsData> {
+  return loadOperationsBoards(token, userId);
+}
+
+export async function loadOperationsSummaryFromDb(): Promise<OperationsSummaryCounts> {
+  const cycles = await prisma.replenishmentCycle.findMany({
+    where: { status: { not: "completed" } },
+    select: { kind: true, status: true },
+  });
+  return summarizeOperationsCounts(cycles);
 }
 
 export async function loadOperationsSummary(
   token: string,
   userId: number,
 ): Promise<OperationsSummaryCounts> {
-  const board = await loadReplenishmentBoard(token, userId);
-  return board.summary;
+  const boards = await loadOperationsBoards(token, userId);
+  return boards.summary;
 }
 
 export async function transitionReplenishmentCycle(
   cycleId: string,
   nextStatus: ReplenishmentStatus,
-  options?: { notes?: string | null },
+  options?: { notes?: string | null; accessToken?: string },
 ): Promise<void> {
   const cycle = await prisma.replenishmentCycle.findUnique({
     where: { id: cycleId },
@@ -405,20 +707,12 @@ export async function transitionReplenishmentCycle(
     throw new Error("Cycle already completed");
   }
 
-  const warehouse = await prisma.warehouseStock.findUnique({
-    where: { mlItemId: cycle.mlItemId },
-    select: { quantity: true, purchaseLeadTimeDays: true },
-  });
+  const snapshot = await resolveCycleSnapshot(cycle, options?.accessToken);
 
   const patch = buildStatusTransition(
     toCycleRecord(cycle),
     nextStatus,
-    {
-      mlQty: cycle.triggerMlQty,
-      warehouseQty: warehouse?.quantity ?? cycle.triggerWarehouseQty,
-      leadTimeDays:
-        warehouse?.purchaseLeadTimeDays ?? cycle.triggerLeadTimeDays ?? 0,
-    },
+    snapshot,
   );
 
   await prisma.replenishmentCycle.update({
@@ -432,7 +726,7 @@ export async function transitionReplenishmentCycle(
 
 export async function advanceReplenishmentCycle(
   cycleId: string,
-  options?: { skipFull?: boolean },
+  options?: { accessToken?: string },
 ): Promise<ReplenishmentStatus | null> {
   const cycle = await prisma.replenishmentCycle.findUnique({
     where: { id: cycleId },
@@ -441,26 +735,11 @@ export async function advanceReplenishmentCycle(
     throw new Error("Cycle not found or inactive");
   }
 
-  let nextStatus: ReplenishmentStatus | null = null;
-
-  if (cycle.status === "in_warehouse") {
-    nextStatus = options?.skipFull ? "completed" : "full_pending";
-  } else {
-    const order = [
-      "attention",
-      "analyzing",
-      "quoted",
-      "ordered",
-      "in_warehouse",
-      "full_pending",
-      "completed",
-    ] as const;
-    const index = order.indexOf(cycle.status);
-    nextStatus = order[index + 1] ?? null;
-  }
-
+  const nextStatus = nextStatusForKind(cycle.kind, cycle.status);
   if (!nextStatus) return null;
 
-  await transitionReplenishmentCycle(cycleId, nextStatus);
+  await transitionReplenishmentCycle(cycleId, nextStatus, {
+    accessToken: options?.accessToken,
+  });
   return nextStatus;
 }

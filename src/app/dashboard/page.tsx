@@ -15,8 +15,7 @@ import {
   refreshSessionPath,
 } from "@/lib/mercadolibre/session";
 import { countListingsByStatus } from "@/lib/mercadolibre/listing-status";
-import { loadOperationsSummary } from "@/lib/replenishment-cycle-data";
-import type { OperationsSummaryCounts } from "@/lib/replenishment-cycle";
+import { loadOperationsSummaryFromDb } from "@/lib/replenishment-cycle-data";
 
 export default async function DashboardPage() {
   const cookieStore = await cookies();
@@ -36,7 +35,9 @@ export default async function DashboardPage() {
 
   let items;
   let salesByItem: Record<string, number> = {};
-  let operationsSummary: OperationsSummaryCounts | null = null;
+  let operationsSummary: Awaited<
+    ReturnType<typeof loadOperationsSummaryFromDb>
+  > | null = null;
 
   try {
     const allItems = await fetchOperationalListings(token, userId);
@@ -53,7 +54,7 @@ export default async function DashboardPage() {
 
     items = allItems;
     salesByItem = allSales;
-    operationsSummary = await loadOperationsSummary(token, userId);
+    operationsSummary = await loadOperationsSummaryFromDb();
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro ao carregar anúncios";
     return (

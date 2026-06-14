@@ -54,26 +54,34 @@ enum StockAttentionKind {
   purchase
 }
 
+enum OperationCycleKind {
+  purchase
+  full
+}
+
 enum ReplenishmentStatus {
   attention
   analyzing
   quoted
   ordered
-  in_warehouse
-  full_pending
+  scheduled
+  collected
   completed
 }
 
-/// Ciclo operacional de reposição (compra → galpão → Full) por anúncio.
+/// Ciclo operacional por anúncio (compra ou envio Full), independente por kind.
 model ReplenishmentCycle {
   id                    String              @id @default(cuid())
   mlItemId              String              @map("ml_item_id")
+  kind                  OperationCycleKind
   status                ReplenishmentStatus
   triggerMlQty          Int                 @map("trigger_ml_qty")
   triggerWarehouseQty   Int                 @map("trigger_warehouse_qty")
   triggerLeadTimeDays   Int?                @map("trigger_lead_time_days")
   triggerPurchaseAt     DateTime?           @map("trigger_purchase_at")
   warehouseQtyAtOrder   Int?                @map("warehouse_qty_at_order")
+  /// Estoque ML ao marcar Coletado (baseline para detectar entrada no Full).
+  mlQtyAtCollection     Int?                @map("ml_qty_at_collection")
   suggestedQty          Int?                @map("suggested_qty")
   notes                 String?
   completedMlQty        Int?                @map("completed_ml_qty")
@@ -85,7 +93,7 @@ model ReplenishmentCycle {
 
   listing Listing @relation(fields: [mlItemId], references: [mlItemId], onDelete: Cascade)
 
-  @@index([mlItemId, status])
+  @@index([mlItemId, kind, status])
   @@index([status])
   @@map("replenishment_cycles")
 }

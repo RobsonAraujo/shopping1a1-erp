@@ -1,9 +1,9 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Kanban } from "lucide-react";
-import { ReplenishmentKanban } from "@/components/replenishment-kanban";
+import { OperationsKanban } from "@/components/operations-kanban";
 import { Card, CardContent } from "@/components/ui/card";
-import { loadReplenishmentBoard } from "@/lib/replenishment-cycle-data";
+import { loadOperationsBoards } from "@/lib/replenishment-cycle-data";
 import {
   getSessionAccessState,
   readSession,
@@ -24,10 +24,10 @@ export default async function OperacoesPage() {
   }
 
   let loadError: string | null = null;
-  let board: Awaited<ReturnType<typeof loadReplenishmentBoard>> | null = null;
+  let boards: Awaited<ReturnType<typeof loadOperationsBoards>> | null = null;
 
   try {
-    board = await loadReplenishmentBoard(token, userId);
+    boards = await loadOperationsBoards(token, userId);
   } catch (e) {
     loadError = e instanceof Error ? e.message : "Erro ao carregar operações";
   }
@@ -51,13 +51,13 @@ export default async function OperacoesPage() {
             Operações
           </h1>
           <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-[var(--muted-foreground)]">
-            Acompanhe cada anúncio do alerta de compra até o estoque no galpão
-            e envio ao Full. Use Avançar ou Mover para… em cada card.
+            Acompanhe reposição de compra e envio Full em abas separadas.
+            Use Avançar ou Mover para… em cada card.
           </p>
         </div>
       </header>
 
-      {board ? <ReplenishmentKanban initialData={board} /> : null}
+      {boards ? <OperationsKanban initialData={boards} /> : null}
     </div>
   );
 }

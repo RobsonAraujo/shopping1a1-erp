@@ -7,33 +7,41 @@ import { ExternalLink, ImageOff } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  BOARD_COLUMN_STATUSES,
-  nextReplenishmentStatus,
-  REPLENISHMENT_STATUS_LABELS,
+  boardColumnsForKind,
+  nextStatusForKind,
+  statusLabelsForKind,
 } from "@/lib/replenishment-cycle";
-import type { ReplenishmentBoardCard } from "@/lib/replenishment-cycle-data";
+import type { OperationsBoardCard } from "@/lib/replenishment-cycle-data";
 import { supplierPathSegment } from "@/lib/purchase-analysis";
 import type { ReplenishmentStatus } from "@/generated/prisma/client";
 import { cn } from "@/lib/utils";
 
-type ReplenishmentKanbanCardProps = {
-  card: ReplenishmentBoardCard;
-  onAdvance: (cycleId: string, options?: { skipFull?: boolean }) => Promise<void>;
-  onMove: (cycleId: string, status: ReplenishmentStatus) => Promise<void>;
+type OperationsKanbanCardProps = {
+  card: OperationsBoardCard;
+  onAdvance: () => void | Promise<void>;
+  onMove: (status: ReplenishmentStatus) => void | Promise<void>;
   busy: boolean;
 };
 
-export function ReplenishmentKanbanCard({
+export function OperationsKanbanCard({
   card,
   onAdvance,
   onMove,
   busy,
-}: ReplenishmentKanbanCardProps) {
+}: OperationsKanbanCardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const next = nextReplenishmentStatus(card.status, {
-    skipFull: !card.needsSchedulingAttention,
-  });
-  const urgent = card.purchaseIsOverdue || card.searchIsOverdue;
+  const next = nextStatusForKind(card.kind, card.status);
+  const labels = statusLabelsForKind(card.kind);
+  const columns = boardColumnsForKind(card.kind);
+  const urgent =
+    card.kind === "purchase"
+      ? card.purchaseIsOverdue
+      : card.searchIsOverdue;
+
+  const advanceLabel =
+    card.kind === "full" && card.status === "scheduled"
+      ? "Coletado"
+      : "Avançar";
 
   return (
     <article
@@ -73,7 +81,9 @@ export function ReplenishmentKanbanCard({
         <span>ML {card.mlStock}</span>
         <span>·</span>
         <span>Galpão {card.warehouseStock}</span>
-        {card.suggestedQty != null && card.suggestedQty > 0 ? (
+        {card.kind === "purchase" &&
+        card.suggestedQty != null &&
+        card.suggestedQty > 0 ? (
           <>
             <span>·</span>
             <span>Sug. {card.suggestedQty} un.</span>
@@ -81,12 +91,12 @@ export function ReplenishmentKanbanCard({
         ) : null}
       </div>
 
-      {card.purchaseStartsOn ? (
+      {card.kind === "purchase" && card.purchaseStartsOn ? (
         <p className="mt-1.5 text-[11px] text-[var(--muted-foreground)]">
           Comprar em {card.purchaseStartsOn}
         </p>
       ) : null}
-      {card.status === "full_pending" && card.searchStartsOn ? (
+      {card.kind === "full" && card.searchStartsOn ? (
         <p className="mt-1.5 text-[11px] text-[var(--muted-foreground)]">
           Full em {card.searchStartsOn}
         </p>
@@ -97,11 +107,6 @@ export function ReplenishmentKanbanCard({
           Urgente
         </Badge>
       ) : null}
-      {card.status === "in_warehouse" && card.needsSchedulingAttention ? (
-        <Badge variant="secondary" className="mt-2 h-5 px-1.5 text-[10px]">
-          Full pendente
-        </Badge>
-      ) : null}
 
       <div className="mt-3 flex flex-wrap gap-1.5">
         {next ? (
@@ -110,15 +115,9 @@ export function ReplenishmentKanbanCard({
             size="sm"
             className="h-7 px-2 text-xs"
             disabled={busy}
-            onClick={() =>
-              void onAdvance(card.cycleId, {
-                skipFull:
-                  card.status === "in_warehouse" &&
-                  !card.needsSchedulingAttention,
-              })
-            }
+            onClick={() => void onAdvance()}
           >
-            Avançar
+            {advanceLabel}
           </Button>
         ) : null}
         <div className="relative">
@@ -134,27 +133,27 @@ export function ReplenishmentKanbanCard({
           </Button>
           {menuOpen ? (
             <div className="absolute right-0 z-20 mt-1 min-w-[10rem] rounded-md border border-[var(--border)] bg-[var(--card)] py-1 shadow-lg">
-              {BOARD_COLUMN_STATUSES.filter((status) => status !== card.status).map(
-                (status) => (
+              {columns
+                .filter((status) => status !== card.status)
+                .map((status) => (
                   <button
                     key={status}
                     type="button"
                     className="block w-full px-3 py-1.5 text-left text-xs hover:bg-[var(--muted)]"
                     onClick={() => {
                       setMenuOpen(false);
-                      void onMove(card.cycleId, status);
+                      void onMove(status);
                     }}
                   >
-                    {REPLENISHMENT_STATUS_LABELS[status]}
+                    {labels[status]}
                   </button>
-                ),
-              )}
+                ))}
               <button
                 type="button"
                 className="block w-full border-t border-[var(--border)] px-3 py-1.5 text-left text-xs hover:bg-[var(--muted)]"
                 onClick={() => {
                   setMenuOpen(false);
-                  void onMove(card.cycleId, "completed");
+                  void onMove("completed");
                 }}
               >
                 Concluído
@@ -172,13 +171,15 @@ export function ReplenishmentKanbanCard({
           Anúncio
           <ExternalLink className="size-3" aria-hidden />
         </Link>
-        <Link
-          href={`/dashboard/compras/${supplierPathSegment(card.supplier)}`}
-          className="inline-flex items-center gap-1 text-[var(--primary)] hover:underline"
-        >
-          Análise
-          <ExternalLink className="size-3" aria-hidden />
-        </Link>
+        {card.kind === "purchase" ? (
+          <Link
+            href={`/dashboard/compras/${supplierPathSegment(card.supplier)}`}
+            className="inline-flex items-center gap-1 text-[var(--primary)] hover:underline"
+          >
+            Análise
+            <ExternalLink className="size-3" aria-hidden />
+          </Link>
+        ) : null}
       </div>
     </article>
   );

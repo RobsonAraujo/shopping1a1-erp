@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { loadReplenishmentBoard } from "@/lib/replenishment-cycle-data";
+import { loadOperationsBoards } from "@/lib/replenishment-cycle-data";
 import {
   getValidAccessToken,
   readSession,
@@ -17,8 +17,8 @@ export async function GET() {
   }
 
   try {
-    const board = await loadReplenishmentBoard(token, userId);
-    return NextResponse.json(board);
+    const boards = await loadOperationsBoards(token, userId);
+    return NextResponse.json(boards);
   } catch (e) {
     logServerError("api/replenishment-cycles GET", e);
     return NextResponse.json(apiErrorPayload(e, "replenishment_board_failed"), {
@@ -37,8 +37,8 @@ export async function POST() {
   }
 
   try {
-    const board = await loadReplenishmentBoard(token, userId);
-    return NextResponse.json(board);
+    const boards = await loadOperationsBoards(token, userId);
+    return NextResponse.json(boards);
   } catch (e) {
     logServerError("api/replenishment-cycles POST sync", e);
     return NextResponse.json(apiErrorPayload(e, "replenishment_sync_failed"), {

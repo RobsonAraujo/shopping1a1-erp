@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { stockPlanningConfig } from "@/config/stock-planning";
 import { fetchItemById } from "@/lib/mercadolibre/api";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import { prisma } from "@/lib/db";
-import { syncReplenishmentFromWarehouse } from "@/lib/replenishment-cycle-data";
+import { syncPurchaseCycleFromWarehouse } from "@/lib/replenishment-cycle-data";
+import { computeStockPlanningDisplay } from "@/lib/stock-planning";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 import {
   getValidAccessToken,
@@ -321,7 +323,18 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     );
 
     if (quantity !== undefined && warehouseStock.quantity > previousQty) {
-      await syncReplenishmentFromWarehouse(mlItemId, warehouseStock.quantity);
+      const purchaseLead =
+        warehouseStock.purchaseLeadTimeDays ?? 0;
+      const purchasePlan = computeStockPlanningDisplay(
+        item.available_quantity + warehouseStock.quantity,
+        0,
+        stockPlanningConfig.salesAverageWindowDays,
+        stockPlanningConfig,
+        purchaseLead,
+      );
+      await syncPurchaseCycleFromWarehouse(mlItemId, warehouseStock.quantity, {
+        needsPurchaseAttention: purchasePlan.needsPurchaseAttention,
+      });
     }
 
     return NextResponse.json({ listing, warehouseStock });

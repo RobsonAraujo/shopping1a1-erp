@@ -15,34 +15,51 @@ function countLabel(count: number, singular: string, plural: string): string {
 export function DashboardOperationsSummary({
   summary,
 }: DashboardOperationsSummaryProps) {
-  const parts: string[] = [];
+  const purchaseParts: string[] = [];
+  const fullParts: string[] = [];
 
-  if (summary.attention > 0) {
-    parts.push(countLabel(summary.attention, "em atenção", "em atenção"));
+  const p = summary.purchase;
+  if (p.attention > 0) {
+    purchaseParts.push(countLabel(p.attention, "em entrada", "em entrada"));
   }
-  if (summary.ordered > 0) {
-    parts.push(countLabel(summary.ordered, "comprado", "comprados"));
-  }
-  if (summary.inWarehouse > 0) {
-    parts.push(countLabel(summary.inWarehouse, "no galpão", "no galpão"));
-  }
-  if (summary.fullPending > 0) {
-    parts.push(countLabel(summary.fullPending, "enviar Full", "enviar Full"));
-  }
-  if (summary.analyzing + summary.quoted > 0) {
-    parts.push(
+  if (p.analyzing + p.quoted > 0) {
+    purchaseParts.push(
       countLabel(
-        summary.analyzing + summary.quoted,
+        p.analyzing + p.quoted,
         "em andamento",
         "em andamento",
       ),
     );
   }
+  if (p.ordered > 0) {
+    purchaseParts.push(countLabel(p.ordered, "comprado", "comprados"));
+  }
+
+  const f = summary.full;
+  if (f.attention > 0) {
+    fullParts.push(countLabel(f.attention, "Full em entrada", "Full em entrada"));
+  }
+  if (f.scheduled > 0) {
+    fullParts.push(countLabel(f.scheduled, "Full agendado", "Full agendados"));
+  }
+  if (f.collected > 0) {
+    fullParts.push(countLabel(f.collected, "Full coletado", "Full coletados"));
+  }
+
+  const sections: string[] = [];
+  if (purchaseParts.length > 0) {
+    sections.push(`Compra: ${purchaseParts.join(" · ")}`);
+  }
+  if (fullParts.length > 0) {
+    sections.push(`Full: ${fullParts.join(" · ")}`);
+  }
 
   const summaryText =
-    parts.length > 0
-      ? parts.join(" · ")
+    sections.length > 0
+      ? sections.join(" · ")
       : "Nenhuma reposição ativa no momento.";
+
+  const urgentPurchase = p.attention;
 
   return (
     <section id="prioridades" className="scroll-mt-24">
@@ -59,9 +76,14 @@ export function DashboardOperationsSummary({
               <p className="mt-1 text-sm text-[var(--muted-foreground)]">
                 {summaryText}
               </p>
-              {summary.attention > 0 ? (
+              {urgentPurchase > 0 ? (
                 <p className="mt-1 text-sm font-medium text-amber-800">
-                  {countLabel(summary.attention, "anúncio precisa", "anúncios precisam")} de ação imediata.
+                  {countLabel(
+                    urgentPurchase,
+                    "anúncio precisa",
+                    "anúncios precisam",
+                  )}{" "}
+                  de ação imediata na compra.
                 </p>
               ) : null}
             </div>

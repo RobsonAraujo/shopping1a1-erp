@@ -14,19 +14,21 @@ function createPrismaClient(): PrismaClient {
   return new PrismaClient({ adapter });
 }
 
-/** Cliente em cache do hot-reload pode ser anterior ao `prisma generate` do DRE. */
-function prismaClientHasDreModels(client: PrismaClient): boolean {
-  const delegate = (
-    client as PrismaClient & {
-      dreCostItem?: { findMany?: unknown };
-    }
-  ).dreCostItem;
-  return typeof delegate?.findMany === "function";
+/** Cliente em cache do hot-reload pode ser anterior ao `prisma generate`. */
+function prismaClientHasExpectedModels(client: PrismaClient): boolean {
+  const delegate = client as PrismaClient & {
+    dreCostItem?: { findMany?: unknown };
+    replenishmentCycle?: { findMany?: unknown };
+  };
+  return (
+    typeof delegate.dreCostItem?.findMany === "function" &&
+    typeof delegate.replenishmentCycle?.findMany === "function"
+  );
 }
 
 function getPrismaClient(): PrismaClient {
   const cached = globalForPrisma.prisma;
-  if (cached && prismaClientHasDreModels(cached)) {
+  if (cached && prismaClientHasExpectedModels(cached)) {
     return cached;
   }
   const client = createPrismaClient();

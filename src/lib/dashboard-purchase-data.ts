@@ -69,6 +69,7 @@ function hasActiveReplenishmentBeyondAttention(
           {
             id: "",
             mlItemId,
+            kind: "purchase",
             status: "completed",
             triggerMlQty: 0,
             triggerWarehouseQty: 0,
@@ -172,7 +173,7 @@ export async function loadDashboardPurchaseData(
         },
       }),
       prisma.replenishmentCycle.findMany({
-        where: { mlItemId: { in: allIds } },
+        where: { mlItemId: { in: allIds }, kind: "purchase" },
         select: {
           mlItemId: true,
           status: true,
