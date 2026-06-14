@@ -139,6 +139,65 @@ function marginTone(margin: number | null | undefined): string {
   return "text-[var(--muted-foreground)]";
 }
 
+const decisionSectionClass =
+  "ml-4 border-l-2 border-[var(--border)] bg-[var(--muted)]/20 pl-4";
+
+function MinPriceTableCell({
+  row,
+  targetMarginPercent,
+  marginBasis,
+}: {
+  row: FinancialEvaluationRow;
+  targetMarginPercent: number;
+  marginBasis: MarginBasis;
+}) {
+  const suggestion = useMemo(
+    () =>
+      buildMinPriceSuggestion(row, targetMarginPercent, marginBasis, {
+        productCost: row.productCost,
+        extraCosts: row.extraCosts,
+        taxRatePercent: row.taxRatePercent,
+      }),
+    [row, targetMarginPercent, marginBasis],
+  );
+
+  if (suggestion.reason === "missing_product_cost") {
+    return (
+      <span className="text-xs text-[var(--muted-foreground)]" title="Preencha o custo do produto">
+        Sem custo
+      </span>
+    );
+  }
+
+  if (suggestion.reason === "incomplete" || suggestion.reason === "impossible") {
+    return <span className="text-[var(--muted-foreground)]">—</span>;
+  }
+
+  if (suggestion.alreadyMeetsTarget) {
+    return (
+      <div>
+        <span className="font-medium text-emerald-600" title="Preço atual já atinge a meta">
+          OK
+        </span>
+        <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+          Meta {formatFinancialPercent(targetMarginPercent)}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <span className="font-medium text-amber-700 dark:text-amber-500">
+        {formatFinancialMoney(suggestion.minSalePrice)}
+      </span>
+      <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+        mín. p/ {formatFinancialPercent(targetMarginPercent)}
+      </div>
+    </div>
+  );
+}
+
 export function FinancialEvaluationClient() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -146,14 +205,9 @@ export function FinancialEvaluationClient() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [targetMarginPercent, setTargetMarginPercent] = useState(
-    DEFAULT_TARGET_MARGIN_PERCENT,
+    readStoredTargetMargin,
   );
-  const [marginBasis, setMarginBasis] = useState<MarginBasis>("contribution");
-
-  useEffect(() => {
-    setTargetMarginPercent(readStoredTargetMargin());
-    setMarginBasis(readStoredMarginBasis());
-  }, []);
+  const [marginBasis, setMarginBasis] = useState(readStoredMarginBasis);
 
   useEffect(() => {
     try {
@@ -227,7 +281,8 @@ export function FinancialEvaluationClient() {
           <div>
             <CardTitle className="text-lg">Anúncios ativos e pausados</CardTitle>
             <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-              Margem pós ADS usa TACOS dos últimos 7 dias (Product Ads ML).
+              Margem pós ADS usa TACOS dos últimos 7 dias. À direita, sugestão de
+              preço para a meta configurada.
             </p>
           </div>
           <div className="flex flex-wrap items-end gap-2">
@@ -236,9 +291,11 @@ export function FinancialEvaluationClient() {
                 id="target-margin-percent"
                 label="Meta de margem"
                 value={targetMarginPercent}
-                onValueChange={(value) =>
-                  setTargetMarginPercent(value ?? DEFAULT_TARGET_MARGIN_PERCENT)
-                }
+                onValueChange={(value) => {
+                  if (value !== null && Number.isFinite(value)) {
+                    setTargetMarginPercent(value);
+                  }
+                }}
               />
             </div>
             <div className="space-y-1">
@@ -306,8 +363,26 @@ export function FinancialEvaluationClient() {
 
           {data && filteredItems.length > 0 ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[900px] border-collapse text-sm">
+              <table className="w-full min-w-[1020px] border-collapse text-sm">
                 <thead>
+                  <tr className="text-left text-[var(--muted-foreground)]">
+                    <th colSpan={3} className="px-2 pt-2" />
+                    <th
+                      colSpan={4}
+                      className="px-2 pt-2 pb-1 text-center text-xs font-semibold uppercase tracking-wide"
+                    >
+                      Situação atual
+                    </th>
+                    <th
+                      colSpan={1}
+                      className={cn(
+                        decisionSectionClass,
+                        "px-2 pt-2 pb-1 text-center text-xs font-semibold uppercase tracking-wide",
+                      )}
+                    >
+                      Para decidir
+                    </th>
+                  </tr>
                   <tr className="border-b border-[var(--border)] text-left text-[var(--muted-foreground)]">
                     <th className="px-2 py-2 font-medium">Produto</th>
                     <th className="px-2 py-2 font-medium">Tipo</th>
@@ -326,6 +401,15 @@ export function FinancialEvaluationClient() {
                     </th>
                     <th className="px-2 py-2 font-medium text-right">
                       Pós ADS R$
+                    </th>
+                    <th
+                      className={cn(
+                        decisionSectionClass,
+                        "px-2 py-2 font-medium text-right",
+                      )}
+                      title={`Preço mínimo estimado para ${formatFinancialPercent(targetMarginPercent)} de ${marginBasisLabel(marginBasis)}`}
+                    >
+                      Preço p/ meta
                     </th>
                   </tr>
                 </thead>
@@ -417,6 +501,18 @@ export function FinancialEvaluationClient() {
                           {row.adsMetricsAvailable
                             ? formatFinancialMoney(afterAdsValue)
                             : "—"}
+                        </td>
+                        <td
+                          className={cn(
+                            decisionSectionClass,
+                            "px-2 py-3 text-right",
+                          )}
+                        >
+                          <MinPriceTableCell
+                            row={row}
+                            targetMarginPercent={targetMarginPercent}
+                            marginBasis={marginBasis}
+                          />
                         </td>
                       </tr>
                     );
