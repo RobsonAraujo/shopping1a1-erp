@@ -142,7 +142,7 @@ export function OperationsKanban({ initialData }: OperationsKanbanProps) {
               role="tab"
               aria-selected={selected}
               className={cn(
-                "inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors",
+                "inline-flex cursor-pointer items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors",
                 selected
                   ? "bg-[var(--card)] text-[var(--primary)] shadow-sm"
                   : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
