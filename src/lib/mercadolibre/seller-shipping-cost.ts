@@ -23,9 +23,29 @@ function itemDimensions(item: ItemBody): string | undefined {
 type SellerShippingCostParams = {
   sellerId: number;
   item: ItemBody;
-  /** Preço efetivo de venda (com promoção); usado no fallback sem item_id. */
+  /** Preço efetivo de venda (com promoção); obrigatório para cotação correta na API ML. */
   effectiveSalePrice?: number;
 };
+
+function appendShippingQuoteParams(
+  u: URL,
+  params: SellerShippingCostParams,
+): void {
+  const itemPrice = params.effectiveSalePrice ?? params.item.price;
+  if (Number.isFinite(itemPrice) && itemPrice >= 0) {
+    u.searchParams.set("item_price", String(itemPrice));
+  }
+
+  const freeShipping = params.item.shipping?.free_shipping;
+  if (typeof freeShipping === "boolean") {
+    u.searchParams.set("free_shipping", String(freeShipping));
+  }
+
+  const mode = params.item.shipping?.mode;
+  if (mode) {
+    u.searchParams.set("mode", mode);
+  }
+}
 
 export async function fetchSellerShippingCost(
   accessToken: string,
@@ -36,6 +56,7 @@ export async function fetchSellerShippingCost(
     `${apiBase}/users/${params.sellerId}/shipping_options/free`,
   );
   u.searchParams.set("item_id", params.item.id);
+  appendShippingQuoteParams(u, params);
 
   const res = await fetch(u.toString(), {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -72,8 +93,7 @@ async function fetchSellerShippingCostFallback(
   const u = new URL(
     `${apiBase}/users/${params.sellerId}/shipping_options/free`,
   );
-  const itemPrice = params.effectiveSalePrice ?? params.item.price;
-  u.searchParams.set("item_price", String(itemPrice));
+  appendShippingQuoteParams(u, params);
   u.searchParams.set("listing_type_id", listingTypeId);
   if (logisticType) {
     u.searchParams.set("logistic_type", logisticType);
