@@ -27,6 +27,7 @@ import {
   getCalendarMonthRange,
   isCurrentCalendarMonth,
   isMlBillingPeriodCivilMonth,
+  type CalendarDateRange,
 } from "@/lib/mercadolibre/revenue-periods";
 import { fetchSellerShippingCost } from "@/lib/mercadolibre/seller-shipping-cost";
 

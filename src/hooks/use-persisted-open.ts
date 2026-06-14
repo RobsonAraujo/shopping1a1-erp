@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
 
 export const DASHBOARD_ATTENTION_FULL_OPEN_KEY =
   "dashboard-attention-full-open";
@@ -19,6 +19,56 @@ function readPersistedOpen(storageKey: string, defaultOpen: boolean): boolean {
   }
 }
 
+function createPersistedOpenStore(storageKey: string, defaultOpen: boolean) {
+  const listeners = new Set<() => void>();
+
+  return {
+    subscribe(onStoreChange: () => void) {
+      listeners.add(onStoreChange);
+      const onStorage = (event: StorageEvent) => {
+        if (event.key !== null && event.key !== storageKey) return;
+        onStoreChange();
+      };
+      window.addEventListener("storage", onStorage);
+      return () => {
+        listeners.delete(onStoreChange);
+        window.removeEventListener("storage", onStorage);
+      };
+    },
+    getSnapshot() {
+      return readPersistedOpen(storageKey, defaultOpen);
+    },
+    getServerSnapshot() {
+      return defaultOpen;
+    },
+    set(value: boolean) {
+      try {
+        localStorage.setItem(storageKey, value ? "true" : "false");
+      } catch {
+        // ignore quota / private mode
+      }
+      for (const listener of listeners) {
+        listener();
+      }
+    },
+  };
+}
+
+const storeCache = new Map<
+  string,
+  ReturnType<typeof createPersistedOpenStore>
+>();
+
+function getPersistedOpenStore(storageKey: string, defaultOpen: boolean) {
+  const cacheKey = `${storageKey}\0${defaultOpen}`;
+  let store = storeCache.get(cacheKey);
+  if (!store) {
+    store = createPersistedOpenStore(storageKey, defaultOpen);
+    storeCache.set(cacheKey, store);
+  }
+  return store;
+}
+
 export function usePersistedOpen(
   storageKey: string,
   defaultOpen = false,
@@ -27,55 +77,30 @@ export function usePersistedOpen(
   setOpen: (value: boolean) => void;
   toggle: () => void;
 } {
-  const [open, setOpenState] = useState(defaultOpen);
-  const [ready, setReady] = useState(false);
+  const store = useMemo(
+    () => getPersistedOpenStore(storageKey, defaultOpen),
+    [storageKey, defaultOpen],
+  );
 
-  useEffect(() => {
-    setOpenState(readPersistedOpen(storageKey, defaultOpen));
-    setReady(true);
-
-    const onStorage = (event: StorageEvent) => {
-      if (event.key !== null && event.key !== storageKey) return;
-      setOpenState(readPersistedOpen(storageKey, defaultOpen));
-    };
-
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, [defaultOpen, storageKey]);
-
-  const persistOpen = useCallback(
-    (value: boolean) => {
-      setOpenState(value);
-      try {
-        localStorage.setItem(storageKey, value ? "true" : "false");
-      } catch {
-        // ignore quota / private mode
-      }
-    },
-    [storageKey],
+  const open = useSyncExternalStore(
+    store.subscribe,
+    store.getSnapshot,
+    store.getServerSnapshot,
   );
 
   const setOpen = useCallback(
     (value: boolean) => {
-      persistOpen(value);
+      store.set(value);
     },
-    [persistOpen],
+    [store],
   );
 
   const toggle = useCallback(() => {
-    setOpenState((current) => {
-      const next = !current;
-      try {
-        localStorage.setItem(storageKey, next ? "true" : "false");
-      } catch {
-        // ignore quota / private mode
-      }
-      return next;
-    });
-  }, [storageKey]);
+    store.set(!store.getSnapshot());
+  }, [store]);
 
   return {
-    open: ready ? open : defaultOpen,
+    open,
     setOpen,
     toggle,
   };

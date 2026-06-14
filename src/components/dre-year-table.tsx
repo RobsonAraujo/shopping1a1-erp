@@ -195,10 +195,6 @@ function DreManualCostCell({
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!editing) setDraft(value);
-  }, [value, editing]);
-
-  useEffect(() => {
     if (editing) {
       inputRef.current?.focus();
       inputRef.current?.select();
@@ -261,7 +257,10 @@ function DreManualCostCell({
         size="icon-sm"
         className="size-5 shrink-0 p-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
         aria-label={`Editar ${label}`}
-        onClick={() => setEditing(true)}
+        onClick={() => {
+          setDraft(value);
+          setEditing(true);
+        }}
       >
         <Pencil className="size-3" aria-hidden />
       </Button>

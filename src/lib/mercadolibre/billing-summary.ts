@@ -8,7 +8,6 @@ import {
   addBillingBonus,
   billingPeriodKey,
   classifyFullChargeLabel,
-  isFullChargeLabel,
   normalizeBillingLabel,
   subtractBillingCost,
   type MlBillingDreLines,
@@ -66,10 +65,6 @@ type FullBillingResponse = {
   total?: number;
 };
 
-function matchAny(text: string, patterns: RegExp[]): boolean {
-  return patterns.some((pattern) => pattern.test(text));
-}
-
 /** Resultado completo do fetch mensal de faturamento ML. */
 export type MlBillingMonthResult = MlBillingDreLines & {
   billingPeriod: CalendarDateRange | null;
@@ -80,11 +75,6 @@ export type MlBillingMonthResult = MlBillingDreLines & {
 
 /** @deprecated use MlBillingMonthResult */
 export type MlBillingSummary = MlBillingMonthResult;
-
-function chargeAmount(entry: BillingCharge): number {
-  const amount = Number(entry.amount ?? 0);
-  return Number.isFinite(amount) ? amount : 0;
-}
 
 function parseYmd(value: string): { year: number; month: number; day: number } | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());

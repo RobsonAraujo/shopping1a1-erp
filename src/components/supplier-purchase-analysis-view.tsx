@@ -83,13 +83,24 @@ export function SupplierPurchaseAnalysisView({
 }: SupplierPurchaseAnalysisViewProps) {
   const { bufferDays, setBufferDays } = usePurchaseCoverageBufferDays();
   const [searchQuery, setSearchQuery] = useState("");
-  const [revenueState, setRevenueState] = useState<RevenueLoadState>({
-    status: "loading",
-  });
+  const [fetchByKey, setFetchByKey] = useState<
+    Map<string, Exclude<RevenueLoadState, { status: "loading" }>>
+  >(() => new Map());
 
   const pendingMonthLabels = useMemo(
     () => getCalendarMonthLabels(getCalendarMonthRanges()),
     [],
+  );
+
+  const emptyReadyState = useMemo(
+    (): Extract<RevenueLoadState, { status: "ready" }> => ({
+      status: "ready",
+      monthLabels: pendingMonthLabels,
+      supplierRevenueLastMonth: 0,
+      supplierRevenueCurrentMonth: 0,
+      rowsWithRevenue: rows,
+    }),
+    [pendingMonthLabels, rows],
   );
 
   const itemIdsKey = useMemo(
@@ -97,21 +108,12 @@ export function SupplierPurchaseAnalysisView({
     [rows],
   );
 
+  const requestKey = `${supplierParam}:${itemIdsKey}`;
+
   useEffect(() => {
-    if (rows.length === 0) {
-      setRevenueState({
-        status: "ready",
-        monthLabels: pendingMonthLabels,
-        supplierRevenueLastMonth: 0,
-        supplierRevenueCurrentMonth: 0,
-        rowsWithRevenue: rows,
-      });
-      return;
-    }
+    if (rows.length === 0) return;
 
     let cancelled = false;
-    setRevenueState({ status: "loading" });
-
     const itemIds = rows.map((row) => row.item.id).join(",");
     const url = `/api/compras/${encodeURIComponent(supplierParam)}/revenue?itemIds=${encodeURIComponent(itemIds)}`;
 
@@ -146,29 +148,42 @@ export function SupplierPurchaseAnalysisView({
           data.unitsCurrentMonth ?? {},
         );
 
-        setRevenueState({
-          status: "ready",
-          monthLabels: data.monthLabels ?? pendingMonthLabels,
-          supplierRevenueLastMonth: data.totals?.lastMonth ?? 0,
-          supplierRevenueCurrentMonth: data.totals?.currentMonth ?? 0,
-          rowsWithRevenue,
+        setFetchByKey((prev) => {
+          const next = new Map(prev);
+          next.set(requestKey, {
+            status: "ready",
+            monthLabels: data.monthLabels ?? pendingMonthLabels,
+            supplierRevenueLastMonth: data.totals?.lastMonth ?? 0,
+            supplierRevenueCurrentMonth: data.totals?.currentMonth ?? 0,
+            rowsWithRevenue,
+          });
+          return next;
         });
       })
       .catch((e: unknown) => {
         if (cancelled) return;
-        setRevenueState({
-          status: "error",
-          message:
-            e instanceof Error
-              ? e.message
-              : "Não foi possível carregar faturamento",
+        setFetchByKey((prev) => {
+          const next = new Map(prev);
+          next.set(requestKey, {
+            status: "error",
+            message:
+              e instanceof Error
+                ? e.message
+                : "Não foi possível carregar faturamento",
+          });
+          return next;
         });
       });
 
     return () => {
       cancelled = true;
     };
-  }, [supplierParam, itemIdsKey, rows, pendingMonthLabels]);
+  }, [supplierParam, itemIdsKey, requestKey, rows, pendingMonthLabels]);
+
+  const revenueState: RevenueLoadState =
+    rows.length === 0
+      ? emptyReadyState
+      : (fetchByKey.get(requestKey) ?? { status: "loading" });
 
   const baseRows =
     revenueState.status === "ready" ? revenueState.rowsWithRevenue : rows;

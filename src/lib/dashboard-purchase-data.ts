@@ -75,6 +75,7 @@ function hasActiveReplenishmentBeyondAttention(
             triggerWarehouseQty: 0,
             triggerLeadTimeDays: null,
             warehouseQtyAtOrder: null,
+            mlQtyAtCollection: null,
             completedMlQty: completed.completedMlQty,
             completedWarehouseQty: completed.completedWarehouseQty,
             completedLeadTimeDays: completed.completedLeadTimeDays,
@@ -357,6 +358,24 @@ export function buildSupplierSummaries(
     });
   });
 
-  return sortable.map(({ urgentForSort: _urgentForSort, ...summary }) => summary);
+  return sortable.map(
+    ({
+      supplier,
+      totalProducts,
+      urgentCount,
+      highRotationCount,
+      noSalesCount,
+      suggestedUnitsTotal,
+      hasActiveAlert,
+    }) => ({
+      supplier,
+      totalProducts,
+      urgentCount,
+      highRotationCount,
+      noSalesCount,
+      suggestedUnitsTotal,
+      hasActiveAlert,
+    }),
+  );
 }
 
