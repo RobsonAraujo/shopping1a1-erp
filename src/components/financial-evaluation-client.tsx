@@ -142,7 +142,10 @@ function marginTone(margin: number | null | undefined): string {
 const currentSectionClass = "bg-[var(--muted)]/10";
 
 const decisionSectionClass =
-  "ml-4 border-l-2 border-sky-200 bg-sky-50/80 pl-4 dark:border-sky-800 dark:bg-sky-950/30";
+  "border-l border-sky-200/90 bg-sky-50/50 px-2 dark:border-sky-800/80 dark:bg-sky-950/25";
+
+const tableCellPad = "px-3 py-3";
+const tableHeadPad = "px-3 py-2";
 
 function sectionGroupPill(variant: "current" | "decision") {
   return cn(
@@ -218,26 +221,22 @@ function MinPriceTableCell({
 
   if (suggestion.alreadyMeetsTarget) {
     return (
-      <div>
-        <span className="font-medium text-emerald-600" title="Preço atual já atinge a meta">
-          OK
-        </span>
-        <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-          Meta {formatFinancialPercent(targetMarginPercent)}
-        </div>
-      </div>
+      <span
+        className="font-medium text-emerald-600"
+        title={`Preço atual já atinge meta de ${formatFinancialPercent(targetMarginPercent)}`}
+      >
+        OK
+      </span>
     );
   }
 
   return (
-    <div>
-      <span className="font-medium text-amber-700 dark:text-amber-500">
-        {formatFinancialMoney(suggestion.minSalePrice)}
-      </span>
-      <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-        mín. p/ {formatFinancialPercent(targetMarginPercent)}
-      </div>
-    </div>
+    <span
+      className="font-medium tabular-nums text-amber-700 dark:text-amber-500"
+      title={`Mínimo para ${formatFinancialPercent(targetMarginPercent)} de ${marginBasisLabel(marginBasis)}`}
+    >
+      {formatFinancialMoney(suggestion.minSalePrice)}
+    </span>
   );
 }
 
@@ -421,15 +420,24 @@ export function FinancialEvaluationClient() {
               </div>
 
               <div className="overflow-x-auto">
-              <table className="w-full min-w-[900px] border-collapse text-sm">
+              <table className="w-full min-w-[880px] table-fixed border-collapse text-sm">
+                <colgroup>
+                  <col className="w-[34%]" />
+                  <col className="w-[7%]" />
+                  <col className="w-[9%]" />
+                  <col className="w-[11%]" />
+                  <col className="w-[11%]" />
+                  <col className="w-[9%]" />
+                </colgroup>
                 <thead>
                   <tr className="text-left text-[var(--muted-foreground)]">
-                    <th colSpan={3} className="px-2 pt-2" />
+                    <th colSpan={3} className={cn(tableHeadPad, "pt-2")} />
                     <th
                       colSpan={2}
                       className={cn(
                         currentSectionClass,
-                        "px-2 pt-2 pb-1 text-center",
+                        tableHeadPad,
+                        "pt-2 pb-1 text-center",
                       )}
                     >
                       <span className={sectionGroupPill("current")}>
@@ -440,22 +448,26 @@ export function FinancialEvaluationClient() {
                       colSpan={1}
                       className={cn(
                         decisionSectionClass,
-                        "px-2 pt-2 pb-1 text-center",
+                        tableHeadPad,
+                        "pt-2 pb-1 text-center",
                       )}
                     >
                       <span className={sectionGroupPill("decision")}>
-                        Para decidir
+                        Decidir
                       </span>
                     </th>
                   </tr>
                   <tr className="border-b border-[var(--border)] text-left text-[var(--muted-foreground)]">
-                    <th className="px-2 py-2 font-medium">Produto</th>
-                    <th className="px-2 py-2 font-medium">Tipo</th>
-                    <th className="px-2 py-2 font-medium text-right">Preço</th>
+                    <th className={cn(tableHeadPad, "font-medium")}>Produto</th>
+                    <th className={cn(tableHeadPad, "font-medium")}>Tipo</th>
+                    <th className={cn(tableHeadPad, "font-medium text-right")}>
+                      Preço
+                    </th>
                     <th
                       className={cn(
                         currentSectionClass,
-                        "px-2 py-2 font-medium text-right",
+                        tableHeadPad,
+                        "font-medium text-right",
                       )}
                       title="Margem de contribuição (% em destaque, R$ abaixo)"
                     >
@@ -464,7 +476,8 @@ export function FinancialEvaluationClient() {
                     <th
                       className={cn(
                         currentSectionClass,
-                        "px-2 py-2 font-medium text-right",
+                        tableHeadPad,
+                        "font-medium text-right",
                       )}
                       title="Margem de contribuição menos TACOS (últimos 7 dias)"
                     >
@@ -473,11 +486,12 @@ export function FinancialEvaluationClient() {
                     <th
                       className={cn(
                         decisionSectionClass,
-                        "px-2 py-2 font-medium text-right",
+                        tableHeadPad,
+                        "font-medium text-right",
                       )}
-                      title={`Preço mínimo estimado para ${formatFinancialPercent(targetMarginPercent)} de ${marginBasisLabel(marginBasis)}`}
+                      title={`Preço mínimo para ${formatFinancialPercent(targetMarginPercent)} (${marginBasisLabel(marginBasis)})`}
                     >
-                      Preço p/ meta
+                      P/ meta
                     </th>
                   </tr>
                 </thead>
@@ -499,7 +513,7 @@ export function FinancialEvaluationClient() {
                         className="cursor-pointer border-b border-[var(--border)] transition-colors hover:bg-[var(--muted)]/30"
                         onClick={() => setSelectedId(row.mlItemId)}
                       >
-                        <td className="px-2 py-3">
+                        <td className={tableCellPad}>
                           <div className="flex items-center gap-3">
                             {row.imageUrl ? (
                               <Image
@@ -522,10 +536,10 @@ export function FinancialEvaluationClient() {
                             </div>
                           </div>
                         </td>
-                        <td className="px-2 py-3">
+                        <td className={tableCellPad}>
                           {row.listingTypeLabel ?? "—"}
                         </td>
-                        <td className="px-2 py-3 text-right">
+                        <td className={cn(tableCellPad, "text-right")}>
                           <div>{formatFinancialMoney(row.salePrice)}</div>
                           {row.hasPromotion && row.regularPrice != null ? (
                             <div className="text-xs text-[var(--muted-foreground)] line-through">
@@ -533,13 +547,13 @@ export function FinancialEvaluationClient() {
                             </div>
                           ) : null}
                         </td>
-                        <td className={cn(currentSectionClass, "px-2 py-3")}>
+                        <td className={cn(currentSectionClass, tableCellPad)}>
                           <StackedMarginCell
                             percent={marginPercent}
                             value={marginValue}
                           />
                         </td>
-                        <td className={cn(currentSectionClass, "px-2 py-3")}>
+                        <td className={cn(currentSectionClass, tableCellPad)}>
                           <StackedMarginCell
                             percent={afterAdsPercent}
                             value={afterAdsValue}
@@ -550,7 +564,8 @@ export function FinancialEvaluationClient() {
                         <td
                           className={cn(
                             decisionSectionClass,
-                            "px-2 py-3 text-right",
+                            tableCellPad,
+                            "text-right",
                           )}
                         >
                           <MinPriceTableCell
