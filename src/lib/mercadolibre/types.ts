@@ -87,6 +87,7 @@ export type OrderSearchOrderItem = {
   quantity?: number;
   unit_price?: number;
   currency_id?: string;
+  sale_fee?: number;
   item?: { id?: string };
   /** Em algumas respostas o id do anúncio vem no nível da linha */
   item_id?: string;
@@ -98,6 +99,7 @@ export type ItemRevenueByMonth = {
 };
 
 export type OrderSearchOrder = {
+  id?: number | string;
   /** Ex.: `paid`, `cancelled` — usamos para excluir cancelados na soma de vendas */
   status?: string;
   date_closed?: string;

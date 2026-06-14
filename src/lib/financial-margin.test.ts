@@ -28,6 +28,41 @@ describe("computeFinancialMargin", () => {
     assert.equal(taxLine?.value, 4.06);
   });
 
+  it("applies ML fee rebate as separate credit line", () => {
+    const result = computeFinancialMargin({
+      salePrice: 26,
+      mlFeeAmount: 3.38,
+      mlFeeRebate: 1.56,
+      shippingCost: 6.65,
+      productCost: 11.97,
+      extraCosts: 0,
+      taxRatePercent: 0,
+      listingTypeLabel: "Clássico",
+    });
+
+    const rebateLine = result.lines.find((line) => line.key === "mlFeeRebate");
+    assert.ok(rebateLine);
+    assert.equal(rebateLine?.value, -1.56);
+    assert.equal(result.totalCosts, roundMoney(3.38 + 6.65 + 11.97 - 1.56));
+    assert.equal(result.marginValue, roundMoney(26 - result.totalCosts));
+  });
+
+  it("caps fee rebate at gross ML fee amount", () => {
+    const result = computeFinancialMargin({
+      salePrice: 26,
+      mlFeeAmount: 1,
+      mlFeeRebate: 5,
+      shippingCost: 0,
+      productCost: 0,
+      extraCosts: 0,
+      taxRatePercent: 0,
+    });
+
+    const rebateLine = result.lines.find((line) => line.key === "mlFeeRebate");
+    assert.equal(rebateLine?.value, -1);
+    assert.equal(result.totalCosts, 0);
+  });
+
   it("flags incomplete when product cost is missing", () => {
     const result = computeFinancialMargin({
       salePrice: 100,

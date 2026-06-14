@@ -450,6 +450,8 @@ function FinancialDetailModal({
                         (line.key === "margin" || line.key === "marginAfterAds") &&
                           "font-semibold",
                         line.key === "ads" && "text-[var(--muted-foreground)]",
+                        line.key === "mlFeeRebate" &&
+                          "text-emerald-700 dark:text-emerald-400",
                       )}
                     >
                       <td className="py-2 pr-4">{line.label}</td>

@@ -17,6 +17,7 @@ import {
   siteIdFromItemId,
 } from "@/lib/mercadolibre/listing-fees";
 import { fetchItemSalePrice } from "@/lib/mercadolibre/item-sale-price";
+import { fetchLastSaleFeeRebate } from "@/lib/mercadolibre/last-sale-fee-rebate";
 import {
   fetchPadsAdvertiserId,
   fetchProductAdsMetricsByItem,
@@ -43,6 +44,8 @@ export type FinancialEvaluationRow = {
   extraCosts: number | null;
   taxRatePercent: number | null;
   mlFeeAmount: number | null;
+  mlFeeRebate: number | null;
+  mlFeeRebateOrderId: string | null;
   shippingCost: number | null;
   breakdown: FinancialMarginBreakdown | null;
   acosPercent: number | null;
@@ -318,11 +321,42 @@ async function buildRowForItem(
     );
   }
 
+  let mlFeeRebate: number | null = null;
+  let mlFeeRebateOrderId: string | null = null;
+  if (
+    hasPromotion &&
+    siteIdFromItemId(item.id) === "MLB" &&
+    mlFeeAmount !== null
+  ) {
+    const lastRebate = await fetchLastSaleFeeRebate(
+      accessToken,
+      userId,
+      item.id,
+      item.category_id && item.listing_type_id
+        ? {
+            categoryId: item.category_id,
+            listingTypeId: item.listing_type_id,
+            currencyId,
+            logisticType: item.shipping?.logistic_type ?? null,
+            shippingMode: item.shipping?.mode ?? null,
+          }
+        : undefined,
+    );
+    if (lastRebate) {
+      mlFeeRebate = lastRebate.rebate;
+      mlFeeRebateOrderId = lastRebate.orderId;
+      warnings.push(
+        `Desconto de tarifa baseado na última venda paga (pedido ${lastRebate.orderId}).`,
+      );
+    }
+  }
+
   const breakdown =
     mlFeeAmount !== null && shippingCost !== null
       ? computeFinancialMargin({
           salePrice,
           mlFeeAmount,
+          mlFeeRebate: mlFeeRebate ?? 0,
           shippingCost,
           productCost,
           extraCosts: extraCosts ?? 0,
@@ -347,6 +381,8 @@ async function buildRowForItem(
     extraCosts,
     taxRatePercent,
     mlFeeAmount,
+    mlFeeRebate,
+    mlFeeRebateOrderId,
     shippingCost,
     breakdown,
     errors,

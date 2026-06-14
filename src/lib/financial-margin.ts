@@ -1,5 +1,6 @@
 export type FinancialMarginLineKey =
   | "mlFee"
+  | "mlFeeRebate"
   | "shipping"
   | "productCost"
   | "extraCosts"
@@ -20,6 +21,8 @@ export type FinancialMarginLine = {
 export type FinancialMarginInput = {
   salePrice: number;
   mlFeeAmount: number;
+  /** Crédito de tarifa (rebate) da última venda MLB; reduz custos totais. */
+  mlFeeRebate?: number;
   shippingCost: number;
   productCost: number | null;
   extraCosts: number | null;
@@ -74,6 +77,12 @@ export function computeFinancialMargin(
 ): FinancialMarginBreakdown {
   const salePrice = roundMoney(input.salePrice);
   const mlFeeAmount = roundMoney(Math.max(0, input.mlFeeAmount));
+  const mlFeeRebate = roundMoney(
+    Math.min(
+      Math.max(0, input.mlFeeRebate ?? 0),
+      Math.max(0, input.mlFeeAmount),
+    ),
+  );
   const shippingCost = roundMoney(Math.max(0, input.shippingCost));
   const productCost =
     input.productCost !== null ? roundMoney(Math.max(0, input.productCost)) : null;
@@ -99,7 +108,12 @@ export function computeFinancialMargin(
   const extraCostsValue = extraCosts ?? 0;
 
   const totalCosts = roundMoney(
-    mlFeeAmount + shippingCost + productCostValue + extraCostsValue + taxAmount,
+    mlFeeAmount +
+      shippingCost +
+      productCostValue +
+      extraCostsValue +
+      taxAmount -
+      mlFeeRebate,
   );
   const marginValue = roundMoney(salePrice - totalCosts);
   const marginPercent = percentOfSale(marginValue, salePrice);
@@ -111,6 +125,16 @@ export function computeFinancialMargin(
       value: mlFeeAmount,
       percentOfSale: percentOfSale(mlFeeAmount, salePrice),
     },
+    ...(mlFeeRebate > 0
+      ? [
+          {
+            key: "mlFeeRebate" as const,
+            label: "Desconto de tarifa oferecido pelo Mercado Livre",
+            value: -mlFeeRebate,
+            percentOfSale: percentOfSale(-mlFeeRebate, salePrice),
+          },
+        ]
+      : []),
     {
       key: "shipping",
       label: "Frete",
