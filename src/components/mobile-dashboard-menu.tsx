@@ -4,79 +4,58 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import {
-  ChartNoAxesColumn,
-  Kanban,
-  LayoutGrid,
-  LineChart,
-  LogOut,
-  Menu,
-  Package,
-  ShoppingCart,
-  TrendingUp,
-  Warehouse,
-  X,
-} from "lucide-react";
+import { LogOut, Menu, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { DRE_DISCLAIMER_MENU } from "@/lib/dre-disclaimer";
+import {
+  DASHBOARD_NAV_GROUPS,
+  isDashboardNavActive,
+  type DashboardNavItem,
+} from "@/lib/dashboard-nav";
 
-const navItems = [
-  {
-    href: "/dashboard",
-    label: "Anúncios",
-    description: "Gerencie os anúncios do Mercado Livre",
-    icon: Package,
-  },
-  {
-    href: "/dashboard/resumo",
-    label: "Resumo",
-    description: "Painéis operacionais e alertas rápidos",
-    icon: LayoutGrid,
-  },
-  {
-    href: "/dashboard/inventory",
-    label: "Estoque",
-    description: "Acompanhe o estoque dos produtos",
-    icon: Warehouse,
-  },
-  {
-    href: "/dashboard/compras",
-    label: "Compras",
-    description: "Analise reposição por fornecedor",
-    icon: ShoppingCart,
-  },
-  {
-    href: "/dashboard/operacoes",
-    label: "Operações",
-    description: "Fluxo de compra, galpão e Full",
-    icon: Kanban,
-  },
-  {
-    href: "/dashboard/catalog-report",
-    label: "Relatório catálogo",
-    description: "Veja mudanças de competição no catálogo",
-    icon: ChartNoAxesColumn,
-  },
-  {
-    href: "/dashboard/lucratividade",
-    label: "Lucratividade",
-    description: "Margem de contribuição por anúncio",
-    icon: TrendingUp,
-  },
-  {
-    href: "/dashboard/dre",
-    label: "DRE",
-    description: DRE_DISCLAIMER_MENU,
-    icon: LineChart,
-    badge: "Indisponível",
-    badgeVariant: "warning" as const,
-  },
-];
+function MobileNavLink({
+  item,
+  active,
+  onNavigate,
+}: {
+  item: DashboardNavItem;
+  active: boolean;
+  onNavigate: () => void;
+}) {
+  const Icon = item.icon;
 
-function isActivePath(pathname: string, href: string) {
-  if (href === "/dashboard") return pathname === href;
-  return pathname === href || pathname.startsWith(`${href}/`);
+  return (
+    <Link
+      href={item.href}
+      aria-current={active ? "page" : undefined}
+      title={item.title}
+      onClick={onNavigate}
+      className={[
+        "flex items-start gap-3 rounded-xl px-3 py-3 transition-colors",
+        active
+          ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
+          : "text-[var(--foreground)] hover:bg-[var(--accent)] hover:text-[var(--accent-foreground)]",
+      ].join(" ")}
+    >
+      <Icon className="mt-0.5 size-5 shrink-0" aria-hidden />
+      <span className="min-w-0">
+        <span className="flex items-center gap-2 font-medium leading-none">
+          {item.label}
+          {item.badge ? (
+            <Badge
+              variant={item.badge.variant}
+              className="px-1.5 py-0 text-[10px]"
+            >
+              {item.badge.label}
+            </Badge>
+          ) : null}
+        </span>
+        <span className="mt-1.5 block text-xs leading-snug text-[var(--muted-foreground)]">
+          {item.description}
+        </span>
+      </span>
+    </Link>
+  );
 }
 
 export function MobileDashboardMenu() {
@@ -180,50 +159,26 @@ export function MobileDashboardMenu() {
           </div>
 
           <nav
-            className="flex flex-1 flex-col gap-1 px-3 bg-white"
+            className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 bg-white"
             aria-label="Principal mobile"
           >
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const active = isActivePath(pathname, item.href);
-
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  aria-current={active ? "page" : undefined}
-                  onClick={() => setOpen(false)}
-                  className={[
-                    "flex items-start gap-3 rounded-xl px-3 py-3 transition-colors",
-                    active
-                      ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
-                      : "text-[var(--foreground)] hover:bg-[var(--accent)] hover:text-[var(--accent-foreground)]",
-                  ].join(" ")}
-                >
-                  <Icon className="mt-0.5 size-5 shrink-0" aria-hidden />
-                  <span className="min-w-0">
-                    <span className="flex items-center gap-2 font-medium leading-none">
-                      {item.label}
-                      {"badge" in item && item.badge ? (
-                        <Badge
-                          variant={
-                            "badgeVariant" in item && item.badgeVariant
-                              ? item.badgeVariant
-                              : "secondary"
-                          }
-                          className="px-1.5 py-0 text-[10px]"
-                        >
-                          {item.badge}
-                        </Badge>
-                      ) : null}
-                    </span>
-                    <span className="mt-1.5 block text-xs leading-snug text-[var(--muted-foreground)]">
-                      {item.description}
-                    </span>
-                  </span>
-                </Link>
-              );
-            })}
+            {DASHBOARD_NAV_GROUPS.map((group) => (
+              <div key={group.id} className="flex flex-col gap-1">
+                {group.kind === "dropdown" && group.label ? (
+                  <p className="px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                    {group.label}
+                  </p>
+                ) : null}
+                {group.items.map((item) => (
+                  <MobileNavLink
+                    key={item.href}
+                    item={item}
+                    active={isDashboardNavActive(pathname, item.href)}
+                    onNavigate={() => setOpen(false)}
+                  />
+                ))}
+              </div>
+            ))}
           </nav>
 
           <form
