@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import {
   MaskedMoneyField,
   MaskedPercentField,
@@ -59,6 +61,46 @@ function formFromProduct(product: ProductView): ProductFormState {
     isMonophasic: product.isMonophasic,
     saleIcmsPercent: product.saleIcmsPercent,
   };
+}
+
+function FormSwitchRow({
+  id,
+  label,
+  description,
+  checked,
+  onCheckedChange,
+  className,
+}: {
+  id: string;
+  label: string;
+  description?: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-center justify-between gap-4 rounded-lg border border-[var(--border)] bg-[var(--card)] px-4 py-3 shadow-sm",
+        className,
+      )}
+    >
+      <label htmlFor={id} className="min-w-0 cursor-pointer">
+        <p className="text-sm font-medium text-[var(--foreground)]">{label}</p>
+        {description ? (
+          <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+            {description}
+          </p>
+        ) : null}
+      </label>
+      <Switch
+        id={id}
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+        aria-label={label}
+      />
+    </div>
+  );
 }
 
 function ProductFormModal({
@@ -162,16 +204,16 @@ function ProductFormModal({
                 setForm((f) => ({ ...f, purchaseIcmsPercent: v }))
               }
             />
-            <label className="flex items-center gap-2 text-sm sm:col-span-2">
-              <input
-                type="checkbox"
-                checked={form.hasIcmsSt}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, hasIcmsSt: e.target.checked }))
-                }
-              />
-              ICMS-ST
-            </label>
+            <FormSwitchRow
+              id="has-icms-st"
+              label="ICMS-ST"
+              description="Substituição tributária na compra — usa o custo com ST no cálculo."
+              checked={form.hasIcmsSt}
+              onCheckedChange={(checked) =>
+                setForm((f) => ({ ...f, hasIcmsSt: checked }))
+              }
+              className="sm:col-span-2"
+            />
             {form.hasIcmsSt ? (
               <MaskedMoneyField
                 id="purchase-cost-st"
@@ -194,16 +236,16 @@ function ProductFormModal({
               value={form.extraCosts}
               onValueChange={(v) => setForm((f) => ({ ...f, extraCosts: v }))}
             />
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={form.isMonophasic}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, isMonophasic: e.target.checked }))
-                }
-              />
-              Monofásico
-            </label>
+            <FormSwitchRow
+              id="is-monophasic"
+              label="Monofásico"
+              description="Sem PIS/COFINS no crédito de compra nem na precificação."
+              checked={form.isMonophasic}
+              onCheckedChange={(checked) =>
+                setForm((f) => ({ ...f, isMonophasic: checked }))
+              }
+              className="sm:col-span-2"
+            />
             <MaskedPercentField
               id="sale-icms"
               label="Imposto venda ICMS"
@@ -235,6 +277,7 @@ export function ProductsClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pisCofinsDraft, setPisCofinsDraft] = useState<number | null>(null);
+  const [editingPisCofins, setEditingPisCofins] = useState(false);
   const [savingTax, setSavingTax] = useState(false);
   const [modal, setModal] = useState<
     | { mode: "create"; form: ProductFormState }
@@ -255,6 +298,7 @@ export function ProductsClient() {
       const json = (await res.json()) as ProductsResponse;
       setData(json);
       setPisCofinsDraft(json.pisCofinsPercent);
+      setEditingPisCofins(false);
     } catch {
       setError("Falha de rede ao carregar produtos.");
     } finally {
@@ -291,6 +335,7 @@ export function ProductsClient() {
         return;
       }
       await load();
+      setEditingPisCofins(false);
     } catch {
       setError("Falha de rede ao salvar PIS/COFINS.");
     } finally {
@@ -345,24 +390,67 @@ export function ProductsClient() {
         <CardHeader className="pb-2">
           <CardTitle className="text-base">PIS/COFINS da empresa</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-wrap items-end gap-3">
-          <div className="min-w-[12rem] flex-1">
-            <MaskedPercentField
-              id="company-pis-cofins"
-              label="Alíquota PIS/COFINS (%)"
-              value={pisCofinsDraft}
-              onValueChange={setPisCofinsDraft}
-            />
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={savingTax || pisCofinsDraft === null}
-            onClick={() => void savePisCofins()}
-          >
-            Salvar alíquota
-          </Button>
-          <p className="w-full text-xs text-[var(--muted-foreground)]">
+        <CardContent>
+          {editingPisCofins ? (
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="min-w-[12rem] flex-1">
+                <MaskedPercentField
+                  id="company-pis-cofins"
+                  label="Alíquota PIS/COFINS (%)"
+                  value={pisCofinsDraft}
+                  onValueChange={setPisCofinsDraft}
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  disabled={savingTax || pisCofinsDraft === null}
+                  onClick={() => void savePisCofins()}
+                >
+                  {savingTax ? "Salvando…" : "Salvar"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={savingTax}
+                  onClick={() => {
+                    setPisCofinsDraft(data?.pisCofinsPercent ?? null);
+                    setEditingPisCofins(false);
+                  }}
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-sm text-[var(--muted-foreground)]">
+                  Alíquota PIS/COFINS
+                </p>
+                <p className="mt-1 text-2xl font-semibold tabular-nums text-[var(--foreground)]">
+                  {loading && data === null
+                    ? "—"
+                    : formatFinancialPercent(data?.pisCofinsPercent ?? null)}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                disabled={loading}
+                onClick={() => {
+                  setPisCofinsDraft(data?.pisCofinsPercent ?? null);
+                  setEditingPisCofins(true);
+                }}
+              >
+                <Pencil className="size-4" aria-hidden />
+                Editar
+              </Button>
+            </div>
+          )}
+          <p className="mt-3 text-xs text-[var(--muted-foreground)]">
             Usada no cálculo de crédito na compra e no imposto para precificar,
             exceto em produtos monofásicos.
           </p>
@@ -409,93 +497,124 @@ export function ProductsClient() {
         </p>
       ) : null}
 
-      <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
-        <table className="w-full min-w-[56rem] text-sm">
-          <thead className="bg-[var(--muted)]/30 text-left text-xs text-[var(--muted-foreground)]">
-            <tr>
-              <th className="px-3 py-2 font-medium">SKU</th>
-              <th className="px-3 py-2 font-medium">NCM</th>
-              <th className="px-3 py-2 font-medium text-right">
-                Custo precificação
-              </th>
-              <th className="px-3 py-2 font-medium text-right">Imposto %</th>
-              <th className="px-3 py-2 font-medium text-center">ST</th>
-              <th className="px-3 py-2 font-medium text-center">Mono</th>
-              <th className="px-3 py-2 font-medium text-right">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
+      <Card className="overflow-hidden p-0 shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[56rem] text-sm">
+            <thead className="border-b border-[var(--border)] bg-[var(--muted)]/80 text-left text-xs text-[var(--muted-foreground)]">
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-[var(--muted-foreground)]">
-                  Carregando…
-                </td>
+                <th className="px-4 py-3 font-semibold uppercase tracking-wide">
+                  SKU
+                </th>
+                <th className="px-4 py-3 font-semibold uppercase tracking-wide">
+                  NCM
+                </th>
+                <th className="px-4 py-3 text-right font-semibold uppercase tracking-wide">
+                  Custo precificação
+                </th>
+                <th className="px-4 py-3 text-right font-semibold uppercase tracking-wide">
+                  Imposto %
+                </th>
+                <th className="px-4 py-3 text-center font-semibold uppercase tracking-wide">
+                  ST
+                </th>
+                <th className="px-4 py-3 text-center font-semibold uppercase tracking-wide">
+                  Mono
+                </th>
+                <th className="px-4 py-3 text-right font-semibold uppercase tracking-wide">
+                  Ações
+                </th>
               </tr>
-            ) : sortedProducts.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-[var(--muted-foreground)]">
-                  Nenhum produto cadastrado. Importe SKUs dos anúncios ou crie um novo.
-                </td>
-              </tr>
-            ) : (
-              sortedProducts.map((product) => (
-                <tr
-                  key={product.sku}
-                  className="border-t border-[var(--border)] hover:bg-[var(--muted)]/10"
-                >
-                  <td className="px-3 py-2 font-medium">{product.sku}</td>
-                  <td className="px-3 py-2 text-[var(--muted-foreground)]">
-                    {product.ncm ?? "—"}
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums">
-                    {product.pricingCost !== null
-                      ? formatFinancialMoney(product.pricingCost)
-                      : "—"}
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums">
-                    {product.taxPercent !== null
-                      ? formatFinancialPercent(product.taxPercent)
-                      : "—"}
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    {product.hasIcmsSt ? "Sim" : "Não"}
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    {product.isMonophasic ? "Sim" : "Não"}
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={`Editar ${product.sku}`}
-                        onClick={() =>
-                          setModal({
-                            mode: "edit",
-                            form: formFromProduct(product),
-                          })
-                        }
-                      >
-                        <Pencil className="size-4" aria-hidden />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={`Remover ${product.sku}`}
-                        onClick={() => void deleteProduct(product.sku)}
-                      >
-                        <Trash2 className="size-4" aria-hidden />
-                      </Button>
-                    </div>
+            </thead>
+            <tbody className="bg-[var(--card)]">
+              {loading ? (
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="px-4 py-10 text-center text-[var(--muted-foreground)]"
+                  >
+                    Carregando…
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ) : sortedProducts.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="px-4 py-10 text-center text-[var(--muted-foreground)]"
+                  >
+                    Nenhum produto cadastrado. Importe SKUs dos anúncios ou crie
+                    um novo.
+                  </td>
+                </tr>
+              ) : (
+                sortedProducts.map((product) => (
+                  <tr
+                    key={product.sku}
+                    className="border-t border-[var(--border)] transition-colors hover:bg-[var(--muted)]/25"
+                  >
+                    <td className="px-4 py-3 font-medium">{product.sku}</td>
+                    <td className="px-4 py-3 text-[var(--muted-foreground)]">
+                      {product.ncm ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {product.pricingCost !== null
+                        ? formatFinancialMoney(product.pricingCost)
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {product.taxPercent !== null
+                        ? formatFinancialPercent(product.taxPercent)
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <Badge
+                        variant={product.hasIcmsSt ? "secondary" : "muted"}
+                        className="min-w-[2.5rem]"
+                      >
+                        {product.hasIcmsSt ? "Sim" : "Não"}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <Badge
+                        variant={product.isMonophasic ? "secondary" : "muted"}
+                        className="min-w-[2.5rem]"
+                      >
+                        {product.isMonophasic ? "Sim" : "Não"}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Editar ${product.sku}`}
+                          onClick={() =>
+                            setModal({
+                              mode: "edit",
+                              form: formFromProduct(product),
+                            })
+                          }
+                        >
+                          <Pencil className="size-4" aria-hidden />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Remover ${product.sku}`}
+                          onClick={() => void deleteProduct(product.sku)}
+                        >
+                          <Trash2 className="size-4" aria-hidden />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
 
       {modal ? (
         <ProductFormModal
