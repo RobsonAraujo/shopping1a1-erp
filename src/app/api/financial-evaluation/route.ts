@@ -53,6 +53,9 @@ export async function GET(request: NextRequest) {
         level1ReductionPercent: companySettings.level1ReductionPercent,
         level2ReductionPercent: companySettings.level2ReductionPercent,
         level3ReductionPercent: companySettings.level3ReductionPercent,
+        level1MinPurchaseUnit: companySettings.level1MinPurchaseUnit,
+        level2MinPurchaseUnit: companySettings.level2MinPurchaseUnit,
+        level3MinPurchaseUnit: companySettings.level3MinPurchaseUnit,
       },
     });
   } catch (e) {

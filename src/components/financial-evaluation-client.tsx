@@ -978,6 +978,15 @@ function wholesalePriceReasonLabel(reason: WholesalePriceLevelReason): string {
   }
 }
 
+function minPurchaseUnitForLevel(
+  settings: WholesaleReductionSettings,
+  level: 1 | 2 | 3,
+): number {
+  if (level === 1) return settings.level1MinPurchaseUnit;
+  if (level === 2) return settings.level2MinPurchaseUnit;
+  return settings.level3MinPurchaseUnit;
+}
+
 function WholesalePricesSection({
   row,
   wholesaleReductions,
@@ -985,6 +994,13 @@ function WholesalePricesSection({
   row: FinancialEvaluationRow;
   wholesaleReductions: WholesaleReductionSettings;
 }) {
+  const [pendingLevels, setPendingLevels] = useState<Array<1 | 2 | 3> | null>(
+    null,
+  );
+  const [applying, setApplying] = useState(false);
+  const [applySuccess, setApplySuccess] = useState<string | null>(null);
+  const [applyError, setApplyError] = useState<string | null>(null);
+
   const levels = useMemo(
     () =>
       computeWholesalePricesForListing({
@@ -1001,6 +1017,52 @@ function WholesalePricesSection({
     [row, wholesaleReductions],
   );
 
+  const applicableLevels = levels.filter(
+    (level) => level.suggestedPrice !== null && level.reason === "ok",
+  );
+
+  async function applyToMl(levelsToApply: Array<1 | 2 | 3>) {
+    setApplying(true);
+    setApplyError(null);
+    setApplySuccess(null);
+    try {
+      const res = await fetch(
+        `/api/ml/items/${encodeURIComponent(row.mlItemId)}/wholesale-prices`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ levels: levelsToApply }),
+        },
+      );
+      if (!res.ok) {
+        setApplyError(
+          await readApiError(res, "wholesale_apply_failed"),
+        );
+        return;
+      }
+      const json = (await res.json()) as {
+        appliedLevels?: number[];
+      };
+      const applied = json.appliedLevels?.join(", ") ?? levelsToApply.join(", ");
+      setApplySuccess(`Preços atacado aplicados no ML (níveis ${applied}).`);
+      setPendingLevels(null);
+    } catch {
+      setApplyError("Falha de rede ao aplicar preços no Mercado Livre.");
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  const pendingRows =
+    pendingLevels?.map((level) => {
+      const computed = levels[level - 1];
+      return {
+        level,
+        minPurchaseUnit: minPurchaseUnitForLevel(wholesaleReductions, level),
+        netAmount: computed?.suggestedPrice ?? null,
+      };
+    }) ?? [];
+
   return (
     <details className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--muted)]/10">
       <summary className="cursor-pointer px-3 py-2.5 text-sm font-medium text-[var(--foreground)]">
@@ -1012,61 +1074,165 @@ function WholesalePricesSection({
           <span className="font-medium text-[var(--foreground)]">
             {formatFinancialMoney(row.breakdown?.marginValue ?? null)}
           </span>{" "}
-          ({formatFinancialPercent(row.breakdown?.marginPercent ?? null)}). Preço
-          = taxa ML + frete + custos + margem após redução (varejo, sem imposto).
+          ({formatFinancialPercent(row.breakdown?.marginPercent ?? null)}).
+          Preço líquido sugerido = taxa ML + frete + custos + margem após
+          redução.
         </p>
+
+        {applySuccess ? (
+          <p className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+            {applySuccess}
+          </p>
+        ) : null}
+        {applyError ? (
+          <p className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+            {applyError}
+          </p>
+        ) : null}
+
+        <div className="mb-3 flex flex-wrap justify-end gap-2">
+          <Button
+            type="button"
+            size="sm"
+            disabled={applying || applicableLevels.length === 0}
+            onClick={() => setPendingLevels([1, 2, 3])}
+          >
+            Aplicar todos no ML
+          </Button>
+        </div>
+
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[20rem] text-sm">
+          <table className="w-full min-w-[28rem] text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-left text-xs text-[var(--muted-foreground)]">
                 <th className="py-2 pr-3 font-medium">Nível</th>
                 <th className="py-2 pr-3 font-medium text-right">Redução</th>
+                <th className="py-2 pr-3 font-medium text-right">Qtd mín.</th>
                 <th className="py-2 pr-3 font-medium text-right">Margem (R$)</th>
-                <th className="py-2 font-medium text-right">Preço sugerido</th>
+                <th className="py-2 pr-3 font-medium text-right">
+                  Preço líquido
+                </th>
+                <th className="py-2 font-medium text-right">Ação</th>
               </tr>
             </thead>
             <tbody>
-              {levels.map((level) => (
-                <tr
-                  key={level.level}
-                  className="border-b border-[var(--border)] last:border-b-0"
-                >
-                  <td className="py-2 pr-3 font-medium">{level.level}</td>
-                  <td className="py-2 pr-3 text-right tabular-nums">
-                    {formatFinancialPercent(level.reductionPercent)}
-                  </td>
-                  <td
-                    className="py-2 pr-3 text-right tabular-nums"
-                    title={
-                      level.targetMarginPercent !== null
-                        ? formatFinancialPercent(level.targetMarginPercent)
-                        : undefined
-                    }
+              {levels.map((level) => {
+                const minQty = minPurchaseUnitForLevel(
+                  wholesaleReductions,
+                  level.level,
+                );
+                const canApply =
+                  level.suggestedPrice !== null && level.reason === "ok";
+                return (
+                  <tr
+                    key={level.level}
+                    className="border-b border-[var(--border)] last:border-b-0"
                   >
-                    {formatFinancialMoney(level.targetMarginValue)}
-                  </td>
-                  <td className="py-2 text-right tabular-nums">
-                    {level.suggestedPrice !== null ? (
-                      formatFinancialMoney(level.suggestedPrice)
-                    ) : (
-                      <span
-                        className="text-[var(--muted-foreground)]"
-                        title={wholesalePriceReasonLabel(level.reason)}
+                    <td className="py-2 pr-3 font-medium">{level.level}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">
+                      {formatFinancialPercent(level.reductionPercent)}
+                    </td>
+                    <td className="py-2 pr-3 text-right tabular-nums">
+                      {minQty} un
+                    </td>
+                    <td
+                      className="py-2 pr-3 text-right tabular-nums"
+                      title={
+                        level.targetMarginPercent !== null
+                          ? formatFinancialPercent(level.targetMarginPercent)
+                          : undefined
+                      }
+                    >
+                      {formatFinancialMoney(level.targetMarginValue)}
+                    </td>
+                    <td className="py-2 pr-3 text-right tabular-nums">
+                      {level.suggestedPrice !== null ? (
+                        formatFinancialMoney(level.suggestedPrice)
+                      ) : (
+                        <span
+                          className="text-[var(--muted-foreground)]"
+                          title={wholesalePriceReasonLabel(level.reason)}
+                        >
+                          —
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2 text-right">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={applying || !canApply}
+                        onClick={() => setPendingLevels([level.level])}
                       >
-                        —
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                        Aplicar
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
         <p className="mt-3 text-xs text-[var(--muted-foreground)]">
-          Passe o mouse sobre a margem em R$ para ver a % equivalente. Preço sem
-          imposto — no ML o imposto é repassado ao comprador empresarial.
+          Publica preço líquido por quantidade B2B no Mercado Livre (comprador
+          empresarial). Requer conta e anúncio elegíveis no ML.
         </p>
       </div>
+
+      {pendingLevels ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-black/50"
+            aria-hidden
+            onClick={() => !applying && setPendingLevels(null)}
+          />
+          <div className="relative z-10 w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-lg">
+            <h3 className="text-base font-semibold text-[var(--foreground)]">
+              Aplicar no Mercado Livre
+            </h3>
+            <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+              Confirme os preços líquidos por quantidade que serão enviados para{" "}
+              <span className="font-medium text-[var(--foreground)]">
+                {row.mlItemId}
+              </span>
+              .
+            </p>
+            <ul className="mt-3 space-y-2 text-sm">
+              {pendingRows.map((item) => (
+                <li
+                  key={item.level}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] px-3 py-2"
+                >
+                  <span>
+                    Nível {item.level} · {item.minPurchaseUnit}+ un
+                  </span>
+                  <span className="font-semibold tabular-nums">
+                    {formatFinancialMoney(item.netAmount)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={applying}
+                onClick={() => setPendingLevels(null)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                disabled={applying}
+                onClick={() => void applyToMl(pendingLevels)}
+              >
+                {applying ? "Aplicando…" : "Confirmar"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </details>
   );
 }

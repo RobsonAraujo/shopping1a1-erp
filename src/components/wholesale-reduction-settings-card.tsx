@@ -5,7 +5,11 @@ import { ChevronDown, Layers2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatFinancialPercent } from "@/lib/financial-margin";
-import type { WholesaleReductionSettings } from "@/lib/wholesale-pricing";
+import {
+  DEFAULT_WHOLESALE_REDUCTIONS,
+  validateWholesaleReductionSettings,
+  type WholesaleReductionSettings,
+} from "@/lib/wholesale-pricing";
 import { cn } from "@/lib/utils";
 
 type WholesaleReductionSettingsCardProps = {
@@ -15,49 +19,55 @@ type WholesaleReductionSettingsCardProps = {
   onSave: (values: WholesaleReductionSettings) => Promise<void>;
 };
 
-type LevelKey =
-  | "level1ReductionPercent"
-  | "level2ReductionPercent"
-  | "level3ReductionPercent";
-
-type EditDraft = Record<LevelKey, string>;
-
-const levelRows: Array<{
+type LevelConfig = {
   level: number;
-  key: LevelKey;
+  reductionKey: keyof Pick<
+    WholesaleReductionSettings,
+    | "level1ReductionPercent"
+    | "level2ReductionPercent"
+    | "level3ReductionPercent"
+  >;
+  minQtyKey: keyof Pick<
+    WholesaleReductionSettings,
+    | "level1MinPurchaseUnit"
+    | "level2MinPurchaseUnit"
+    | "level3MinPurchaseUnit"
+  >;
   label: string;
   hint: string;
-}> = [
+};
+
+type EditDraft = Record<
+  LevelConfig["reductionKey"] | LevelConfig["minQtyKey"],
+  string
+>;
+
+const levelRows: LevelConfig[] = [
   {
     level: 1,
-    key: "level1ReductionPercent",
+    reductionKey: "level1ReductionPercent",
+    minQtyKey: "level1MinPurchaseUnit",
     label: "Nível 1",
     hint: "Menor desconto — faixa inicial B2B",
   },
   {
     level: 2,
-    key: "level2ReductionPercent",
+    reductionKey: "level2ReductionPercent",
+    minQtyKey: "level2MinPurchaseUnit",
     label: "Nível 2",
     hint: "Desconto intermediário",
   },
   {
     level: 3,
-    key: "level3ReductionPercent",
+    reductionKey: "level3ReductionPercent",
+    minQtyKey: "level3MinPurchaseUnit",
     label: "Nível 3",
     hint: "Maior desconto — volume atacado",
   },
 ];
 
-const inputClassName =
-  "w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2.5 pr-9 text-center text-lg font-semibold tabular-nums shadow-sm focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]/30";
-
-function emptyDraft(): WholesaleReductionSettings {
-  return {
-    level1ReductionPercent: 10,
-    level2ReductionPercent: 15,
-    level3ReductionPercent: 20,
-  };
-}
+const fieldInputClassName =
+  "w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-center text-sm font-semibold tabular-nums shadow-sm focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]/30";
 
 function settingsToEditDraft(settings: WholesaleReductionSettings): EditDraft {
   return {
@@ -73,6 +83,9 @@ function settingsToEditDraft(settings: WholesaleReductionSettings): EditDraft {
       ".",
       ",",
     ),
+    level1MinPurchaseUnit: String(settings.level1MinPurchaseUnit),
+    level2MinPurchaseUnit: String(settings.level2MinPurchaseUnit),
+    level3MinPurchaseUnit: String(settings.level3MinPurchaseUnit),
   };
 }
 
@@ -84,17 +97,31 @@ function parsePercentInput(raw: string): number | null {
   return n;
 }
 
+function parseMinQtyInput(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (trimmed === "") return null;
+  const n = Number(trimmed);
+  if (!Number.isInteger(n) || n < 2) return null;
+  return n;
+}
+
 function editDraftToSettings(
   draft: EditDraft,
 ): WholesaleReductionSettings | null {
   const level1ReductionPercent = parsePercentInput(draft.level1ReductionPercent);
   const level2ReductionPercent = parsePercentInput(draft.level2ReductionPercent);
   const level3ReductionPercent = parsePercentInput(draft.level3ReductionPercent);
+  const level1MinPurchaseUnit = parseMinQtyInput(draft.level1MinPurchaseUnit);
+  const level2MinPurchaseUnit = parseMinQtyInput(draft.level2MinPurchaseUnit);
+  const level3MinPurchaseUnit = parseMinQtyInput(draft.level3MinPurchaseUnit);
 
   if (
     level1ReductionPercent === null ||
     level2ReductionPercent === null ||
-    level3ReductionPercent === null
+    level3ReductionPercent === null ||
+    level1MinPurchaseUnit === null ||
+    level2MinPurchaseUnit === null ||
+    level3MinPurchaseUnit === null
   ) {
     return null;
   }
@@ -103,16 +130,21 @@ function editDraftToSettings(
     level1ReductionPercent,
     level2ReductionPercent,
     level3ReductionPercent,
+    level1MinPurchaseUnit,
+    level2MinPurchaseUnit,
+    level3MinPurchaseUnit,
   };
 }
 
 function LevelPreviewBadge({
   level,
-  value,
+  reduction,
+  minQty,
   loading,
 }: {
   level: number;
-  value: number | null;
+  reduction: number | null;
+  minQty: number | null;
   loading: boolean;
 }) {
   return (
@@ -121,35 +153,41 @@ function LevelPreviewBadge({
         N{level}
       </span>
       <span className="font-semibold tabular-nums text-[var(--foreground)]">
-        {loading || value === null ? "—" : formatFinancialPercent(value)}
+        {loading || reduction === null
+          ? "—"
+          : formatFinancialPercent(reduction)}
+      </span>
+      <span className="text-[var(--muted-foreground)]">·</span>
+      <span className="tabular-nums text-[var(--muted-foreground)]">
+        {loading || minQty === null ? "—" : `${minQty} un`}
       </span>
     </span>
   );
 }
 
 function LevelCard({
-  level,
-  label,
-  hint,
+  row,
   editing,
-  value,
-  displayValue,
+  reductionValue,
+  minQtyValue,
+  displayReduction,
+  displayMinQty,
   loading,
   disabled,
-  onChange,
+  onReductionChange,
+  onMinQtyChange,
 }: {
-  level: number;
-  label: string;
-  hint: string;
+  row: LevelConfig;
   editing: boolean;
-  value: string;
-  displayValue: number | null;
+  reductionValue: string;
+  minQtyValue: string;
+  displayReduction: number | null;
+  displayMinQty: number | null;
   loading: boolean;
   disabled?: boolean;
-  onChange?: (value: string) => void;
+  onReductionChange?: (value: string) => void;
+  onMinQtyChange?: (value: string) => void;
 }) {
-  const inputId = `wholesale-level-${level}`;
-
   return (
     <div
       className={cn(
@@ -159,46 +197,74 @@ function LevelCard({
     >
       <div className="flex items-center justify-between gap-2">
         <Badge variant="secondary" className="font-semibold">
-          {label}
+          {row.label}
         </Badge>
         <span className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
-          N{level}
+          N{row.level}
         </span>
       </div>
 
-      <div className="mt-4 flex flex-1 flex-col items-center justify-center">
-        {editing ? (
-          <div className="relative w-full max-w-[8rem]">
+      {editing ? (
+        <div className="mt-4 space-y-3">
+          <div>
+            <label
+              htmlFor={`wholesale-${row.reductionKey}`}
+              className="mb-1 block text-center text-xs text-[var(--muted-foreground)]"
+            >
+              Redução da margem
+            </label>
+            <div className="relative">
+              <input
+                id={`wholesale-${row.reductionKey}`}
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                disabled={disabled}
+                value={reductionValue}
+                onChange={(e) => onReductionChange?.(e.target.value)}
+                className={cn(fieldInputClassName, "pr-8", disabled && "opacity-60")}
+              />
+              <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-[var(--muted-foreground)]">
+                %
+              </span>
+            </div>
+          </div>
+          <div>
+            <label
+              htmlFor={`wholesale-${row.minQtyKey}`}
+              className="mb-1 block text-center text-xs text-[var(--muted-foreground)]"
+            >
+              Qtd mínima no ML
+            </label>
             <input
-              id={inputId}
+              id={`wholesale-${row.minQtyKey}`}
               type="text"
-              inputMode="decimal"
+              inputMode="numeric"
               autoComplete="off"
               disabled={disabled}
-              value={value}
-              onChange={(e) => onChange?.(e.target.value)}
-              placeholder="0"
-              aria-label={`${label} — redução percentual`}
-              className={cn(inputClassName, disabled && "opacity-60")}
+              value={minQtyValue}
+              onChange={(e) => onMinQtyChange?.(e.target.value)}
+              className={cn(fieldInputClassName, disabled && "opacity-60")}
             />
-            <span
-              className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[var(--muted-foreground)]"
-              aria-hidden
-            >
-              %
-            </span>
           </div>
-        ) : (
+        </div>
+      ) : (
+        <div className="mt-4 flex flex-1 flex-col items-center justify-center text-center">
           <p className="text-3xl font-bold tabular-nums tracking-tight text-[var(--primary)]">
-            {loading || displayValue === null
+            {loading || displayReduction === null
               ? "—"
-              : formatFinancialPercent(displayValue)}
+              : formatFinancialPercent(displayReduction)}
           </p>
-        )}
-        <p className="mt-2 text-center text-xs text-[var(--muted-foreground)]">
-          {editing ? "redução da margem" : hint}
-        </p>
-      </div>
+          <p className="mt-1 text-sm font-medium tabular-nums text-[var(--foreground)]">
+            {loading || displayMinQty === null
+              ? "—"
+              : `a partir de ${displayMinQty} un`}
+          </p>
+          <p className="mt-2 text-xs text-[var(--muted-foreground)]">
+            {row.hint}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -214,7 +280,7 @@ export function WholesaleReductionSettingsCard({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<EditDraft>(
-    settingsToEditDraft(values ?? emptyDraft()),
+    settingsToEditDraft(values ?? DEFAULT_WHOLESALE_REDUCTIONS),
   );
 
   useEffect(() => {
@@ -224,7 +290,7 @@ export function WholesaleReductionSettingsCard({
   }, [values, editing]);
 
   function startEdit() {
-    setEditDraft(settingsToEditDraft(values ?? emptyDraft()));
+    setEditDraft(settingsToEditDraft(values ?? DEFAULT_WHOLESALE_REDUCTIONS));
     setSaveError(null);
     setEditing(true);
     setOpen(true);
@@ -233,7 +299,15 @@ export function WholesaleReductionSettingsCard({
   async function handleSave() {
     const parsed = editDraftToSettings(editDraft);
     if (!parsed) {
-      setSaveError("Informe valores entre 0 e 100 em todos os níveis.");
+      setSaveError(
+        "Informe redução entre 0 e 100% e quantidade mínima inteira ≥ 2 em todos os níveis.",
+      );
+      return;
+    }
+
+    const validationError = validateWholesaleReductionSettings(parsed);
+    if (validationError) {
+      setSaveError(validationError);
       return;
     }
 
@@ -247,7 +321,7 @@ export function WholesaleReductionSettingsCard({
     }
   }
 
-  const resolvedValues = values ?? emptyDraft();
+  const resolvedValues = values ?? DEFAULT_WHOLESALE_REDUCTIONS;
 
   return (
     <section className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-sm">
@@ -266,17 +340,17 @@ export function WholesaleReductionSettingsCard({
               Atacado B2B
             </span>
             <span className="mt-1 block text-sm text-[var(--muted-foreground)]">
-              Redução da margem de contribuição por faixa de preço no Mercado
-              Livre
+              Redução da margem e quantidade mínima por faixa no Mercado Livre
             </span>
             {!open ? (
               <span className="mt-2.5 flex flex-wrap gap-1.5">
                 {levelRows.map((row) => (
                   <LevelPreviewBadge
-                    key={row.key}
+                    key={row.reductionKey}
                     level={row.level}
                     loading={loading}
-                    value={values ? values[row.key] : null}
+                    reduction={values ? values[row.reductionKey] : null}
+                    minQty={values ? values[row.minQtyKey] : null}
                   />
                 ))}
               </span>
@@ -296,7 +370,7 @@ export function WholesaleReductionSettingsCard({
         <div className="border-t border-[var(--border)] px-4 pb-5 pt-4 sm:px-5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm font-medium text-[var(--foreground)]">
-              {editing ? "Editar reduções por nível" : "Reduções configuradas"}
+              {editing ? "Editar faixas de atacado" : "Faixas configuradas"}
             </p>
             {!editing ? (
               <Button
@@ -318,17 +392,20 @@ export function WholesaleReductionSettingsCard({
               <div className="grid gap-3 sm:grid-cols-3">
                 {levelRows.map((row) => (
                   <LevelCard
-                    key={row.key}
-                    level={row.level}
-                    label={row.label}
-                    hint={row.hint}
+                    key={row.reductionKey}
+                    row={row}
                     editing
-                    value={editDraft[row.key]}
-                    displayValue={null}
+                    reductionValue={editDraft[row.reductionKey]}
+                    minQtyValue={editDraft[row.minQtyKey]}
+                    displayReduction={null}
+                    displayMinQty={null}
                     loading={false}
                     disabled={saving}
-                    onChange={(next) =>
-                      setEditDraft((d) => ({ ...d, [row.key]: next }))
+                    onReductionChange={(next) =>
+                      setEditDraft((d) => ({ ...d, [row.reductionKey]: next }))
+                    }
+                    onMinQtyChange={(next) =>
+                      setEditDraft((d) => ({ ...d, [row.minQtyKey]: next }))
                     }
                   />
                 ))}
@@ -354,7 +431,9 @@ export function WholesaleReductionSettingsCard({
                   variant="outline"
                   disabled={saving}
                   onClick={() => {
-                    setEditDraft(settingsToEditDraft(values ?? emptyDraft()));
+                    setEditDraft(
+                      settingsToEditDraft(values ?? DEFAULT_WHOLESALE_REDUCTIONS),
+                    );
                     setSaveError(null);
                     setEditing(false);
                   }}
@@ -367,13 +446,15 @@ export function WholesaleReductionSettingsCard({
             <div className="grid gap-3 sm:grid-cols-3">
               {levelRows.map((row) => (
                 <LevelCard
-                  key={row.key}
-                  level={row.level}
-                  label={row.label}
-                  hint={row.hint}
+                  key={row.reductionKey}
+                  row={row}
                   editing={false}
-                  value=""
-                  displayValue={loading ? null : resolvedValues[row.key]}
+                  reductionValue=""
+                  minQtyValue=""
+                  displayReduction={
+                    loading ? null : resolvedValues[row.reductionKey]
+                  }
+                  displayMinQty={loading ? null : resolvedValues[row.minQtyKey]}
                   loading={loading}
                 />
               ))}
@@ -381,9 +462,9 @@ export function WholesaleReductionSettingsCard({
           )}
 
           <p className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--muted)]/10 px-3 py-2.5 text-xs leading-relaxed text-[var(--muted-foreground)]">
-            Cada nível reduz o valor em R$ da margem de contribuição do
-            anúncio. O preço sugerido soma taxa ML, frete, custos e essa margem
-            — sem imposto (repasse ao comprador empresarial no ML).
+            A redução incide sobre o valor em R$ da margem de contribuição. A
+            quantidade mínima define a faixa no preço por quantidade B2B do ML
+            (preço líquido, sem imposto — repasse ao comprador empresarial).
           </p>
         </div>
       ) : null}

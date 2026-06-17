@@ -3,18 +3,68 @@ import { roundMoney, type MinSalePriceReason } from "@/lib/financial-margin";
 export const DEFAULT_WHOLESALE_LEVEL1_REDUCTION_PERCENT = 10;
 export const DEFAULT_WHOLESALE_LEVEL2_REDUCTION_PERCENT = 15;
 export const DEFAULT_WHOLESALE_LEVEL3_REDUCTION_PERCENT = 20;
+export const DEFAULT_WHOLESALE_LEVEL1_MIN_PURCHASE_UNIT = 2;
+export const DEFAULT_WHOLESALE_LEVEL2_MIN_PURCHASE_UNIT = 5;
+export const DEFAULT_WHOLESALE_LEVEL3_MIN_PURCHASE_UNIT = 10;
 
 export type WholesaleReductionSettings = {
   level1ReductionPercent: number;
   level2ReductionPercent: number;
   level3ReductionPercent: number;
+  level1MinPurchaseUnit: number;
+  level2MinPurchaseUnit: number;
+  level3MinPurchaseUnit: number;
 };
 
 export const DEFAULT_WHOLESALE_REDUCTIONS: WholesaleReductionSettings = {
   level1ReductionPercent: DEFAULT_WHOLESALE_LEVEL1_REDUCTION_PERCENT,
   level2ReductionPercent: DEFAULT_WHOLESALE_LEVEL2_REDUCTION_PERCENT,
   level3ReductionPercent: DEFAULT_WHOLESALE_LEVEL3_REDUCTION_PERCENT,
+  level1MinPurchaseUnit: DEFAULT_WHOLESALE_LEVEL1_MIN_PURCHASE_UNIT,
+  level2MinPurchaseUnit: DEFAULT_WHOLESALE_LEVEL2_MIN_PURCHASE_UNIT,
+  level3MinPurchaseUnit: DEFAULT_WHOLESALE_LEVEL3_MIN_PURCHASE_UNIT,
 };
+
+export function validateWholesaleMinPurchaseUnit(value: unknown): string | null {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 2) {
+    return "Quantidade mínima deve ser um inteiro maior ou igual a 2";
+  }
+  return null;
+}
+
+export function validateWholesaleReductionSettings(
+  settings: WholesaleReductionSettings,
+): string | null {
+  const qtys = [
+    settings.level1MinPurchaseUnit,
+    settings.level2MinPurchaseUnit,
+    settings.level3MinPurchaseUnit,
+  ];
+  for (let i = 0; i < qtys.length; i++) {
+    const err = validateWholesaleMinPurchaseUnit(qtys[i]);
+    if (err) return `Nível ${i + 1}: ${err}`;
+  }
+  if (
+    !(
+      qtys[0] < qtys[1] &&
+      qtys[1] < qtys[2]
+    )
+  ) {
+    return "Quantidades mínimas devem crescer do nível 1 ao 3";
+  }
+  return null;
+}
+
+export function wholesaleMinPurchaseUnitsFromSettings(
+  settings: WholesaleReductionSettings,
+): [number, number, number] {
+  return [
+    settings.level1MinPurchaseUnit,
+    settings.level2MinPurchaseUnit,
+    settings.level3MinPurchaseUnit,
+  ];
+}
 
 export type WholesalePriceLevelReason =
   | MinSalePriceReason
@@ -128,6 +178,9 @@ export function computeWholesalePricesForListing(input: {
     }));
   }
 
+  const currentMarginPercent = input.currentMarginPercent;
+  const currentMarginValue = input.currentMarginValue;
+
   if (
     input.mlFeeAmount === null ||
     !Number.isFinite(input.mlFeeAmount) ||
@@ -138,11 +191,11 @@ export function computeWholesalePricesForListing(input: {
       level,
       reductionPercent: input.reductions[index],
       targetMarginPercent: computeTargetMarginFromReduction(
-        input.currentMarginPercent,
+        currentMarginPercent,
         input.reductions[index],
       ),
       targetMarginValue: computeTargetMarginValueFromReduction(
-        input.currentMarginValue,
+        currentMarginValue,
         input.reductions[index],
       ),
       suggestedPrice: null,
@@ -155,11 +208,11 @@ export function computeWholesalePricesForListing(input: {
       level,
       reductionPercent: input.reductions[index],
       targetMarginPercent: computeTargetMarginFromReduction(
-        input.currentMarginPercent,
+        currentMarginPercent,
         input.reductions[index],
       ),
       targetMarginValue: computeTargetMarginValueFromReduction(
-        input.currentMarginValue,
+        currentMarginValue,
         input.reductions[index],
       ),
       suggestedPrice: null,
@@ -170,11 +223,11 @@ export function computeWholesalePricesForListing(input: {
   return levels.map((level, index) => {
     const reductionPercent = input.reductions[index];
     const targetMarginPercent = computeTargetMarginFromReduction(
-      input.currentMarginPercent,
+      currentMarginPercent,
       reductionPercent,
     );
     const targetMarginValue = computeTargetMarginValueFromReduction(
-      input.currentMarginValue,
+      currentMarginValue,
       reductionPercent,
     );
 

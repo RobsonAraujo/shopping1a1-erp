@@ -7,6 +7,11 @@ import {
   type CompanySettings,
 } from "@/lib/product-data";
 import { DEFAULT_PIS_COFINS_PERCENT } from "@/lib/product-pricing";
+import {
+  validateWholesaleMinPurchaseUnit,
+  validateWholesaleReductionSettings,
+  type WholesaleReductionSettings,
+} from "@/lib/wholesale-pricing";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 import {
   getValidAccessToken,
@@ -21,14 +26,31 @@ async function requireAuth() {
   return true;
 }
 
+function wholesaleReductionsResponse(
+  settings: Pick<
+    WholesaleReductionSettings,
+    | "level1ReductionPercent"
+    | "level2ReductionPercent"
+    | "level3ReductionPercent"
+    | "level1MinPurchaseUnit"
+    | "level2MinPurchaseUnit"
+    | "level3MinPurchaseUnit"
+  >,
+) {
+  return {
+    level1ReductionPercent: settings.level1ReductionPercent,
+    level2ReductionPercent: settings.level2ReductionPercent,
+    level3ReductionPercent: settings.level3ReductionPercent,
+    level1MinPurchaseUnit: settings.level1MinPurchaseUnit,
+    level2MinPurchaseUnit: settings.level2MinPurchaseUnit,
+    level3MinPurchaseUnit: settings.level3MinPurchaseUnit,
+  };
+}
+
 function settingsResponse(settings: CompanySettings) {
   return {
     pisCofinsPercent: settings.pisCofinsPercent,
-    wholesaleReductions: {
-      level1ReductionPercent: settings.level1ReductionPercent,
-      level2ReductionPercent: settings.level2ReductionPercent,
-      level3ReductionPercent: settings.level3ReductionPercent,
-    },
+    wholesaleReductions: wholesaleReductionsResponse(settings),
   };
 }
 
@@ -54,6 +76,9 @@ type PatchBody = {
     level1ReductionPercent?: unknown;
     level2ReductionPercent?: unknown;
     level3ReductionPercent?: unknown;
+    level1MinPurchaseUnit?: unknown;
+    level2MinPurchaseUnit?: unknown;
+    level3MinPurchaseUnit?: unknown;
   };
 };
 
@@ -86,10 +111,19 @@ export async function PATCH(request: NextRequest) {
   let level1 = current.level1ReductionPercent;
   let level2 = current.level2ReductionPercent;
   let level3 = current.level3ReductionPercent;
+  let min1 = current.level1MinPurchaseUnit;
+  let min2 = current.level2MinPurchaseUnit;
+  let min3 = current.level3MinPurchaseUnit;
 
   if (body.wholesaleReductions) {
-    const { level1ReductionPercent, level2ReductionPercent, level3ReductionPercent } =
-      body.wholesaleReductions;
+    const {
+      level1ReductionPercent,
+      level2ReductionPercent,
+      level3ReductionPercent,
+      level1MinPurchaseUnit,
+      level2MinPurchaseUnit,
+      level3MinPurchaseUnit,
+    } = body.wholesaleReductions;
 
     if (level1ReductionPercent !== undefined) {
       const err = validateWholesaleReductionPercent(level1ReductionPercent);
@@ -112,6 +146,39 @@ export async function PATCH(request: NextRequest) {
       }
       level3 = Number(level3ReductionPercent);
     }
+    if (level1MinPurchaseUnit !== undefined) {
+      const err = validateWholesaleMinPurchaseUnit(level1MinPurchaseUnit);
+      if (err) {
+        return NextResponse.json({ error: `Nível 1: ${err}` }, { status: 400 });
+      }
+      min1 = Number(level1MinPurchaseUnit);
+    }
+    if (level2MinPurchaseUnit !== undefined) {
+      const err = validateWholesaleMinPurchaseUnit(level2MinPurchaseUnit);
+      if (err) {
+        return NextResponse.json({ error: `Nível 2: ${err}` }, { status: 400 });
+      }
+      min2 = Number(level2MinPurchaseUnit);
+    }
+    if (level3MinPurchaseUnit !== undefined) {
+      const err = validateWholesaleMinPurchaseUnit(level3MinPurchaseUnit);
+      if (err) {
+        return NextResponse.json({ error: `Nível 3: ${err}` }, { status: 400 });
+      }
+      min3 = Number(level3MinPurchaseUnit);
+    }
+
+    const qtyErr = validateWholesaleReductionSettings({
+      level1ReductionPercent: level1,
+      level2ReductionPercent: level2,
+      level3ReductionPercent: level3,
+      level1MinPurchaseUnit: min1,
+      level2MinPurchaseUnit: min2,
+      level3MinPurchaseUnit: min3,
+    });
+    if (qtyErr) {
+      return NextResponse.json({ error: qtyErr }, { status: 400 });
+    }
   }
 
   try {
@@ -122,12 +189,18 @@ export async function PATCH(request: NextRequest) {
         wholesaleLevel1ReductionPercent: level1,
         wholesaleLevel2ReductionPercent: level2,
         wholesaleLevel3ReductionPercent: level3,
+        wholesaleLevel1MinPurchaseUnit: min1,
+        wholesaleLevel2MinPurchaseUnit: min2,
+        wholesaleLevel3MinPurchaseUnit: min3,
       },
       update: {
         pisCofinsPercent,
         wholesaleLevel1ReductionPercent: level1,
         wholesaleLevel2ReductionPercent: level2,
         wholesaleLevel3ReductionPercent: level3,
+        wholesaleLevel1MinPurchaseUnit: min1,
+        wholesaleLevel2MinPurchaseUnit: min2,
+        wholesaleLevel3MinPurchaseUnit: min3,
       },
     });
 
@@ -137,6 +210,9 @@ export async function PATCH(request: NextRequest) {
         level1ReductionPercent: Number(row.wholesaleLevel1ReductionPercent),
         level2ReductionPercent: Number(row.wholesaleLevel2ReductionPercent),
         level3ReductionPercent: Number(row.wholesaleLevel3ReductionPercent),
+        level1MinPurchaseUnit: row.wholesaleLevel1MinPurchaseUnit,
+        level2MinPurchaseUnit: row.wholesaleLevel2MinPurchaseUnit,
+        level3MinPurchaseUnit: row.wholesaleLevel3MinPurchaseUnit,
       }),
     );
   } catch (e) {

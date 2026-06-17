@@ -74,6 +74,15 @@ function rowToCompanySettings(row: CompanyTaxSettings): CompanySettings {
     level3ReductionPercent:
       decimalToNumber(row.wholesaleLevel3ReductionPercent) ??
       DEFAULT_WHOLESALE_REDUCTIONS.level3ReductionPercent,
+    level1MinPurchaseUnit:
+      row.wholesaleLevel1MinPurchaseUnit ??
+      DEFAULT_WHOLESALE_REDUCTIONS.level1MinPurchaseUnit,
+    level2MinPurchaseUnit:
+      row.wholesaleLevel2MinPurchaseUnit ??
+      DEFAULT_WHOLESALE_REDUCTIONS.level2MinPurchaseUnit,
+    level3MinPurchaseUnit:
+      row.wholesaleLevel3MinPurchaseUnit ??
+      DEFAULT_WHOLESALE_REDUCTIONS.level3MinPurchaseUnit,
   };
 }
 
@@ -114,6 +123,12 @@ export async function ensureCompanySettings(): Promise<CompanySettings> {
         DEFAULT_WHOLESALE_REDUCTIONS.level2ReductionPercent,
       wholesaleLevel3ReductionPercent:
         DEFAULT_WHOLESALE_REDUCTIONS.level3ReductionPercent,
+      wholesaleLevel1MinPurchaseUnit:
+        DEFAULT_WHOLESALE_REDUCTIONS.level1MinPurchaseUnit,
+      wholesaleLevel2MinPurchaseUnit:
+        DEFAULT_WHOLESALE_REDUCTIONS.level2MinPurchaseUnit,
+      wholesaleLevel3MinPurchaseUnit:
+        DEFAULT_WHOLESALE_REDUCTIONS.level3MinPurchaseUnit,
     },
   });
   return rowToCompanySettings(created);
