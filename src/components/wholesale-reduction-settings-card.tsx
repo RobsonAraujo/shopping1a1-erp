@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, Pencil } from "lucide-react";
+import { ChevronDown, Layers2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { formatFinancialPercent } from "@/lib/financial-margin";
 import type { WholesaleReductionSettings } from "@/lib/wholesale-pricing";
 import { cn } from "@/lib/utils";
@@ -22,14 +22,34 @@ type LevelKey =
 
 type EditDraft = Record<LevelKey, string>;
 
-const levelRows: Array<{ level: number; key: LevelKey; label: string }> = [
-  { level: 1, key: "level1ReductionPercent", label: "Nível 1" },
-  { level: 2, key: "level2ReductionPercent", label: "Nível 2" },
-  { level: 3, key: "level3ReductionPercent", label: "Nível 3" },
+const levelRows: Array<{
+  level: number;
+  key: LevelKey;
+  label: string;
+  hint: string;
+}> = [
+  {
+    level: 1,
+    key: "level1ReductionPercent",
+    label: "Nível 1",
+    hint: "Menor desconto — faixa inicial B2B",
+  },
+  {
+    level: 2,
+    key: "level2ReductionPercent",
+    label: "Nível 2",
+    hint: "Desconto intermediário",
+  },
+  {
+    level: 3,
+    key: "level3ReductionPercent",
+    label: "Nível 3",
+    hint: "Maior desconto — volume atacado",
+  },
 ];
 
 const inputClassName =
-  "w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 pr-8 text-sm tabular-nums";
+  "w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2.5 pr-9 text-center text-lg font-semibold tabular-nums shadow-sm focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]/30";
 
 function emptyDraft(): WholesaleReductionSettings {
   return {
@@ -86,42 +106,98 @@ function editDraftToSettings(
   };
 }
 
-function PercentInput({
-  id,
-  label,
+function LevelPreviewBadge({
+  level,
   value,
-  onChange,
-  disabled,
+  loading,
 }: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  disabled?: boolean;
+  level: number;
+  value: number | null;
+  loading: boolean;
 }) {
   return (
-    <div className="space-y-1">
-      <label htmlFor={id} className="block text-sm font-medium">
-        {label}
-      </label>
-      <div className="relative">
-        <input
-          id={id}
-          type="text"
-          inputMode="decimal"
-          autoComplete="off"
-          disabled={disabled}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="0"
-          className={cn(inputClassName, disabled && "opacity-60")}
-        />
-        <span
-          className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-[var(--muted-foreground)]"
-          aria-hidden
-        >
-          %
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--background)] px-2.5 py-1 text-xs">
+      <span className="font-medium text-[var(--muted-foreground)]">
+        N{level}
+      </span>
+      <span className="font-semibold tabular-nums text-[var(--foreground)]">
+        {loading || value === null ? "—" : formatFinancialPercent(value)}
+      </span>
+    </span>
+  );
+}
+
+function LevelCard({
+  level,
+  label,
+  hint,
+  editing,
+  value,
+  displayValue,
+  loading,
+  disabled,
+  onChange,
+}: {
+  level: number;
+  label: string;
+  hint: string;
+  editing: boolean;
+  value: string;
+  displayValue: number | null;
+  loading: boolean;
+  disabled?: boolean;
+  onChange?: (value: string) => void;
+}) {
+  const inputId = `wholesale-level-${level}`;
+
+  return (
+    <div
+      className={cn(
+        "flex flex-col rounded-xl border border-[var(--border)] bg-[var(--muted)]/15 p-4 shadow-sm transition-colors",
+        editing && "bg-[var(--card)] ring-1 ring-[var(--border)]",
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <Badge variant="secondary" className="font-semibold">
+          {label}
+        </Badge>
+        <span className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+          N{level}
         </span>
+      </div>
+
+      <div className="mt-4 flex flex-1 flex-col items-center justify-center">
+        {editing ? (
+          <div className="relative w-full max-w-[8rem]">
+            <input
+              id={inputId}
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              disabled={disabled}
+              value={value}
+              onChange={(e) => onChange?.(e.target.value)}
+              placeholder="0"
+              aria-label={`${label} — redução percentual`}
+              className={cn(inputClassName, disabled && "opacity-60")}
+            />
+            <span
+              className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[var(--muted-foreground)]"
+              aria-hidden
+            >
+              %
+            </span>
+          </div>
+        ) : (
+          <p className="text-3xl font-bold tabular-nums tracking-tight text-[var(--primary)]">
+            {loading || displayValue === null
+              ? "—"
+              : formatFinancialPercent(displayValue)}
+          </p>
+        )}
+        <p className="mt-2 text-center text-xs text-[var(--muted-foreground)]">
+          {editing ? "redução da margem" : hint}
+        </p>
       </div>
     </div>
   );
@@ -171,25 +247,45 @@ export function WholesaleReductionSettingsCard({
     }
   }
 
+  const resolvedValues = values ?? emptyDraft();
+
   return (
-    <Card className="overflow-hidden">
+    <section className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-sm">
       <button
         type="button"
-        className="flex w-full cursor-pointer items-center justify-between gap-3 px-6 py-4 text-left"
+        className="flex w-full cursor-pointer items-start justify-between gap-4 px-4 py-4 text-left transition-colors hover:bg-[var(--muted)]/25 sm:px-5 sm:py-5"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
       >
-        <div>
-          <p className="text-base font-semibold text-[var(--foreground)]">
-            Atacado B2B
-          </p>
-          <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-            Redução da margem de contribuição por faixa de preço
-          </p>
-        </div>
+        <span className="flex min-w-0 items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--muted)]/30 text-[var(--primary)]">
+            <Layers2 className="size-5" aria-hidden />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-lg font-semibold text-[var(--primary)]">
+              Atacado B2B
+            </span>
+            <span className="mt-1 block text-sm text-[var(--muted-foreground)]">
+              Redução da margem de contribuição por faixa de preço no Mercado
+              Livre
+            </span>
+            {!open ? (
+              <span className="mt-2.5 flex flex-wrap gap-1.5">
+                {levelRows.map((row) => (
+                  <LevelPreviewBadge
+                    key={row.key}
+                    level={row.level}
+                    loading={loading}
+                    value={values ? values[row.key] : null}
+                  />
+                ))}
+              </span>
+            ) : null}
+          </span>
+        </span>
         <ChevronDown
           className={cn(
-            "size-5 shrink-0 text-[var(--muted-foreground)] transition-transform",
+            "mt-1 size-5 shrink-0 text-[var(--muted-foreground)] transition-transform duration-200",
             open && "rotate-180",
           )}
           aria-hidden
@@ -197,16 +293,39 @@ export function WholesaleReductionSettingsCard({
       </button>
 
       {open ? (
-        <CardContent className="border-t border-[var(--border)] pt-4">
+        <div className="border-t border-[var(--border)] px-4 pb-5 pt-4 sm:px-5">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm font-medium text-[var(--foreground)]">
+              {editing ? "Editar reduções por nível" : "Reduções configuradas"}
+            </p>
+            {!editing ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                disabled={loading}
+                onClick={startEdit}
+              >
+                <Pencil className="size-4" aria-hidden />
+                Editar
+              </Button>
+            ) : null}
+          </div>
+
           {editing ? (
             <div className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-3">
                 {levelRows.map((row) => (
-                  <PercentInput
+                  <LevelCard
                     key={row.key}
-                    id={`wholesale-${row.key}`}
-                    label={`${row.label} — redução`}
+                    level={row.level}
+                    label={row.label}
+                    hint={row.hint}
+                    editing
                     value={editDraft[row.key]}
+                    displayValue={null}
+                    loading={false}
                     disabled={saving}
                     onChange={(next) =>
                       setEditDraft((d) => ({ ...d, [row.key]: next }))
@@ -215,7 +334,10 @@ export function WholesaleReductionSettingsCard({
                 ))}
               </div>
               {saveError ? (
-                <p className="text-sm text-red-600" role="alert">
+                <p
+                  className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
+                  role="alert"
+                >
                   {saveError}
                 </p>
               ) : null}
@@ -242,41 +364,29 @@ export function WholesaleReductionSettingsCard({
               </div>
             </div>
           ) : (
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="grid gap-2 sm:grid-cols-3 sm:gap-4">
-                {levelRows.map((row) => (
-                  <div key={row.key}>
-                    <p className="text-xs text-[var(--muted-foreground)]">
-                      {row.label}
-                    </p>
-                    <p className="mt-0.5 text-lg font-semibold tabular-nums">
-                      {loading || !values
-                        ? "—"
-                        : formatFinancialPercent(values[row.key])}
-                    </p>
-                  </div>
-                ))}
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-2"
-                disabled={loading}
-                onClick={startEdit}
-              >
-                <Pencil className="size-4" aria-hidden />
-                Editar
-              </Button>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {levelRows.map((row) => (
+                <LevelCard
+                  key={row.key}
+                  level={row.level}
+                  label={row.label}
+                  hint={row.hint}
+                  editing={false}
+                  value=""
+                  displayValue={loading ? null : resolvedValues[row.key]}
+                  loading={loading}
+                />
+              ))}
             </div>
           )}
-          <p className="mt-3 text-xs text-[var(--muted-foreground)]">
-            Quanto reduzir da margem de contribuição atual do anúncio em cada
-            faixa de preço B2B. O preço sugerido é calculado sem imposto (repasse
-            ao comprador empresarial no ML).
+
+          <p className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--muted)]/10 px-3 py-2.5 text-xs leading-relaxed text-[var(--muted-foreground)]">
+            Cada nível reduz o valor em R$ da margem de contribuição do
+            anúncio. O preço sugerido soma taxa ML, frete, custos e essa margem
+            — sem imposto (repasse ao comprador empresarial no ML).
           </p>
-        </CardContent>
+        </div>
       ) : null}
-    </Card>
+    </section>
   );
 }
