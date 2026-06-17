@@ -31,12 +31,21 @@ import {
   type MarginBasis,
   type MinSalePriceResult,
 } from "@/lib/financial-margin";
+import { readApiError } from "@/lib/api-client-error";
 import type { FinancialEvaluationRow } from "@/lib/financial-evaluation-data";
 import { filterByItemListSearch } from "@/lib/item-list-search";
+import {
+  computeWholesalePricesForListing,
+  wholesaleReductionsToTuple,
+  type WholesalePriceLevelReason,
+  type WholesaleReductionSettings,
+} from "@/lib/wholesale-pricing";
+import { WholesaleReductionSettingsCard } from "@/components/wholesale-reduction-settings-card";
 import { cn } from "@/lib/utils";
 
 type ApiResponse = {
   items: FinancialEvaluationRow[];
+  wholesaleReductions: WholesaleReductionSettings;
 };
 
 const TARGET_MARGIN_STORAGE_KEY = "lucratividade-target-margin";
@@ -327,6 +336,8 @@ export function FinancialEvaluationClient() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<FinancialEvaluationRow[] | null>(null);
+  const [wholesaleReductions, setWholesaleReductions] =
+    useState<WholesaleReductionSettings | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [targetMarginPercent, setTargetMarginPercent] = useState(
@@ -402,6 +413,7 @@ export function FinancialEvaluationClient() {
       }
       const items = (json as ApiResponse).items;
       setData(items);
+      setWholesaleReductions((json as ApiResponse).wholesaleReductions);
       if (itemIds?.length) {
         setAppliedTargetMargin(null);
         setAppliedMarginBasis(null);
@@ -414,6 +426,28 @@ export function FinancialEvaluationClient() {
       setLoading(false);
     }
   }, []);
+
+  const saveWholesaleReductions = useCallback(
+    async (values: WholesaleReductionSettings) => {
+      setError(null);
+      const res = await fetch("/api/company-tax-settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ wholesaleReductions: values }),
+      });
+      if (!res.ok) {
+        setError(
+          await readApiError(res, "wholesale_settings_update_failed"),
+        );
+        throw new Error("wholesale save failed");
+      }
+      const json = (await res.json()) as {
+        wholesaleReductions: WholesaleReductionSettings;
+      };
+      setWholesaleReductions(json.wholesaleReductions);
+    },
+    [],
+  );
 
   const refineMinPrices = useCallback(
     async (itemIds?: string[]) => {
@@ -485,6 +519,12 @@ export function FinancialEvaluationClient() {
 
   return (
     <div className="space-y-6">
+      <WholesaleReductionSettingsCard
+        values={wholesaleReductions}
+        loading={loading && wholesaleReductions === null}
+        onSave={saveWholesaleReductions}
+      />
+
       <Card className="border-[var(--border)]">
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0 pb-4">
           <div>
@@ -812,13 +852,14 @@ export function FinancialEvaluationClient() {
         </CardContent>
       </Card>
 
-      {selectedRow ? (
+      {selectedRow && wholesaleReductions ? (
         <FinancialDetailModal
           row={selectedRow}
           targetMarginPercent={targetMarginPercent}
           marginBasis={marginBasis}
           refiningMinPrices={refiningMinPrices}
           minPriceStale={minPriceStale}
+          wholesaleReductions={wholesaleReductions}
           onClose={() => setSelectedId(null)}
         />
       ) : null}
@@ -922,12 +963,121 @@ function MarginPriceSuggestion({
   );
 }
 
+function wholesalePriceReasonLabel(reason: WholesalePriceLevelReason): string {
+  switch (reason) {
+    case "missing_current_margin":
+      return "Margem atual indisponível";
+    case "missing_product_cost":
+      return "Cadastre o custo em Meus produtos";
+    case "impossible":
+      return "Meta inatingível com custos atuais";
+    case "incomplete":
+      return "Dados insuficientes";
+    case "ok":
+      return "";
+  }
+}
+
+function WholesalePricesSection({
+  row,
+  wholesaleReductions,
+}: {
+  row: FinancialEvaluationRow;
+  wholesaleReductions: WholesaleReductionSettings;
+}) {
+  const levels = useMemo(
+    () =>
+      computeWholesalePricesForListing({
+        salePrice: row.salePrice,
+        mlFeeAmount: row.mlFeeAmount,
+        mlFeeRebate: row.mlFeeRebate,
+        shippingCost: row.shippingCost,
+        productCost: row.productCost,
+        extraCosts: row.extraCosts,
+        currentMarginPercent: row.breakdown?.marginPercent ?? null,
+        currentMarginValue: row.breakdown?.marginValue ?? null,
+        reductions: wholesaleReductionsToTuple(wholesaleReductions),
+      }),
+    [row, wholesaleReductions],
+  );
+
+  return (
+    <details className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--muted)]/10">
+      <summary className="cursor-pointer px-3 py-2.5 text-sm font-medium text-[var(--foreground)]">
+        Preços atacado (B2B)
+      </summary>
+      <div className="border-t border-[var(--border)] px-3 py-3">
+        <p className="mb-3 text-xs text-[var(--muted-foreground)]">
+          Margem atual:{" "}
+          <span className="font-medium text-[var(--foreground)]">
+            {formatFinancialMoney(row.breakdown?.marginValue ?? null)}
+          </span>{" "}
+          ({formatFinancialPercent(row.breakdown?.marginPercent ?? null)}). Preço
+          = taxa ML + frete + custos + margem após redução (varejo, sem imposto).
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[20rem] text-sm">
+            <thead>
+              <tr className="border-b border-[var(--border)] text-left text-xs text-[var(--muted-foreground)]">
+                <th className="py-2 pr-3 font-medium">Nível</th>
+                <th className="py-2 pr-3 font-medium text-right">Redução</th>
+                <th className="py-2 pr-3 font-medium text-right">Margem (R$)</th>
+                <th className="py-2 font-medium text-right">Preço sugerido</th>
+              </tr>
+            </thead>
+            <tbody>
+              {levels.map((level) => (
+                <tr
+                  key={level.level}
+                  className="border-b border-[var(--border)] last:border-b-0"
+                >
+                  <td className="py-2 pr-3 font-medium">{level.level}</td>
+                  <td className="py-2 pr-3 text-right tabular-nums">
+                    {formatFinancialPercent(level.reductionPercent)}
+                  </td>
+                  <td
+                    className="py-2 pr-3 text-right tabular-nums"
+                    title={
+                      level.targetMarginPercent !== null
+                        ? formatFinancialPercent(level.targetMarginPercent)
+                        : undefined
+                    }
+                  >
+                    {formatFinancialMoney(level.targetMarginValue)}
+                  </td>
+                  <td className="py-2 text-right tabular-nums">
+                    {level.suggestedPrice !== null ? (
+                      formatFinancialMoney(level.suggestedPrice)
+                    ) : (
+                      <span
+                        className="text-[var(--muted-foreground)]"
+                        title={wholesalePriceReasonLabel(level.reason)}
+                      >
+                        —
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-3 text-xs text-[var(--muted-foreground)]">
+          Passe o mouse sobre a margem em R$ para ver a % equivalente. Preço sem
+          imposto — no ML o imposto é repassado ao comprador empresarial.
+        </p>
+      </div>
+    </details>
+  );
+}
+
 function FinancialDetailModal({
   row,
   targetMarginPercent,
   marginBasis,
   refiningMinPrices,
   minPriceStale,
+  wholesaleReductions,
   onClose,
 }: {
   row: FinancialEvaluationRow;
@@ -935,6 +1085,7 @@ function FinancialDetailModal({
   marginBasis: MarginBasis;
   refiningMinPrices?: boolean;
   minPriceStale?: boolean;
+  wholesaleReductions: WholesaleReductionSettings;
   onClose: () => void;
 }) {
   const labelId = useId();
@@ -1044,6 +1195,11 @@ function FinancialDetailModal({
             taxRatePercent={row.taxRatePercent}
             refining={refiningMinPrices}
             minPriceStale={minPriceStale}
+          />
+
+          <WholesalePricesSection
+            row={row}
+            wholesaleReductions={wholesaleReductions}
           />
 
           {row.breakdown ? (

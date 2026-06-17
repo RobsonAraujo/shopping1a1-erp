@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
 import {
   buildProductView,
-  ensureCompanyTaxSettings,
+  ensureCompanySettings,
   productWriteToPrismaData,
   validateProductInput,
   type ProductWriteInput,
@@ -66,13 +66,15 @@ export async function GET() {
   }
 
   try {
-    const pisCofinsPercent = await ensureCompanyTaxSettings();
+    const settings = await ensureCompanySettings();
     const products = await prisma.product.findMany({
       orderBy: { sku: "asc" },
     });
     return NextResponse.json({
-      pisCofinsPercent,
-      products: products.map((p) => buildProductView(p, pisCofinsPercent)),
+      pisCofinsPercent: settings.pisCofinsPercent,
+      products: products.map((p) =>
+        buildProductView(p, settings.pisCofinsPercent),
+      ),
     });
   } catch (e) {
     logServerError("api/products GET", e);
@@ -105,11 +107,11 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const pisCofinsPercent = await ensureCompanyTaxSettings();
+    const settings = await ensureCompanySettings();
     const data = productWriteToPrismaData(parsed);
     const product = await prisma.product.create({ data });
     return NextResponse.json({
-      product: buildProductView(product, pisCofinsPercent),
+      product: buildProductView(product, settings.pisCofinsPercent),
     });
   } catch (e) {
     logServerError("api/products POST", e);

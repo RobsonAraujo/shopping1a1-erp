@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
+import {
+  ensureCompanySettings,
+  validateWholesaleReductionPercent,
+  type CompanySettings,
+} from "@/lib/product-data";
 import { DEFAULT_PIS_COFINS_PERCENT } from "@/lib/product-pricing";
-import { ensureCompanyTaxSettings } from "@/lib/product-data";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 import {
   getValidAccessToken,
@@ -17,14 +21,25 @@ async function requireAuth() {
   return true;
 }
 
+function settingsResponse(settings: CompanySettings) {
+  return {
+    pisCofinsPercent: settings.pisCofinsPercent,
+    wholesaleReductions: {
+      level1ReductionPercent: settings.level1ReductionPercent,
+      level2ReductionPercent: settings.level2ReductionPercent,
+      level3ReductionPercent: settings.level3ReductionPercent,
+    },
+  };
+}
+
 export async function GET() {
   if (!(await requireAuth())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    const pisCofinsPercent = await ensureCompanyTaxSettings();
-    return NextResponse.json({ pisCofinsPercent });
+    const settings = await ensureCompanySettings();
+    return NextResponse.json(settingsResponse(settings));
   } catch (e) {
     logServerError("api/company-tax-settings GET", e);
     return NextResponse.json(apiErrorPayload(e, "tax_settings_load_failed"), {
@@ -33,35 +48,97 @@ export async function GET() {
   }
 }
 
+type PatchBody = {
+  pisCofinsPercent?: unknown;
+  wholesaleReductions?: {
+    level1ReductionPercent?: unknown;
+    level2ReductionPercent?: unknown;
+    level3ReductionPercent?: unknown;
+  };
+};
+
 export async function PATCH(request: NextRequest) {
   if (!(await requireAuth())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { pisCofinsPercent?: unknown };
+  let body: PatchBody;
   try {
-    body = (await request.json()) as { pisCofinsPercent?: unknown };
+    body = (await request.json()) as PatchBody;
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const pisCofinsPercent = Number(body.pisCofinsPercent);
-  if (!Number.isFinite(pisCofinsPercent) || pisCofinsPercent < 0 || pisCofinsPercent > 100) {
-    return NextResponse.json(
-      { error: "pisCofinsPercent must be between 0 and 100" },
-      { status: 400 },
-    );
+  const current = await ensureCompanySettings();
+
+  let pisCofinsPercent = current.pisCofinsPercent;
+  if (body.pisCofinsPercent !== undefined) {
+    const n = Number(body.pisCofinsPercent);
+    if (!Number.isFinite(n) || n < 0 || n > 100) {
+      return NextResponse.json(
+        { error: "pisCofinsPercent must be between 0 and 100" },
+        { status: 400 },
+      );
+    }
+    pisCofinsPercent = n;
+  }
+
+  let level1 = current.level1ReductionPercent;
+  let level2 = current.level2ReductionPercent;
+  let level3 = current.level3ReductionPercent;
+
+  if (body.wholesaleReductions) {
+    const { level1ReductionPercent, level2ReductionPercent, level3ReductionPercent } =
+      body.wholesaleReductions;
+
+    if (level1ReductionPercent !== undefined) {
+      const err = validateWholesaleReductionPercent(level1ReductionPercent);
+      if (err) {
+        return NextResponse.json({ error: `Nível 1: ${err}` }, { status: 400 });
+      }
+      level1 = Number(level1ReductionPercent);
+    }
+    if (level2ReductionPercent !== undefined) {
+      const err = validateWholesaleReductionPercent(level2ReductionPercent);
+      if (err) {
+        return NextResponse.json({ error: `Nível 2: ${err}` }, { status: 400 });
+      }
+      level2 = Number(level2ReductionPercent);
+    }
+    if (level3ReductionPercent !== undefined) {
+      const err = validateWholesaleReductionPercent(level3ReductionPercent);
+      if (err) {
+        return NextResponse.json({ error: `Nível 3: ${err}` }, { status: 400 });
+      }
+      level3 = Number(level3ReductionPercent);
+    }
   }
 
   try {
     const row = await prisma.companyTaxSettings.upsert({
       where: { id: "default" },
-      create: { pisCofinsPercent },
-      update: { pisCofinsPercent },
+      create: {
+        pisCofinsPercent: pisCofinsPercent ?? DEFAULT_PIS_COFINS_PERCENT,
+        wholesaleLevel1ReductionPercent: level1,
+        wholesaleLevel2ReductionPercent: level2,
+        wholesaleLevel3ReductionPercent: level3,
+      },
+      update: {
+        pisCofinsPercent,
+        wholesaleLevel1ReductionPercent: level1,
+        wholesaleLevel2ReductionPercent: level2,
+        wholesaleLevel3ReductionPercent: level3,
+      },
     });
-    return NextResponse.json({
-      pisCofinsPercent: Number(row.pisCofinsPercent),
-    });
+
+    return NextResponse.json(
+      settingsResponse({
+        pisCofinsPercent: Number(row.pisCofinsPercent),
+        level1ReductionPercent: Number(row.wholesaleLevel1ReductionPercent),
+        level2ReductionPercent: Number(row.wholesaleLevel2ReductionPercent),
+        level3ReductionPercent: Number(row.wholesaleLevel3ReductionPercent),
+      }),
+    );
   } catch (e) {
     logServerError("api/company-tax-settings PATCH", e);
     return NextResponse.json(apiErrorPayload(e, "tax_settings_update_failed"), {

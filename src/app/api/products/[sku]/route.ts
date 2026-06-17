@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
 import {
   buildProductView,
-  ensureCompanyTaxSettings,
+  ensureCompanySettings,
   productWriteToPrismaData,
   validateProductInput,
   type ProductWriteInput,
@@ -72,14 +72,14 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   const sku = normalizeProductSku(decodeURIComponent(skuParam));
 
   try {
-    const pisCofinsPercent = await ensureCompanyTaxSettings();
+    const settings = await ensureCompanySettings();
     const product = await prisma.product.findUnique({ where: { sku } });
     if (!product) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
     return NextResponse.json({
-      product: buildProductView(product, pisCofinsPercent),
-      pisCofinsPercent,
+      product: buildProductView(product, settings.pisCofinsPercent),
+      pisCofinsPercent: settings.pisCofinsPercent,
     });
   } catch (e) {
     logServerError("api/products/[sku] GET", e);
@@ -115,7 +115,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 
   try {
-    const pisCofinsPercent = await ensureCompanyTaxSettings();
+    const settings = await ensureCompanySettings();
     const data = productWriteToPrismaData(parsed);
     const product = await prisma.product.update({
       where: { sku },
@@ -132,7 +132,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       },
     });
     return NextResponse.json({
-      product: buildProductView(product, pisCofinsPercent),
+      product: buildProductView(product, settings.pisCofinsPercent),
     });
   } catch (e) {
     logServerError("api/products/[sku] PATCH", e);

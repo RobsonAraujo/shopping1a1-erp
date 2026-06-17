@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { ensureCompanySettings } from "@/lib/product-data";
 import { loadFinancialEvaluationRows } from "@/lib/financial-evaluation-data";
 import {
   getValidAccessToken,
@@ -34,16 +35,26 @@ export async function GET(request: NextRequest) {
       : undefined;
 
   try {
-    const items = await loadFinancialEvaluationRows(token, userId, {
-      itemIds,
-      targetMarginPercent:
-        targetMarginPercent !== undefined &&
-        Number.isFinite(targetMarginPercent)
-          ? targetMarginPercent
-          : undefined,
-      marginBasis,
+    const [items, companySettings] = await Promise.all([
+      loadFinancialEvaluationRows(token, userId, {
+        itemIds,
+        targetMarginPercent:
+          targetMarginPercent !== undefined &&
+          Number.isFinite(targetMarginPercent)
+            ? targetMarginPercent
+            : undefined,
+        marginBasis,
+      }),
+      ensureCompanySettings(),
+    ]);
+    return NextResponse.json({
+      items,
+      wholesaleReductions: {
+        level1ReductionPercent: companySettings.level1ReductionPercent,
+        level2ReductionPercent: companySettings.level2ReductionPercent,
+        level3ReductionPercent: companySettings.level3ReductionPercent,
+      },
     });
-    return NextResponse.json({ items });
   } catch (e) {
     logServerError("api/financial-evaluation GET", e);
     return NextResponse.json(apiErrorPayload(e, "financial_evaluation_failed"), {

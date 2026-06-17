@@ -166,9 +166,12 @@ model Product {
 
 /// PIS/COFINS global da empresa (uma linha).
 model CompanyTaxSettings {
-  id               String   @id @default("default")
-  pisCofinsPercent Decimal  @map("pis_cofins_percent") @db.Decimal(8, 4)
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  id                            String   @id @default("default")
+  pisCofinsPercent              Decimal  @map("pis_cofins_percent") @db.Decimal(8, 4)
+  wholesaleLevel1ReductionPercent Decimal @default(10) @map("wholesale_level1_reduction_percent") @db.Decimal(8, 4)
+  wholesaleLevel2ReductionPercent Decimal @default(15) @map("wholesale_level2_reduction_percent") @db.Decimal(8, 4)
+  wholesaleLevel3ReductionPercent Decimal @default(20) @map("wholesale_level3_reduction_percent") @db.Decimal(8, 4)
+  updatedAt                     DateTime @updatedAt @map("updated_at")
 
   @@map("company_tax_settings")
 }

@@ -6,7 +6,11 @@ import {
   type ProductRecordForPricing,
   type ResolvedProductPricing,
 } from "@/lib/product-pricing";
-import type { Product } from "@/generated/prisma/client";
+import {
+  DEFAULT_WHOLESALE_REDUCTIONS,
+  type WholesaleReductionSettings,
+} from "@/lib/wholesale-pricing";
+import type { CompanyTaxSettings, Product } from "@/generated/prisma/client";
 
 function decimalToNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null;
@@ -53,25 +57,76 @@ export function buildProductView(
   };
 }
 
-export async function getCompanyPisCofinsPercent(): Promise<number> {
+export type CompanySettings = {
+  pisCofinsPercent: number;
+} & WholesaleReductionSettings;
+
+function rowToCompanySettings(row: CompanyTaxSettings): CompanySettings {
+  return {
+    pisCofinsPercent:
+      decimalToNumber(row.pisCofinsPercent) ?? DEFAULT_PIS_COFINS_PERCENT,
+    level1ReductionPercent:
+      decimalToNumber(row.wholesaleLevel1ReductionPercent) ??
+      DEFAULT_WHOLESALE_REDUCTIONS.level1ReductionPercent,
+    level2ReductionPercent:
+      decimalToNumber(row.wholesaleLevel2ReductionPercent) ??
+      DEFAULT_WHOLESALE_REDUCTIONS.level2ReductionPercent,
+    level3ReductionPercent:
+      decimalToNumber(row.wholesaleLevel3ReductionPercent) ??
+      DEFAULT_WHOLESALE_REDUCTIONS.level3ReductionPercent,
+  };
+}
+
+export function validateWholesaleReductionPercent(value: unknown): string | null {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0 || n > 100) {
+    return "Redução deve ser entre 0 e 100";
+  }
+  return null;
+}
+
+export async function getCompanySettings(): Promise<CompanySettings> {
   const row = await prisma.companyTaxSettings.findUnique({
     where: { id: "default" },
   });
-  if (!row) return DEFAULT_PIS_COFINS_PERCENT;
-  return decimalToNumber(row.pisCofinsPercent) ?? DEFAULT_PIS_COFINS_PERCENT;
+  if (!row) {
+    return {
+      pisCofinsPercent: DEFAULT_PIS_COFINS_PERCENT,
+      ...DEFAULT_WHOLESALE_REDUCTIONS,
+    };
+  }
+  return rowToCompanySettings(row);
 }
 
-export async function ensureCompanyTaxSettings(): Promise<number> {
+export async function ensureCompanySettings(): Promise<CompanySettings> {
   const existing = await prisma.companyTaxSettings.findUnique({
     where: { id: "default" },
   });
   if (existing) {
-    return decimalToNumber(existing.pisCofinsPercent) ?? DEFAULT_PIS_COFINS_PERCENT;
+    return rowToCompanySettings(existing);
   }
   const created = await prisma.companyTaxSettings.create({
-    data: { pisCofinsPercent: DEFAULT_PIS_COFINS_PERCENT },
+    data: {
+      pisCofinsPercent: DEFAULT_PIS_COFINS_PERCENT,
+      wholesaleLevel1ReductionPercent:
+        DEFAULT_WHOLESALE_REDUCTIONS.level1ReductionPercent,
+      wholesaleLevel2ReductionPercent:
+        DEFAULT_WHOLESALE_REDUCTIONS.level2ReductionPercent,
+      wholesaleLevel3ReductionPercent:
+        DEFAULT_WHOLESALE_REDUCTIONS.level3ReductionPercent,
+    },
   });
-  return decimalToNumber(created.pisCofinsPercent) ?? DEFAULT_PIS_COFINS_PERCENT;
+  return rowToCompanySettings(created);
+}
+
+export async function getCompanyPisCofinsPercent(): Promise<number> {
+  const settings = await getCompanySettings();
+  return settings.pisCofinsPercent;
+}
+
+export async function ensureCompanyTaxSettings(): Promise<number> {
+  const settings = await ensureCompanySettings();
+  return settings.pisCofinsPercent;
 }
 
 export async function resolvePricingForSku(
