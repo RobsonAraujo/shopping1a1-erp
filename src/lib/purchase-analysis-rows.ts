@@ -24,8 +24,6 @@ export type PurchaseAnalysisItemRow = {
   revenueCurrentMonth: number;
   unitsSoldLastMonth: number;
   unitsSoldCurrentMonth: number;
-  lastPurchasePrice: number | null;
-  minAcceptablePrice: number | null;
   targetCoverageDays: number | null;
 };
 

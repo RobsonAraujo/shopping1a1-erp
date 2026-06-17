@@ -2,15 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Check,
   Copy,
   ExternalLink,
   ImageOff,
   LineChart,
-  Settings,
 } from "lucide-react";
 import type { PurchaseAnalysisItemRow } from "@/lib/purchase-analysis-rows";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
@@ -96,14 +94,6 @@ function formatCoverage(days: number | null): string {
   if (days < 1) return "< 1 dia";
   const floored = Math.floor(days);
   return `${floored} ${floored === 1 ? "dia" : "dias"}`;
-}
-
-function formatMoney(value: number | null): string {
-  if (value === null) return "—";
-  return value.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
 }
 
 function BadgeTooltip({
@@ -302,21 +292,13 @@ function showCatalogReportLink(row: PurchaseAnalysisItemRow): boolean {
 
 type SupplierPurchaseAnalysisTableProps = {
   rows: PurchaseAnalysisItemRow[];
-  showCostColumns?: boolean;
   emptyMessage?: string;
 };
 
 export function SupplierPurchaseAnalysisTable({
   rows,
-  showCostColumns = true,
   emptyMessage = "Nenhum produto neste fornecedor.",
 }: SupplierPurchaseAnalysisTableProps) {
-  const router = useRouter();
-  const [settingsId, setSettingsId] = useState<string | null>(null);
-  const settingsRow = settingsId
-    ? (rows.find((r) => r.item.id === settingsId) ?? null)
-    : null;
-
   return (
     <TooltipProvider delayDuration={200} disableHoverableContent={false}>
       <Card className="overflow-hidden p-0 shadow-sm">
@@ -348,11 +330,6 @@ export function SupplierPurchaseAnalysisTable({
                 <th className="w-[6rem] px-2 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                   Ação
                 </th>
-                {showCostColumns ? (
-                  <th className="w-[11rem] px-2 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                    Custos
-                  </th>
-                ) : null}
                 <th className="w-[6.5rem] px-2 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                   Ações
                 </th>
@@ -362,7 +339,7 @@ export function SupplierPurchaseAnalysisTable({
               {rows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={showCostColumns ? 10 : 9}
+                    colSpan={9}
                     className="px-4 py-12 text-center text-[var(--muted-foreground)]"
                   >
                     {emptyMessage}
@@ -575,34 +552,8 @@ export function SupplierPurchaseAnalysisTable({
                           {recommendationLabels[analysis.recommendation]}
                         </Badge>
                       </td>
-                      {showCostColumns ? (
-                        <td className="align-middle px-2 py-3 text-xs whitespace-nowrap">
-                          <div>
-                            <span className="text-[var(--muted-foreground)]">
-                              Custo pago:{" "}
-                            </span>
-                            {formatMoney(row.lastPurchasePrice)}
-                          </div>
-                          <div>
-                            <span className="text-[var(--muted-foreground)]">
-                              Custo aceitável:{" "}
-                            </span>
-                            {formatMoney(row.minAcceptablePrice)}
-                          </div>
-                        </td>
-                      ) : null}
                       <td className="align-middle px-2 py-3">
                         <div className="flex flex-wrap gap-1.5">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon-sm"
-                            title="Configurações de compra"
-                            aria-label="Configurações de compra"
-                            onClick={() => setSettingsId(row.item.id)}
-                          >
-                            <Settings className="size-4" aria-hidden />
-                          </Button>
                           {showCatalogLink ? (
                             <Button
                               type="button"
@@ -649,197 +600,6 @@ export function SupplierPurchaseAnalysisTable({
           </table>
         </div>
       </Card>
-
-      {settingsRow ? (
-        <PurchaseCostSettingsModal
-          row={settingsRow}
-          onClose={() => setSettingsId(null)}
-          onSaved={() => {
-            setSettingsId(null);
-            router.refresh();
-          }}
-        />
-      ) : null}
     </TooltipProvider>
-  );
-}
-
-function PurchaseCostSettingsModal({
-  row,
-  onClose,
-  onSaved,
-}: {
-  row: PurchaseAnalysisItemRow;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const labelId = useId();
-  const [lastPurchasePrice, setLastPurchasePrice] = useState(
-    row.lastPurchasePrice != null ? String(row.lastPurchasePrice) : "",
-  );
-  const [minAcceptablePrice, setMinAcceptablePrice] = useState(
-    row.minAcceptablePrice != null ? String(row.minAcceptablePrice) : "",
-  );
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setLastPurchasePrice(
-      row.lastPurchasePrice != null ? String(row.lastPurchasePrice) : "",
-    );
-    setMinAcceptablePrice(
-      row.minAcceptablePrice != null ? String(row.minAcceptablePrice) : "",
-    );
-  }, [row.item.id, row.lastPurchasePrice, row.minAcceptablePrice]);
-
-  const handleBackdrop = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.target === e.currentTarget) onClose();
-    },
-    [onClose],
-  );
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  function parseOptionalMoney(value: string): number | null {
-    const trimmed = value.trim();
-    if (trimmed === "") return null;
-    const n = Number(trimmed.replace(",", "."));
-    if (!Number.isFinite(n) || n < 0) return NaN;
-    return n;
-  }
-
-  async function submit() {
-    const last = parseOptionalMoney(lastPurchasePrice);
-    const min = parseOptionalMoney(minAcceptablePrice);
-    if (Number.isNaN(last) || Number.isNaN(min)) {
-      setError("Informe valores numéricos válidos (≥ 0) ou deixe em branco.");
-      return;
-    }
-
-    setError(null);
-    setSaving(true);
-    try {
-      const res = await fetch(
-        `/api/inventory/${encodeURIComponent(row.item.id)}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            quantity: row.warehouseStock,
-            lastPurchasePrice: last,
-            minAcceptablePrice: min,
-          }),
-        },
-      );
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) {
-        setError(data.error ?? "Não foi possível salvar.");
-        return;
-      }
-      onSaved();
-    } catch {
-      setError("Falha de rede. Tente de novo.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="presentation"
-      onClick={handleBackdrop}
-    >
-      <div className="fixed inset-0 bg-black/50" aria-hidden />
-      <div
-        className={cn(
-          "relative z-10 w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-lg",
-        )}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={labelId}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2
-          id={labelId}
-          className="text-lg font-semibold text-[var(--primary)]"
-        >
-          Configurações de compra
-        </h2>
-        <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-          {row.sku ?? "Sem SKU"}
-        </p>
-
-        <div className="mt-4 space-y-3">
-          <div className="space-y-1">
-            <label
-              htmlFor="last-purchase-price"
-              className="block text-sm font-medium"
-            >
-              Custo pago na última compra (R$)
-            </label>
-            <input
-              id="last-purchase-price"
-              type="text"
-              inputMode="decimal"
-              value={lastPurchasePrice}
-              onChange={(e) => setLastPurchasePrice(e.target.value)}
-              placeholder="Ex.: 45.90"
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
-            />
-            <p className="text-xs text-[var(--muted-foreground)]">
-              O que você pagou ao fornecedor por unidade na última compra.
-            </p>
-          </div>
-          <div className="space-y-1">
-            <label
-              htmlFor="min-acceptable-price"
-              className="block text-sm font-medium"
-            >
-              Custo aceitável (R$)
-            </label>
-            <input
-              id="min-acceptable-price"
-              type="text"
-              inputMode="decimal"
-              value={minAcceptablePrice}
-              onChange={(e) => setMinAcceptablePrice(e.target.value)}
-              placeholder="Ex.: 50.00"
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
-            />
-            <p className="text-xs text-[var(--muted-foreground)]">
-              Teto por unidade que ainda compensa comprar deste fornecedor.
-            </p>
-          </div>
-        </div>
-
-        {error ? (
-          <p className="mt-2 text-sm text-red-600" role="alert">
-            {error}
-          </p>
-        ) : null}
-
-        <div className="mt-6 flex flex-wrap justify-end gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onClose}
-            disabled={saving}
-          >
-            Cancelar
-          </Button>
-          <Button type="button" onClick={() => void submit()} disabled={saving}>
-            {saving ? "Salvando…" : "Confirmar"}
-          </Button>
-        </div>
-      </div>
-    </div>
   );
 }

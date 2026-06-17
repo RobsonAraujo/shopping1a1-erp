@@ -14,8 +14,6 @@ export type PurchaseStatus =
 export type PurchaseRecommendation = "comprar" | "revisar" | "nao_repor";
 
 export type PurchaseCostProfile = {
-  lastPurchasePrice: number | null;
-  minAcceptablePrice: number | null;
   targetCoverageDays: number | null;
 };
 
@@ -25,7 +23,6 @@ export type PurchaseAnalysisInput = {
   purchaseLeadTimeDays: number;
   purchaseIsOverdue: boolean;
   needsPurchaseAttention: boolean;
-  mlPrice?: number | null;
   costProfile?: PurchaseCostProfile | null;
   /** Override do buffer de dias na meta da Qtd. sugerida (padrão: config). */
   coverageBufferDays?: number;
@@ -55,8 +52,6 @@ export type PurchaseAnalysisResult = {
   coverageDays: number | null;
   unitsSoldInWindow: number;
   targetDays: number;
-  grossMarginPct: number | null;
-  worthBuying: boolean | null;
   recommendationTooltip: string;
 };
 
@@ -232,26 +227,6 @@ export function computePurchaseAnalysis(
     totalStock: input.totalStock,
   });
 
-  let grossMarginPct: number | null = null;
-  let worthBuying: boolean | null = null;
-  const lastCost = input.costProfile?.lastPurchasePrice ?? null;
-  const mlPrice = input.mlPrice ?? null;
-  if (
-    lastCost !== null &&
-    lastCost > 0 &&
-    mlPrice !== null &&
-    mlPrice > 0
-  ) {
-    grossMarginPct = ((mlPrice - lastCost) / mlPrice) * 100;
-    const minPrice = input.costProfile?.minAcceptablePrice ?? null;
-    if (minPrice !== null && minPrice > 0) {
-      worthBuying = lastCost <= minPrice;
-      if (!worthBuying && recommendation === "comprar") {
-        recommendation = "revisar";
-      }
-    }
-  }
-
   const tooltipParts = [
     `Vendas: ${input.unitsSoldInWindow} un. em ${windowDays} dias (média ${formatNumPt(dailyAvg)}/dia).`,
     `Estoque total: ${input.totalStock} un.`,
@@ -261,18 +236,6 @@ export function computePurchaseAnalysis(
     `Meta de cobertura: ${targetDays} dias (prazo compra ${input.purchaseLeadTimeDays} d + Full ${stockPlanningConfig.leadTimeDays} d + buffer ${coverageBufferDays} d).`,
     `Quantidade sugerida: max(0, ceil(média × meta) − estoque) = ${suggestedQty} un.`,
   ];
-  if (grossMarginPct !== null) {
-    tooltipParts.push(
-      `Margem bruta estimada (preço ML − último custo): ${formatNumPt(grossMarginPct, 1)}%.`,
-    );
-  }
-  if (worthBuying !== null) {
-    tooltipParts.push(
-      worthBuying
-        ? "Último custo dentro do teto aceitável."
-        : "Último custo acima do teto aceitável — revisar se ainda compensa.",
-    );
-  }
 
   return {
     performanceTier,
@@ -285,8 +248,6 @@ export function computePurchaseAnalysis(
     coverageDays,
     unitsSoldInWindow: input.unitsSoldInWindow,
     targetDays,
-    grossMarginPct,
-    worthBuying,
     recommendationTooltip: tooltipParts.join(" "),
   };
 }
@@ -300,9 +261,6 @@ export function buildPurchaseAnalysisInputFromRow(
       purchaseIsOverdue: boolean;
       needsPurchaseAttention: boolean;
     };
-    item: { price?: number | null };
-    lastPurchasePrice: number | null;
-    minAcceptablePrice: number | null;
     targetCoverageDays: number | null;
   },
   coverageBufferDays?: number,
@@ -313,10 +271,7 @@ export function buildPurchaseAnalysisInputFromRow(
     purchaseLeadTimeDays: row.purchaseLeadTimeDays,
     purchaseIsOverdue: row.plan.purchaseIsOverdue,
     needsPurchaseAttention: row.plan.needsPurchaseAttention,
-    mlPrice: row.item.price,
     costProfile: {
-      lastPurchasePrice: row.lastPurchasePrice,
-      minAcceptablePrice: row.minAcceptablePrice,
       targetCoverageDays: row.targetCoverageDays,
     },
     coverageBufferDays,

@@ -6,7 +6,10 @@ import {
   computeDreTotals,
   type DreMonthSnapshotPayload,
 } from "@/lib/dre-calculations";
+import { loadProductsMapBySku } from "@/lib/product-data";
 import { roundMoney } from "@/lib/financial-margin";
+import { getItemSku } from "@/lib/mercadolibre/item-sku";
+import { normalizeProductSku } from "@/lib/product-pricing";
 import {
   fetchCancelledOrderRevenueInDateRange,
   fetchOrderMetricsByItemInDateRange,
@@ -31,13 +34,8 @@ import {
 } from "@/lib/mercadolibre/revenue-periods";
 import { fetchSellerShippingCost } from "@/lib/mercadolibre/seller-shipping-cost";
 
-function decimalToNumber(value: unknown): number | null {
-  if (value === null || value === undefined) return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
-
 async function computeErpCostsFromOrderLines(
+  accessToken: string,
   orderLines: Array<{ itemId: string; quantity: number; revenue: number }>,
 ): Promise<{
   productCostErp: number;
@@ -45,12 +43,15 @@ async function computeErpCostsFromOrderLines(
   incompleteProductCostCount: number;
 }> {
   const itemIds = [...new Set(orderLines.map((line) => line.itemId))];
-  const stockRows = await prisma.warehouseStock.findMany({
-    where: { mlItemId: { in: itemIds } },
-  });
-  const stockByItem = new Map(
-    stockRows.map((row) => [row.mlItemId, row]),
+  const items = await fetchItemsByIdsBatched(accessToken, itemIds);
+  const skuByItemId = new Map(
+    items.map((item) => [item.id, getItemSku(item)]),
   );
+  const skus = items
+    .map((item) => getItemSku(item))
+    .filter((sku): sku is string => Boolean(sku))
+    .map((sku) => normalizeProductSku(sku));
+  const pricingBySku = await loadProductsMapBySku(skus);
 
   let productCostErp = 0;
   let taxErp = 0;
@@ -58,19 +59,18 @@ async function computeErpCostsFromOrderLines(
   const missingItems = new Set<string>();
 
   for (const line of orderLines) {
-    const stock = stockByItem.get(line.itemId);
-    const purchasePrice = decimalToNumber(stock?.lastPurchasePrice);
-    const extraCosts = decimalToNumber(stock?.extraCosts) ?? 0;
-    const taxRate = decimalToNumber(stock?.taxRatePercent);
+    const sku = skuByItemId.get(line.itemId);
+    const normalizedSku = sku ? normalizeProductSku(sku) : "";
+    const pricing = normalizedSku ? pricingBySku.get(normalizedSku) : undefined;
 
-    if (purchasePrice === null) {
+    if (!pricing) {
       missingItems.add(line.itemId);
     } else {
-      productCostErp += line.quantity * (purchasePrice + extraCosts);
-    }
-
-    if (taxRate !== null && line.revenue > 0) {
-      taxErp += line.revenue * (taxRate / 100);
+      productCostErp +=
+        line.quantity * (pricing.pricingCost + pricing.extraCosts);
+      if (pricing.taxPercent > 0 && line.revenue > 0) {
+        taxErp += line.revenue * (pricing.taxPercent / 100);
+      }
     }
   }
 
@@ -262,7 +262,7 @@ export async function buildDreMonthSnapshot(
     }
   }
 
-  const erpCosts = await computeErpCostsFromOrderLines(orderLines);
+  const erpCosts = await computeErpCostsFromOrderLines(accessToken, orderLines);
 
   let saleFeeMl = 0;
   let sellerShippingMl = 0;

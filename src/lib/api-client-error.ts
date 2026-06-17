@@ -6,6 +6,13 @@ const API_ERROR_MESSAGES: Record<string, string> = {
   dre_cost_item_create_failed: "Não foi possível criar o custo fixo.",
   dre_cost_item_update_failed: "Não foi possível atualizar o custo fixo.",
   dre_cost_item_delete_failed: "Não foi possível remover o custo fixo.",
+  products_load_failed: "Não foi possível carregar os produtos.",
+  product_create_failed: "Não foi possível criar o produto.",
+  product_update_failed: "Não foi possível atualizar o produto.",
+  product_delete_failed: "Não foi possível remover o produto.",
+  products_suggestions_failed: "Não foi possível carregar sugestões de SKU.",
+  tax_settings_load_failed: "Não foi possível carregar PIS/COFINS da empresa.",
+  tax_settings_update_failed: "Não foi possível salvar PIS/COFINS da empresa.",
   Unauthorized: "Sessão expirada. Entre novamente.",
   "Invalid JSON": "Dados inválidos enviados ao servidor.",
 };

@@ -85,46 +85,8 @@ type PatchBody = {
   quantity?: unknown;
   notes?: unknown;
   purchaseLeadTimeDays?: unknown;
-  lastPurchasePrice?: unknown;
-  minAcceptablePrice?: unknown;
   targetCoverageDays?: unknown;
-  extraCosts?: unknown;
-  taxRatePercent?: unknown;
 };
-
-function parseOptionalMoneyField(
-  value: unknown,
-): number | null | undefined | "invalid" {
-  if (value === undefined) return undefined;
-  if (value === null) return null;
-  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
-    return value;
-  }
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (trimmed === "") return null;
-    const n = Number(trimmed.replace(",", "."));
-    if (Number.isFinite(n) && n >= 0) return n;
-  }
-  return "invalid";
-}
-
-function parseOptionalPercentField(
-  value: unknown,
-): number | null | undefined | "invalid" {
-  if (value === undefined) return undefined;
-  if (value === null) return null;
-  if (typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 100) {
-    return value;
-  }
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (trimmed === "") return null;
-    const n = Number(trimmed.replace(",", "."));
-    if (Number.isFinite(n) && n >= 0 && n <= 100) return n;
-  }
-  return "invalid";
-}
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   const { mlItemId } = await context.params;
@@ -192,38 +154,6 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
   }
 
-  const lastPurchasePrice = parseOptionalMoneyField(body.lastPurchasePrice);
-  if (lastPurchasePrice === "invalid") {
-    return NextResponse.json(
-      { error: "lastPurchasePrice must be null or a number >= 0" },
-      { status: 400 },
-    );
-  }
-
-  const minAcceptablePrice = parseOptionalMoneyField(body.minAcceptablePrice);
-  if (minAcceptablePrice === "invalid") {
-    return NextResponse.json(
-      { error: "minAcceptablePrice must be null or a number >= 0" },
-      { status: 400 },
-    );
-  }
-
-  const extraCosts = parseOptionalMoneyField(body.extraCosts);
-  if (extraCosts === "invalid") {
-    return NextResponse.json(
-      { error: "extraCosts must be null or a number >= 0" },
-      { status: 400 },
-    );
-  }
-
-  const taxRatePercent = parseOptionalPercentField(body.taxRatePercent);
-  if (taxRatePercent === "invalid") {
-    return NextResponse.json(
-      { error: "taxRatePercent must be null or a number between 0 and 100" },
-      { status: 400 },
-    );
-  }
-
   let targetCoverageDays: number | null | undefined;
   if (body.targetCoverageDays !== undefined) {
     if (body.targetCoverageDays === null) {
@@ -283,17 +213,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
             ...(purchaseLeadTimeDays !== undefined
               ? { purchaseLeadTimeDays }
               : {}),
-            ...(lastPurchasePrice !== undefined
-              ? { lastPurchasePrice }
-              : {}),
-            ...(minAcceptablePrice !== undefined
-              ? { minAcceptablePrice }
-              : {}),
             ...(targetCoverageDays !== undefined
               ? { targetCoverageDays }
               : {}),
-            ...(extraCosts !== undefined ? { extraCosts } : {}),
-            ...(taxRatePercent !== undefined ? { taxRatePercent } : {}),
           },
           update: {
             ...(quantity !== undefined ? { quantity } : {}),
@@ -301,17 +223,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
             ...(purchaseLeadTimeDays !== undefined
               ? { purchaseLeadTimeDays }
               : {}),
-            ...(lastPurchasePrice !== undefined
-              ? { lastPurchasePrice }
-              : {}),
-            ...(minAcceptablePrice !== undefined
-              ? { minAcceptablePrice }
-              : {}),
             ...(targetCoverageDays !== undefined
               ? { targetCoverageDays }
               : {}),
-            ...(extraCosts !== undefined ? { extraCosts } : {}),
-            ...(taxRatePercent !== undefined ? { taxRatePercent } : {}),
             ...(quantity === undefined && !existing
               ? { quantity: 0 }
               : {}),

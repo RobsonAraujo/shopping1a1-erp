@@ -136,22 +136,41 @@ model WarehouseStock {
   quantity              Int      @default(0)
   /// Prazo compra → chegada no galpão (dias inteiros; UI pode informar em semanas).
   purchaseLeadTimeDays  Int?     @map("purchase_lead_time_days")
-  /// Último preço pago ao fornecedor (por unidade).
-  lastPurchasePrice     Decimal? @map("last_purchase_price") @db.Decimal(18, 2)
-  /// Teto de custo por unidade que ainda compensa comprar.
-  minAcceptablePrice    Decimal? @map("min_acceptable_price") @db.Decimal(18, 2)
   /// Override opcional dos dias de cobertura alvo na análise de compra.
   targetCoverageDays    Int?     @map("target_coverage_days")
-  /// Custos extras por unidade (embalagem etc.) para lucratividade.
-  extraCosts            Decimal? @map("extra_costs") @db.Decimal(18, 2)
-  /// Alíquota de impostos % sobre preço de venda.
-  taxRatePercent        Decimal? @map("tax_rate_percent") @db.Decimal(8, 4)
   notes                 String?
   updatedAt             DateTime @updatedAt @map("updated_at")
 
   listing Listing @relation(fields: [mlItemId], references: [mlItemId], onDelete: Cascade)
 
   @@map("warehouse_stock")
+}
+
+/// Cadastro fiscal/comercial por SKU (chave = SKU do anúncio ML).
+model Product {
+  sku                 String   @id
+  ncm                 String?
+  unitCostNf          Decimal  @map("unit_cost_nf") @db.Decimal(18, 2)
+  purchaseIcmsPercent Decimal  @map("purchase_icms_percent") @db.Decimal(8, 4)
+  hasIcmsSt           Boolean  @default(false) @map("has_icms_st")
+  purchaseCostWithSt  Decimal? @map("purchase_cost_with_st") @db.Decimal(18, 2)
+  ipiPercent          Decimal  @default(0) @map("ipi_percent") @db.Decimal(8, 4)
+  extraCosts          Decimal  @default(0) @map("extra_costs") @db.Decimal(18, 2)
+  isMonophasic        Boolean  @default(false) @map("is_monophasic")
+  saleIcmsPercent     Decimal  @map("sale_icms_percent") @db.Decimal(8, 4)
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@map("products")
+}
+
+/// PIS/COFINS global da empresa (uma linha).
+model CompanyTaxSettings {
+  id               String   @id @default("default")
+  pisCofinsPercent Decimal  @map("pis_cofins_percent") @db.Decimal(8, 4)
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("company_tax_settings")
 }
 
 /// Avisos de estoque que já receberam ação operacional (ex.: compra feita).

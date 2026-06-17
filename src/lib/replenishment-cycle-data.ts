@@ -172,7 +172,6 @@ function buildItemPlanningContext(
     purchaseLeadTimeDays: purchaseLead,
     purchaseIsOverdue: plan.purchaseIsOverdue,
     needsPurchaseAttention: plan.needsPurchaseAttention,
-    mlPrice: item.price,
     costProfile: null,
   });
 

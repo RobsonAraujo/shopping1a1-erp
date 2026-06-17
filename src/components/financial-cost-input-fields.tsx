@@ -9,7 +9,8 @@ type MaskedMoneyFieldProps = {
   id: string;
   label: string;
   value: number | null;
-  onValueChange: (value: number | null) => void;
+  onValueChange?: (value: number | null) => void;
+  readOnly?: boolean;
 };
 
 export function MaskedMoneyField({
@@ -17,6 +18,7 @@ export function MaskedMoneyField({
   label,
   value,
   onValueChange,
+  readOnly = false,
 }: MaskedMoneyFieldProps) {
   return (
     <div className="space-y-1">
@@ -26,9 +28,15 @@ export function MaskedMoneyField({
       <NumericFormat
         id={id}
         value={value ?? ""}
-        onValueChange={(values) => {
-          onValueChange(values.floatValue ?? null);
-        }}
+        onValueChange={
+          readOnly
+            ? undefined
+            : (values) => {
+                onValueChange?.(values.floatValue ?? null);
+              }
+        }
+        readOnly={readOnly}
+        disabled={readOnly}
         thousandSeparator="."
         decimalSeparator=","
         prefix="R$ "
@@ -36,7 +44,7 @@ export function MaskedMoneyField({
         allowNegative={false}
         autoComplete="off"
         placeholder="R$ 0,00"
-        className={`${inputClassName} px-3 py-2`}
+        className={`${inputClassName} px-3 py-2${readOnly ? " cursor-default opacity-80" : ""}`}
       />
     </div>
   );
@@ -46,7 +54,8 @@ type MaskedPercentFieldProps = {
   id: string;
   label: string;
   value: number | null;
-  onValueChange: (value: number | null) => void;
+  onValueChange?: (value: number | null) => void;
+  readOnly?: boolean;
 };
 
 export function MaskedPercentField({
@@ -54,6 +63,7 @@ export function MaskedPercentField({
   label,
   value,
   onValueChange,
+  readOnly = false,
 }: MaskedPercentFieldProps) {
   return (
     <div className="space-y-1">
@@ -63,9 +73,15 @@ export function MaskedPercentField({
       <NumericFormat
         id={id}
         value={value ?? ""}
-        onValueChange={(values) => {
-          onValueChange(values.floatValue ?? null);
-        }}
+        onValueChange={
+          readOnly
+            ? undefined
+            : (values) => {
+                onValueChange?.(values.floatValue ?? null);
+              }
+        }
+        readOnly={readOnly}
+        disabled={readOnly}
         thousandSeparator="."
         decimalSeparator=","
         suffix=" %"
@@ -77,7 +93,7 @@ export function MaskedPercentField({
         }}
         autoComplete="off"
         placeholder="0,00 %"
-        className={`${inputClassName} px-3 py-2`}
+        className={`${inputClassName} px-3 py-2${readOnly ? " cursor-default opacity-80" : ""}`}
       />
     </div>
   );

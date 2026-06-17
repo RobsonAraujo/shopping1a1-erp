@@ -37,8 +37,6 @@ export {
 export type WarehouseStockRow = {
   quantity: number;
   purchaseLeadTimeDays: number | null;
-  lastPurchasePrice: number | null;
-  minAcceptablePrice: number | null;
   targetCoverageDays: number | null;
 };
 
@@ -138,12 +136,6 @@ function buildCyclesByItem(
   return map;
 }
 
-function decimalToNumber(value: unknown): number | null {
-  if (value === null || value === undefined) return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
-
 export async function loadDashboardPurchaseData(
   token: string,
   userId: number,
@@ -168,8 +160,6 @@ export async function loadDashboardPurchaseData(
           mlItemId: true,
           quantity: true,
           purchaseLeadTimeDays: true,
-          lastPurchasePrice: true,
-          minAcceptablePrice: true,
           targetCoverageDays: true,
         },
       }),
@@ -199,8 +189,6 @@ export async function loadDashboardPurchaseData(
       {
         quantity: s.quantity,
         purchaseLeadTimeDays: s.purchaseLeadTimeDays,
-        lastPurchasePrice: decimalToNumber(s.lastPurchasePrice),
-        minAcceptablePrice: decimalToNumber(s.minAcceptablePrice),
         targetCoverageDays: s.targetCoverageDays,
       } satisfies WarehouseStockRow,
     ]),
@@ -236,11 +224,8 @@ export async function loadDashboardPurchaseData(
       purchaseLeadTimeDays: purchaseLead,
       purchaseIsOverdue: plan.purchaseIsOverdue,
       needsPurchaseAttention: plan.needsPurchaseAttention,
-      mlPrice: item.price,
       costProfile: warehouse
         ? {
-            lastPurchasePrice: warehouse.lastPurchasePrice,
-            minAcceptablePrice: warehouse.minAcceptablePrice,
             targetCoverageDays: warehouse.targetCoverageDays,
           }
         : null,
@@ -270,8 +255,6 @@ export async function loadDashboardPurchaseData(
       revenueCurrentMonth: 0,
       unitsSoldLastMonth: 0,
       unitsSoldCurrentMonth: 0,
-      lastPurchasePrice: warehouse?.lastPurchasePrice ?? null,
-      minAcceptablePrice: warehouse?.minAcceptablePrice ?? null,
       targetCoverageDays: warehouse?.targetCoverageDays ?? null,
     };
   });

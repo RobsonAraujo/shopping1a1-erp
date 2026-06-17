@@ -78,7 +78,10 @@ type MinPriceSuggestion = MinSalePriceResult & {
   refined?: boolean;
 };
 
-function costsMatchRow(costs: CostOverrides, row: FinancialEvaluationRow): boolean {
+function costsMatchRow(
+  costs: CostOverrides,
+  row: FinancialEvaluationRow,
+): boolean {
   return (
     costs.productCost === row.productCost &&
     costs.extraCosts === row.extraCosts &&
@@ -279,13 +282,19 @@ function MinPriceTableCell({
 
   if (suggestion.reason === "missing_product_cost") {
     return (
-      <span className="text-xs text-[var(--muted-foreground)]" title="Preencha o custo do produto">
+      <span
+        className="text-xs text-[var(--muted-foreground)]"
+        title="Preencha o custo do produto"
+      >
         Sem custo
       </span>
     );
   }
 
-  if (suggestion.reason === "incomplete" || suggestion.reason === "impossible") {
+  if (
+    suggestion.reason === "incomplete" ||
+    suggestion.reason === "impossible"
+  ) {
     return <span className="text-[var(--muted-foreground)]">—</span>;
   }
 
@@ -435,7 +444,9 @@ export function FinancialEvaluationClient() {
           return;
         }
         const { patches } = json as MinPricesApiResponse;
-        const patchById = new Map(patches.map((patch) => [patch.mlItemId, patch]));
+        const patchById = new Map(
+          patches.map((patch) => [patch.mlItemId, patch]),
+        );
 
         setData((prev) => {
           if (!prev) return prev;
@@ -477,7 +488,9 @@ export function FinancialEvaluationClient() {
       <Card className="border-[var(--border)]">
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0 pb-4">
           <div>
-            <CardTitle className="text-lg">Anúncios ativos e pausados</CardTitle>
+            <CardTitle className="text-lg">
+              Anúncios ativos e pausados
+            </CardTitle>
             <p className="mt-1 text-xs text-[var(--muted-foreground)]">
               Clique em um anúncio para ver o detalhamento completo.
             </p>
@@ -539,8 +552,8 @@ export function FinancialEvaluationClient() {
                     <span className="font-medium text-[var(--foreground)]">
                       {formatFinancialPercent(targetMarginPercent)}
                     </span>{" "}
-                    ({marginBasisLabel(marginBasis)}). Pós ADS: TACOS dos últimos
-                    7 dias.
+                    ({marginBasisLabel(marginBasis)}). Pós ADS: TACOS dos
+                    últimos 7 dias.
                   </p>
                   {minPriceStale ? (
                     <p className="text-xs text-amber-700 dark:text-amber-500">
@@ -568,7 +581,9 @@ export function FinancialEvaluationClient() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <span className="block text-sm font-medium">Base da meta</span>
+                    <span className="block text-sm font-medium">
+                      Base da meta
+                    </span>
                     <div className="flex rounded-lg border border-[var(--border)] bg-[var(--background)] p-0.5">
                       <Button
                         type="button"
@@ -584,7 +599,9 @@ export function FinancialEvaluationClient() {
                       <Button
                         type="button"
                         size="sm"
-                        variant={marginBasis === "afterAds" ? "default" : "ghost"}
+                        variant={
+                          marginBasis === "afterAds" ? "default" : "ghost"
+                        }
                         className="h-8 rounded-md px-3 text-xs"
                         onClick={() => setMarginBasis("afterAds")}
                       >
@@ -598,7 +615,10 @@ export function FinancialEvaluationClient() {
                     variant={minPriceStale ? "default" : "outline"}
                     className="h-[42px] gap-2"
                     disabled={
-                      refiningMinPrices || loading || !data?.length || !minPriceStale
+                      refiningMinPrices ||
+                      loading ||
+                      !data?.length ||
+                      !minPriceStale
                     }
                     onClick={() => {
                       if (!data?.length) return;
@@ -612,174 +632,181 @@ export function FinancialEvaluationClient() {
                       )}
                       aria-hidden
                     />
-                    {refiningMinPrices ? "Consultando ML…" : "Atualizar P/ meta"}
+                    {refiningMinPrices
+                      ? "Consultando ML…"
+                      : "Atualizar P/ meta"}
                   </Button>
                 </div>
               </div>
 
               <div className="overflow-x-auto">
-              <table className="w-full min-w-[880px] table-fixed border-collapse text-sm">
-                <colgroup>
-                  <col className="w-[34%]" />
-                  <col className="w-[7%]" />
-                  <col className="w-[9%]" />
-                  <col className="w-[11%]" />
-                  <col className="w-[11%]" />
-                  <col className="w-[9%]" />
-                </colgroup>
-                <thead>
-                  <tr className="text-left text-[var(--muted-foreground)]">
-                    <th colSpan={3} className={cn(tableHeadPad, "pt-2")} />
-                    <th
-                      colSpan={2}
-                      className={cn(
-                        currentSectionClass,
-                        tableHeadPad,
-                        "pt-2 pb-1 text-center",
-                      )}
-                    >
-                      <span className={sectionGroupPill("current")}>
-                        Situação atual
-                      </span>
-                    </th>
-                    <th
-                      colSpan={1}
-                      className={cn(
-                        decisionSectionClass,
-                        tableHeadPad,
-                        "pt-2 pb-1 text-center",
-                      )}
-                    >
-                      <span className={sectionGroupPill("decision")}>
-                        Decidir
-                      </span>
-                    </th>
-                  </tr>
-                  <tr className="border-b border-[var(--border)] text-left text-[var(--muted-foreground)]">
-                    <th className={cn(tableHeadPad, "font-medium")}>Produto</th>
-                    <th className={cn(tableHeadPad, "font-medium")}>Tipo</th>
-                    <th className={cn(tableHeadPad, "font-medium text-right")}>
-                      Preço
-                    </th>
-                    <th
-                      className={cn(
-                        currentSectionClass,
-                        tableHeadPad,
-                        "font-medium text-right",
-                      )}
-                      title="Margem de contribuição (% em destaque, R$ abaixo)"
-                    >
-                      Margem
-                    </th>
-                    <th
-                      className={cn(
-                        currentSectionClass,
-                        tableHeadPad,
-                        "font-medium text-right",
-                      )}
-                      title="Margem de contribuição menos TACOS (últimos 7 dias)"
-                    >
-                      Pós ADS
-                    </th>
-                    <th
-                      className={cn(
-                        decisionSectionClass,
-                        tableHeadPad,
-                        "font-medium text-right",
-                      )}
-                      title={`Preço mínimo para ${formatFinancialPercent(targetMarginPercent)} (${marginBasisLabel(marginBasis)})`}
-                    >
-                      P/ meta
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredItems.map((row) => {
-                    const marginValue = row.breakdown?.marginValue ?? null;
-                    const marginPercent = row.breakdown?.marginPercent ?? null;
-                    const afterAdsPercent = row.marginAfterAdsPercent;
-                    const afterAdsValue = row.marginAfterAdsValue;
-                    const tacosSublabel =
-                      row.adsMetricsAvailable &&
-                      row.tacosPercent != null &&
-                      row.tacosPercent > 0
-                        ? `TACOS ${formatFinancialPercent(row.tacosPercent)}`
-                        : null;
-                    return (
-                      <tr
-                        key={row.mlItemId}
-                        className="cursor-pointer border-b border-[var(--border)] transition-colors hover:bg-[var(--muted)]/30"
-                        onClick={() => setSelectedId(row.mlItemId)}
+                <table className="w-full min-w-[880px] table-fixed border-collapse text-sm">
+                  <colgroup>
+                    <col className="w-[34%]" />
+                    <col className="w-[7%]" />
+                    <col className="w-[9%]" />
+                    <col className="w-[11%]" />
+                    <col className="w-[11%]" />
+                    <col className="w-[9%]" />
+                  </colgroup>
+                  <thead>
+                    <tr className="text-left text-[var(--muted-foreground)]">
+                      <th colSpan={3} className={cn(tableHeadPad, "pt-2")} />
+                      <th
+                        colSpan={2}
+                        className={cn(
+                          currentSectionClass,
+                          tableHeadPad,
+                          "pt-2 pb-1 text-center",
+                        )}
                       >
-                        <td className={tableCellPad}>
-                          <div className="flex items-center gap-3">
-                            {row.imageUrl ? (
-                              <Image
-                                src={row.imageUrl}
-                                alt=""
-                                width={40}
-                                height={40}
-                                className="size-10 rounded-md object-cover"
-                              />
-                            ) : (
-                              <div className="size-10 rounded-md bg-[var(--muted)]" />
-                            )}
-                            <div className="min-w-0">
-                              <p className="truncate font-medium">
-                                {row.sku ?? row.title}
-                              </p>
-                              <p className="truncate text-xs text-[var(--muted-foreground)]">
-                                {row.mlItemId}
-                              </p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className={tableCellPad}>
-                          {row.listingTypeLabel ?? "—"}
-                        </td>
-                        <td className={cn(tableCellPad, "text-right")}>
-                          <div>{formatFinancialMoney(row.salePrice)}</div>
-                          {row.hasPromotion && row.regularPrice != null ? (
-                            <div className="text-xs text-[var(--muted-foreground)] line-through">
-                              {formatFinancialMoney(row.regularPrice)}
-                            </div>
-                          ) : null}
-                        </td>
-                        <td className={cn(currentSectionClass, tableCellPad)}>
-                          <StackedMarginCell
-                            percent={marginPercent}
-                            value={marginValue}
-                          />
-                        </td>
-                        <td className={cn(currentSectionClass, tableCellPad)}>
-                          <StackedMarginCell
-                            percent={afterAdsPercent}
-                            value={afterAdsValue}
-                            sublabel={tacosSublabel}
-                            unavailable={!row.adsMetricsAvailable}
-                          />
-                        </td>
-                        <td
-                          className={cn(
-                            decisionSectionClass,
-                            tableCellPad,
-                            "text-right",
-                          )}
+                        <span className={sectionGroupPill("current")}>
+                          Situação atual
+                        </span>
+                      </th>
+                      <th
+                        colSpan={1}
+                        className={cn(
+                          decisionSectionClass,
+                          tableHeadPad,
+                          "pt-2 pb-1 text-center",
+                        )}
+                      >
+                        <span className={sectionGroupPill("decision")}>
+                          Decidir
+                        </span>
+                      </th>
+                    </tr>
+                    <tr className="border-b border-[var(--border)] text-left text-[var(--muted-foreground)]">
+                      <th className={cn(tableHeadPad, "font-medium")}>
+                        Produto
+                      </th>
+                      <th className={cn(tableHeadPad, "font-medium")}>Tipo</th>
+                      <th
+                        className={cn(tableHeadPad, "font-medium text-right")}
+                      >
+                        Preço
+                      </th>
+                      <th
+                        className={cn(
+                          currentSectionClass,
+                          tableHeadPad,
+                          "font-medium text-right",
+                        )}
+                        title="Margem de contribuição (% em destaque, R$ abaixo)"
+                      >
+                        Margem
+                      </th>
+                      <th
+                        className={cn(
+                          currentSectionClass,
+                          tableHeadPad,
+                          "font-medium text-right",
+                        )}
+                        title="Margem de contribuição menos TACOS (últimos 7 dias)"
+                      >
+                        Pós ADS
+                      </th>
+                      <th
+                        className={cn(
+                          decisionSectionClass,
+                          tableHeadPad,
+                          "font-medium text-right",
+                        )}
+                        title={`Preço mínimo para ${formatFinancialPercent(targetMarginPercent)} (${marginBasisLabel(marginBasis)})`}
+                      >
+                        P/ meta
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredItems.map((row) => {
+                      const marginValue = row.breakdown?.marginValue ?? null;
+                      const marginPercent =
+                        row.breakdown?.marginPercent ?? null;
+                      const afterAdsPercent = row.marginAfterAdsPercent;
+                      const afterAdsValue = row.marginAfterAdsValue;
+                      const tacosSublabel =
+                        row.adsMetricsAvailable &&
+                        row.tacosPercent != null &&
+                        row.tacosPercent > 0
+                          ? `TACOS ${formatFinancialPercent(row.tacosPercent)}`
+                          : null;
+                      return (
+                        <tr
+                          key={row.mlItemId}
+                          className="cursor-pointer border-b border-[var(--border)] transition-colors hover:bg-[var(--muted)]/30"
+                          onClick={() => setSelectedId(row.mlItemId)}
                         >
-                          <MinPriceTableCell
-                            row={row}
-                            targetMarginPercent={targetMarginPercent}
-                            marginBasis={marginBasis}
-                            refining={refiningMinPrices}
-                            showProportionalWhileStale={minPriceStale}
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                          <td className={tableCellPad}>
+                            <div className="flex items-center gap-3">
+                              {row.imageUrl ? (
+                                <Image
+                                  src={row.imageUrl}
+                                  alt=""
+                                  width={40}
+                                  height={40}
+                                  className="size-10 rounded-md object-cover"
+                                />
+                              ) : (
+                                <div className="size-10 rounded-md bg-[var(--muted)]" />
+                              )}
+                              <div className="min-w-0">
+                                <p className="truncate font-medium">
+                                  {row.sku ?? row.title}
+                                </p>
+                                <p className="truncate text-xs text-[var(--muted-foreground)]">
+                                  {row.mlItemId}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className={tableCellPad}>
+                            {row.listingTypeLabel ?? "—"}
+                          </td>
+                          <td className={cn(tableCellPad, "text-right")}>
+                            <div>{formatFinancialMoney(row.salePrice)}</div>
+                            {row.hasPromotion && row.regularPrice != null ? (
+                              <div className="text-xs text-[var(--muted-foreground)] line-through">
+                                {formatFinancialMoney(row.regularPrice)}
+                              </div>
+                            ) : null}
+                          </td>
+                          <td className={cn(currentSectionClass, tableCellPad)}>
+                            <StackedMarginCell
+                              percent={marginPercent}
+                              value={marginValue}
+                            />
+                          </td>
+                          <td className={cn(currentSectionClass, tableCellPad)}>
+                            <StackedMarginCell
+                              percent={afterAdsPercent}
+                              value={afterAdsValue}
+                              sublabel={tacosSublabel}
+                              unavailable={!row.adsMetricsAvailable}
+                            />
+                          </td>
+                          <td
+                            className={cn(
+                              decisionSectionClass,
+                              tableCellPad,
+                              "text-right",
+                            )}
+                          >
+                            <MinPriceTableCell
+                              row={row}
+                              targetMarginPercent={targetMarginPercent}
+                              marginBasis={marginBasis}
+                              refining={refiningMinPrices}
+                              showProportionalWhileStale={minPriceStale}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </>
           ) : null}
         </CardContent>
@@ -793,14 +820,6 @@ export function FinancialEvaluationClient() {
           refiningMinPrices={refiningMinPrices}
           minPriceStale={minPriceStale}
           onClose={() => setSelectedId(null)}
-          onSaved={() => {
-            void (async () => {
-              const items = await loadData([selectedRow.mlItemId]);
-              if (items?.length) {
-                await refineMinPrices([selectedRow.mlItemId]);
-              }
-            })();
-          }}
         />
       ) : null}
     </div>
@@ -864,14 +883,17 @@ function MarginPriceSuggestion({
   }
 
   let message: string;
-  let toneClass = "border-[var(--border)] bg-[var(--muted)]/20 text-[var(--foreground)]";
+  let toneClass =
+    "border-[var(--border)] bg-[var(--muted)]/20 text-[var(--foreground)]";
 
   if (suggestion.reason === "missing_product_cost") {
-    message = "Preencha o custo do produto para calcular o preço mínimo sugerido.";
+    message =
+      "Cadastre o produto em Meus produtos (SKU do anúncio) para calcular o preço mínimo sugerido.";
     toneClass = "border-amber-200 bg-amber-50 text-amber-900";
   } else if (suggestion.reason === "incomplete") {
     message = "Dados insuficientes para sugerir preço mínimo.";
-    toneClass = "border-[var(--border)] bg-[var(--muted)]/20 text-[var(--muted-foreground)]";
+    toneClass =
+      "border-[var(--border)] bg-[var(--muted)]/20 text-[var(--muted-foreground)]";
   } else if (suggestion.reason === "impossible") {
     message = `Com os custos atuais, não é possível atingir ${targetLabel} de ${basisLabel}.`;
     toneClass = "border-rose-200 bg-rose-50 text-rose-800";
@@ -907,7 +929,6 @@ function FinancialDetailModal({
   refiningMinPrices,
   minPriceStale,
   onClose,
-  onSaved,
 }: {
   row: FinancialEvaluationRow;
   targetMarginPercent: number;
@@ -915,22 +936,8 @@ function FinancialDetailModal({
   refiningMinPrices?: boolean;
   minPriceStale?: boolean;
   onClose: () => void;
-  onSaved: () => void;
 }) {
   const labelId = useId();
-  const [productCost, setProductCost] = useState<number | null>(row.productCost);
-  const [extraCosts, setExtraCosts] = useState<number | null>(row.extraCosts);
-  const [taxRatePercent, setTaxRatePercent] = useState<number | null>(
-    row.taxRatePercent,
-  );
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setProductCost(row.productCost);
-    setExtraCosts(row.extraCosts);
-    setTaxRatePercent(row.taxRatePercent);
-  }, [row.mlItemId, row.productCost, row.extraCosts, row.taxRatePercent]);
 
   const handleBackdrop = useCallback(
     (e: React.MouseEvent) => {
@@ -946,35 +953,6 @@ function FinancialDetailModal({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
-
-  async function submit() {
-    setError(null);
-    setSaving(true);
-    try {
-      const res = await fetch(
-        `/api/inventory/${encodeURIComponent(row.mlItemId)}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            lastPurchasePrice: productCost,
-            extraCosts,
-            taxRatePercent,
-          }),
-        },
-      );
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) {
-        setError(data.error ?? "Não foi possível salvar.");
-        return;
-      }
-      onSaved();
-    } catch {
-      setError("Falha de rede. Tente de novo.");
-    } finally {
-      setSaving(false);
-    }
-  }
 
   return (
     <div
@@ -1061,9 +1039,9 @@ function FinancialDetailModal({
             row={row}
             targetMarginPercent={targetMarginPercent}
             marginBasis={marginBasis}
-            productCost={productCost}
-            extraCosts={extraCosts}
-            taxRatePercent={taxRatePercent}
+            productCost={row.productCost}
+            extraCosts={row.extraCosts}
+            taxRatePercent={row.taxRatePercent}
             refining={refiningMinPrices}
             minPriceStale={minPriceStale}
           />
@@ -1084,7 +1062,8 @@ function FinancialDetailModal({
                       key={line.key}
                       className={cn(
                         "border-b border-[var(--border)]",
-                        (line.key === "margin" || line.key === "marginAfterAds") &&
+                        (line.key === "margin" ||
+                          line.key === "marginAfterAds") &&
                           "font-semibold",
                         line.key === "ads" && "text-[var(--muted-foreground)]",
                         line.key === "mlFeeRebate" &&
@@ -1106,44 +1085,60 @@ function FinancialDetailModal({
           ) : null}
 
           <div className="mt-6 space-y-3 border-t border-[var(--border)] pt-6">
-            <h3 className="text-sm font-semibold">Custos editáveis</h3>
+            <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-100">
+              {row.sku ? (
+                <>
+                  Valores vindos do cadastro em{" "}
+                  <Link
+                    href="/dashboard/produtos"
+                    className="font-medium underline underline-offset-2"
+                  >
+                    Meus produtos
+                  </Link>{" "}
+                  (SKU {row.sku}).
+                </>
+              ) : (
+                <>
+                  Cadastre o produto em{" "}
+                  <Link
+                    href="/dashboard/produtos"
+                    className="font-medium underline underline-offset-2"
+                  >
+                    Meus produtos
+                  </Link>{" "}
+                  com o mesmo SKU do anúncio no ML.
+                </>
+              )}
+            </div>
+            <h3 className="text-sm font-semibold">Custos de precificação</h3>
             <div className="grid gap-3 sm:grid-cols-3">
               <MaskedMoneyField
                 key={`product-cost-${row.mlItemId}`}
                 id="product-cost"
-                label="Custo do produto"
-                value={productCost}
-                onValueChange={setProductCost}
+                label="Custo de precificação"
+                value={row.productCost}
+                readOnly
               />
               <MaskedMoneyField
                 key={`extra-costs-${row.mlItemId}`}
                 id="extra-costs"
                 label="Custos extras"
-                value={extraCosts}
-                onValueChange={setExtraCosts}
+                value={row.extraCosts}
+                readOnly
               />
               <MaskedPercentField
                 key={`tax-rate-${row.mlItemId}`}
                 id="tax-rate"
                 label="Alíquota impostos"
-                value={taxRatePercent}
-                onValueChange={setTaxRatePercent}
+                value={row.taxRatePercent}
+                readOnly
               />
             </div>
           </div>
 
-          {error ? (
-            <p className="mt-3 text-sm text-red-600" role="alert">
-              {error}
-            </p>
-          ) : null}
-
           <div className="mt-6 flex flex-wrap justify-end gap-2">
             <Button type="button" variant="outline" onClick={onClose}>
               Fechar
-            </Button>
-            <Button type="button" disabled={saving} onClick={() => void submit()}>
-              {saving ? "Salvando…" : "Salvar e recalcular"}
             </Button>
           </div>
         </div>

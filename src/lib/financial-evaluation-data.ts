@@ -1,4 +1,3 @@
-import { prisma } from "@/lib/db";
 import {
   computeFinancialMargin,
   computeMarginAfterAds,
@@ -29,6 +28,11 @@ import {
 } from "@/lib/mercadolibre/product-ads-metrics";
 import { fetchSellerShippingCost } from "@/lib/mercadolibre/seller-shipping-cost";
 import type { ItemBody } from "@/lib/mercadolibre/types";
+import { loadProductsMapBySku } from "@/lib/product-data";
+import {
+  normalizeProductSku,
+  type ResolvedProductPricing,
+} from "@/lib/product-pricing";
 import { refineMinSalePriceForTargetMargin } from "@/lib/refine-min-sale-price";
 
 export type FinancialEvaluationRow = {
@@ -69,12 +73,6 @@ export type FinancialEvaluationRow = {
   minSalePriceMarginBasis?: MarginBasis | null;
   minSalePriceRefined?: boolean;
 };
-
-function decimalToNumber(value: unknown): number | null {
-  if (value === null || value === undefined) return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
 
 async function mapWithConcurrency<T, R>(
   items: T[],
@@ -225,11 +223,7 @@ async function buildRowForItem(
   accessToken: string,
   userId: number,
   item: ItemBody,
-  stock: {
-    lastPurchasePrice: unknown;
-    extraCosts: unknown;
-    taxRatePercent: unknown;
-  } | null,
+  pricing: ResolvedProductPricing | null,
 ): Promise<
   Omit<
     FinancialEvaluationRow,
@@ -249,9 +243,10 @@ async function buildRowForItem(
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  const productCost = decimalToNumber(stock?.lastPurchasePrice);
-  const extraCosts = decimalToNumber(stock?.extraCosts);
-  const taxRatePercent = decimalToNumber(stock?.taxRatePercent);
+  const sku = getItemSku(item);
+  const productCost = pricing?.pricingCost ?? null;
+  const extraCosts = pricing?.extraCosts ?? null;
+  const taxRatePercent = pricing?.taxPercent ?? null;
 
   let salePrice = item.price;
   let regularPrice: number | null = null;
@@ -276,14 +271,14 @@ async function buildRowForItem(
     );
   }
 
-  if (productCost === null) {
-    warnings.push("Preencha o custo do produto para margem completa.");
-  }
-  if (extraCosts === null) {
-    warnings.push("Custos extras não informados (considerado 0).");
-  }
-  if (taxRatePercent === null) {
-    warnings.push("Alíquota de impostos não informada (considerado 0).");
+  if (!sku) {
+    warnings.push(
+      "Anúncio sem SKU — cadastre o produto em Meus produtos com o mesmo SKU do ML.",
+    );
+  } else if (!pricing) {
+    warnings.push(
+      `SKU ${sku} sem cadastro completo em Meus produtos — preencha o custo de precificação.`,
+    );
   }
 
   let mlFeeAmount: number | null = null;
@@ -519,35 +514,30 @@ export async function loadFinancialEvaluationRows(
     ? siteIdFromItemId(listingIds[0])
     : "MLB";
 
-  const [items, stockRows, adsLoad] = await Promise.all([
+  const [items, adsLoad] = await Promise.all([
     fetchItemsByIdsBatched(accessToken, listingIds),
-    prisma.warehouseStock.findMany({
-      where: { mlItemId: { in: listingIds } },
-      select: {
-        mlItemId: true,
-        lastPurchasePrice: true,
-        extraCosts: true,
-        taxRatePercent: true,
-      },
-    }),
     loadAdsMetricsByItem(accessToken, siteId, listingIds),
   ]);
 
-  const stockByItemId = new Map(stockRows.map((row) => [row.mlItemId, row]));
   const operationalItems = items.filter((item) =>
     isOperationalStatus(item.status),
   );
 
+  const skus = operationalItems
+    .map((item) => getItemSku(item))
+    .filter((sku): sku is string => Boolean(sku));
+  const pricingBySku = await loadProductsMapBySku(skus);
+
   const baseRows = await mapWithConcurrency(
     operationalItems,
     5,
-    async (item) =>
-      buildRowForItem(
-        accessToken,
-        userId,
-        item,
-        stockByItemId.get(item.id) ?? null,
-      ),
+    async (item) => {
+      const sku = getItemSku(item);
+      const pricing = sku
+        ? (pricingBySku.get(normalizeProductSku(sku)) ?? null)
+        : null;
+      return buildRowForItem(accessToken, userId, item, pricing);
+    },
   );
 
   const rows = baseRows.map((row) => {

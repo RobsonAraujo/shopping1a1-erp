@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  Boxes,
   ChartNoAxesColumn,
   Kanban,
   LayoutGrid,
@@ -76,6 +77,12 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
         label: "Operações",
         description: "Fluxo de compra, galpão e Full",
         icon: Kanban,
+      },
+      {
+        href: "/dashboard/produtos",
+        label: "Meus produtos",
+        description: "Cadastro fiscal e custo por SKU",
+        icon: Boxes,
       },
     ],
   },
