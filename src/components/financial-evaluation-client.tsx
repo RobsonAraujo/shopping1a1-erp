@@ -36,6 +36,9 @@ import type { FinancialEvaluationRow } from "@/lib/financial-evaluation-data";
 import { filterByItemListSearch } from "@/lib/item-list-search";
 import {
   computeWholesalePricesForListing,
+  displayMinPurchaseUnitForLevel,
+  isWholesaleAnchorLevel,
+  mlDiscountMinPurchaseUnitForLevel,
   wholesaleReductionsToTuple,
   type WholesalePriceLevelReason,
   type WholesaleReductionSettings,
@@ -436,9 +439,7 @@ export function FinancialEvaluationClient() {
         body: JSON.stringify({ wholesaleReductions: values }),
       });
       if (!res.ok) {
-        setError(
-          await readApiError(res, "wholesale_settings_update_failed"),
-        );
+        setError(await readApiError(res, "wholesale_settings_update_failed"));
         throw new Error("wholesale save failed");
       }
       const json = (await res.json()) as {
@@ -978,15 +979,6 @@ function wholesalePriceReasonLabel(reason: WholesalePriceLevelReason): string {
   }
 }
 
-function minPurchaseUnitForLevel(
-  settings: WholesaleReductionSettings,
-  level: 1 | 2 | 3,
-): number {
-  if (level === 1) return settings.level1MinPurchaseUnit;
-  if (level === 2) return settings.level2MinPurchaseUnit;
-  return settings.level3MinPurchaseUnit;
-}
-
 function WholesalePricesSection({
   row,
   wholesaleReductions,
@@ -998,7 +990,14 @@ function WholesalePricesSection({
     null,
   );
   const [applying, setApplying] = useState(false);
-  const [applySuccess, setApplySuccess] = useState<string | null>(null);
+  const [applySuccess, setApplySuccess] = useState<{
+    anchor: { netAmount: number } | null;
+    tiers: Array<{
+      level: number;
+      minPurchaseUnit: number;
+      netAmount: number;
+    }>;
+  } | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
 
   const levels = useMemo(
@@ -1035,16 +1034,21 @@ function WholesalePricesSection({
         },
       );
       if (!res.ok) {
-        setApplyError(
-          await readApiError(res, "wholesale_apply_failed"),
-        );
+        setApplyError(await readApiError(res, "wholesale_apply_failed"));
         return;
       }
       const json = (await res.json()) as {
-        appliedLevels?: number[];
+        anchor?: { netAmount: number };
+        tiers?: Array<{
+          level: number;
+          minPurchaseUnit: number;
+          netAmount: number;
+        }>;
       };
-      const applied = json.appliedLevels?.join(", ") ?? levelsToApply.join(", ");
-      setApplySuccess(`Preços atacado aplicados no ML (níveis ${applied}).`);
+      setApplySuccess({
+        anchor: json.anchor ? { netAmount: json.anchor.netAmount } : null,
+        tiers: json.tiers ?? [],
+      });
       setPendingLevels(null);
     } catch {
       setApplyError("Falha de rede ao aplicar preços no Mercado Livre.");
@@ -1053,14 +1057,39 @@ function WholesalePricesSection({
     }
   }
 
-  const pendingRows =
-    pendingLevels?.map((level) => {
+  const pendingRows: Array<{
+    key: string;
+    label: string;
+    minPurchaseUnit: number;
+    netAmount: number | null;
+    isAnchor?: boolean;
+  }> =
+    pendingLevels?.flatMap((level) => {
       const computed = levels[level - 1];
-      return {
-        level,
-        minPurchaseUnit: minPurchaseUnitForLevel(wholesaleReductions, level),
-        netAmount: computed?.suggestedPrice ?? null,
-      };
+
+      if (isWholesaleAnchorLevel(level)) {
+        return [
+          {
+            key: `level-1`,
+            label: "Nível 1 · Âncora ML",
+            minPurchaseUnit: 1,
+            netAmount: computed?.suggestedPrice ?? null,
+            isAnchor: true,
+          },
+        ];
+      }
+
+      return [
+        {
+          key: `discount-${level}`,
+          label: `Nível ${level}`,
+          minPurchaseUnit: mlDiscountMinPurchaseUnitForLevel(
+            level,
+            wholesaleReductions,
+          ),
+          netAmount: computed?.suggestedPrice ?? null,
+        },
+      ];
     }) ?? [];
 
   return (
@@ -1080,9 +1109,27 @@ function WholesalePricesSection({
         </p>
 
         {applySuccess ? (
-          <p className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-            {applySuccess}
-          </p>
+          <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+            <p className="font-medium">Preços atacado aplicados no ML</p>
+            <ul className="mt-2 space-y-1">
+              {applySuccess.tiers.map((tier) => (
+                <li key={tier.level}>
+                  Nível {tier.level} · {tier.minPurchaseUnit}+ un ·{" "}
+                  <span className="font-semibold tabular-nums">
+                    {formatFinancialMoney(tier.netAmount)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {applySuccess.anchor ? (
+              <p className="mt-2 text-xs text-emerald-800">
+                Âncora ML (1 un · nível 1):{" "}
+                <span className="tabular-nums">
+                  {formatFinancialMoney(applySuccess.anchor.netAmount)}
+                </span>
+              </p>
+            ) : null}
+          </div>
         ) : null}
         {applyError ? (
           <p className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
@@ -1097,7 +1144,7 @@ function WholesalePricesSection({
             disabled={applying || applicableLevels.length === 0}
             onClick={() => setPendingLevels([1, 2, 3])}
           >
-            Aplicar todos no ML
+            Aplicar 3 níveis no ML
           </Button>
         </div>
 
@@ -1108,7 +1155,9 @@ function WholesalePricesSection({
                 <th className="py-2 pr-3 font-medium">Nível</th>
                 <th className="py-2 pr-3 font-medium text-right">Redução</th>
                 <th className="py-2 pr-3 font-medium text-right">Qtd mín.</th>
-                <th className="py-2 pr-3 font-medium text-right">Margem (R$)</th>
+                <th className="py-2 pr-3 font-medium text-right">
+                  Margem (R$)
+                </th>
                 <th className="py-2 pr-3 font-medium text-right">
                   Preço líquido
                 </th>
@@ -1117,9 +1166,9 @@ function WholesalePricesSection({
             </thead>
             <tbody>
               {levels.map((level) => {
-                const minQty = minPurchaseUnitForLevel(
-                  wholesaleReductions,
+                const minQty = displayMinPurchaseUnitForLevel(
                   level.level,
+                  wholesaleReductions,
                 );
                 const canApply =
                   level.suggestedPrice !== null && level.reason === "ok";
@@ -1128,7 +1177,16 @@ function WholesalePricesSection({
                     key={level.level}
                     className="border-b border-[var(--border)] last:border-b-0"
                   >
-                    <td className="py-2 pr-3 font-medium">{level.level}</td>
+                    <td className="py-2 pr-3 font-medium">
+                      <span className="inline-flex items-center gap-1.5">
+                        {level.level}
+                        {isWholesaleAnchorLevel(level.level) ? (
+                          <span className="rounded-full border border-[var(--border)] bg-[var(--muted)]/40 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                            Âncora
+                          </span>
+                        ) : null}
+                      </span>
+                    </td>
                     <td className="py-2 pr-3 text-right tabular-nums">
                       {formatFinancialPercent(level.reductionPercent)}
                     </td>
@@ -1147,7 +1205,15 @@ function WholesalePricesSection({
                     </td>
                     <td className="py-2 pr-3 text-right tabular-nums">
                       {level.suggestedPrice !== null ? (
-                        formatFinancialMoney(level.suggestedPrice)
+                        <span
+                          title={
+                            isWholesaleAnchorLevel(level.level)
+                              ? `Preço sugerido enviado na âncora ML (1 un.). Pode ser abaixo do varejo (${formatFinancialMoney(row.salePrice)}).`
+                              : undefined
+                          }
+                        >
+                          {formatFinancialMoney(level.suggestedPrice)}
+                        </span>
                       ) : (
                         <span
                           className="text-[var(--muted-foreground)]"
@@ -1175,8 +1241,8 @@ function WholesalePricesSection({
           </table>
         </div>
         <p className="mt-3 text-xs text-[var(--muted-foreground)]">
-          Publica preço líquido por quantidade B2B no Mercado Livre (comprador
-          empresarial). Requer conta e anúncio elegíveis no ML.
+          Nível 1 = âncora ML em 1 un. (preço sugerido). Níveis 2 e 3 = faixas
+          de desconto adicionais por quantidade.
         </p>
       </div>
 
@@ -1194,18 +1260,24 @@ function WholesalePricesSection({
             <p className="mt-2 text-sm text-[var(--muted-foreground)]">
               Confirme os preços líquidos por quantidade que serão enviados para{" "}
               <span className="font-medium text-[var(--foreground)]">
-                {row.mlItemId}
+                {row.sku ? ` · SKU ${row.sku}` : row.mlItemId}
               </span>
               .
             </p>
             <ul className="mt-3 space-y-2 text-sm">
               {pendingRows.map((item) => (
                 <li
-                  key={item.level}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] px-3 py-2"
+                  key={item.key}
+                  className={cn(
+                    "flex items-center justify-between gap-3 rounded-lg border px-3 py-2",
+                    item.isAnchor
+                      ? "border-[var(--border)] bg-[var(--muted)]/20"
+                      : "border-[var(--border)]",
+                  )}
                 >
                   <span>
-                    Nível {item.level} · {item.minPurchaseUnit}+ un
+                    {item.label} · {item.minPurchaseUnit}
+                    {item.isAnchor ? " un" : "+ un"}
                   </span>
                   <span className="font-semibold tabular-nums">
                     {formatFinancialMoney(item.netAmount)}
@@ -1213,6 +1285,20 @@ function WholesalePricesSection({
                 </li>
               ))}
             </ul>
+            {pendingLevels?.includes(1) ? (
+              <p className="mt-3 text-xs text-[var(--muted-foreground)]">
+                O preço sugerido do nível 1 será enviado na âncora ML (1 un.).
+              </p>
+            ) : null}
+            {pendingLevels.length === 3 ? (
+              <p className="mt-3 text-xs text-[var(--muted-foreground)]">
+                Serão enviados{" "}
+                <span className="font-medium text-[var(--foreground)]">
+                  3 níveis
+                </span>
+                : âncora (nível 1) + 2 faixas de desconto.
+              </p>
+            ) : null}
             <div className="mt-4 flex flex-wrap justify-end gap-2">
               <Button
                 type="button"

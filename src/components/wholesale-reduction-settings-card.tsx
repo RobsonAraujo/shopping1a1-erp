@@ -8,6 +8,7 @@ import { formatFinancialPercent } from "@/lib/financial-margin";
 import {
   DEFAULT_WHOLESALE_REDUCTIONS,
   validateWholesaleReductionSettings,
+  WHOLESALE_ANCHOR_MIN_PURCHASE_UNIT,
   type WholesaleReductionSettings,
 } from "@/lib/wholesale-pricing";
 import { cn } from "@/lib/utils";
@@ -35,6 +36,7 @@ type LevelConfig = {
   >;
   label: string;
   hint: string;
+  isAnchor?: boolean;
 };
 
 type EditDraft = Record<
@@ -47,8 +49,9 @@ const levelRows: LevelConfig[] = [
     level: 1,
     reductionKey: "level1ReductionPercent",
     minQtyKey: "level1MinPurchaseUnit",
-    label: "Nível 1",
-    hint: "Menor desconto — faixa inicial B2B",
+    label: "Nível 1 · Âncora",
+    hint: "Preço sugerido enviado na âncora ML (1 un.)",
+    isAnchor: true,
   },
   {
     level: 2,
@@ -97,7 +100,7 @@ function parsePercentInput(raw: string): number | null {
   return n;
 }
 
-function parseMinQtyInput(raw: string): number | null {
+function parseDiscountMinQtyInput(raw: string): number | null {
   const trimmed = raw.trim();
   if (trimmed === "") return null;
   const n = Number(trimmed);
@@ -111,15 +114,17 @@ function editDraftToSettings(
   const level1ReductionPercent = parsePercentInput(draft.level1ReductionPercent);
   const level2ReductionPercent = parsePercentInput(draft.level2ReductionPercent);
   const level3ReductionPercent = parsePercentInput(draft.level3ReductionPercent);
-  const level1MinPurchaseUnit = parseMinQtyInput(draft.level1MinPurchaseUnit);
-  const level2MinPurchaseUnit = parseMinQtyInput(draft.level2MinPurchaseUnit);
-  const level3MinPurchaseUnit = parseMinQtyInput(draft.level3MinPurchaseUnit);
+  const level2MinPurchaseUnit = parseDiscountMinQtyInput(
+    draft.level2MinPurchaseUnit,
+  );
+  const level3MinPurchaseUnit = parseDiscountMinQtyInput(
+    draft.level3MinPurchaseUnit,
+  );
 
   if (
     level1ReductionPercent === null ||
     level2ReductionPercent === null ||
     level3ReductionPercent === null ||
-    level1MinPurchaseUnit === null ||
     level2MinPurchaseUnit === null ||
     level3MinPurchaseUnit === null
   ) {
@@ -130,7 +135,7 @@ function editDraftToSettings(
     level1ReductionPercent,
     level2ReductionPercent,
     level3ReductionPercent,
-    level1MinPurchaseUnit,
+    level1MinPurchaseUnit: WHOLESALE_ANCHOR_MIN_PURCHASE_UNIT,
     level2MinPurchaseUnit,
     level3MinPurchaseUnit,
   };
@@ -176,6 +181,7 @@ function LevelCard({
   disabled,
   onReductionChange,
   onMinQtyChange,
+  minQtyLocked,
 }: {
   row: LevelConfig;
   editing: boolean;
@@ -187,6 +193,7 @@ function LevelCard({
   disabled?: boolean;
   onReductionChange?: (value: string) => void;
   onMinQtyChange?: (value: string) => void;
+  minQtyLocked?: boolean;
 }) {
   return (
     <div
@@ -234,17 +241,21 @@ function LevelCard({
               htmlFor={`wholesale-${row.minQtyKey}`}
               className="mb-1 block text-center text-xs text-[var(--muted-foreground)]"
             >
-              Qtd mínima no ML
+              {row.isAnchor ? "Qtd mín. âncora (ML)" : "Qtd mínima no ML"}
             </label>
             <input
               id={`wholesale-${row.minQtyKey}`}
               type="text"
               inputMode="numeric"
               autoComplete="off"
-              disabled={disabled}
+              disabled={disabled || minQtyLocked}
+              readOnly={minQtyLocked}
               value={minQtyValue}
               onChange={(e) => onMinQtyChange?.(e.target.value)}
-              className={cn(fieldInputClassName, disabled && "opacity-60")}
+              className={cn(
+                fieldInputClassName,
+                (disabled || minQtyLocked) && "opacity-60",
+              )}
             />
           </div>
         </div>
@@ -300,7 +311,7 @@ export function WholesaleReductionSettingsCard({
     const parsed = editDraftToSettings(editDraft);
     if (!parsed) {
       setSaveError(
-        "Informe redução entre 0 e 100% e quantidade mínima inteira ≥ 2 em todos os níveis.",
+        "Informe redução entre 0 e 100% e quantidade mínima inteira ≥ 2 nos níveis 2 e 3.",
       );
       return;
     }
@@ -401,6 +412,7 @@ export function WholesaleReductionSettingsCard({
                     displayMinQty={null}
                     loading={false}
                     disabled={saving}
+                    minQtyLocked={row.isAnchor}
                     onReductionChange={(next) =>
                       setEditDraft((d) => ({ ...d, [row.reductionKey]: next }))
                     }
@@ -462,9 +474,9 @@ export function WholesaleReductionSettingsCard({
           )}
 
           <p className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--muted)]/10 px-3 py-2.5 text-xs leading-relaxed text-[var(--muted-foreground)]">
-            A redução incide sobre o valor em R$ da margem de contribuição. A
-            quantidade mínima define a faixa no preço por quantidade B2B do ML
-            (preço líquido, sem imposto — repasse ao comprador empresarial).
+            A redução incide sobre o valor em R$ da margem de contribuição. O
+            nível 1 é enviado na âncora ML (1 un.). Os níveis 2 e 3 definem
+            faixas adicionais de desconto B2B.
           </p>
         </div>
       ) : null}

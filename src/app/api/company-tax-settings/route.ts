@@ -8,8 +8,9 @@ import {
 } from "@/lib/product-data";
 import { DEFAULT_PIS_COFINS_PERCENT } from "@/lib/product-pricing";
 import {
-  validateWholesaleMinPurchaseUnit,
+  validateWholesaleDiscountMinPurchaseUnit,
   validateWholesaleReductionSettings,
+  WHOLESALE_ANCHOR_MIN_PURCHASE_UNIT,
   type WholesaleReductionSettings,
 } from "@/lib/wholesale-pricing";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
@@ -111,7 +112,7 @@ export async function PATCH(request: NextRequest) {
   let level1 = current.level1ReductionPercent;
   let level2 = current.level2ReductionPercent;
   let level3 = current.level3ReductionPercent;
-  let min1 = current.level1MinPurchaseUnit;
+  let min1 = WHOLESALE_ANCHOR_MIN_PURCHASE_UNIT;
   let min2 = current.level2MinPurchaseUnit;
   let min3 = current.level3MinPurchaseUnit;
 
@@ -147,21 +148,24 @@ export async function PATCH(request: NextRequest) {
       level3 = Number(level3ReductionPercent);
     }
     if (level1MinPurchaseUnit !== undefined) {
-      const err = validateWholesaleMinPurchaseUnit(level1MinPurchaseUnit);
-      if (err) {
-        return NextResponse.json({ error: `Nível 1: ${err}` }, { status: 400 });
+      const n = Number(level1MinPurchaseUnit);
+      if (!Number.isInteger(n) || n !== WHOLESALE_ANCHOR_MIN_PURCHASE_UNIT) {
+        return NextResponse.json(
+          { error: "Nível 1 (âncora): quantidade mínima deve ser 1 unidade" },
+          { status: 400 },
+        );
       }
-      min1 = Number(level1MinPurchaseUnit);
+      min1 = WHOLESALE_ANCHOR_MIN_PURCHASE_UNIT;
     }
     if (level2MinPurchaseUnit !== undefined) {
-      const err = validateWholesaleMinPurchaseUnit(level2MinPurchaseUnit);
+      const err = validateWholesaleDiscountMinPurchaseUnit(level2MinPurchaseUnit);
       if (err) {
         return NextResponse.json({ error: `Nível 2: ${err}` }, { status: 400 });
       }
       min2 = Number(level2MinPurchaseUnit);
     }
     if (level3MinPurchaseUnit !== undefined) {
-      const err = validateWholesaleMinPurchaseUnit(level3MinPurchaseUnit);
+      const err = validateWholesaleDiscountMinPurchaseUnit(level3MinPurchaseUnit);
       if (err) {
         return NextResponse.json({ error: `Nível 3: ${err}` }, { status: 400 });
       }

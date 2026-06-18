@@ -158,6 +158,72 @@ export function isRetailStandardPrice(price: ItemPriceRecord): boolean {
   return !isBusinessQuantityPrice(price) && Boolean(price.id);
 }
 
+/** Preço líquido de referência quando não há âncora B2B vigente (promoção ou varejo). */
+export function resolveMlAnchorNetAmount(
+  prices: ItemPriceRecord[],
+  fallbackSalePrice: number,
+): number {
+  const promo = prices.find((p) => p.type === "promotion");
+  if (
+    promo?.amount != null &&
+    Number.isFinite(promo.amount) &&
+    promo.amount > 0
+  ) {
+    return promo.amount;
+  }
+
+  const retail = prices.find(isRetailStandardPrice);
+  if (retail?.amount != null && Number.isFinite(retail.amount) && retail.amount > 0) {
+    return retail.amount;
+  }
+
+  const businessAnchor = prices.find(
+    (p) =>
+      isBusinessQuantityPrice(p) && p.conditions?.min_purchase_unit === 1,
+  );
+  if (
+    businessAnchor?.amount != null &&
+    Number.isFinite(businessAnchor.amount) &&
+    businessAnchor.amount > 0
+  ) {
+    return businessAnchor.amount;
+  }
+
+  return fallbackSalePrice;
+}
+
+export type ConfirmedBusinessTier = {
+  minPurchaseUnit: number;
+  netAmount: number;
+};
+
+export type SplitBusinessPricesResult = {
+  anchor: ConfirmedBusinessTier | null;
+  discountTiers: ConfirmedBusinessTier[];
+};
+
+/** Separa âncora ML (min=1) das faixas de desconto B2B (min>1). */
+export function splitBusinessPrices(
+  prices: ItemPriceRecord[],
+): SplitBusinessPricesResult {
+  const business = prices.filter(isBusinessQuantityPrice);
+  let anchor: ConfirmedBusinessTier | null = null;
+  const discountTiers: ConfirmedBusinessTier[] = [];
+
+  for (const price of business) {
+    const min = price.conditions?.min_purchase_unit ?? 0;
+    const netAmount = price.amount ?? 0;
+    if (min === 1) {
+      anchor = { minPurchaseUnit: min, netAmount };
+    } else if (min > 1) {
+      discountTiers.push({ minPurchaseUnit: min, netAmount });
+    }
+  }
+
+  discountTiers.sort((a, b) => a.minPurchaseUnit - b.minPurchaseUnit);
+  return { anchor, discountTiers };
+}
+
 export function eligibilityErrorMessage(
   eligibility: NetPriceEligibilityResponse,
 ): string | null {

@@ -15,7 +15,8 @@ export type WholesaleNetPriceTier = {
 };
 
 export type BuildNetWholesalePricesPayloadInput = {
-  retailUnitPrice: number;
+  /** Preço líquido da âncora B2B (nível 1 sugerido ou preço vigente no anúncio). */
+  anchorNetAmount: number;
   currencyId: string;
   tiers: WholesaleNetPriceTier[];
   currentPrices: ItemPriceRecord[];
@@ -33,7 +34,7 @@ export function validateWholesaleNetTiers(
   tiers: WholesaleNetPriceTier[],
 ): string | null {
   if (tiers.length === 0) {
-    return "Nenhuma faixa de atacado para aplicar.";
+    return null;
   }
 
   const sorted = [...tiers].sort(
@@ -62,9 +63,9 @@ export function validateWholesaleNetTiers(
 export function buildNetWholesalePricesPayload(
   input: BuildNetWholesalePricesPayloadInput,
 ): BuildNetWholesalePricesPayloadResult {
-  const retailUnitPrice = roundMoney(input.retailUnitPrice);
-  if (!Number.isFinite(retailUnitPrice) || retailUnitPrice <= 0) {
-    throw new Error("Preço de varejo inválido para âncora B2B.");
+  const anchorNetAmount = roundMoney(input.anchorNetAmount);
+  if (!Number.isFinite(anchorNetAmount) || anchorNetAmount <= 0) {
+    throw new Error("Preço da âncora B2B inválido.");
   }
   if (!input.currencyId) {
     throw new Error("Moeda do anúncio indisponível.");
@@ -78,6 +79,15 @@ export function buildNetWholesalePricesPayload(
   const sortedTiers = [...input.tiers].sort(
     (a, b) => a.minPurchaseUnit - b.minPurchaseUnit,
   );
+
+  if (
+    sortedTiers.length > 0 &&
+    anchorNetAmount < roundMoney(sortedTiers[0].netAmount)
+  ) {
+    throw new Error(
+      "Preço da âncora deve ser maior ou igual ao primeiro desconto.",
+    );
+  }
 
   const retailKeepers: QuantityPriceWriteNode[] = input.currentPrices
     .filter(isRetailStandardPrice)
@@ -108,9 +118,10 @@ export function buildNetWholesalePricesPayload(
           }))
           .filter((node) => node.amount > 0);
 
+  // Âncora ML (min=1) — preço sugerido do nível 1 ou preço B2B vigente.
   const anchor: QuantityPriceWriteNode = {
     type: "standard",
-    amount: retailUnitPrice,
+    amount: anchorNetAmount,
     currency_id: input.currencyId,
     amount_tax_inclusion_type: "net",
     conditions: {

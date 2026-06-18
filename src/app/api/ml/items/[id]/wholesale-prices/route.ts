@@ -6,6 +6,8 @@ import {
   eligibilityErrorMessage,
   fetchItemPrices,
   fetchNetPriceEligibility,
+  resolveMlAnchorNetAmount,
+  splitBusinessPrices,
   updateItemNetQuantityPrices,
 } from "@/lib/mercadolibre/item-quantity-prices";
 import { siteIdFromItemId } from "@/lib/mercadolibre/listing-fees";
@@ -14,6 +16,7 @@ import { ensureCompanySettings } from "@/lib/product-data";
 import { loadFinancialEvaluationRows } from "@/lib/financial-evaluation-data";
 import {
   computeWholesalePricesForListing,
+  mlDiscountMinPurchaseUnitForLevel,
   wholesaleReductionsToTuple,
 } from "@/lib/wholesale-pricing";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
@@ -105,39 +108,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
       reductions: wholesaleReductionsToTuple(companySettings),
     });
 
-    const minQtyByLevel: Record<1 | 2 | 3, number> = {
-      1: companySettings.level1MinPurchaseUnit,
-      2: companySettings.level2MinPurchaseUnit,
-      3: companySettings.level3MinPurchaseUnit,
-    };
-
-    const tiers = levels
-      .map((level) => {
-        const computed = wholesaleLevels[level - 1];
-        if (
-          !computed ||
-          computed.suggestedPrice === null ||
-          computed.reason !== "ok"
-        ) {
-          return null;
-        }
-        return {
-          level,
-          minPurchaseUnit: minQtyByLevel[level],
-          netAmount: computed.suggestedPrice,
-        };
-      })
-      .filter((tier): tier is NonNullable<typeof tier> => tier !== null);
-
-    if (tiers.length === 0) {
-      return NextResponse.json(
-        {
-          error:
-            "Não há preços atacado válidos para aplicar. Verifique custos e margem do anúncio.",
-        },
-        { status: 422 },
-      );
-    }
+    const level1Computed = wholesaleLevels[0];
+    const level1Valid =
+      level1Computed !== undefined &&
+      level1Computed.suggestedPrice !== null &&
+      level1Computed.reason === "ok";
 
     const siteId = siteIdFromItemId(mlItemId);
     const eligibility = await fetchNetPriceEligibility(
@@ -152,12 +127,67 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     const currentPrices = await fetchItemPrices(token, mlItemId);
+    const { anchor: existingAnchor, discountTiers: existingDiscountTiers } =
+      splitBusinessPrices(currentPrices.prices);
+
+    const hasLevel1Apply = levels.includes(1) && level1Valid;
+    const anchorNetAmount = hasLevel1Apply
+      ? level1Computed.suggestedPrice!
+      : (existingAnchor?.netAmount ??
+        resolveMlAnchorNetAmount(currentPrices.prices, row.salePrice));
+
+    const discountTiers = ([2, 3] as const)
+      .map((level) => {
+        const minPurchaseUnit = mlDiscountMinPurchaseUnitForLevel(
+          level,
+          companySettings,
+        );
+        if (levels.includes(level)) {
+          const computed = wholesaleLevels[level - 1];
+          if (
+            !computed ||
+            computed.suggestedPrice === null ||
+            computed.reason !== "ok"
+          ) {
+            return null;
+          }
+          return {
+            level,
+            minPurchaseUnit,
+            netAmount: computed.suggestedPrice,
+          };
+        }
+        const existing = existingDiscountTiers.find(
+          (tier) => tier.minPurchaseUnit === minPurchaseUnit,
+        );
+        if (!existing) {
+          return null;
+        }
+        return {
+          level,
+          minPurchaseUnit,
+          netAmount: existing.netAmount,
+        };
+      })
+      .filter((tier): tier is NonNullable<typeof tier> => tier !== null)
+      .sort((a, b) => a.minPurchaseUnit - b.minPurchaseUnit);
+
+    if (!hasLevel1Apply && discountTiers.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Não há preços atacado válidos para aplicar. Verifique custos e margem do anúncio.",
+        },
+        { status: 422 },
+      );
+    }
+
     const payload = buildNetWholesalePricesPayload({
-      retailUnitPrice: row.salePrice,
+      anchorNetAmount,
       currencyId: item.currency_id ?? "BRL",
-      tiers,
+      tiers: discountTiers,
       currentPrices: currentPrices.prices,
-      replaceAllBusinessTiers: levels.length === 3,
+      replaceAllBusinessTiers: true,
     });
 
     const updated = await updateItemNetQuantityPrices(
@@ -166,28 +196,43 @@ export async function POST(request: NextRequest, context: RouteContext) {
       payload,
     );
 
+    const { discountTiers: confirmed } = splitBusinessPrices(updated.prices);
+
     return NextResponse.json({
       ok: true,
       mlItemId,
-      appliedLevels: tiers.map((t) => t.level),
-      tiers: tiers.map((t) => ({
+      anchor: {
+        minPurchaseUnit: 1,
+        netAmount: anchorNetAmount,
+        note: hasLevel1Apply
+          ? "Âncora ML (nível 1 — preço sugerido)"
+          : "Âncora ML (preço vigente no anúncio)",
+      },
+      level1Applied: hasLevel1Apply,
+      tiers: discountTiers.map((t) => ({
         level: t.level,
         minPurchaseUnit: t.minPurchaseUnit,
         netAmount: t.netAmount,
       })),
-      prices: updated.prices,
+      confirmed,
     });
   } catch (e) {
     logServerError("api/ml/items wholesale-prices POST", e);
     const message = e instanceof Error ? e.message : "apply_wholesale_failed";
-    const status =
+    const isValidationError =
       message.includes("elegib") ||
       message.includes("inválid") ||
-      message.includes("Não há preços")
-        ? 422
-        : 502;
-    return NextResponse.json(apiErrorPayload(e, "apply_wholesale_failed"), {
-      status,
-    });
+      message.includes("Não há preços") ||
+      message.includes("Price validation");
+
+    const status = isValidationError ? 422 : 502;
+
+    return NextResponse.json(
+      apiErrorPayload(
+        e instanceof Error ? new Error(message) : e,
+        "apply_wholesale_failed",
+      ),
+      { status },
+    );
   }
 }

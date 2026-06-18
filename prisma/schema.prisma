@@ -171,7 +171,7 @@ model CompanyTaxSettings {
   wholesaleLevel1ReductionPercent Decimal @default(10) @map("wholesale_level1_reduction_percent") @db.Decimal(8, 4)
   wholesaleLevel2ReductionPercent Decimal @default(15) @map("wholesale_level2_reduction_percent") @db.Decimal(8, 4)
   wholesaleLevel3ReductionPercent Decimal @default(20) @map("wholesale_level3_reduction_percent") @db.Decimal(8, 4)
-  wholesaleLevel1MinPurchaseUnit  Int      @default(2) @map("wholesale_level1_min_purchase_unit")
+  wholesaleLevel1MinPurchaseUnit  Int      @default(1) @map("wholesale_level1_min_purchase_unit")
   wholesaleLevel2MinPurchaseUnit  Int      @default(5) @map("wholesale_level2_min_purchase_unit")
   wholesaleLevel3MinPurchaseUnit  Int      @default(10) @map("wholesale_level3_min_purchase_unit")
   updatedAt                     DateTime @updatedAt @map("updated_at")

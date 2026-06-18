@@ -8,6 +8,7 @@ import {
 } from "@/lib/product-pricing";
 import {
   DEFAULT_WHOLESALE_REDUCTIONS,
+  WHOLESALE_ANCHOR_MIN_PURCHASE_UNIT,
   type WholesaleReductionSettings,
 } from "@/lib/wholesale-pricing";
 import type { CompanyTaxSettings, Product } from "@/generated/prisma/client";
@@ -74,9 +75,7 @@ function rowToCompanySettings(row: CompanyTaxSettings): CompanySettings {
     level3ReductionPercent:
       decimalToNumber(row.wholesaleLevel3ReductionPercent) ??
       DEFAULT_WHOLESALE_REDUCTIONS.level3ReductionPercent,
-    level1MinPurchaseUnit:
-      row.wholesaleLevel1MinPurchaseUnit ??
-      DEFAULT_WHOLESALE_REDUCTIONS.level1MinPurchaseUnit,
+    level1MinPurchaseUnit: WHOLESALE_ANCHOR_MIN_PURCHASE_UNIT,
     level2MinPurchaseUnit:
       row.wholesaleLevel2MinPurchaseUnit ??
       DEFAULT_WHOLESALE_REDUCTIONS.level2MinPurchaseUnit,

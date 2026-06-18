@@ -25,12 +25,11 @@ describe("buildNetWholesalePricesPayload", () => {
     },
   ];
 
-  it("keeps retail standard price and sends anchor plus requested tiers", () => {
+  it("keeps retail standard price and sends anchor plus discount tiers", () => {
     const result = buildNetWholesalePricesPayload({
-      retailUnitPrice: 100,
+      anchorNetAmount: 88,
       currencyId: "BRL",
       tiers: [
-        { level: 1, minPurchaseUnit: 2, netAmount: 88 },
         { level: 2, minPurchaseUnit: 5, netAmount: 84 },
         { level: 3, minPurchaseUnit: 10, netAmount: 80 },
       ],
@@ -39,33 +38,46 @@ describe("buildNetWholesalePricesPayload", () => {
     });
 
     assert.deepEqual(result.prices[0], { id: "1" });
-    assert.equal(result.prices[1].amount, 100);
+    assert.equal(result.prices[1].amount, 88);
     assert.equal(result.prices[1].conditions?.min_purchase_unit, 1);
     assert.equal(result.prices[1].amount_tax_inclusion_type, "net");
 
     const businessTiers = result.prices.filter(
       (p) => (p.conditions?.min_purchase_unit ?? 0) > 1,
     );
-    assert.equal(businessTiers.length, 3);
-    assert.equal(businessTiers[0].conditions?.min_purchase_unit, 2);
-    assert.equal(businessTiers[0].amount, 88);
-    assert.equal(businessTiers[2].conditions?.min_purchase_unit, 10);
-    assert.equal(businessTiers[2].amount, 80);
+    assert.equal(businessTiers.length, 2);
+    assert.equal(businessTiers[0].conditions?.min_purchase_unit, 5);
+    assert.equal(businessTiers[0].amount, 84);
+    assert.equal(businessTiers[1].conditions?.min_purchase_unit, 10);
+    assert.equal(businessTiers[1].amount, 80);
   });
 
   it("rejects tiers with increasing prices", () => {
     assert.throws(
       () =>
         buildNetWholesalePricesPayload({
-          retailUnitPrice: 100,
+          anchorNetAmount: 88,
           currencyId: "BRL",
           tiers: [
-            { level: 1, minPurchaseUnit: 2, netAmount: 80 },
-            { level: 2, minPurchaseUnit: 5, netAmount: 85 },
+            { level: 2, minPurchaseUnit: 5, netAmount: 80 },
+            { level: 3, minPurchaseUnit: 10, netAmount: 85 },
           ],
           currentPrices: [],
         }),
       /devem cair/,
     );
+  });
+
+  it("allows anchor-only payload without discount tiers", () => {
+    const result = buildNetWholesalePricesPayload({
+      anchorNetAmount: 26.59,
+      currencyId: "BRL",
+      tiers: [],
+      currentPrices: [],
+    });
+
+    assert.equal(result.prices.length, 1);
+    assert.equal(result.prices[0].amount, 26.59);
+    assert.equal(result.prices[0].conditions?.min_purchase_unit, 1);
   });
 });

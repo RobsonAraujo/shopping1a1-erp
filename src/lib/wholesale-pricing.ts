@@ -3,7 +3,10 @@ import { roundMoney, type MinSalePriceReason } from "@/lib/financial-margin";
 export const DEFAULT_WHOLESALE_LEVEL1_REDUCTION_PERCENT = 10;
 export const DEFAULT_WHOLESALE_LEVEL2_REDUCTION_PERCENT = 15;
 export const DEFAULT_WHOLESALE_LEVEL3_REDUCTION_PERCENT = 20;
-export const DEFAULT_WHOLESALE_LEVEL1_MIN_PURCHASE_UNIT = 2;
+/** Qtd mín. da âncora ML (nível 1 ERP) — fixo em 1 unidade. */
+export const WHOLESALE_ANCHOR_MIN_PURCHASE_UNIT = 1;
+export const DEFAULT_WHOLESALE_LEVEL1_MIN_PURCHASE_UNIT =
+  WHOLESALE_ANCHOR_MIN_PURCHASE_UNIT;
 export const DEFAULT_WHOLESALE_LEVEL2_MIN_PURCHASE_UNIT = 5;
 export const DEFAULT_WHOLESALE_LEVEL3_MIN_PURCHASE_UNIT = 10;
 
@@ -25,7 +28,9 @@ export const DEFAULT_WHOLESALE_REDUCTIONS: WholesaleReductionSettings = {
   level3MinPurchaseUnit: DEFAULT_WHOLESALE_LEVEL3_MIN_PURCHASE_UNIT,
 };
 
-export function validateWholesaleMinPurchaseUnit(value: unknown): string | null {
+export function validateWholesaleDiscountMinPurchaseUnit(
+  value: unknown,
+): string | null {
   const n = Number(value);
   if (!Number.isInteger(n) || n < 2) {
     return "Quantidade mínima deve ser um inteiro maior ou igual a 2";
@@ -33,25 +38,53 @@ export function validateWholesaleMinPurchaseUnit(value: unknown): string | null 
   return null;
 }
 
+/** @deprecated Use validateWholesaleDiscountMinPurchaseUnit */
+export function validateWholesaleMinPurchaseUnit(
+  value: unknown,
+): string | null {
+  return validateWholesaleDiscountMinPurchaseUnit(value);
+}
+
+export function displayMinPurchaseUnitForLevel(
+  level: 1 | 2 | 3,
+  settings: WholesaleReductionSettings,
+): number {
+  if (level === 1) return WHOLESALE_ANCHOR_MIN_PURCHASE_UNIT;
+  if (level === 2) return settings.level2MinPurchaseUnit;
+  return settings.level3MinPurchaseUnit;
+}
+
+/** Qtd mín. enviada ao ML para cada nível (nível 1 = âncora em 1 un.). */
+export function mlDiscountMinPurchaseUnitForLevel(
+  level: 1 | 2 | 3,
+  settings: WholesaleReductionSettings,
+): number {
+  if (level === 1) return WHOLESALE_ANCHOR_MIN_PURCHASE_UNIT;
+  if (level === 2) return settings.level2MinPurchaseUnit;
+  return settings.level3MinPurchaseUnit;
+}
+
+export function isWholesaleAnchorLevel(level: number): boolean {
+  return level === 1;
+}
+
 export function validateWholesaleReductionSettings(
   settings: WholesaleReductionSettings,
 ): string | null {
-  const qtys = [
-    settings.level1MinPurchaseUnit,
+  if (settings.level1MinPurchaseUnit !== WHOLESALE_ANCHOR_MIN_PURCHASE_UNIT) {
+    return "Nível 1 (âncora): quantidade mínima deve ser 1 unidade";
+  }
+
+  const discountQtys = [
     settings.level2MinPurchaseUnit,
     settings.level3MinPurchaseUnit,
   ];
-  for (let i = 0; i < qtys.length; i++) {
-    const err = validateWholesaleMinPurchaseUnit(qtys[i]);
-    if (err) return `Nível ${i + 1}: ${err}`;
+  for (let i = 0; i < discountQtys.length; i++) {
+    const err = validateWholesaleDiscountMinPurchaseUnit(discountQtys[i]);
+    if (err) return `Nível ${i + 2}: ${err}`;
   }
-  if (
-    !(
-      qtys[0] < qtys[1] &&
-      qtys[1] < qtys[2]
-    )
-  ) {
-    return "Quantidades mínimas devem crescer do nível 1 ao 3";
+  if (!(discountQtys[0] < discountQtys[1])) {
+    return "Quantidades mínimas dos níveis 2 e 3 devem crescer";
   }
   return null;
 }

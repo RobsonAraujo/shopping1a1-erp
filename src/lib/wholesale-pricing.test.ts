@@ -5,6 +5,9 @@ import {
   computeTargetMarginValueFromReduction,
   computeWholesalePricesForListing,
   computeWholesaleSalePrice,
+  displayMinPurchaseUnitForLevel,
+  mlDiscountMinPurchaseUnitForLevel,
+  validateWholesaleReductionSettings,
 } from "./wholesale-pricing";
 
 describe("computeTargetMarginFromReduction", () => {
@@ -34,6 +37,41 @@ describe("computeWholesaleSalePrice", () => {
     assert.equal(result.reason, "ok");
     // 13 + 20 + 40 + 2 + 9.69 = 84.69
     assert.equal(result.suggestedPrice, 84.69);
+  });
+});
+
+describe("wholesale min purchase units", () => {
+  it("treats level 1 as anchor at 1 unit for ML", () => {
+    const settings = {
+      level1ReductionPercent: 10,
+      level2ReductionPercent: 15,
+      level3ReductionPercent: 20,
+      level1MinPurchaseUnit: 1,
+      level2MinPurchaseUnit: 5,
+      level3MinPurchaseUnit: 10,
+    };
+
+    assert.equal(
+      validateWholesaleReductionSettings(settings),
+      null,
+    );
+    assert.equal(displayMinPurchaseUnitForLevel(1, settings), 1);
+    assert.equal(displayMinPurchaseUnitForLevel(2, settings), 5);
+    assert.equal(mlDiscountMinPurchaseUnitForLevel(1, settings), 1);
+    assert.equal(mlDiscountMinPurchaseUnitForLevel(2, settings), 5);
+    assert.equal(mlDiscountMinPurchaseUnitForLevel(3, settings), 10);
+  });
+
+  it("rejects level 1 min other than 1", () => {
+    const err = validateWholesaleReductionSettings({
+      level1ReductionPercent: 10,
+      level2ReductionPercent: 15,
+      level3ReductionPercent: 20,
+      level1MinPurchaseUnit: 2,
+      level2MinPurchaseUnit: 5,
+      level3MinPurchaseUnit: 10,
+    });
+    assert.match(err ?? "", /âncora/i);
   });
 });
 
