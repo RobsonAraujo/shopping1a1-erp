@@ -18,6 +18,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { FormSelect } from "@/components/ui/form-select";
 import {
   Tooltip,
   TooltipContent,
@@ -619,18 +620,19 @@ function LeadTimeSettingsModal({
               onChange={(e) => setValue(e.target.value)}
               className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm tabular-nums text-[var(--foreground)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
             />
-            <select
+            <FormSelect
               id="lead-time-unit"
-              value={unit}
-              onChange={(e) =>
-                setUnit(e.target.value === "weeks" ? "weeks" : "days")
-              }
-              className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
               aria-label="Unidade do prazo"
-            >
-              <option value="weeks">Semanas</option>
-              <option value="days">Dias</option>
-            </select>
+              value={unit}
+              onValueChange={(value) =>
+                setUnit(value === "weeks" ? "weeks" : "days")
+              }
+              options={[
+                { value: "weeks", label: "Semanas" },
+                { value: "days", label: "Dias" },
+              ]}
+              triggerClassName="w-[8.5rem]"
+            />
           </div>
           <p className="text-xs text-[var(--muted-foreground)]">
             Informe em semanas ou em dias; o sistema grava em dias para cálculos

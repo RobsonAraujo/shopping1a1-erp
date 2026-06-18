@@ -35,6 +35,8 @@ export function productToPricingRecord(product: Product): ProductRecordForPricin
 export type ProductView = ProductRecordForPricing & {
   sku: string;
   ncm: string | null;
+  isImported: boolean;
+  importContentPercent: number;
   pricingCost: number | null;
   taxPercent: number | null;
   createdAt: string;
@@ -51,6 +53,8 @@ export function buildProductView(
     sku: product.sku,
     ncm: product.ncm,
     ...record,
+    isImported: product.isImported,
+    importContentPercent: decimalToNumber(product.importContentPercent) ?? 0,
     pricingCost: resolved?.pricingCost ?? null,
     taxPercent: resolved?.taxPercent ?? null,
     createdAt: product.createdAt.toISOString(),

@@ -88,7 +88,12 @@ export type OrderSearchOrderItem = {
   unit_price?: number;
   currency_id?: string;
   sale_fee?: number;
-  item?: { id?: string };
+  item?: {
+    id?: string;
+    seller_sku?: string;
+    seller_custom_field?: string;
+  };
+  seller_custom_field?: string;
   /** Em algumas respostas o id do anúncio vem no nível da linha */
   item_id?: string;
 };

@@ -146,6 +146,12 @@ model WarehouseStock {
   @@map("warehouse_stock")
 }
 
+enum TaxRegime {
+  LUCRO_REAL     @map("lucro_real")
+  LUCRO_PRESUMIDO @map("lucro_presumido")
+  SIMPLES        @map("simples")
+}
+
 /// Cadastro fiscal/comercial por SKU (chave = SKU do anúncio ML).
 model Product {
   sku                 String   @id
@@ -158,6 +164,8 @@ model Product {
   extraCosts          Decimal  @default(0) @map("extra_costs") @db.Decimal(18, 2)
   isMonophasic        Boolean  @default(false) @map("is_monophasic")
   saleIcmsPercent     Decimal  @map("sale_icms_percent") @db.Decimal(8, 4)
+  isImported          Boolean  @default(false) @map("is_imported")
+  importContentPercent Decimal @default(0) @map("import_content_percent") @db.Decimal(8, 4)
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
@@ -168,6 +176,12 @@ model Product {
 model CompanyTaxSettings {
   id                            String   @id @default("default")
   pisCofinsPercent              Decimal  @map("pis_cofins_percent") @db.Decimal(8, 4)
+  taxRegime                     TaxRegime @default(LUCRO_REAL) @map("tax_regime")
+  originUf                      String   @default("SP") @map("origin_uf")
+  pisRatePercent                Decimal  @default(1.65) @map("pis_rate_percent") @db.Decimal(8, 4)
+  cofinsRatePercent             Decimal  @default(7.6) @map("cofins_rate_percent") @db.Decimal(8, 4)
+  excludeIcmsFromPisCofinsBase  Boolean  @default(true) @map("exclude_icms_from_pis_cofins_base")
+  irpjAdditionalThreshold       Decimal  @default(20000) @map("irpj_additional_threshold") @db.Decimal(18, 2)
   wholesaleLevel1ReductionPercent Decimal @default(10) @map("wholesale_level1_reduction_percent") @db.Decimal(8, 4)
   wholesaleLevel2ReductionPercent Decimal @default(15) @map("wholesale_level2_reduction_percent") @db.Decimal(8, 4)
   wholesaleLevel3ReductionPercent Decimal @default(20) @map("wholesale_level3_reduction_percent") @db.Decimal(8, 4)
@@ -177,6 +191,54 @@ model CompanyTaxSettings {
   updatedAt                     DateTime @updatedAt @map("updated_at")
 
   @@map("company_tax_settings")
+}
+
+/// Alíquota interna de ICMS + FCP por UF de destino (configurável).
+model IcmsInternalRate {
+  uf           String   @id
+  aliquotaBase Decimal  @map("aliquota_base") @db.Decimal(8, 4)
+  fcp          Decimal  @default(0) @db.Decimal(8, 4)
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("icms_internal_rates")
+}
+
+/// Vigência CBS/IBS por ano (informativo / reforma tributária).
+model CbsIbsVigencia {
+  year             Int      @id
+  cbsRate          Decimal? @map("cbs_rate") @db.Decimal(8, 4)
+  ibsEstadualRate  Decimal? @map("ibs_estadual_rate") @db.Decimal(8, 4)
+  ibsMunicipalRate Decimal? @map("ibs_municipal_rate") @db.Decimal(8, 4)
+  notes            String?  @db.Text
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("cbs_ibs_vigencia")
+}
+
+/// Snapshot mensal do relatório tributário por vendedor ML.
+model TaxReportMonthSnapshot {
+  id         String   @id @default(cuid())
+  sellerId   Int      @map("seller_id")
+  year       Int
+  month      Int
+  generatedAt DateTime @map("generated_at")
+  payload    Json
+
+  @@unique([sellerId, year, month])
+  @@index([year, month])
+  @@map("tax_report_month_snapshots")
+}
+
+/// Cache de verificação de contribuinte ICMS por CNPJ.
+model TaxpayerVerificationCache {
+  cnpj          String   @id
+  isContributor Boolean  @map("is_contributor")
+  provider      String
+  expiresAt     DateTime @map("expires_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([expiresAt])
+  @@map("taxpayer_verification_cache")
 }
 
 /// Avisos de estoque que já receberam ação operacional (ex.: compra feita).

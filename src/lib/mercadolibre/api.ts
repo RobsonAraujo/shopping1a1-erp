@@ -203,7 +203,7 @@ export type PaidOrderLine = {
   revenue: number;
 };
 
-async function fetchOrdersInDateRange(
+export async function fetchOrdersInDateRange(
   accessToken: string,
   sellerId: number,
   from: Date,
@@ -285,11 +285,29 @@ export async function fetchPaidOrderLinesInDateRange(
   to: Date,
   dateField: SalesWindowDateField = stockPlanningConfig.salesWindowDateField,
 ): Promise<PaidOrderLine[]> {
+  const orders = await fetchPaidOrdersByPeriod(
+    accessToken,
+    sellerId,
+    from,
+    to,
+    dateField,
+  );
+  return paidOrderLinesFromOrders(orders);
+}
+
+/** Pedidos pagos no período com paginação completa (`display=complete`). */
+export async function fetchPaidOrdersByPeriod(
+  accessToken: string,
+  sellerId: number,
+  from: Date,
+  to: Date,
+  dateField: SalesWindowDateField = stockPlanningConfig.salesWindowDateField,
+): Promise<OrderSearchOrder[]> {
   const orders = await fetchOrdersInDateRange(accessToken, sellerId, from, to, {
     dateField,
     orderStatus: "paid",
   });
-  return paidOrderLinesFromOrders(orders);
+  return orders.filter((order) => order.status === "paid");
 }
 
 export async function fetchCancelledOrderRevenueInDateRange(

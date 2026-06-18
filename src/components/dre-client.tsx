@@ -6,6 +6,7 @@ import { DreCostItemsModal } from "@/components/dre-fixed-costs-modal";
 import { DreYearTable } from "@/components/dre-year-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { FormSelect } from "@/components/ui/form-select";
 import { readApiError } from "@/lib/api-client-error";
 import {
   formatFinancialMoney,
@@ -27,9 +28,14 @@ export function DreClient() {
   const [syncingMonths, setSyncingMonths] = useState<Set<number>>(new Set());
   const [syncingAll, setSyncingAll] = useState(false);
 
-  const yearOptions = useMemo(() => {
-    return [currentYear - 1, currentYear, currentYear + 1];
-  }, [currentYear]);
+  const yearOptions = useMemo(
+    () =>
+      [currentYear - 1, currentYear, currentYear + 1].map((y) => ({
+        value: String(y),
+        label: String(y),
+      })),
+    [currentYear],
+  );
 
   const loadYear = useCallback(async (targetYear: number) => {
     setLoading(true);
@@ -134,22 +140,15 @@ export function DreClient() {
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="text-xs font-medium text-[var(--muted-foreground)]" htmlFor="dre-year">
-            Ano
-          </label>
-          <select
+        <div className="flex flex-wrap items-end gap-2">
+          <FormSelect
             id="dre-year"
-            value={year}
-            onChange={(e) => setYear(Number(e.target.value))}
-            className="rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1.5 text-xs"
-          >
-            {yearOptions.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
+            label="Ano"
+            value={String(year)}
+            onValueChange={(value) => setYear(Number(value))}
+            options={yearOptions}
+            triggerClassName="h-9 w-[6.5rem] text-xs"
+          />
         </div>
         <div className="flex flex-wrap gap-1.5">
           <Button
