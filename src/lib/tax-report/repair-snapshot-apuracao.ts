@@ -42,10 +42,18 @@ function enrichTransacao(
 
 function needsApuracaoRepair(payload: TaxReportPayload): boolean {
   if (!payload.consolidado.apuracao) return true;
+  if (
+    payload.consolidado.irpjEstimado != null ||
+    payload.consolidado.margemOperacional == null
+  ) {
+    return true;
+  }
 
   const detalhes = collectDetalhes(payload).filter((d) => d.incluidoNaApuracao);
   return detalhes.some(
     (d) =>
+      d.irpjCsll != null ||
+      d.margemOperacionalEstimada == null ||
       d.icmsCreditoCompra == null ||
       d.pisCofins?.baseCredito === undefined ||
       (d.transacao as TransacaoVenda & { saleIcmsPercent?: number })

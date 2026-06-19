@@ -75,15 +75,6 @@ export type IcmsDifalBreakdown = {
   icmsStNaCompra?: boolean;
 };
 
-export type IrpjCsllBreakdown = {
-  baseLucro: number;
-  irpjBase: number;
-  csll: number;
-  irpjAdicional: number;
-  irpjTotal: number;
-  isEstimativaGerencial: true;
-};
-
 export type CbsIbsInformativo = {
   year: number;
   cbs: number | null;
@@ -99,10 +90,14 @@ export type DetalhamentoTributario = {
   pisCofins: PisCofinsBreakdown | null;
   icmsDifal: IcmsDifalBreakdown | null;
   icmsCreditoCompra: IcmsCreditoCompraBreakdown | null;
-  irpjCsll: IrpjCsllBreakdown | null;
   cbsIbs: CbsIbsInformativo | null;
+  /** PIS/COFINS líquido + ICMS total (imposto operacional). */
   impostoTotal: number;
-  margemLiquidaEstimada: number;
+  margemOperacionalEstimada: number;
+  /** @deprecated Snapshots antigos — use margemOperacionalEstimada */
+  margemLiquidaEstimada?: number;
+  /** @deprecated Snapshots antigos — removido do cálculo */
+  irpjCsll?: unknown;
   incluidoNaApuracao: boolean;
   memoriaCalculo: string[];
 };
@@ -157,10 +152,14 @@ export type RelatorioConsolidado = {
   /** DIFAL (UF destino, EC 87/2015). Ausente em snapshots antigos. */
   difalTotal?: number;
   icmsDifalTotal: number;
-  irpjEstimado: number;
-  csllEstimado: number;
   cbsIbsInformativoTotal: number;
-  margemLiquida: number;
+  margemOperacional: number;
+  /** @deprecated Snapshots antigos — use margemOperacional */
+  margemLiquida?: number;
+  /** @deprecated Snapshots antigos — removido do cálculo */
+  irpjEstimado?: number;
+  /** @deprecated Snapshots antigos — removido do cálculo */
+  csllEstimado?: number;
   transacoesIncluidas: number;
   transacoesExcluidas: number;
   transacoesSemBillingInfo: number;
@@ -191,7 +190,6 @@ export type TaxCompanyConfig = {
   pisRatePercent: number;
   cofinsRatePercent: number;
   excludeIcmsFromPisCofinsBase: boolean;
-  irpjAdditionalThreshold: number;
 };
 
 export type IcmsRateRow = {

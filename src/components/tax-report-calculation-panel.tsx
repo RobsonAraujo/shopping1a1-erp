@@ -5,6 +5,9 @@ import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { formatFinancialMoney, formatFinancialPercent, percentOfSale } from "@/lib/financial-margin";
+import {
+  margemOperacionalEstimadaLinha,
+} from "@/lib/tax-report/imposto-operacional";
 import type { DetalhamentoTributario } from "@/lib/tax-report/types";
 import { cn } from "@/lib/utils";
 
@@ -73,10 +76,11 @@ export function TaxReportCalculationPanel({
   const icms = row.icmsDifal;
   const pis = row.pisCofins;
   const icmsCred = row.icmsCreditoCompra;
-  const irpj = row.irpjCsll;
 
-  const impostoPercent = percentOfSale(row.impostoTotal, t.receitaBruta);
-  const margemPercent = percentOfSale(row.margemLiquidaEstimada, t.receitaBruta);
+  const impostoOperacional = row.impostoTotal;
+  const impostoPercent = percentOfSale(impostoOperacional, t.receitaBruta);
+  const margemOperacional = margemOperacionalEstimadaLinha(row);
+  const margemPercent = percentOfSale(margemOperacional, t.receitaBruta);
 
   const saidaPct =
     icms?.aliquotaSaidaEfetiva != null
@@ -304,33 +308,16 @@ export function TaxReportCalculationPanel({
             )}
           </MemoriaSection>
         ) : null}
-
-        {irpj ? (
-          <MemoriaSection title="IRPJ / CSLL (estimativa)">
-            <MemoriaRow
-              label="Base de lucro"
-              value={formatFinancialMoney(irpj.baseLucro)}
-            />
-            <MemoriaRow
-              label="IRPJ 15%"
-              value={formatFinancialMoney(irpj.irpjTotal)}
-            />
-            <MemoriaRow label="CSLL 9%" value={formatFinancialMoney(irpj.csll)} />
-            <p className="pt-1 text-[10px] text-[var(--muted-foreground)]">
-              Estimativa gerencial — não substitui LALUR/e-Lalur.
-            </p>
-          </MemoriaSection>
-        ) : null}
       </div>
 
       {row.incluidoNaApuracao ? (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm">
           <span className="text-xs text-[var(--muted-foreground)]">
-            Imposto total estimado
+            Imposto operacional
           </span>
           <span className="flex flex-col items-end text-right tabular-nums">
             <span className="font-semibold">
-              {formatFinancialMoney(row.impostoTotal)}
+              {formatFinancialMoney(impostoOperacional)}
             </span>
             <span className="text-xs text-[var(--muted-foreground)]">
               {formatFinancialPercent(impostoPercent)} da receita
@@ -338,10 +325,10 @@ export function TaxReportCalculationPanel({
           </span>
           <span className="flex w-full flex-col items-end text-right tabular-nums sm:ml-auto sm:w-auto">
             <span className="text-xs text-[var(--muted-foreground)]">
-              Margem líquida est.
+              Margem operacional
             </span>
             <span className="font-medium">
-              {formatFinancialMoney(row.margemLiquidaEstimada)}
+              {formatFinancialMoney(margemOperacional)}
             </span>
             <span className="text-xs text-[var(--muted-foreground)]">
               {formatFinancialPercent(margemPercent)} da receita

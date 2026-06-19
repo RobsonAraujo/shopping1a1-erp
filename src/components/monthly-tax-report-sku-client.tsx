@@ -35,7 +35,7 @@ function SkuSummaryCard({ data }: { data: SkuAggregation }) {
   const impostoOperacionalPercentual = skuImpostoOperacionalPercentual(data);
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <Card className="p-4">
         <p className="text-xs text-[var(--muted-foreground)]">Vendas</p>
         <p className="mt-1 text-xl font-semibold tabular-nums">
@@ -55,24 +55,13 @@ function SkuSummaryCard({ data }: { data: SkuAggregation }) {
         </p>
       </Card>
       <Card className="p-4">
-        <p className="text-xs text-[var(--muted-foreground)]">Imposto total</p>
-        <p className="mt-1 text-xl font-semibold tabular-nums text-[var(--primary)]">
-          {formatFinancialMoney(data.impostoTotal)}
-        </p>
-        <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-          Média {formatFinancialMoney(data.impostoMedioPorVenda)} (
-          {formatFinancialPercent(data.impostoMedioPercentual)} s/ receita)
-        </p>
-      </Card>
-      <Card className="p-4">
         <p className="text-xs text-[var(--muted-foreground)]">Imp. operacional</p>
-        <p className="mt-1 text-xl font-semibold tabular-nums">
+        <p className="mt-1 text-xl font-semibold tabular-nums text-[var(--primary)]">
           {formatFinancialMoney(impostoOperacionalTotal)}
         </p>
         <p className="mt-1 text-xs text-[var(--muted-foreground)]">
           Média {formatFinancialMoney(impostoOperacionalMedio)} (
-          {formatFinancialPercent(impostoOperacionalPercentual)} s/ receita) · sem
-          IRPJ/CSLL
+          {formatFinancialPercent(impostoOperacionalPercentual)} s/ receita)
         </p>
       </Card>
     </div>

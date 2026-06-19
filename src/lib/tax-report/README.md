@@ -1,6 +1,6 @@
 # Relatório Tributário Mensal
 
-Módulo de apuração fiscal por venda (Mercado Livre) para **Lucro Real** — PIS/COFINS não-cumulativo, ICMS/DIFAL e estimativa gerencial de IRPJ/CSLL.
+Módulo de apuração fiscal por venda (Mercado Livre) para **Lucro Real** — PIS/COFINS não-cumulativo e ICMS/DIFAL.
 
 ## Base legal (resumo)
 
@@ -58,7 +58,6 @@ O status de contribuinte ICMS vem do campo `taxpayer_type` do `billing_info` do 
 
 - Apenas **Lucro Real** na v1
 - Alíquotas internas: validar periodicamente com CONFAZ (seed inicial com TODO)
-- IRPJ/CSLL: estimativa gerencial, não substitui LALUR
 - CBS/IBS 2026: informativo, compensado com PIS/COFINS no mesmo período
 - DRE existente continua com % simplificado por SKU (não substituído)
 

@@ -76,8 +76,6 @@ export function agregarPorSku(
 
 export function consolidarRelatorio(
   transacoes: DetalhamentoTributario[],
-  irpjTotal: number,
-  csllTotal: number,
 ): RelatorioConsolidado {
   const incluidas = transacoes.filter((t) => t.incluidoNaApuracao);
   const excluidas = transacoes.filter((t) => !t.incluidoNaApuracao);
@@ -107,7 +105,7 @@ export function consolidarRelatorio(
       0,
     ),
   );
-  const impostosSemIrpj = roundMoney(pisCofinsLiquido + icmsDifalTotal);
+  const impostosOperacionais = roundMoney(pisCofinsLiquido + icmsDifalTotal);
   const cmvTotal = roundMoney(
     incluidas.reduce(
       (s, t) =>
@@ -118,8 +116,8 @@ export function consolidarRelatorio(
     ),
   );
 
-  const margemLiquida = roundMoney(
-    faturamento - cmvTotal - impostosSemIrpj - irpjTotal - csllTotal,
+  const margemOperacional = roundMoney(
+    faturamento - cmvTotal - impostosOperacionais,
   );
 
   return {
@@ -129,10 +127,8 @@ export function consolidarRelatorio(
     icmsSemDifalTotal,
     difalTotal,
     icmsDifalTotal,
-    irpjEstimado: irpjTotal,
-    csllEstimado: csllTotal,
     cbsIbsInformativoTotal,
-    margemLiquida,
+    margemOperacional,
     transacoesIncluidas: incluidas.length,
     transacoesExcluidas: excluidas.length,
     transacoesSemBillingInfo: semBilling.length,

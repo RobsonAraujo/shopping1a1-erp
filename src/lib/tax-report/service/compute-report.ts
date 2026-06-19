@@ -14,11 +14,6 @@ import {
   icmsDestacadoParaBase,
 } from "@/lib/tax-report/calculators/icms-difal";
 import {
-  buildIrpjMemoria,
-  consolidarIrpjCslMensal,
-  estimarIrpjCslPorTransacao,
-} from "@/lib/tax-report/calculators/irpj-csll";
-import {
   buildPisCofinsMemoria,
   calcularPisCofins,
 } from "@/lib/tax-report/calculators/pis-cofins";
@@ -49,10 +44,9 @@ export function calcularDetalhamentoTransacao(input: {
       pisCofins: null,
       icmsDifal: null,
       icmsCreditoCompra: null,
-      irpjCsll: null,
       cbsIbs: null,
       impostoTotal: 0,
-      margemLiquidaEstimada: 0,
+      margemOperacionalEstimada: 0,
       incluidoNaApuracao: false,
       memoriaCalculo: [
         transacao.dadosFiscaisIndisponiveis
@@ -79,25 +73,15 @@ export function calcularDetalhamentoTransacao(input: {
     transacao.extraCostsUnitario * transacao.quantidade;
   const impostosOperacionais =
     (pisCofins?.liquido ?? 0) + (icmsDifal?.icmsTotal ?? 0);
-  const irpjCsll = estimarIrpjCslPorTransacao({
-    receitaBruta: transacao.receitaBruta,
-    cmvTotal,
-    impostosOperacionais,
-  });
   const cbsIbs = calcularCbsIbsInformativo(
     transacao.receitaBruta,
     year,
     cbsIbsVigencia,
   );
 
-  const impostoTotal = roundMoney(
-    (pisCofins?.liquido ?? 0) +
-      (icmsDifal?.icmsTotal ?? 0) +
-      irpjCsll.irpjTotal +
-      irpjCsll.csll,
-  );
-  const margemLiquidaEstimada = roundMoney(
-    transacao.receitaBruta - cmvTotal - impostoTotal,
+  const impostoTotal = roundMoney(impostosOperacionais);
+  const margemOperacionalEstimada = roundMoney(
+    transacao.receitaBruta - cmvTotal - impostosOperacionais,
   );
 
   const memoriaCalculo = [
@@ -105,7 +89,7 @@ export function calcularDetalhamentoTransacao(input: {
     ...(icmsDifal ? buildIcmsMemoria(icmsDifal) : []),
     ...buildIcmsCreditoMemoria(icmsCreditoCompra),
     ...(pisCofins ? buildPisCofinsMemoria(pisCofins, config) : []),
-    ...buildIrpjMemoria(irpjCsll),
+    `Margem operacional: R$ ${margemOperacionalEstimada.toFixed(2)}`,
   ];
 
   return {
@@ -113,10 +97,9 @@ export function calcularDetalhamentoTransacao(input: {
     pisCofins,
     icmsDifal,
     icmsCreditoCompra,
-    irpjCsll,
     cbsIbs,
     impostoTotal,
-    margemLiquidaEstimada,
+    margemOperacionalEstimada,
     incluidoNaApuracao: true,
     memoriaCalculo,
   };
@@ -156,51 +139,15 @@ export function calcularRelatorioFromTransacoes(input: {
     });
   });
 
-  const basesLucro = detalhes
-    .filter((d) => d.incluidoNaApuracao)
-    .map((d) => d.irpjCsll?.baseLucro ?? 0);
-  const irpjCsllMensal = consolidarIrpjCslMensal(basesLucro, input.config);
-
-  const detalhesComIrpj = detalhes.map((d) => {
-    if (!d.incluidoNaApuracao || !d.irpjCsll) return d;
-    return {
-      ...d,
-      irpjCsll: {
-        ...d.irpjCsll,
-        irpjAdicional: 0,
-        irpjTotal: d.irpjCsll.irpjBase,
-      },
-      impostoTotal: roundMoney(
-        (d.pisCofins?.liquido ?? 0) +
-          (d.icmsDifal?.icmsTotal ?? 0) +
-          d.irpjCsll.irpjBase +
-          d.irpjCsll.csll,
-      ),
-      margemLiquidaEstimada: roundMoney(
-        d.transacao.receitaBruta -
-          (d.transacao.custoAquisicaoUnitario ?? 0) * d.transacao.quantidade -
-          d.transacao.extraCostsUnitario * d.transacao.quantidade -
-          ((d.pisCofins?.liquido ?? 0) +
-            (d.icmsDifal?.icmsTotal ?? 0) +
-            d.irpjCsll.irpjBase +
-            d.irpjCsll.csll),
-      ),
-    };
-  });
-
-  const porSku = agregarPorSku(detalhesComIrpj);
-  const consolidado = consolidarRelatorio(
-    detalhesComIrpj,
-    irpjCsllMensal.irpjTotal,
-    irpjCsllMensal.csllTotal,
-  );
+  const porSku = agregarPorSku(detalhes);
+  const consolidado = consolidarRelatorio(detalhes);
 
   return {
     year: input.year,
     month: input.month,
     consolidado,
     porSku,
-    transacoes: detalhesComIrpj,
+    transacoes: detalhes,
     overrides: input.overrides,
     meta: input.meta,
   };

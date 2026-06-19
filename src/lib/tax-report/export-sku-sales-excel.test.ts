@@ -70,17 +70,9 @@ function includedRow(
       aliquotaPercent: 18,
       creditoTotal: 9,
     },
-    irpjCsll: {
-      baseLucro: 100,
-      irpjBase: 15,
-      csll: 9,
-      irpjAdicional: 0,
-      irpjTotal: 15,
-      isEstimativaGerencial: true,
-    },
     cbsIbs: null,
-    impostoTotal: 65.1,
-    margemLiquidaEstimada: 84.9,
+    impostoTotal: 41.1,
+    margemOperacionalEstimada: 78.9,
     incluidoNaApuracao: true,
     memoriaCalculo: ["Linha 1", "Linha 2"],
     ...overrides,
@@ -105,12 +97,9 @@ describe("buildSkuSalesExcelRows", () => {
     assert.equal(row.ICMS, 24);
     assert.equal(row["ICMS crédito compra"], 9);
     assert.equal(row.DIFAL, 6);
-    assert.equal(row["IRPJ+CSLL"], 24);
     assert.equal(row["Imp. oper. (R$)"], 41.1);
     assert.equal(row["Imp. oper. (%)"], 20.55);
-    assert.equal(row["Imposto (R$)"], 65.1);
-    assert.equal(row["Imposto (%)"], 32.55);
-    assert.equal(row.Margem, 84.9);
+    assert.equal(row["Margem oper. (R$)"], 78.9);
     assert.equal(row["Incluído na apuração"], "Sim");
     assert.equal(row["Memória de cálculo"], "Linha 1\nLinha 2");
   });
@@ -120,7 +109,7 @@ describe("buildSkuSalesExcelRows", () => {
       includedRow({
         incluidoNaApuracao: false,
         impostoTotal: 0,
-        margemLiquidaEstimada: 0,
+        margemOperacionalEstimada: 0,
         memoriaCalculo: ["Excluída"],
       }),
     ]);
@@ -128,12 +117,9 @@ describe("buildSkuSalesExcelRows", () => {
     assert.equal(row["PIS/COFINS"], null);
     assert.equal(row.ICMS, null);
     assert.equal(row.DIFAL, null);
-    assert.equal(row["IRPJ+CSLL"], null);
     assert.equal(row["Imp. oper. (R$)"], null);
     assert.equal(row["Imp. oper. (%)"], null);
-    assert.equal(row["Imposto (R$)"], null);
-    assert.equal(row["Imposto (%)"], null);
-    assert.equal(row.Margem, null);
+    assert.equal(row["Margem oper. (R$)"], null);
     assert.equal(row["Incluído na apuração"], "Não");
     assert.equal(row["Memória de cálculo"], "Excluída");
   });

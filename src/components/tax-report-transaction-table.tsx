@@ -16,18 +16,18 @@ import {
 } from "@/lib/financial-margin";
 import type { DetalhamentoTributario } from "@/lib/tax-report/types";
 import { icmsSemDifal } from "@/lib/tax-report/calculators/icms-difal";
-import { impostoOperacionalLinha } from "@/lib/tax-report/imposto-operacional";
+import { impostoOperacionalLinha, margemOperacionalEstimadaLinha } from "@/lib/tax-report/imposto-operacional";
 import { TaxReportCalculationPanel } from "@/components/tax-report-calculation-panel";
 import { cn } from "@/lib/utils";
 
 const ROW_HEIGHT = 52;
 
-/** 12 colunas — cabe em max-w-7xl sem scroll horizontal. */
+/** 10 colunas — cabe em max-w-7xl sem scroll horizontal. */
 const GRID_COLS_DETAIL =
-  "5rem 3.25rem minmax(4.25rem,0.55fr) minmax(4rem,0.5fr) minmax(4.5rem,1fr) minmax(4.5rem,1fr) minmax(4rem,1fr) minmax(3.75rem,1fr) minmax(4rem,1fr) minmax(4.5rem,1fr) minmax(4.5rem,1fr) minmax(4.25rem,1fr)";
+  "5rem 3.25rem minmax(4.25rem,0.55fr) minmax(4rem,0.5fr) minmax(4.5rem,1fr) minmax(4.5rem,1fr) minmax(4rem,1fr) minmax(3.75rem,1fr) minmax(4.5rem,1fr) minmax(4.25rem,1fr)";
 
 const GRID_COLS_WITH_SKU =
-  "5rem minmax(4rem,1fr) 3.25rem minmax(4.25rem,0.55fr) minmax(4rem,0.5fr) minmax(4.5rem,1fr) minmax(4.5rem,1fr) minmax(4rem,1fr) minmax(3.75rem,1fr) minmax(4rem,1fr) minmax(4.5rem,1fr) minmax(4.5rem,1fr) minmax(4.25rem,1fr)";
+  "5rem minmax(4rem,1fr) 3.25rem minmax(4.25rem,0.55fr) minmax(4rem,0.5fr) minmax(4.5rem,1fr) minmax(4.5rem,1fr) minmax(4rem,1fr) minmax(3.75rem,1fr) minmax(4.5rem,1fr) minmax(4.25rem,1fr)";
 
 function tableGridStyle(showSku: boolean): CSSProperties {
   return {
@@ -115,26 +115,14 @@ function TransactionTableHeader({ showSku }: { showSku: boolean }) {
       </span>
       <span className="px-2 py-2.5 text-right whitespace-nowrap">
         <TaxReportHeaderWithTip
-          label="IRPJ+CSLL"
-          tip="Estimativa por venda; adicional IRPJ 10% no consolidado mensal."
-        />
-      </span>
-      <span className="px-2 py-2.5 text-right whitespace-nowrap">
-        <TaxReportHeaderWithTip
           label="Imp. oper."
-          tip="PIS/COFINS + ICMS por venda — sem IRPJ/CSLL. Percentual sobre a receita bruta."
+          tip="PIS/COFINS + ICMS por venda. Percentual sobre a receita bruta."
         />
       </span>
       <span className="px-2 py-2.5 text-right whitespace-nowrap">
         <TaxReportHeaderWithTip
-          label="Imposto"
-          tip="Imposto total (PIS/COFINS + ICMS + IRPJ+CSLL) e percentual sobre a receita bruta."
-        />
-      </span>
-      <span className="px-2 py-2.5 text-right whitespace-nowrap">
-        <TaxReportHeaderWithTip
-          label="Margem"
-          tip="Receita menos CMV e impostos estimados nesta venda."
+          label="Margem oper."
+          tip="Receita menos CMV e impostos operacionais nesta venda."
         />
       </span>
     </div>
@@ -154,8 +142,9 @@ function TransactionRowCells({
     impostoOperacional != null
       ? percentOfSale(impostoOperacional, t.receitaBruta)
       : null;
-  const impostoPercent = row.incluidoNaApuracao
-    ? percentOfSale(row.impostoTotal, t.receitaBruta)
+  const margemOperacional = margemOperacionalEstimadaLinha(row);
+  const margemPercent = row.incluidoNaApuracao
+    ? percentOfSale(margemOperacional, t.receitaBruta)
     : null;
 
   return (
@@ -213,11 +202,6 @@ function TransactionRowCells({
       <span className="px-2 text-right tabular-nums whitespace-nowrap">
         {formatFinancialMoney(row.icmsDifal?.difal ?? null)}
       </span>
-      <span className="px-2 text-right tabular-nums whitespace-nowrap">
-        {formatFinancialMoney(
-          (row.irpjCsll?.irpjTotal ?? 0) + (row.irpjCsll?.csll ?? 0),
-        )}
-      </span>
       <span className="flex flex-col items-end px-2 text-right tabular-nums">
         <span className="whitespace-nowrap">
           {formatFinancialPercent(impostoOperacionalPercent)}
@@ -228,14 +212,11 @@ function TransactionRowCells({
       </span>
       <span className="flex flex-col items-end px-2 text-right tabular-nums">
         <span className="whitespace-nowrap">
-          {formatFinancialPercent(impostoPercent)}
+          {formatFinancialPercent(margemPercent)}
         </span>
         <span className="text-[10px] text-[var(--muted-foreground)]">
-          {formatFinancialMoney(row.incluidoNaApuracao ? row.impostoTotal : null)}
+          {formatFinancialMoney(row.incluidoNaApuracao ? margemOperacional : null)}
         </span>
-      </span>
-      <span className="px-2 text-right tabular-nums whitespace-nowrap">
-        {formatFinancialMoney(row.margemLiquidaEstimada)}
       </span>
     </>
   );

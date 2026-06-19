@@ -9,7 +9,6 @@ const config: TaxCompanyConfig = {
   pisRatePercent: 1.65,
   cofinsRatePercent: 7.6,
   excludeIcmsFromPisCofinsBase: true,
-  irpjAdditionalThreshold: 20_000,
 };
 
 function tx(overrides: Partial<TransacaoVenda> = {}): TransacaoVenda {

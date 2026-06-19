@@ -1,5 +1,9 @@
 import { roundMoney } from "@/lib/financial-margin";
-import type { DetalhamentoTributario, SkuAggregation } from "@/lib/tax-report/types";
+import type {
+  DetalhamentoTributario,
+  RelatorioConsolidado,
+  SkuAggregation,
+} from "@/lib/tax-report/types";
 
 /** PIS/COFINS líquido + ICMS — sem IRPJ/CSLL. */
 export function impostoOperacionalLinha(
@@ -50,4 +54,16 @@ export function skuImpostoOperacionalPercentual(sku: SkuAggregation): number {
   return roundMoney(
     (skuImpostoOperacionalTotal(sku) / sku.receitaTotal) * 100,
   );
+}
+
+export function margemOperacionalEstimadaLinha(
+  row: DetalhamentoTributario,
+): number {
+  return row.margemOperacionalEstimada ?? row.margemLiquidaEstimada ?? 0;
+}
+
+export function margemOperacionalConsolidado(
+  consolidado: RelatorioConsolidado,
+): number {
+  return consolidado.margemOperacional ?? consolidado.margemLiquida ?? 0;
 }

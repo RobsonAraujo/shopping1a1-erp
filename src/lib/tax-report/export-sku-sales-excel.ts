@@ -1,6 +1,9 @@
 import * as XLSX from "xlsx";
 import { percentOfSale } from "@/lib/financial-margin";
-import { impostoOperacionalLinha } from "@/lib/tax-report/imposto-operacional";
+import {
+  impostoOperacionalLinha,
+  margemOperacionalEstimadaLinha,
+} from "@/lib/tax-report/imposto-operacional";
 import { icmsSemDifal } from "@/lib/tax-report/calculators/icms-difal";
 import type { DetalhamentoTributario } from "@/lib/tax-report/types";
 
@@ -19,12 +22,9 @@ export type SkuSalesExcelRow = {
   ICMS: number | null;
   "ICMS crédito compra": number | null;
   DIFAL: number | null;
-  "IRPJ+CSLL": number | null;
   "Imp. oper. (R$)": number | null;
   "Imp. oper. (%)": number | null;
-  "Imposto (R$)": number | null;
-  "Imposto (%)": number | null;
-  Margem: number | null;
+  "Margem oper. (R$)": number | null;
   "Incluído na apuração": string;
   "Memória de cálculo": string;
 };
@@ -43,9 +43,6 @@ function mapDetalhamentoToExcelRow(row: DetalhamentoTributario): SkuSalesExcelRo
     impostoOperacional != null
       ? percentOfSale(impostoOperacional, t.receitaBruta)
       : null;
-  const impostoPercent = row.incluidoNaApuracao
-    ? percentOfSale(row.impostoTotal, t.receitaBruta)
-    : null;
 
   return {
     Data: t.orderDate.slice(0, 10),
@@ -78,14 +75,11 @@ function mapDetalhamentoToExcelRow(row: DetalhamentoTributario): SkuSalesExcelRo
     DIFAL: row.incluidoNaApuracao
       ? (row.icmsDifal?.difal ?? null)
       : null,
-    "IRPJ+CSLL": row.incluidoNaApuracao
-      ? (row.irpjCsll?.irpjTotal ?? 0) + (row.irpjCsll?.csll ?? 0)
-      : null,
     "Imp. oper. (R$)": impostoOperacional,
     "Imp. oper. (%)": impostoOperacionalPercent,
-    "Imposto (R$)": row.incluidoNaApuracao ? row.impostoTotal : null,
-    "Imposto (%)": impostoPercent,
-    Margem: row.incluidoNaApuracao ? row.margemLiquidaEstimada : null,
+    "Margem oper. (R$)": row.incluidoNaApuracao
+      ? margemOperacionalEstimadaLinha(row)
+      : null,
     "Incluído na apuração": row.incluidoNaApuracao ? "Sim" : "Não",
     "Memória de cálculo": row.memoriaCalculo.join("\n"),
   };

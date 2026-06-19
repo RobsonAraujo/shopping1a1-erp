@@ -29,9 +29,6 @@ export async function loadTaxCompanyConfig(): Promise<TaxCompanyConfig> {
       ? decimalToNumber(row.cofinsRatePercent)
       : DEFAULT_COFINS_RATE,
     excludeIcmsFromPisCofinsBase: row?.excludeIcmsFromPisCofinsBase ?? true,
-    irpjAdditionalThreshold: row
-      ? decimalToNumber(row.irpjAdditionalThreshold)
-      : DEFAULT_IRPJ_ADDITIONAL_THRESHOLD,
   };
 }
 
@@ -114,7 +111,6 @@ export async function updateTaxCompanyConfig(
     pisRatePercent: decimalToNumber(row.pisRatePercent),
     cofinsRatePercent: decimalToNumber(row.cofinsRatePercent),
     excludeIcmsFromPisCofinsBase: row.excludeIcmsFromPisCofinsBase,
-    irpjAdditionalThreshold: decimalToNumber(row.irpjAdditionalThreshold),
   };
 }
 
