@@ -165,5 +165,9 @@ export function resolveProductPricing(
 }
 
 export function normalizeProductSku(sku: string): string {
-  return sku.trim();
+  return sku
+    .replace(/\u00A0/g, " ")
+    .replace(/[\t\r\n]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
 }

@@ -1,3 +1,4 @@
+import { normalizeProductSku } from "@/lib/product-pricing";
 import { resolveCanonicalSku, type SkuAliasMap } from "@/lib/product-sku-alias";
 import { loadSkuAliasMap } from "@/lib/product-sku-alias-data";
 import type { CustoProduto } from "@/lib/tax-report/enrichment/custo-produto";
@@ -17,16 +18,24 @@ import type {
 import { repairTaxReportPayloadSync } from "@/lib/tax-report/repair-snapshot-uf";
 
 function collectDetalhes(payload: TaxReportPayload): DetalhamentoTributario[] {
-  const root = payload.transacoes ?? [];
-  if (root.length > 0) return root;
-  return payload.porSku.flatMap((sku) => sku.transacoes);
+  const fromPorSku = payload.porSku.flatMap((sku) => sku.transacoes);
+  if (fromPorSku.length > 0) return fromPorSku;
+  return payload.transacoes ?? [];
 }
 
-function enrichTransacao(
+export function enrichTransacao(
   transacao: TransacaoVenda,
   custoBySku: Map<string, CustoProduto>,
+  aliasMap?: SkuAliasMap,
 ): TransacaoVenda {
-  const custo = custoBySku.get(transacao.sku);
+  const normalized = normalizeProductSku(transacao.sku);
+  let custo = custoBySku.get(normalized);
+  if (!custo && aliasMap) {
+    const canonical = resolveCanonicalSku(normalized, aliasMap);
+    if (canonical !== normalized) {
+      custo = custoBySku.get(canonical);
+    }
+  }
   if (!custo) return transacao;
 
   return {
@@ -78,6 +87,36 @@ function needsSkuAliasRepair(
   return false;
 }
 
+export function needsAliasCostRepair(
+  detalhes: DetalhamentoTributario[],
+  aliasMap: SkuAliasMap,
+): boolean {
+  if (aliasMap.size === 0) return false;
+
+  return detalhes.some((d) => {
+    if (!d.incluidoNaApuracao) return false;
+    const tx = d.transacao;
+    if (tx.unitCostNf != null && tx.unitCostNf > 0) return false;
+    const normalized = normalizeProductSku(tx.sku);
+    const canonical = resolveCanonicalSku(normalized, aliasMap);
+    return canonical !== normalized;
+  });
+}
+
+export function needsCostEnrichmentRepair(
+  detalhes: DetalhamentoTributario[],
+  custoBySku: Map<string, CustoProduto>,
+  aliasMap: SkuAliasMap,
+): boolean {
+  return detalhes.some((d) => {
+    if (!d.incluidoNaApuracao) return false;
+    const tx = d.transacao;
+    if (tx.unitCostNf != null && tx.unitCostNf > 0) return false;
+    const enriched = enrichTransacao(tx, custoBySku, aliasMap);
+    return enriched.unitCostNf != null && enriched.unitCostNf > 0;
+  });
+}
+
 function needsApuracaoRepair(
   payload: TaxReportPayload,
   aliasMap: SkuAliasMap,
@@ -92,6 +131,8 @@ function needsApuracaoRepair(
   }
 
   const detalhes = collectDetalhes(payload).filter((d) => d.incluidoNaApuracao);
+  if (needsAliasCostRepair(detalhes, aliasMap)) return true;
+
   return detalhes.some(
     (d) =>
       d.irpjCsll != null ||
@@ -110,21 +151,27 @@ export async function repairTaxReportPayload(
 ): Promise<TaxReportPayload> {
   const synced = repairTaxReportPayloadSync(payload);
   const aliasMap = await loadSkuAliasMap();
-  if (!needsApuracaoRepair(synced, aliasMap)) return synced;
-
   const detalhes = collectDetalhes(synced);
   if (detalhes.length === 0) return synced;
 
   const skus = [...new Set(detalhes.map((d) => d.transacao.sku).filter(Boolean))];
-  const [custoBySku, config, icmsRates, cbsIbsVigencia] = await Promise.all([
-    loadCustoBySkuMap(skus, aliasMap),
+  const custoBySku = await loadCustoBySkuMap(skus, aliasMap);
+  const needsCostRepair = needsCostEnrichmentRepair(
+    detalhes.filter((d) => d.incluidoNaApuracao),
+    custoBySku,
+    aliasMap,
+  );
+
+  if (!needsApuracaoRepair(synced, aliasMap) && !needsCostRepair) return synced;
+
+  const [config, icmsRates, cbsIbsVigencia] = await Promise.all([
     loadTaxCompanyConfig(),
     loadIcmsRatesMap(),
     loadCbsIbsVigencia(synced.year),
   ]);
 
   const transacoes = detalhes.map((d) =>
-    enrichTransacao(d.transacao, custoBySku),
+    enrichTransacao(d.transacao, custoBySku, aliasMap),
   );
 
   const recomputed = calcularRelatorioFromTransacoes({

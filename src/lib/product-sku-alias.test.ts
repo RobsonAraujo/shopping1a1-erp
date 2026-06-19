@@ -31,6 +31,13 @@ describe("resolveCanonicalSku", () => {
       "SKU-ATUAL",
     );
   });
+
+  it("resolves alias with double internal spaces to canonical", () => {
+    assert.equal(
+      resolveCanonicalSku("MXT  - Cabo Guitar 10m (Próprio)", aliasMap),
+      "MXT - Cabo 81063 10m (Próprio)",
+    );
+  });
 });
 
 describe("getAliasSkusForCanonical", () => {

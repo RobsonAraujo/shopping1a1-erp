@@ -11,6 +11,7 @@ import {
   revenueFromOrderItemLine,
   skuFromOrderLineWithFallback,
 } from "@/lib/tax-report/ml/sku-from-order-line";
+import { normalizeProductSku } from "@/lib/product-pricing";
 import type { CustoProduto } from "@/lib/tax-report/enrichment/custo-produto";
 import type {
   ManualFiscalOverride,
@@ -50,7 +51,7 @@ export function buildTransacoesFromOrder(input: {
     const transactionKey = `${orderId}-${itemId}-${sku}`;
     const override = input.overrides?.[transactionKey];
 
-    const custo = input.custoBySku.get(sku);
+    const custo = input.custoBySku.get(normalizeProductSku(sku));
     const quantidade =
       typeof line.quantity === "number" && line.quantity > 0 ? line.quantity : 1;
 

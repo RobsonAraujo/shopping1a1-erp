@@ -1,4 +1,5 @@
 import type { ItemBody } from "@/lib/mercadolibre/types";
+import { normalizeProductSku } from "@/lib/product-pricing";
 
 const NO_SUPPLIER_LABEL = "Sem fornecedor";
 
@@ -31,12 +32,14 @@ export function groupBySkuSupplier<T>(
 }
 
 export function getItemSku(item: ItemBody): string | null {
-  const directSku = item.seller_custom_field?.trim();
+  const directSku = item.seller_custom_field
+    ? normalizeProductSku(item.seller_custom_field)
+    : "";
   if (directSku) return directSku;
 
-  const attrSku = item.attributes
-    ?.find((attr) => attr.id === "SELLER_SKU")
-    ?.value_name?.trim();
+  const rawAttr = item.attributes?.find((attr) => attr.id === "SELLER_SKU")
+    ?.value_name;
+  const attrSku = rawAttr ? normalizeProductSku(rawAttr) : "";
   if (attrSku) return attrSku;
 
   return null;

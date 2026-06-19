@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   computeEffectivePricingCost,
   computePricingTaxPercent,
+  normalizeProductSku,
   resolveProductPricing,
 } from "@/lib/product-pricing";
 
@@ -83,5 +84,27 @@ describe("product-pricing", () => {
     assert.equal(resolved!.pricingCost, 104.35);
     assert.equal(resolved!.taxPercent, 12.25);
     assert.equal(resolved!.extraCosts, 0.5);
+  });
+});
+
+describe("normalizeProductSku", () => {
+  it("trims leading and trailing spaces", () => {
+    assert.equal(normalizeProductSku("  SKU-A  "), "SKU-A");
+  });
+
+  it("collapses internal multiple spaces", () => {
+    assert.equal(
+      normalizeProductSku("MXT  - Cabo Guitar 10m (Próprio)"),
+      "MXT - Cabo Guitar 10m (Próprio)",
+    );
+  });
+
+  it("normalizes tabs and newlines to single spaces", () => {
+    assert.equal(normalizeProductSku("MXT\t-\tCabo"), "MXT - Cabo");
+    assert.equal(normalizeProductSku("MXT\n- Cabo"), "MXT - Cabo");
+  });
+
+  it("converts NBSP to regular space", () => {
+    assert.equal(normalizeProductSku("MXT\u00A0- Cabo"), "MXT - Cabo");
   });
 });

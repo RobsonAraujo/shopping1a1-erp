@@ -20,4 +20,13 @@ describe("skuFromOrderLine", () => {
       "FALLBACK",
     );
   });
+
+  it("normalizes double internal spaces from ML sku", () => {
+    assert.equal(
+      skuFromOrderLine({
+        item: { seller_sku: "MXT  - Cabo Guitar 10m (Próprio)" },
+      }),
+      "MXT - Cabo Guitar 10m (Próprio)",
+    );
+  });
 });

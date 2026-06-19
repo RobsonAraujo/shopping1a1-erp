@@ -30,6 +30,34 @@ describe("findSkuInReport", () => {
     const found = findSkuInReport([row("SKU-ATUAL", ["SKU-LEGADO"])], "SKU-LEGADO");
     assert.equal(found?.sku, "SKU-ATUAL");
   });
+
+  it("prefers canonical row when legacy alias row still exists", () => {
+    const found = findSkuInReport(
+      [row("SKU-LEGADO"), row("SKU-ATUAL", ["SKU-LEGADO"])],
+      "SKU-LEGADO",
+    );
+    assert.equal(found?.sku, "SKU-ATUAL");
+  });
+
+  it("finds canonical row when URL alias has double internal spaces", () => {
+    const found = findSkuInReport(
+      [
+        row("MXT - Cabo 81063 10m (Próprio)", [
+          "MXT - Cabo Guitar 10m (Próprio)",
+        ]),
+      ],
+      "MXT  - Cabo Guitar 10m (Próprio)",
+    );
+    assert.equal(found?.sku, "MXT - Cabo 81063 10m (Próprio)");
+  });
+
+  it("trims URL sku with surrounding spaces", () => {
+    const found = findSkuInReport(
+      [row("SKU-ATUAL", ["SKU-LEGADO"])],
+      "  SKU-LEGADO  ",
+    );
+    assert.equal(found?.sku, "SKU-ATUAL");
+  });
 });
 
 describe("canonicalSkuFromReport", () => {

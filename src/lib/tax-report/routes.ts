@@ -1,3 +1,5 @@
+import { normalizeProductSku } from "@/lib/product-pricing";
+
 export const TAX_REPORT_MONTH_NAMES = [
   "Janeiro",
   "Fevereiro",
@@ -49,6 +51,7 @@ export function parseTaxReportSkuParams(params: {
     return null;
   }
 
-  if (!sku.trim()) return null;
-  return { year, month, sku };
+  const normalized = normalizeProductSku(sku);
+  if (!normalized) return null;
+  return { year, month, sku: normalized };
 }

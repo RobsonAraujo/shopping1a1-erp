@@ -44,7 +44,14 @@ export async function loadCustoBySkuMap(
     byCanonical.set(product.sku, custoProdutoFromView(view));
   }
 
-  return indexBySkuWithAliases(byCanonical, normalized, map);
+  const indexed = indexBySkuWithAliases(byCanonical, normalized, map);
+  for (const canonical of canonicalSkus) {
+    const value = byCanonical.get(canonical);
+    if (value !== undefined) {
+      indexed.set(canonical, value);
+    }
+  }
+  return indexed;
 }
 
 // TODO: integrar com o serviço real de precificação se divergir do cadastro de produtos.

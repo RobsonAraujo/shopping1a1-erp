@@ -1,16 +1,22 @@
-import { getMercadoLibreConfig } from "@/lib/mercadolibre/config";
 import type { OrderSearchOrderItem } from "@/lib/mercadolibre/types";
 import { getItemSku } from "@/lib/mercadolibre/item-sku";
+import { normalizeProductSku } from "@/lib/product-pricing";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 
+function normalizeOrderSku(sku: string | null | undefined): string | null {
+  if (!sku) return null;
+  const normalized = normalizeProductSku(sku);
+  return normalized || null;
+}
+
 export function skuFromOrderLine(line: OrderSearchOrderItem): string | null {
-  const fromItem = line.item?.seller_sku?.trim();
+  const fromItem = normalizeOrderSku(line.item?.seller_sku);
   if (fromItem) return fromItem;
 
-  const fromItemCustom = line.item?.seller_custom_field?.trim();
+  const fromItemCustom = normalizeOrderSku(line.item?.seller_custom_field);
   if (fromItemCustom) return fromItemCustom;
 
-  const fromLine = line.seller_custom_field?.trim();
+  const fromLine = normalizeOrderSku(line.seller_custom_field);
   if (fromLine) return fromLine;
 
   return null;
