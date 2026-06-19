@@ -12,8 +12,13 @@ import {
   type TaxReportProgressState,
 } from "@/components/tax-report-generation-overlay";
 import { TaxReportHeaderWithTip } from "@/components/tax-report-transaction-table";
+import {
+  ItemListSearch,
+  itemListSearchEmptyMessage,
+} from "@/components/item-list-search";
 import { readApiError } from "@/lib/api-client-error";
 import { formatFinancialMoney, formatFinancialPercent } from "@/lib/financial-margin";
+import { filterByItemListSearch } from "@/lib/item-list-search";
 import { getZonedYearMonth } from "@/lib/mercadolibre/revenue-periods";
 import {
   TAX_REPORT_MONTH_NAMES,
@@ -64,6 +69,7 @@ export function MonthlyTaxReportClient() {
   const [generateProgress, setGenerateProgress] =
     useState<TaxReportProgressState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const loadReport = useCallback(async () => {
     setLoading(true);
@@ -182,6 +188,19 @@ export function MonthlyTaxReportClient() {
     [],
   );
 
+  const filteredSkuRows = useMemo(
+    () =>
+      filterByItemListSearch(report?.porSku ?? [], searchQuery, (row) => ({
+        sku: row.sku,
+        extra: [
+          String(row.quantidadeVendas),
+          String(row.unidadesVendidas),
+          String(row.receitaTotal),
+        ],
+      })),
+    [report?.porSku, searchQuery],
+  );
+
   return (
     <TooltipProvider delayDuration={200}>
       {generating && generateProgress ? (
@@ -291,6 +310,16 @@ export function MonthlyTaxReportClient() {
                   Clique no SKU para ver as vendas
                 </p>
               </div>
+              <ItemListSearch
+                value={searchQuery}
+                onChange={setSearchQuery}
+                filteredCount={filteredSkuRows.length}
+                totalCount={report.porSku.length}
+                placeholder="Buscar por SKU, vendas, unidades ou receita…"
+                entitySingular="SKU"
+                entityPlural="SKUs"
+                className="mb-3"
+              />
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[52rem] text-sm">
                   <thead>
@@ -327,7 +356,17 @@ export function MonthlyTaxReportClient() {
                     </tr>
                   </thead>
                   <tbody>
-                    {report.porSku.map((row) => (
+                    {filteredSkuRows.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={9}
+                          className="py-8 text-center text-sm text-[var(--muted-foreground)]"
+                        >
+                          {itemListSearchEmptyMessage(searchQuery, "SKU")}
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredSkuRows.map((row) => (
                       <tr
                         key={row.sku}
                         className="border-b border-[var(--border)] hover:bg-[var(--muted)]/20"
@@ -372,7 +411,8 @@ export function MonthlyTaxReportClient() {
                           </Link>
                         </td>
                       </tr>
-                    ))}
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>

@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { VirtualizedTaxReportTransactionTable } from "@/components/tax-report-transaction-table";
+import { ItemListSearch } from "@/components/item-list-search";
 import { readApiError } from "@/lib/api-client-error";
 import { formatFinancialMoney, formatFinancialPercent } from "@/lib/financial-margin";
+import { filterByItemListSearch } from "@/lib/item-list-search";
 import {
   TAX_REPORT_MONTH_NAMES,
   taxReportPath,
@@ -87,6 +89,7 @@ export function MonthlyTaxReportSkuClient({
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [filterUf, setFilterUf] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const loadReport = useCallback(async () => {
     setLoading(true);
@@ -129,7 +132,7 @@ export function MonthlyTaxReportSkuClient({
     [report, sku],
   );
 
-  const filteredTransactions = useMemo(() => {
+  const ufFilteredTransactions = useMemo(() => {
     if (!skuData) return [];
     if (!filterUf.trim()) return skuData.transacoes;
     const uf = filterUf.trim().toUpperCase();
@@ -137,6 +140,23 @@ export function MonthlyTaxReportSkuClient({
       (row) => row.transacao.ufDestino === uf,
     );
   }, [skuData, filterUf]);
+
+  const filteredTransactions = useMemo(
+    () =>
+      filterByItemListSearch(ufFilteredTransactions, searchQuery, (row) => ({
+        sku: row.transacao.sku,
+        mlItemId: row.transacao.itemId,
+        extra: [
+          row.transacao.orderId,
+          row.transacao.ufDestino,
+          row.transacao.tipoDocumento,
+          row.transacao.documento,
+          row.transacao.orderDate.slice(0, 10),
+          row.memoriaCalculo.join(" "),
+        ],
+      })),
+    [ufFilteredTransactions, searchQuery],
+  );
 
   const periodLabel = `${TAX_REPORT_MONTH_NAMES[month - 1]}/${year}`;
 
@@ -205,6 +225,16 @@ export function MonthlyTaxReportSkuClient({
               </Button>
             </div>
           </div>
+          <ItemListSearch
+            value={searchQuery}
+            onChange={setSearchQuery}
+            filteredCount={filteredTransactions.length}
+            totalCount={ufFilteredTransactions.length}
+            placeholder="Buscar por pedido, UF, documento ou memória…"
+            entitySingular="venda"
+            entityPlural="vendas"
+            className="mb-3"
+          />
           <VirtualizedTaxReportTransactionTable rows={filteredTransactions} />
         </Card>
       </div>
