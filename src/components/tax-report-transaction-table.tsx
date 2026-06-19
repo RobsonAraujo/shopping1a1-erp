@@ -23,10 +23,10 @@ const ROW_HEIGHT = 52;
 
 /** 11 colunas — cabe em max-w-7xl sem scroll horizontal. */
 const GRID_COLS_DETAIL =
-  "5rem 2.5rem minmax(3.5rem,0.55fr) minmax(4rem,0.5fr) minmax(4.75rem,1fr) minmax(4.75rem,1fr) minmax(4.25rem,1fr) minmax(4rem,1fr) minmax(4.25rem,1fr) minmax(4.75rem,1fr) minmax(4.25rem,1fr)";
+  "5rem 3.25rem minmax(4.25rem,0.55fr) minmax(4rem,0.5fr) minmax(4.75rem,1fr) minmax(4.75rem,1fr) minmax(4.25rem,1fr) minmax(4rem,1fr) minmax(4.25rem,1fr) minmax(4.75rem,1fr) minmax(4.25rem,1fr)";
 
 const GRID_COLS_WITH_SKU =
-  "5rem minmax(4rem,1fr) 2.5rem minmax(3.5rem,0.55fr) minmax(4rem,0.5fr) minmax(4.75rem,1fr) minmax(4.75rem,1fr) minmax(4.25rem,1fr) minmax(4rem,1fr) minmax(4.25rem,1fr) minmax(4.75rem,1fr) minmax(4.25rem,1fr)";
+  "5rem minmax(4rem,1fr) 3.25rem minmax(4.25rem,0.55fr) minmax(4rem,0.5fr) minmax(4.75rem,1fr) minmax(4.75rem,1fr) minmax(4.25rem,1fr) minmax(4rem,1fr) minmax(4.25rem,1fr) minmax(4.75rem,1fr) minmax(4.25rem,1fr)";
 
 function tableGridStyle(showSku: boolean): CSSProperties {
   return {
@@ -84,8 +84,8 @@ function TransactionTableHeader({ showSku }: { showSku: boolean }) {
       {showSku ? (
         <span className="min-w-0 truncate px-2 py-2.5">SKU</span>
       ) : null}
-      <span className="min-w-0 px-2 py-2.5 whitespace-nowrap">UF</span>
-      <span className="min-w-0 truncate px-2 py-2.5">Doc.</span>
+      <span className="min-w-0 py-2.5 pr-4 pl-2 whitespace-nowrap">UF</span>
+      <span className="min-w-0 truncate py-2.5 pr-2 pl-4">Doc.</span>
       <span className="min-w-0 px-2 py-2.5 text-right">
         <TaxReportHeaderWithTip
           label="Qtd"
@@ -156,8 +156,8 @@ function TransactionRowCells({
           {t.sku}
         </span>
       ) : null}
-      <span className="min-w-0 truncate px-2 whitespace-nowrap">{t.ufDestino ?? "—"}</span>
-      <span className="min-w-0 truncate px-2 whitespace-nowrap">{t.tipoDocumento}</span>
+      <span className="min-w-0 truncate py-2.5 pr-4 pl-2 whitespace-nowrap">{t.ufDestino ?? "—"}</span>
+      <span className="min-w-0 truncate py-2.5 pr-2 pl-4 whitespace-nowrap">{t.tipoDocumento}</span>
       <span className="min-w-0 px-2 text-right tabular-nums whitespace-nowrap">
         {t.quantidade}
       </span>
