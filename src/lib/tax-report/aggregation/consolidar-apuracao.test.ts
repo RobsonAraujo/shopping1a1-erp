@@ -25,6 +25,7 @@ function detalhe(
       unitCostNf: 60,
       purchaseIcmsPercent: 18,
       hasIcmsSt: false,
+      saleIcmsPercent: 18,
       extraCostsUnitario: 0,
       mercadoriaImportada: false,
       conteudoImportacaoPercentual: 0,

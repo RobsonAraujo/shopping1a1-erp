@@ -25,6 +25,8 @@ export type TransacaoVenda = {
   unitCostNf: number | null;
   purchaseIcmsPercent: number;
   hasIcmsSt: boolean;
+  /** % ICMS na venda (cadastro) — usado em operação interna e precificação. */
+  saleIcmsPercent: number;
   extraCostsUnitario: number;
   mercadoriaImportada: boolean;
   conteudoImportacaoPercentual: number;
@@ -67,6 +69,10 @@ export type IcmsDifalBreakdown = {
   icmsTotal: number;
   isContribuinte: boolean;
   isOperacaoInterna: boolean;
+  /** Alíquota efetiva na saída (operação interna). */
+  aliquotaSaidaEfetiva?: number;
+  /** Indica ST na compra (operação interna). */
+  icmsStNaCompra?: boolean;
 };
 
 export type IrpjCsllBreakdown = {

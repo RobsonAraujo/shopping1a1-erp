@@ -6,6 +6,7 @@ export type CustoProduto = {
   unitCostNf: number | null;
   purchaseIcmsPercent: number;
   hasIcmsSt: boolean;
+  saleIcmsPercent: number;
   extraCosts: number;
   isMonophasic: boolean;
   isImported: boolean;
@@ -23,6 +24,7 @@ export function custoProdutoFromView(view: ProductView): CustoProduto {
     unitCostNf,
     purchaseIcmsPercent: view.purchaseIcmsPercent ?? 0,
     hasIcmsSt: view.hasIcmsSt,
+    saleIcmsPercent: view.saleIcmsPercent ?? 0,
     extraCosts: view.extraCosts,
     isMonophasic: view.isMonophasic,
     isImported: view.isImported,

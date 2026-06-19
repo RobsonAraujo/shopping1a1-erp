@@ -49,6 +49,29 @@ export function aliquotaInternaTotal(
   return row.aliquotaBase + row.fcp;
 }
 
+/**
+ * Alíquota ICMS na saída em operação interna (mesma UF).
+ * ST na compra → usa saleIcmsPercent (residual; padrão 0).
+ * Sem ST → saleIcmsPercent do cadastro ou alíquota interna da tabela UF.
+ */
+export function obterAliquotaIcmsSaidaInterna(
+  transacao: TransacaoVenda,
+  aliquotaInternaTabela: number,
+): number {
+  const salePercent = transacao.saleIcmsPercent;
+  const hasSalePercent = Number.isFinite(salePercent) && salePercent >= 0;
+
+  if (transacao.hasIcmsSt) {
+    return hasSalePercent ? salePercent / 100 : 0;
+  }
+
+  if (hasSalePercent && salePercent > 0) {
+    return salePercent / 100;
+  }
+
+  return aliquotaInternaTabela;
+}
+
 export function isContribuinteIcms(
   transacao: TransacaoVenda,
 ): boolean {
@@ -71,16 +94,19 @@ export function calcularIcmsDifal(input: IcmsDifalInput): IcmsDifalBreakdown | n
   if (!ufDestino || !origem) return null;
 
   const receita = transacao.receitaBruta;
-  const interna = aliquotaInternaTotal(ufDestino, rates);
+  const internaTabela = aliquotaInternaTotal(ufDestino, rates);
   const isOperacaoInterna = origem === ufDestino;
 
   if (isOperacaoInterna) {
-    const icmsTotal = roundMoney(receita * interna);
+    const aliquotaSaida = obterAliquotaIcmsSaidaInterna(transacao, internaTabela);
+    const icmsTotal = roundMoney(receita * aliquotaSaida);
     return {
       ufOrigem: origem,
       ufDestino,
       aliquotaInterestadual: 0,
-      aliquotaInternaTotal: interna,
+      aliquotaInternaTotal: internaTabela,
+      aliquotaSaidaEfetiva: aliquotaSaida,
+      icmsStNaCompra: transacao.hasIcmsSt,
       icmsInterestadual: 0,
       difal: 0,
       icmsTotal,
@@ -104,7 +130,7 @@ export function calcularIcmsDifal(input: IcmsDifalInput): IcmsDifalBreakdown | n
       ufOrigem: origem,
       ufDestino,
       aliquotaInterestadual: interestadual,
-      aliquotaInternaTotal: interna,
+      aliquotaInternaTotal: internaTabela,
       icmsInterestadual,
       difal: 0,
       icmsTotal: icmsInterestadual,
@@ -113,14 +139,14 @@ export function calcularIcmsDifal(input: IcmsDifalInput): IcmsDifalBreakdown | n
     };
   }
 
-  const difalRate = Math.max(0, interna - interestadual);
+  const difalRate = Math.max(0, internaTabela - interestadual);
   const difal = roundMoney(receita * difalRate);
 
   return {
     ufOrigem: origem,
     ufDestino,
     aliquotaInterestadual: interestadual,
-    aliquotaInternaTotal: interna,
+    aliquotaInternaTotal: internaTabela,
     icmsInterestadual,
     difal,
     icmsTotal: roundMoney(icmsInterestadual + difal),
@@ -131,11 +157,26 @@ export function calcularIcmsDifal(input: IcmsDifalInput): IcmsDifalBreakdown | n
 
 export function buildIcmsMemoria(result: IcmsDifalBreakdown): string[] {
   if (result.isOperacaoInterna) {
-    return [
+    const saidaPct = (result.aliquotaSaidaEfetiva ?? result.aliquotaInternaTotal) * 100;
+    const tabelaPct = result.aliquotaInternaTotal * 100;
+    const lines = [
       `Operação interna ${result.ufOrigem} → ${result.ufDestino}`,
-      `Alíquota interna ${(result.aliquotaInternaTotal * 100).toFixed(2)}%`,
-      `ICMS = R$ ${result.icmsTotal.toFixed(2)}`,
     ];
+    if (result.icmsStNaCompra) {
+      lines.push("ICMS-ST na compra — alíquota residual na saída");
+    }
+    if (
+      result.aliquotaSaidaEfetiva != null &&
+      Math.abs(result.aliquotaSaidaEfetiva - result.aliquotaInternaTotal) > 0.0001
+    ) {
+      lines.push(
+        `Alíquota interna tabela ${tabelaPct.toFixed(2)}% → saída ${saidaPct.toFixed(2)}%`,
+      );
+    } else {
+      lines.push(`Alíquota ICMS saída ${saidaPct.toFixed(2)}%`);
+    }
+    lines.push(`ICMS = R$ ${result.icmsTotal.toFixed(2)}`);
+    return lines;
   }
 
   const lines = [

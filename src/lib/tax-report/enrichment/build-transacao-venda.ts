@@ -93,6 +93,7 @@ export function buildTransacoesFromOrder(input: {
       unitCostNf: custo?.unitCostNf ?? null,
       purchaseIcmsPercent: custo?.purchaseIcmsPercent ?? 0,
       hasIcmsSt: custo?.hasIcmsSt ?? false,
+      saleIcmsPercent: custo?.saleIcmsPercent ?? 0,
       extraCostsUnitario: custo?.extraCosts ?? 0,
       mercadoriaImportada: custo?.isImported ?? false,
       conteudoImportacaoPercentual: custo?.importContentPercent ?? 0,

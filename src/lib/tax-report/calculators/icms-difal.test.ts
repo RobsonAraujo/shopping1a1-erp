@@ -4,6 +4,7 @@ import {
   aliquotaInternaTotal,
   calcularIcmsDifal,
   icmsSemDifal,
+  obterAliquotaIcmsSaidaInterna,
   obterAliquotaInterestadual,
 } from "@/lib/tax-report/calculators/icms-difal";
 import type { IcmsRateRow, TransacaoVenda } from "@/lib/tax-report/types";
@@ -29,6 +30,7 @@ function baseTransacao(
     unitCostNf: 60,
     purchaseIcmsPercent: 18,
     hasIcmsSt: false,
+    saleIcmsPercent: 18,
     extraCostsUnitario: 0,
     mercadoriaImportada: false,
     conteudoImportacaoPercentual: 0,
@@ -116,7 +118,7 @@ describe("calcularIcmsDifal", () => {
 
   it("SP to SP: internal rate only", () => {
     const result = calcularIcmsDifal({
-      transacao: baseTransacao({ ufDestino: "SP" }),
+      transacao: baseTransacao({ ufDestino: "SP", saleIcmsPercent: 18 }),
       ufOrigem: "SP",
       rates,
     });
@@ -124,6 +126,54 @@ describe("calcularIcmsDifal", () => {
     assert.equal(result.isOperacaoInterna, true);
     assert.equal(result.icmsTotal, 18);
     assert.equal(result.difal, 0);
+    assert.equal(result.aliquotaSaidaEfetiva, 0.18);
+  });
+
+  it("SP to SP with ICMS-ST: uses saleIcmsPercent residual (0%)", () => {
+    const result = calcularIcmsDifal({
+      transacao: baseTransacao({
+        ufDestino: "SP",
+        hasIcmsSt: true,
+        saleIcmsPercent: 0,
+      }),
+      ufOrigem: "SP",
+      rates,
+    });
+    assert.ok(result);
+    assert.equal(result.icmsTotal, 0);
+    assert.equal(result.icmsStNaCompra, true);
+    assert.equal(result.aliquotaSaidaEfetiva, 0);
+  });
+
+  it("SP to SP with ICMS-ST: uses saleIcmsPercent 3%", () => {
+    const result = calcularIcmsDifal({
+      transacao: baseTransacao({
+        ufDestino: "SP",
+        receitaBruta: 100,
+        hasIcmsSt: true,
+        saleIcmsPercent: 3,
+      }),
+      ufOrigem: "SP",
+      rates,
+    });
+    assert.ok(result);
+    assert.equal(result.icmsTotal, 3);
+    assert.equal(result.aliquotaSaidaEfetiva, 0.03);
+  });
+
+  it("SP to SP without ST falls back to UF table when saleIcmsPercent is 0", () => {
+    const result = calcularIcmsDifal({
+      transacao: baseTransacao({
+        ufDestino: "SP",
+        hasIcmsSt: false,
+        saleIcmsPercent: 0,
+      }),
+      ufOrigem: "SP",
+      rates,
+    });
+    assert.ok(result);
+    assert.equal(result.icmsTotal, 18);
+    assert.equal(result.aliquotaSaidaEfetiva, 0.18);
   });
 
   it("imported 45% non-contributor: interstate 4%, DIFAL = internal - 4%", () => {
@@ -141,6 +191,35 @@ describe("calcularIcmsDifal", () => {
     assert.equal(result.icmsInterestadual, 4);
     const interna = aliquotaInternaTotal("RJ", rates);
     assert.equal(result.difal, 100 * (interna - 0.04));
+  });
+});
+
+describe("obterAliquotaIcmsSaidaInterna", () => {
+  it("ST uses sale percent including zero", () => {
+    assert.equal(
+      obterAliquotaIcmsSaidaInterna(
+        baseTransacao({ hasIcmsSt: true, saleIcmsPercent: 0 }),
+        0.18,
+      ),
+      0,
+    );
+    assert.equal(
+      obterAliquotaIcmsSaidaInterna(
+        baseTransacao({ hasIcmsSt: true, saleIcmsPercent: 3 }),
+        0.18,
+      ),
+      0.03,
+    );
+  });
+
+  it("non-ST uses table when sale percent is zero", () => {
+    assert.equal(
+      obterAliquotaIcmsSaidaInterna(
+        baseTransacao({ hasIcmsSt: false, saleIcmsPercent: 0 }),
+        0.18,
+      ),
+      0.18,
+    );
   });
 });
 

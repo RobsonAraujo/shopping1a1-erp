@@ -52,6 +52,7 @@ O status de contribuinte ICMS vem do campo `taxpayer_type` do `billing_info` do 
 - **Performance:** custos de produto carregados em batch (`loadCustoBySkuMap`); rota com `maxDuration = 300` (Vercel)
 - **ICMS vs DIFAL:** consolidado e tabela por venda separam ICMS (origem) e DIFAL (UF destino); total em `icmsDifalTotal`
 - **Apuração:** consolidado expõe `apuracao` com débito/crédito/líquido (PIS, COFINS, ICMS) e DIFAL por UF; crédito PIS/COFINS na base NF entrada; crédito ICMS de `purchaseIcmsPercent`
+- **ICMS saída interna:** usa `saleIcmsPercent` do cadastro; com `hasIcmsSt` aplica alíquota residual (incl. 0%); sem ST e `saleIcmsPercent` 0, usa tabela UF
 
 ## Limitações conhecidas
 

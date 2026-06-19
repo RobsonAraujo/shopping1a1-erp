@@ -2,15 +2,13 @@
 
 import { useRef, useState, type CSSProperties } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { AlertTriangle, Info, X } from "lucide-react";
+import { AlertTriangle, Info } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import {
   formatFinancialMoney,
   formatFinancialPercent,
@@ -19,6 +17,7 @@ import {
 import type { DetalhamentoTributario } from "@/lib/tax-report/types";
 import { icmsSemDifal } from "@/lib/tax-report/calculators/icms-difal";
 import { impostoOperacionalLinha } from "@/lib/tax-report/imposto-operacional";
+import { TaxReportCalculationPanel } from "@/components/tax-report-calculation-panel";
 import { cn } from "@/lib/utils";
 
 const ROW_HEIGHT = 52;
@@ -239,56 +238,6 @@ function TransactionRowCells({
         {formatFinancialMoney(row.margemLiquidaEstimada)}
       </span>
     </>
-  );
-}
-
-export function TaxReportCalculationPanel({
-  row,
-  onClose,
-}: {
-  row: DetalhamentoTributario;
-  onClose: () => void;
-}) {
-  const t = row.transacao;
-  return (
-    <Card className="border-[var(--primary)]/20 bg-[var(--muted)]/10 p-4">
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold">Memória de cálculo</p>
-          <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-            {t.orderDate.slice(0, 10)} · Pedido {t.orderId} ·{" "}
-            {t.ufDestino ?? "UF —"} · {t.tipoDocumento} · Qtd {t.quantidade}
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-8 px-2"
-          onClick={onClose}
-          aria-label="Fechar memória de cálculo"
-        >
-          <X className="size-4" />
-        </Button>
-      </div>
-      {t.dadosFiscaisIndisponiveis ? (
-        <p className="mb-2 text-xs font-medium text-amber-800">
-          Dados fiscais indisponíveis no Mercado Livre — venda excluída da
-          apuração até revisão manual.
-        </p>
-      ) : null}
-      {!t.unitCostNf && row.incluidoNaApuracao ? (
-        <p className="mb-2 text-xs font-medium text-amber-800">
-          SKU sem custo NF cadastrado — créditos PIS/COFINS e ICMS de compra
-          zerados nesta linha.
-        </p>
-      ) : null}
-      <ul className="space-y-1 font-mono text-xs text-[var(--muted-foreground)]">
-        {row.memoriaCalculo.map((line) => (
-          <li key={line}>{line}</li>
-        ))}
-      </ul>
-    </Card>
   );
 }
 

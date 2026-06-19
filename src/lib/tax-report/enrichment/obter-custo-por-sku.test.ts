@@ -34,6 +34,7 @@ describe("custoProdutoFromView", () => {
     assert.equal(custo.unitCostNf, 100);
     assert.equal(custo.purchaseIcmsPercent, 0);
     assert.equal(custo.hasIcmsSt, false);
+    assert.equal(custo.saleIcmsPercent, 18);
     assert.equal(custo.extraCosts, 2);
     assert.equal(custo.isMonophasic, false);
     assert.equal(custo.isImported, true);

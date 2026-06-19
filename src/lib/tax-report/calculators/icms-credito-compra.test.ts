@@ -22,6 +22,7 @@ function tx(overrides: Partial<TransacaoVenda> = {}): TransacaoVenda {
     unitCostNf: 100,
     purchaseIcmsPercent: 18,
     hasIcmsSt: false,
+    saleIcmsPercent: 18,
     extraCostsUnitario: 0,
     mercadoriaImportada: false,
     conteudoImportacaoPercentual: 0,

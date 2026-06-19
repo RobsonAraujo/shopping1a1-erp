@@ -32,6 +32,7 @@ function enrichTransacao(
     unitCostNf: custo.unitCostNf ?? transacao.unitCostNf ?? null,
     purchaseIcmsPercent: custo.purchaseIcmsPercent,
     hasIcmsSt: custo.hasIcmsSt,
+    saleIcmsPercent: custo.saleIcmsPercent,
     extraCostsUnitario: custo.extraCosts,
     isMonophasic: custo.isMonophasic,
     mercadoriaImportada: custo.isImported,
@@ -47,6 +48,8 @@ function needsApuracaoRepair(payload: TaxReportPayload): boolean {
     (d) =>
       d.icmsCreditoCompra == null ||
       d.pisCofins?.baseCredito === undefined ||
+      (d.transacao as TransacaoVenda & { saleIcmsPercent?: number })
+        .saleIcmsPercent === undefined ||
       (d.transacao as TransacaoVenda & { unitCostNf?: number | null })
         .unitCostNf === undefined,
   );
