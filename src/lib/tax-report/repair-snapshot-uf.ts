@@ -5,18 +5,22 @@ import type { TaxReportPayload } from "@/lib/tax-report/types";
 export function repairTaxReportPayload(payload: TaxReportPayload): TaxReportPayload {
   let changed = false;
 
-  const transacoes = payload.transacoes.map((row) => {
-    const fixed = resolveUfDestino(row.transacao.ufDestino);
-    if (fixed === row.transacao.ufDestino) return row;
-    changed = true;
-    return {
-      ...row,
-      transacao: {
-        ...row.transacao,
-        ufDestino: fixed,
-      },
-    };
-  });
+  const rootTransacoes = payload.transacoes ?? [];
+  const transacoes =
+    rootTransacoes.length > 0
+      ? rootTransacoes.map((row) => {
+          const fixed = resolveUfDestino(row.transacao.ufDestino);
+          if (fixed === row.transacao.ufDestino) return row;
+          changed = true;
+          return {
+            ...row,
+            transacao: {
+              ...row.transacao,
+              ufDestino: fixed,
+            },
+          };
+        })
+      : rootTransacoes;
 
   const porSku = payload.porSku.map((skuRow) => {
     const skuTransacoes = skuRow.transacoes.map((row) => {

@@ -1,16 +1,23 @@
 import { prisma } from "@/lib/db";
 import { fetchItemsByIdsBatched, fetchPaidOrdersByPeriod } from "@/lib/mercadolibre/api";
+import type { ItemBody } from "@/lib/mercadolibre/types";
+import type { OrderSearchOrder } from "@/lib/mercadolibre/types";
 import { getCalendarMonthRange } from "@/lib/mercadolibre/revenue-periods";
 import { getTaxReportBillingConcurrency } from "@/lib/tax-report/config";
 import { buildTransacoesFromOrder } from "@/lib/tax-report/enrichment/build-transacao-venda";
-import { obterCustoPorSku } from "@/lib/tax-report/enrichment/obter-custo-por-sku";
-import type { CustoProduto } from "@/lib/tax-report/enrichment/obter-custo-por-sku";
+import {
+  loadCustoBySkuMap,
+  type CustoProduto,
+} from "@/lib/tax-report/enrichment/obter-custo-por-sku";
 import {
   fetchOrderBillingInfo,
   mapWithConcurrency,
   parseTaxpayerTypeFromMl,
 } from "@/lib/tax-report/ml/billing-info-client";
-import { itemIdFromOrderLine } from "@/lib/tax-report/ml/sku-from-order-line";
+import {
+  itemIdFromOrderLine,
+  skuFromOrderLineWithFallback,
+} from "@/lib/tax-report/ml/sku-from-order-line";
 import { repairTaxReportPayload } from "@/lib/tax-report/repair-snapshot-uf";
 import { calcularRelatorioFromTransacoes } from "@/lib/tax-report/service/compute-report";
 import {
@@ -21,11 +28,27 @@ import {
 import type { ManualFiscalOverride, TaxReportPayload } from "@/lib/tax-report/types";
 
 export type GenerateMonthlyReportProgress = {
-  phase: "orders" | "billing" | "compute" | "done";
+  phase: "orders" | "billing" | "compute" | "save" | "done";
   message: string;
   current?: number;
   total?: number;
 };
+
+function collectSkusFromOrders(
+  orders: OrderSearchOrder[],
+  itemById: Map<string, ItemBody>,
+): string[] {
+  const skus = new Set<string>();
+  for (const order of orders) {
+    for (const line of order.order_items ?? []) {
+      const sku = skuFromOrderLineWithFallback(line, itemById);
+      if (sku) skus.add(sku);
+    }
+  }
+  return [...skus];
+}
+
+import { slimTaxReportPayloadForStorage } from "@/lib/tax-report/service/snapshot-storage";
 
 export async function generateMonthlyTaxReport(input: {
   accessToken: string;
@@ -97,24 +120,32 @@ export async function generateMonthlyTaxReport(input: {
   const items = await fetchItemsByIdsBatched(input.accessToken, itemIds);
   const itemById = new Map(items.map((item) => [item.id, item]));
 
-  const contributorByCnpj = new Map<string, boolean>();
-  const custoBySku = new Map<string, CustoProduto>();
+  input.onProgress?.({
+    phase: "compute",
+    message: "Carregando custos dos produtos…",
+  });
+
+  const allSkus = collectSkusFromOrders(orders, itemById);
+  const custoBySku: Map<string, CustoProduto> = await loadCustoBySkuMap(allSkus);
 
   input.onProgress?.({
     phase: "compute",
-    message: "Calculando impostos por venda…",
+    message: `Custos de ${custoBySku.size} SKU${custoBySku.size === 1 ? "" : "s"} carregados. Montando vendas…`,
   });
 
-  const config = await loadTaxCompanyConfig();
+  const [config, icmsRates, cbsIbsVigencia] = await Promise.all([
+    loadTaxCompanyConfig(),
+    loadIcmsRatesMap(),
+    loadCbsIbsVigencia(input.year),
+  ]);
+
   if (config.taxRegime !== "LUCRO_REAL") {
     throw new Error(
       "Apenas Lucro Real está habilitado na v1. Ajuste o regime em Configurações tributárias.",
     );
   }
 
-  const icmsRates = await loadIcmsRatesMap();
-  const cbsIbsVigencia = await loadCbsIbsVigencia(input.year);
-
+  const contributorByCnpj = new Map<string, boolean>();
   const transacoes = [];
 
   for (const { order, billing } of billingResults) {
@@ -131,39 +162,24 @@ export async function generateMonthlyTaxReport(input: {
       }
     }
 
-    const orderTransacoes = buildTransacoesFromOrder({
-      order,
-      billing,
-      itemById,
-      custoBySku,
-      contributorByCnpj,
-      overrides,
-    });
-
-    for (const tx of orderTransacoes) {
-      if (!custoBySku.has(tx.sku)) {
-        const custo = await obterCustoPorSku(tx.sku);
-        if (custo) custoBySku.set(tx.sku, custo);
-      }
-    }
-
-    transacoes.push(...orderTransacoes);
+    transacoes.push(
+      ...buildTransacoesFromOrder({
+        order,
+        billing,
+        itemById,
+        custoBySku,
+        contributorByCnpj,
+        overrides,
+      }),
+    );
   }
 
-  for (const tx of transacoes) {
-    if (!custoBySku.has(tx.sku)) {
-      const custo = await obterCustoPorSku(tx.sku);
-      if (custo) custoBySku.set(tx.sku, custo);
-    }
-    const custo = custoBySku.get(tx.sku);
-    if (custo) {
-      tx.custoAquisicaoUnitario = custo.pricingCost;
-      tx.extraCostsUnitario = custo.extraCosts;
-      tx.isMonophasic = custo.isMonophasic;
-      tx.mercadoriaImportada = custo.isImported;
-      tx.conteudoImportacaoPercentual = custo.importContentPercent;
-    }
-  }
+  input.onProgress?.({
+    phase: "compute",
+    message: "Calculando impostos por venda…",
+    current: 0,
+    total: transacoes.length,
+  });
 
   const payload = calcularRelatorioFromTransacoes({
     transacoes,
@@ -183,6 +199,16 @@ export async function generateMonthlyTaxReport(input: {
       taxRegime: config.taxRegime,
       originUf: config.originUf,
     },
+    onComputeProgress: (current, total) => {
+      if (current % 100 === 0 || current === total) {
+        input.onProgress?.({
+          phase: "compute",
+          message: `Calculando impostos: ${current}/${total}`,
+          current,
+          total,
+        });
+      }
+    },
   });
 
   input.onProgress?.({ phase: "done", message: "Relatório gerado." });
@@ -193,6 +219,7 @@ export async function saveTaxReportSnapshot(
   sellerId: number,
   payload: TaxReportPayload,
 ): Promise<void> {
+  const slim = slimTaxReportPayloadForStorage(payload);
   await prisma.taxReportMonthSnapshot.upsert({
     where: {
       sellerId_year_month: {
@@ -206,11 +233,11 @@ export async function saveTaxReportSnapshot(
       year: payload.year,
       month: payload.month,
       generatedAt: new Date(payload.meta.geradoEm),
-      payload: payload as object,
+      payload: slim as object,
     },
     update: {
       generatedAt: new Date(payload.meta.geradoEm),
-      payload: payload as object,
+      payload: slim as object,
     },
   });
 }

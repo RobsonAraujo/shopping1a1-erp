@@ -130,7 +130,7 @@ export function MonthlyTaxReportClient() {
             if (!line.startsWith("data: ")) continue;
             const data = JSON.parse(line.slice(6)) as
               | { type: "progress" } & TaxReportProgressState
-              | { type: "complete"; payload: TaxReportPayload }
+              | { type: "complete" }
               | { type: "error"; message: string };
 
             if (data.type === "progress") {
@@ -141,7 +141,7 @@ export function MonthlyTaxReportClient() {
                 total: data.total,
               });
             } else if (data.type === "complete") {
-              setReport(data.payload);
+              await loadReport();
               setGenerateProgress({
                 phase: "done",
                 message: "Relatório gerado com sucesso.",
@@ -158,7 +158,7 @@ export function MonthlyTaxReportClient() {
         setTimeout(() => setGenerateProgress(null), 400);
       }
     },
-    [year, month],
+    [year, month, loadReport],
   );
 
   useEffect(() => {

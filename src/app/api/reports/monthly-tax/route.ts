@@ -13,6 +13,8 @@ import {
   readSession,
 } from "@/lib/mercadolibre/session";
 
+export const maxDuration = 300;
+
 function parseYearMonth(searchParams: URLSearchParams): {
   year: number;
   month: number;
@@ -129,7 +131,7 @@ export async function POST(request: NextRequest) {
                 ),
               );
               controller.enqueue(
-                encoder.encode(sseLine({ type: "complete", payload: existing })),
+                encoder.encode(sseLine({ type: "complete" })),
               );
               controller.close();
             },
@@ -176,11 +178,18 @@ export async function POST(request: NextRequest) {
               onProgress: sendProgress,
             });
 
+            sendProgress({
+              phase: "save",
+              message: "Salvando snapshot…",
+            });
+
             await saveTaxReportSnapshot(userId, payload);
+
             controller.enqueue(
-              encoder.encode(sseLine({ type: "complete", payload })),
+              encoder.encode(sseLine({ type: "complete" })),
             );
           } catch (e) {
+            logServerError("api/reports/monthly-tax POST stream", e);
             const message =
               e instanceof Error ? e.message : "monthly_tax_generate_failed";
             controller.enqueue(

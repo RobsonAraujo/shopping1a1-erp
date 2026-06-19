@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 export type TaxReportProgressState = {
-  phase: "orders" | "billing" | "compute" | "done" | "error";
+  phase: "orders" | "billing" | "compute" | "save" | "done" | "error";
   message: string;
   current?: number;
   total?: number;
@@ -15,6 +15,7 @@ const PHASES: Array<{ id: TaxReportProgressState["phase"]; label: string }> = [
   { id: "orders", label: "Pedidos ML" },
   { id: "billing", label: "Dados fiscais" },
   { id: "compute", label: "Cálculo" },
+  { id: "save", label: "Salvando" },
   { id: "done", label: "Concluído" },
 ];
 
@@ -22,7 +23,32 @@ function phaseIndex(phase: TaxReportProgressState["phase"]): number {
   if (phase === "orders") return 0;
   if (phase === "billing") return 1;
   if (phase === "compute") return 2;
-  return 3;
+  if (phase === "save") return 3;
+  return 4;
+}
+
+function progressPercent(progress: TaxReportProgressState): number {
+  if (progress.phase === "done") return 100;
+  if (progress.phase === "save") return 92;
+  if (
+    progress.phase === "compute" &&
+    progress.total != null &&
+    progress.total > 0 &&
+    progress.current != null
+  ) {
+    return 45 + Math.round((progress.current / progress.total) * 45);
+  }
+  if (progress.phase === "compute") return 55;
+  if (
+    progress.phase === "billing" &&
+    progress.total != null &&
+    progress.total > 0 &&
+    progress.current != null
+  ) {
+    return 10 + Math.round((progress.current / progress.total) * 35);
+  }
+  if (progress.phase === "orders") return 8;
+  return 50;
 }
 
 export function TaxReportGenerationOverlay({
@@ -31,22 +57,12 @@ export function TaxReportGenerationOverlay({
   progress: TaxReportProgressState;
 }) {
   const activeIndex = phaseIndex(progress.phase);
-  const percent =
-    progress.phase === "billing" &&
+  const percent = progressPercent(progress);
+  const showCounter =
+    (progress.phase === "billing" || progress.phase === "compute") &&
     progress.total != null &&
     progress.total > 0 &&
-    progress.current != null
-      ? Math.min(
-          100,
-          Math.round((progress.current / progress.total) * 100),
-        )
-      : progress.phase === "orders"
-        ? 15
-        : progress.phase === "compute"
-          ? 85
-          : progress.phase === "done"
-            ? 100
-            : 50;
+    progress.current != null;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4 backdrop-blur-[2px]">
@@ -70,11 +86,10 @@ export function TaxReportGenerationOverlay({
               style={{ width: `${percent}%` }}
             />
           </div>
-          {progress.phase === "billing" &&
-          progress.total != null &&
-          progress.current != null ? (
+          {showCounter ? (
             <p className="mt-2 text-xs tabular-nums text-[var(--muted-foreground)]">
-              {progress.current} de {progress.total} pedidos
+              {progress.current} de {progress.total}{" "}
+              {progress.phase === "billing" ? "pedidos" : "vendas"}
             </p>
           ) : null}
         </div>
@@ -82,7 +97,10 @@ export function TaxReportGenerationOverlay({
         <ol className="mt-5 space-y-2">
           {PHASES.map((step, index) => {
             const done = index < activeIndex || progress.phase === "done";
-            const active = index === activeIndex && progress.phase !== "done";
+            const active =
+              index === activeIndex &&
+              progress.phase !== "done" &&
+              progress.phase !== "error";
             return (
               <li
                 key={step.id}

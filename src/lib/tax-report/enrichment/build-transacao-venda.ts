@@ -11,7 +11,7 @@ import {
   revenueFromOrderItemLine,
   skuFromOrderLineWithFallback,
 } from "@/lib/tax-report/ml/sku-from-order-line";
-import type { CustoProduto } from "@/lib/tax-report/enrichment/obter-custo-por-sku";
+import type { CustoProduto } from "@/lib/tax-report/enrichment/custo-produto";
 import type {
   ManualFiscalOverride,
   TransacaoVenda,

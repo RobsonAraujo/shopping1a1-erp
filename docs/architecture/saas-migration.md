@@ -168,6 +168,17 @@ Detalhes dos modelos: [tenant-data-model.md](tenant-data-model.md).
 
 Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templates/feature-saas-impact.md).
 
+### Otimização geração relatório — 2026-06-18
+
+- **Tabelas novas/alteradas:** nenhuma (mesmo schema JSON, formato enxuto)
+- **Precisa `organizationId`?** não
+- **APIs afetadas:** `POST /api/reports/monthly-tax` (SSE `complete` sem payload; `maxDuration=300`)
+- **Assume singleton?** produtos/settings globais — batch `loadCustoBySkuMap` escopado ao tenant futuro
+- **Cron/background:** nenhum
+- **Dados globais vs por org:** `products` + `company_tax_settings` em 2 queries por geração
+- **Código já tenant-ready?** parcial — batch aceita lista de SKUs; escopar `findMany` por org na migração
+- **Ação futura na migração:** `loadCustoBySkuMap(organizationId, skus)`; job em background se volume exceder 300s
+
 ### Busca aberta — relatório tributário — 2026-06-18
 
 - **Tabelas novas/alteradas:** nenhuma

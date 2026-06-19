@@ -123,8 +123,18 @@ export function calcularRelatorioFromTransacoes(input: {
   month: number;
   overrides: Record<string, ManualFiscalOverride>;
   meta: TaxReportPayload["meta"];
+  onComputeProgress?: (current: number, total: number) => void;
 }): TaxReportPayload {
-  const detalhes = input.transacoes.map((transacao) => {
+  const total = input.transacoes.length;
+  const detalhes = input.transacoes.map((transacao, index) => {
+    const current = index + 1;
+    if (
+      input.onComputeProgress &&
+      (current % 100 === 0 || current === total)
+    ) {
+      input.onComputeProgress(current, total);
+    }
+
     const hasOverride = Boolean(input.overrides[transacao.transactionKey]);
     const incluir =
       hasOverride || !transacao.dadosFiscaisIndisponiveis;

@@ -45,9 +45,11 @@ O status de contribuinte ICMS vem do campo `taxpayer_type` do `billing_info` do 
 ## Snapshot mensal
 
 - `POST /api/reports/monthly-tax` gera e persiste
-- `POST` com `stream: true` envia progresso via SSE (`text/event-stream`)
+- `POST` com `stream: true` envia progresso via SSE (`text/event-stream`); `complete` sem payload — o cliente recarrega via `GET`
 - `GET /api/reports/monthly-tax?year=&month=` lê snapshot
 - `force: true` no POST recalcula
+- **Persistência:** vendas detalhadas ficam em `porSku[].transacoes`; `transacoes` na raiz do JSON salvo fica vazio (menor volume no banco)
+- **Performance:** custos de produto carregados em batch (`loadCustoBySkuMap`); rota com `maxDuration = 300` (Vercel)
 
 ## Limitações conhecidas
 

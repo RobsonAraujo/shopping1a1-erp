@@ -122,7 +122,8 @@ export type TaxReportPayload = {
   month: number;
   consolidado: RelatorioConsolidado;
   porSku: SkuAggregation[];
-  transacoes: DetalhamentoTributario[];
+  /** Detalhes por venda na raiz; vazio em snapshots persistidos (ver porSku[].transacoes). */
+  transacoes?: DetalhamentoTributario[];
   overrides: Record<string, ManualFiscalOverride>;
   meta: {
     geradoEm: string;
