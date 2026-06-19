@@ -2,6 +2,15 @@ import { stockPlanningConfig } from "@/config/stock-planning";
 import { prisma } from "@/lib/db";
 import { getMercadoLibreConfig } from "./config";
 import {
+  aggregateFulfillmentSnapshots,
+  collectInventoryIdsFromItem,
+  emptyFulfillmentStock,
+  isFulfillmentListing,
+  parseFulfillmentStockResponse,
+  type FulfillmentStockSnapshot,
+  type ItemFulfillmentStock,
+} from "./fulfillment-stock";
+import {
   getCalendarMonthLabels,
   getCalendarMonthRanges,
   type CalendarMonthLabels,
@@ -766,4 +775,97 @@ export async function fetchUnitsSoldForItemsInWindowBatched(
     Object.assign(out, part);
   }
   return out;
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  if (items.length === 0) return [];
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await fn(items[index], index);
+    }
+  }
+
+  const workers = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    () => worker(),
+  );
+  await Promise.all(workers);
+  return results;
+}
+
+export async function fetchFulfillmentStock(
+  accessToken: string,
+  inventoryId: string,
+): Promise<FulfillmentStockSnapshot | null> {
+  const { apiBase } = getMercadoLibreConfig();
+  const res = await fetch(
+    `${apiBase}/inventories/${encodeURIComponent(inventoryId)}/stock/fulfillment`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    },
+  );
+  if (!res.ok) return null;
+  const body: unknown = await res.json();
+  return parseFulfillmentStockResponse(body);
+}
+
+const FULFILLMENT_STOCK_CONCURRENCY = 8;
+
+/** Estoque Full em processamento por anúncio (transfer + internal_process). */
+export async function enrichItemsWithFulfillmentStock(
+  accessToken: string,
+  items: ItemBody[],
+): Promise<Map<string, ItemFulfillmentStock>> {
+  const result = new Map<string, ItemFulfillmentStock>();
+  const itemInventoryIds = new Map<string, string[]>();
+
+  for (const item of items) {
+    if (!isFulfillmentListing(item)) continue;
+    const inventoryIds = collectInventoryIdsFromItem(item);
+    if (inventoryIds.length === 0) continue;
+    itemInventoryIds.set(item.id, inventoryIds);
+  }
+
+  const uniqueInventoryIds = [
+    ...new Set([...itemInventoryIds.values()].flat()),
+  ];
+  if (uniqueInventoryIds.length === 0) return result;
+
+  const snapshots = await mapWithConcurrency(
+    uniqueInventoryIds,
+    FULFILLMENT_STOCK_CONCURRENCY,
+    async (inventoryId) => {
+      const snapshot = await fetchFulfillmentStock(accessToken, inventoryId);
+      return { inventoryId, snapshot };
+    },
+  );
+
+  const snapshotByInventoryId = new Map<string, FulfillmentStockSnapshot>();
+  for (const { inventoryId, snapshot } of snapshots) {
+    if (snapshot) snapshotByInventoryId.set(inventoryId, snapshot);
+  }
+
+  for (const [itemId, inventoryIds] of itemInventoryIds) {
+    const itemSnapshots = inventoryIds
+      .map((id) => snapshotByInventoryId.get(id))
+      .filter((snap): snap is FulfillmentStockSnapshot => snap != null);
+    result.set(
+      itemId,
+      itemSnapshots.length > 0
+        ? aggregateFulfillmentSnapshots(itemSnapshots)
+        : emptyFulfillmentStock(),
+    );
+  }
+
+  return result;
 }

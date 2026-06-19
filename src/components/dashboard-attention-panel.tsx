@@ -255,7 +255,7 @@ function AttentionSection({
                               <span className="tabular-nums">
                                 Estoque:{" "}
                                 <span className="font-semibold text-[var(--foreground)]">
-                                  {item.available_quantity}
+                                  {mlStock}
                                 </span>
                               </span>
                               <MetricWithHint
@@ -347,7 +347,7 @@ export function DashboardAttentionPanel({
     const ack = acknowledgementByKey.get(`${kind}:${item.id}`);
     if (!ack) return false;
     return (
-      ack.mlAvailableQuantity === item.available_quantity &&
+      ack.mlAvailableQuantity === mlAvailableStockUnits(item) &&
       ack.warehouseQuantity === warehouseStock &&
       (ack.purchaseLeadTimeDays ?? 0) === purchaseLeadTimeDays
     );
@@ -388,21 +388,22 @@ export function DashboardAttentionPanel({
     const sold = salesByItem[item.id] ?? 0;
     const purchaseLead = purchaseLeadTimeByItem[item.id] ?? 0;
     const warehouseStock = warehouseStockByItem[item.id] ?? 0;
+    const mlQty = mlAvailableStockUnits(item);
     const fullPlan = computeStockPlanningDisplay(
-      item.available_quantity,
+      mlQty,
       sold,
       w,
       stockPlanningConfig,
       purchaseLead,
     );
     const purchasePlan = computeStockPlanningDisplay(
-      item.available_quantity + warehouseStock,
+      mlQty + warehouseStock,
       sold,
       w,
       stockPlanningConfig,
       purchaseLead,
     );
-    return { item, fullPlan, purchasePlan, warehouseStock, purchaseLead };
+    return { item, fullPlan, purchasePlan, warehouseStock, purchaseLead, mlQty };
   });
 
   const fullRows = rows

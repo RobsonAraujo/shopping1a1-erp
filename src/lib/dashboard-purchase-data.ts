@@ -80,7 +80,7 @@ function hasActiveReplenishmentBeyondAttention(
             completedAt: new Date(),
           },
           {
-            mlQty: item.available_quantity,
+            mlQty: mlAvailableStockUnits(item),
             warehouseQty: warehouseStock,
             leadTimeDays: purchaseLead,
           },

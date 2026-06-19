@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { stockPlanningConfig } from "@/config/stock-planning";
 import { fetchItemById } from "@/lib/mercadolibre/api";
+import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import { prisma } from "@/lib/db";
 import { syncPurchaseCycleFromWarehouse } from "@/lib/replenishment-cycle-data";
@@ -240,7 +241,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       const purchaseLead =
         warehouseStock.purchaseLeadTimeDays ?? 0;
       const purchasePlan = computeStockPlanningDisplay(
-        item.available_quantity + warehouseStock.quantity,
+        mlAvailableStockUnits(item) + warehouseStock.quantity,
         0,
         stockPlanningConfig.salesAverageWindowDays,
         stockPlanningConfig,

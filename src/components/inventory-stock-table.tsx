@@ -35,6 +35,17 @@ import { cn } from "@/lib/utils";
 
 const MAX_LEAD_DAYS = 365;
 
+function stockUnits(value: number | null | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  return Math.max(0, Math.floor(value));
+}
+
+function onTheWayUnits(row: InventoryRow): number {
+  const legacy = (row as InventoryRow & { mlStockInProcess?: number })
+    .mlStockInProcess;
+  return stockUnits(row.mlStockOnTheWay ?? legacy);
+}
+
 export type InventoryRow = {
   mlItemId: string;
   sku: string | null;
@@ -43,6 +54,10 @@ export type InventoryRow = {
   mlStatus: string;
   mlStock: number;
   warehouseStock: number;
+  isFulfillment: boolean;
+  mlStockOnTheWay: number;
+  mlProcessTransfer: number;
+  mlProcessInternal: number;
   leadTimeDays: number | null;
   needsPurchaseAttention: boolean;
 };
@@ -65,6 +80,99 @@ function leadTimeToForm(days: number | null): {
   if (days === null || days === 0) return { value: "", unit: "weeks" };
   if (days % 7 === 0) return { value: String(days / 7), unit: "weeks" };
   return { value: String(days), unit: "days" };
+}
+
+function StockColumnHeader({
+  label,
+  tooltip,
+  ariaLabel,
+}: {
+  label: string;
+  tooltip: React.ReactNode;
+  ariaLabel: string;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      {label}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className="inline-flex cursor-pointer rounded text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+            aria-label={ariaLabel}
+          >
+            <HelpCircle className="size-3.5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-xs">
+          {tooltip}
+        </TooltipContent>
+      </Tooltip>
+    </span>
+  );
+}
+
+const PENDING_INBOUND_NOTE =
+  "Entrada pendente: não disponível via API (consulte o painel do Meli).";
+
+function formatOnTheWayCell(row: InventoryRow): {
+  display: string;
+  muted: boolean;
+  showTooltip: boolean;
+  cellTooltip: React.ReactNode | null;
+} {
+  if (!row.isFulfillment) {
+    return {
+      display: "—",
+      muted: true,
+      showTooltip: false,
+      cellTooltip: null,
+    };
+  }
+
+  const onTheWay = onTheWayUnits(row);
+  const transfer = stockUnits(row.mlProcessTransfer);
+  const internal = stockUnits(row.mlProcessInternal);
+
+  const parts: string[] = [];
+  if (transfer > 0) {
+    parts.push(`Em transferência: ${transfer}`);
+  }
+  if (internal > 0) {
+    parts.push(`Processamento interno: ${internal}`);
+  }
+
+  if (onTheWay === 0) {
+    return {
+      display: "0",
+      muted: false,
+      showTooltip: true,
+      cellTooltip: (
+        <>
+          <p>
+            Nenhuma unidade em transferência ou processamento interno na API.
+          </p>
+          <p className="mt-2">
+            Pode haver entrada pendente no painel do Meli que não aparece aqui.
+          </p>
+        </>
+      ),
+    };
+  }
+
+  return {
+    display: String(onTheWay),
+    muted: false,
+    showTooltip: true,
+    cellTooltip: (
+      <>
+        {parts.length > 0 ? <p>{parts.join(" · ")}</p> : null}
+        <p className={parts.length > 0 ? "mt-2" : undefined}>
+          {PENDING_INBOUND_NOTE}
+        </p>
+      </>
+    ),
+  };
 }
 
 export function InventoryStockTable({ rows }: InventoryStockTableProps) {
@@ -103,20 +211,55 @@ export function InventoryStockTable({ rows }: InventoryStockTableProps) {
         />
         <Card className="overflow-hidden p-0 shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[52rem] text-left text-sm">
+          <table className="w-full min-w-[60rem] text-left text-sm">
             <thead className="border-b border-[var(--border)] bg-[var(--muted)]/80">
               <tr>
                 <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                   Produto
                 </th>
                 <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                  Galpão
+                  <StockColumnHeader
+                    label="Galpão"
+                    ariaLabel="Informação sobre estoque no galpão"
+                    tooltip="Unidades no nosso galpão, ainda não enviadas ao Mercado Livre."
+                  />
                 </th>
                 <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                  Mercado Livre
+                  <StockColumnHeader
+                    label="Já no Full"
+                    ariaLabel="Informação sobre estoque já no Full"
+                    tooltip="Unidades que já entraram no depósito Full do Mercado Livre e estão disponíveis para venda no anúncio."
+                  />
                 </th>
                 <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                  Total
+                  <StockColumnHeader
+                    label="A caminho"
+                    ariaLabel="Informação sobre estoque a caminho do Full"
+                    tooltip={
+                      <>
+                        <p>
+                          Unidades enviadas ao Full que ainda não estão
+                          vendáveis. O número reflete o que a API do Mercado
+                          Livre informa: <strong>em transferência</strong> e{" "}
+                          <strong>processamento interno</strong>.
+                        </p>
+                        <p className="mt-2">
+                          A <strong>entrada pendente</strong> (envio agendado
+                          que ainda não entrou no inventário do ML) aparece no
+                          painel do Meli, mas <strong>não é exposta pela API</strong>
+                          — por isso pode ser menor que o &quot;A caminho&quot; do
+                          Seller Center.
+                        </p>
+                      </>
+                    }
+                  />
+                </th>
+                <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                  <StockColumnHeader
+                    label="Total"
+                    ariaLabel="Informação sobre estoque total"
+                    tooltip="Soma de todas as unidades sob nosso controle: galpão + já no Full + a caminho (via API). Pode ser menor que o total do painel Meli quando há entrada pendente."
+                  />
                 </th>
                 <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                   <span className="inline-flex items-center gap-1">
@@ -147,7 +290,7 @@ export function InventoryStockTable({ rows }: InventoryStockTableProps) {
               {filteredRows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={7}
                     className="px-4 py-12 text-center text-[var(--muted-foreground)]"
                   >
                     {rows.length === 0
@@ -161,7 +304,7 @@ export function InventoryStockTable({ rows }: InventoryStockTableProps) {
                     <tr
                       className="border-b border-[var(--border)] bg-[var(--muted)]/50"
                     >
-                      <td colSpan={6} className="px-4 py-2.5">
+                      <td colSpan={7} className="px-4 py-2.5">
                         <span className="text-xs font-semibold uppercase tracking-wide text-[var(--primary)]">
                           {group.supplier}
                         </span>
@@ -172,7 +315,11 @@ export function InventoryStockTable({ rows }: InventoryStockTableProps) {
                       </td>
                     </tr>
                     {group.rows.map((row) => {
-                      const total = row.warehouseStock + row.mlStock;
+                      const total =
+                        stockUnits(row.warehouseStock) +
+                        stockUnits(row.mlStock) +
+                        onTheWayUnits(row);
+                      const onTheWayCell = formatOnTheWayCell(row);
                       return (
                         <tr
                           key={row.mlItemId}
@@ -241,10 +388,32 @@ export function InventoryStockTable({ rows }: InventoryStockTableProps) {
                             </div>
                           </td>
                           <td className="align-middle px-4 py-3.5 tabular-nums">
-                            {row.warehouseStock}
+                            {stockUnits(row.warehouseStock)}
                           </td>
                           <td className="align-middle px-4 py-3.5 tabular-nums">
-                            {row.mlStock}
+                            {stockUnits(row.mlStock)}
+                          </td>
+                          <td
+                            className={cn(
+                              "align-middle px-4 py-3.5 tabular-nums",
+                              onTheWayCell.muted &&
+                                "text-[var(--muted-foreground)]",
+                            )}
+                          >
+                            {onTheWayCell.showTooltip ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="cursor-help underline decoration-dotted decoration-[var(--muted-foreground)]/50 underline-offset-2">
+                                    {onTheWayCell.display}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-xs">
+                                  {onTheWayCell.cellTooltip}
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              onTheWayCell.display
+                            )}
                           </td>
                           <td className="align-middle px-4 py-3.5 tabular-nums font-medium">
                             {total}

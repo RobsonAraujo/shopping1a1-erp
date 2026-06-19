@@ -4,9 +4,11 @@ import { stockPlanningConfig } from "@/config/stock-planning";
 import { InventoryStockTable } from "@/components/inventory-stock-table";
 import { Card, CardContent } from "@/components/ui/card";
 import {
+  enrichItemsWithFulfillmentStock,
   fetchOperationalListings,
   fetchUnitsSoldForItemsInWindowBatched,
 } from "@/lib/mercadolibre/api";
+import { isFulfillmentListing } from "@/lib/mercadolibre/fulfillment-stock";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { getItemSku } from "@/lib/mercadolibre/item-sku";
@@ -18,6 +20,11 @@ import {
   readSession,
   refreshSessionPath,
 } from "@/lib/mercadolibre/session";
+
+function stockUnits(value: number | null | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  return Math.max(0, Math.floor(value));
+}
 
 export default async function InventoryPage() {
 
@@ -44,12 +51,20 @@ export default async function InventoryPage() {
     mlStatus: string;
     mlStock: number;
     warehouseStock: number;
+    isFulfillment: boolean;
+    mlStockOnTheWay: number;
+    mlProcessTransfer: number;
+    mlProcessInternal: number;
     leadTimeDays: number | null;
     needsPurchaseAttention: boolean;
   }[] = [];
 
   try {
     const items = await fetchOperationalListings(token, userId);
+    const fulfillmentStockByItem = await enrichItemsWithFulfillmentStock(
+      token,
+      items,
+    );
     const allIds = items.map((item) => item.id);
     const salesByItem = await fetchUnitsSoldForItemsInWindowBatched(
       token,
@@ -85,10 +100,17 @@ export default async function InventoryPage() {
       ...(() => {
         const mlStock = mlAvailableStockUnits(item);
         const warehouseStock = warehouseById[item.id] ?? 0;
+        const fulfillment = fulfillmentStockByItem.get(item.id);
+        const isFulfillment = isFulfillmentListing(item);
+        const mlProcessTransfer = stockUnits(fulfillment?.inTransfer);
+        const mlProcessInternal = stockUnits(fulfillment?.internalProcess);
+        const mlStockOnTheWay = isFulfillment
+          ? stockUnits(fulfillment?.inProcess)
+          : 0;
         const purchaseLeadTimeDays = leadTimeById[item.id] ?? 0;
         const sold = salesByItem[item.id] ?? 0;
         const plan = computeStockPlanningDisplay(
-          mlStock + warehouseStock,
+          mlStock + warehouseStock + mlStockOnTheWay,
           sold,
           stockPlanningConfig.salesAverageWindowDays,
           stockPlanningConfig,
@@ -97,6 +119,10 @@ export default async function InventoryPage() {
         return {
           mlStock,
           warehouseStock,
+          isFulfillment,
+          mlStockOnTheWay,
+          mlProcessTransfer,
+          mlProcessInternal,
           leadTimeDays: leadTimeById[item.id] ?? null,
           needsPurchaseAttention: plan.needsPurchaseAttention,
         };
@@ -127,8 +153,12 @@ export default async function InventoryPage() {
         </h1>
         <p className="mt-2 max-w-3xl text-[15px] leading-relaxed text-[var(--muted-foreground)]">
           Anúncios <strong>ativos e pausados</strong> no Mercado Livre (pausados
-          aparecem com aviso). Estoque no galpão (banco local), estoque no ML
-          (API) e total geral. <strong>Editar</strong> ajusta só o galpão;{" "}
+          aparecem com aviso). Estoque no <strong>galpão</strong>, no{" "}
+          <strong>Full</strong> (já liberado para venda), <strong>a caminho</strong>{" "}
+          (transferência e processamento interno via API) e total geral. O
+          &quot;a caminho&quot; pode ser menor que no painel do Meli quando há{" "}
+          <strong>entrada pendente</strong> não exposta pela API.{" "}
+          <strong>Editar</strong> ajusta só o galpão;{" "}
           <strong>Configurações</strong> define o prazo compra → galpão.
         </p>
       </div>

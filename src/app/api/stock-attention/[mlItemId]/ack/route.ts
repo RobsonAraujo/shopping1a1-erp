@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { fetchItemById } from "@/lib/mercadolibre/api";
+import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import { prisma } from "@/lib/db";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
@@ -71,6 +72,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const warehouseQuantity = warehouseStock?.quantity ?? 0;
     const purchaseLeadTimeDays = warehouseStock?.purchaseLeadTimeDays ?? null;
 
+    const mlAvailableQuantity = mlAvailableStockUnits(item);
+
     const acknowledgement = await prisma.$transaction(async (tx) => {
       await tx.listing.upsert({
         where: { mlItemId },
@@ -88,12 +91,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
         create: {
           mlItemId,
           kind,
-          mlAvailableQuantity: item.available_quantity,
+          mlAvailableQuantity,
           warehouseQuantity,
           purchaseLeadTimeDays,
         },
         update: {
-          mlAvailableQuantity: item.available_quantity,
+          mlAvailableQuantity,
           warehouseQuantity,
           purchaseLeadTimeDays,
           acknowledgedAt: new Date(),

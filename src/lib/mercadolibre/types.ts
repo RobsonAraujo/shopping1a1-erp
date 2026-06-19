@@ -44,6 +44,8 @@ export type ItemBody = {
   category_id?: string;
   /** Tipo de anúncio (ex.: gold_special = Clássico, gold_pro = Premium). */
   listing_type_id?: string;
+  /** Inventário Full no ML (quando `shipping.logistic_type` é fulfillment). */
+  inventory_id?: string;
   permalink: string;
   /** Dimensões para frete: "HxWxL,peso_g" quando exposto pela API. */
   dimensions?: string;
@@ -70,6 +72,7 @@ export type ItemBody = {
   variations?: Array<{
     id: number;
     available_quantity?: number;
+    inventory_id?: string;
     attribute_combinations?: Array<{
       name?: string;
       value_name?: string;

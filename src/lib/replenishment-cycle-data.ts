@@ -123,8 +123,9 @@ function snapshotForItem(
   warehouseStock: number,
   purchaseLead: number,
 ): ReplenishmentSnapshot {
+  const mlQty = mlAvailableStockUnits(item);
   return {
-    mlQty: item.available_quantity,
+    mlQty,
     warehouseQty: warehouseStock,
     leadTimeDays: purchaseLead,
   };
@@ -146,29 +147,30 @@ function buildItemPlanningContext(
   purchaseLead: number,
   sold: number,
 ): ItemPlanningContext {
+  const mlQty = mlAvailableStockUnits(item);
   const w = stockPlanningConfig.salesAverageWindowDays;
   const fullPlan = computeStockPlanningDisplay(
-    item.available_quantity,
+    mlQty,
     sold,
     w,
     stockPlanningConfig,
     purchaseLead,
   );
   const purchasePlan = computeStockPlanningDisplay(
-    item.available_quantity + warehouseStock,
+    mlQty + warehouseStock,
     sold,
     w,
     stockPlanningConfig,
     purchaseLead,
   );
   const plan = buildPurchasePlan(
-    item.available_quantity + warehouseStock,
+    mlQty + warehouseStock,
     sold,
     purchaseLead,
   );
   const analysis = computePurchaseAnalysis({
     unitsSoldInWindow: sold,
-    totalStock: item.available_quantity + warehouseStock,
+    totalStock: mlQty + warehouseStock,
     purchaseLeadTimeDays: purchaseLead,
     purchaseIsOverdue: plan.purchaseIsOverdue,
     needsPurchaseAttention: plan.needsPurchaseAttention,
@@ -554,7 +556,7 @@ async function resolveCycleSnapshot(
     const item = await fetchItemById(accessToken, cycle.mlItemId);
     if (item) {
       return {
-        mlQty: item.available_quantity,
+        mlQty: mlAvailableStockUnits(item),
         warehouseQty: warehouse?.quantity ?? cycle.triggerWarehouseQty,
         leadTimeDays:
           warehouse?.purchaseLeadTimeDays ?? cycle.triggerLeadTimeDays ?? 0,
