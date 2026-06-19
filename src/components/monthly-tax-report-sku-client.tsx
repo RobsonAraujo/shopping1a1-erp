@@ -21,7 +21,9 @@ import {
   skuImpostoOperacionalTotal,
 } from "@/lib/tax-report/imposto-operacional";
 import { downloadSkuSalesExcel } from "@/lib/tax-report/export-sku-sales-excel";
+import { calcularSkuVendasPorUf } from "@/lib/tax-report/sku-vendas-por-uf";
 import type { SkuAggregation, TaxReportPayload } from "@/lib/tax-report/types";
+import { TaxReportSkuUfBreakdown } from "@/components/tax-report-sku-uf-breakdown";
 
 type MonthlyTaxReportSkuClientProps = {
   year: number;
@@ -121,6 +123,11 @@ export function MonthlyTaxReportSkuClient({
     [report, sku],
   );
 
+  const vendasPorUf = useMemo(
+    () => (skuData ? calcularSkuVendasPorUf(skuData.transacoes) : []),
+    [skuData],
+  );
+
   const ufFilteredTransactions = useMemo(() => {
     if (!skuData) return [];
     if (!filterUf.trim()) return skuData.transacoes;
@@ -183,6 +190,12 @@ export function MonthlyTaxReportSkuClient({
     <TooltipProvider delayDuration={200}>
       <div className="space-y-4">
         <SkuSummaryCard data={skuData} />
+
+        <TaxReportSkuUfBreakdown
+          rows={vendasPorUf}
+          activeUf={filterUf}
+          onSelectUf={setFilterUf}
+        />
 
         <Card className="p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
