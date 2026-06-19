@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -17,6 +18,7 @@ import {
   skuImpostoOperacionalPercentual,
   skuImpostoOperacionalTotal,
 } from "@/lib/tax-report/imposto-operacional";
+import { downloadSkuSalesExcel } from "@/lib/tax-report/export-sku-sales-excel";
 import type { SkuAggregation, TaxReportPayload } from "@/lib/tax-report/types";
 
 type MonthlyTaxReportSkuClientProps = {
@@ -176,13 +178,32 @@ export function MonthlyTaxReportSkuClient({
         <Card className="p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-sm font-semibold">Vendas do SKU</h2>
-            <input
-              className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
-              placeholder="Filtrar UF"
-              value={filterUf}
-              onChange={(e) => setFilterUf(e.target.value)}
-              maxLength={2}
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
+                placeholder="Filtrar UF"
+                value={filterUf}
+                onChange={(e) => setFilterUf(e.target.value)}
+                maxLength={2}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={filteredTransactions.length === 0}
+                onClick={() =>
+                  downloadSkuSalesExcel(filteredTransactions, {
+                    sku,
+                    year,
+                    month,
+                    filterUf: filterUf.trim() || undefined,
+                  })
+                }
+              >
+                <Download className="size-4" />
+                Baixar Excel
+              </Button>
+            </div>
           </div>
           <VirtualizedTaxReportTransactionTable rows={filteredTransactions} />
         </Card>
