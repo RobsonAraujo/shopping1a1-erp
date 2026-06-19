@@ -20,6 +20,7 @@ import {
 } from "@/lib/tax-report/ml/sku-from-order-line";
 import { repairTaxReportPayload } from "@/lib/tax-report/repair-snapshot-apuracao";
 import { calcularRelatorioFromTransacoes } from "@/lib/tax-report/service/compute-report";
+import { loadSkuAliasMap } from "@/lib/product-sku-alias-data";
 import {
   loadCbsIbsVigencia,
   loadIcmsRatesMap,
@@ -126,7 +127,11 @@ export async function generateMonthlyTaxReport(input: {
   });
 
   const allSkus = collectSkusFromOrders(orders, itemById);
-  const custoBySku: Map<string, CustoProduto> = await loadCustoBySkuMap(allSkus);
+  const aliasMap = await loadSkuAliasMap();
+  const custoBySku: Map<string, CustoProduto> = await loadCustoBySkuMap(
+    allSkus,
+    aliasMap,
+  );
 
   input.onProgress?.({
     phase: "compute",
@@ -209,6 +214,7 @@ export async function generateMonthlyTaxReport(input: {
         });
       }
     },
+    aliasMap,
   });
 
   input.onProgress?.({ phase: "done", message: "Relatório gerado." });

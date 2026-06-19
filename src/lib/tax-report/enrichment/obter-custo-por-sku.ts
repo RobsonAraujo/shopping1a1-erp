@@ -5,6 +5,12 @@ import {
 } from "@/lib/product-data";
 import { normalizeProductSku } from "@/lib/product-pricing";
 import {
+  indexBySkuWithAliases,
+  resolveCanonicalSku,
+  type SkuAliasMap,
+} from "@/lib/product-sku-alias";
+import { loadSkuAliasMap } from "@/lib/product-sku-alias-data";
+import {
   custoProdutoFromView,
   type CustoProduto,
 } from "@/lib/tax-report/enrichment/custo-produto";
@@ -12,26 +18,33 @@ import {
 export type { CustoProduto } from "@/lib/tax-report/enrichment/custo-produto";
 export { custoProdutoFromView } from "@/lib/tax-report/enrichment/custo-produto";
 
-/** Carrega custos de todos os SKUs em duas queries (settings + products). */
+/** Carrega custos de todos os SKUs em batch (settings + products + aliases). */
 export async function loadCustoBySkuMap(
   skus: string[],
+  aliasMap?: SkuAliasMap,
 ): Promise<Map<string, CustoProduto>> {
   const normalized = [
     ...new Set(skus.map((sku) => normalizeProductSku(sku)).filter(Boolean)),
   ];
   if (normalized.length === 0) return new Map();
 
+  const map = aliasMap ?? (await loadSkuAliasMap());
+  const canonicalSkus = [
+    ...new Set(normalized.map((sku) => resolveCanonicalSku(sku, map))),
+  ].filter(Boolean);
+
   const pisCofins = await getCompanyPisCofinsPercent();
   const products = await prisma.product.findMany({
-    where: { sku: { in: normalized } },
+    where: { sku: { in: canonicalSkus } },
   });
 
-  const map = new Map<string, CustoProduto>();
+  const byCanonical = new Map<string, CustoProduto>();
   for (const product of products) {
     const view = buildProductView(product, pisCofins);
-    map.set(product.sku, custoProdutoFromView(view));
+    byCanonical.set(product.sku, custoProdutoFromView(view));
   }
-  return map;
+
+  return indexBySkuWithAliases(byCanonical, normalized, map);
 }
 
 // TODO: integrar com o serviço real de precificação se divergir do cadastro de produtos.

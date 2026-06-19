@@ -21,6 +21,7 @@ import {
   skuImpostoOperacionalTotal,
 } from "@/lib/tax-report/imposto-operacional";
 import { downloadSkuSalesExcel } from "@/lib/tax-report/export-sku-sales-excel";
+import { findSkuInReport, canonicalSkuFromReport } from "@/lib/tax-report/find-sku-in-report";
 import { calcularSkuVendasPorUf } from "@/lib/tax-report/sku-vendas-por-uf";
 import type { SkuAggregation, TaxReportPayload } from "@/lib/tax-report/types";
 import { TaxReportSkuUfBreakdown } from "@/components/tax-report-sku-uf-breakdown";
@@ -99,7 +100,7 @@ export function MonthlyTaxReportSkuClient({
         throw new Error(await readApiError(res, "monthly_tax_load_failed"));
       }
       const payload = (await res.json()) as TaxReportPayload;
-      const skuData = payload.porSku.find((row) => row.sku === sku);
+      const skuData = findSkuInReport(payload.porSku, sku);
       if (!skuData) {
         setReport(null);
         setNotFound(true);
@@ -119,9 +120,12 @@ export function MonthlyTaxReportSkuClient({
   }, [loadReport]);
 
   const skuData = useMemo(
-    () => report?.porSku.find((row) => row.sku === sku) ?? null,
+    () => (report ? findSkuInReport(report.porSku, sku) : null),
     [report, sku],
   );
+
+  const canonicalSku = skuData?.sku ?? canonicalSkuFromReport(report?.porSku ?? [], sku);
+  const hasLegacySkus = (skuData?.skuAliases?.length ?? 0) > 0;
 
   const vendasPorUf = useMemo(
     () => (skuData ? calcularSkuVendasPorUf(skuData.transacoes) : []),
@@ -189,6 +193,14 @@ export function MonthlyTaxReportSkuClient({
   return (
     <TooltipProvider delayDuration={200}>
       <div className="space-y-4">
+        {hasLegacySkus ? (
+          <p className="text-xs text-[var(--muted-foreground)]">
+            Cadastro: <span className="font-medium text-[var(--foreground)]">{canonicalSku}</span>
+            {" · "}
+            inclui vendas como: {skuData?.skuAliases?.join(", ")}
+          </p>
+        ) : null}
+
         <SkuSummaryCard data={skuData} />
 
         <TaxReportSkuUfBreakdown
@@ -215,7 +227,7 @@ export function MonthlyTaxReportSkuClient({
                 disabled={filteredTransactions.length === 0}
                 onClick={() =>
                   downloadSkuSalesExcel(filteredTransactions, {
-                    sku,
+                    sku: canonicalSku,
                     year,
                     month,
                     filterUf: filterUf.trim() || undefined,
@@ -237,7 +249,11 @@ export function MonthlyTaxReportSkuClient({
             entityPlural="vendas"
             className="mb-3"
           />
-          <VirtualizedTaxReportTransactionTable rows={filteredTransactions} />
+          <VirtualizedTaxReportTransactionTable
+            rows={filteredTransactions}
+            canonicalSku={canonicalSku}
+            showOrderSku={hasLegacySkus}
+          />
         </Card>
       </div>
     </TooltipProvider>

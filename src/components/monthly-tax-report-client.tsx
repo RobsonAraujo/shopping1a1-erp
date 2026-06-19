@@ -18,7 +18,10 @@ import {
   itemListSearchEmptyMessage,
 } from "@/components/item-list-search";
 import { readApiError } from "@/lib/api-client-error";
-import { formatFinancialMoney, formatFinancialPercent } from "@/lib/financial-margin";
+import {
+  formatFinancialMoney,
+  formatFinancialPercent,
+} from "@/lib/financial-margin";
 import { filterByItemListSearch } from "@/lib/item-list-search";
 import { getZonedYearMonth } from "@/lib/mercadolibre/revenue-periods";
 import {
@@ -112,7 +115,9 @@ export function MonthlyTaxReportClient() {
         });
 
         if (!res.ok || !res.body) {
-          throw new Error(await readApiError(res, "monthly_tax_generate_failed"));
+          throw new Error(
+            await readApiError(res, "monthly_tax_generate_failed"),
+          );
         }
 
         const reader = res.body.getReader();
@@ -131,7 +136,7 @@ export function MonthlyTaxReportClient() {
             const line = chunk.trim();
             if (!line.startsWith("data: ")) continue;
             const data = JSON.parse(line.slice(6)) as
-              | { type: "progress" } & TaxReportProgressState
+              | ({ type: "progress" } & TaxReportProgressState)
               | { type: "complete" }
               | { type: "error"; message: string };
 
@@ -263,8 +268,9 @@ export function MonthlyTaxReportClient() {
 
         {!report && !loading && !generating && !error ? (
           <Card className="p-6 text-center text-sm text-[var(--muted-foreground)]">
-            Nenhum snapshot salvo para {TAX_REPORT_MONTH_NAMES[month - 1]}/{year}.
-            Clique em &quot;Gerar relatório&quot; para buscar pedidos no Mercado Livre.
+            Nenhum snapshot salvo para {TAX_REPORT_MONTH_NAMES[month - 1]}/
+            {year}. Clique em &quot;Gerar relatório&quot; para buscar pedidos no
+            Mercado Livre.
           </Card>
         ) : null}
 
@@ -364,44 +370,51 @@ export function MonthlyTaxReportClient() {
                       </tr>
                     ) : (
                       filteredSkuRows.map((row) => (
-                      <tr
-                        key={row.sku}
-                        className="border-b border-[var(--border)] hover:bg-[var(--muted)]/20"
-                      >
-                        <td className="py-2 pr-3 font-medium">
-                          <Link
-                            href={taxReportSkuPath(year, month, row.sku)}
-                            className="inline-flex items-center gap-1 text-[var(--primary)] hover:underline"
-                          >
-                            {row.sku}
-                          </Link>
-                        </td>
-                        <td className="py-2 pr-3 text-right tabular-nums">
-                          {row.quantidadeVendas}
-                        </td>
-                        <td className="py-2 pr-3 text-right tabular-nums">
-                          {row.unidadesVendidas}
-                        </td>
-                        <td className="py-2 pr-3 text-right tabular-nums">
-                          {formatFinancialMoney(row.receitaTotal)}
-                        </td>
-                        <td className="py-2 pr-3 text-right tabular-nums">
-                          {formatFinancialMoney(skuImpostoOperacionalMedio(row))}
-                        </td>
-                        <td className="py-2 pr-3 text-right tabular-nums">
-                          {formatFinancialPercent(
-                            skuImpostoOperacionalPercentual(row),
-                          )}
-                        </td>
-                        <td className="py-2 text-[var(--muted-foreground)]">
-                          <Link
-                            href={taxReportSkuPath(year, month, row.sku)}
-                            aria-label={`Ver vendas de ${row.sku}`}
-                          >
-                            <ChevronRight className="size-4" />
-                          </Link>
-                        </td>
-                      </tr>
+                        <tr
+                          key={row.sku}
+                          className="border-b border-[var(--border)] hover:bg-[var(--muted)]/20"
+                        >
+                          <td className="py-2 pr-3 font-medium">
+                            <Link
+                              href={taxReportSkuPath(year, month, row.sku)}
+                              className="inline-flex flex-col gap-0.5 text-[var(--primary)] hover:underline"
+                            >
+                              <span>{row.sku}</span>
+                              {(row.skuAliases?.length ?? 0) > 0 ? (
+                                <span className="text-[10px] font-normal text-[var(--muted-foreground)]">
+                                  SKU Associados: {row.skuAliases?.join(", ")}
+                                </span>
+                              ) : null}
+                            </Link>
+                          </td>
+                          <td className="py-2 pr-3 text-right tabular-nums">
+                            {row.quantidadeVendas}
+                          </td>
+                          <td className="py-2 pr-3 text-right tabular-nums">
+                            {row.unidadesVendidas}
+                          </td>
+                          <td className="py-2 pr-3 text-right tabular-nums">
+                            {formatFinancialMoney(row.receitaTotal)}
+                          </td>
+                          <td className="py-2 pr-3 text-right tabular-nums">
+                            {formatFinancialMoney(
+                              skuImpostoOperacionalMedio(row),
+                            )}
+                          </td>
+                          <td className="py-2 pr-3 text-right tabular-nums">
+                            {formatFinancialPercent(
+                              skuImpostoOperacionalPercentual(row),
+                            )}
+                          </td>
+                          <td className="py-2 text-[var(--muted-foreground)]">
+                            <Link
+                              href={taxReportSkuPath(year, month, row.sku)}
+                              aria-label={`Ver vendas de ${row.sku}`}
+                            >
+                              <ChevronRight className="size-4" />
+                            </Link>
+                          </td>
+                        </tr>
                       ))
                     )}
                   </tbody>

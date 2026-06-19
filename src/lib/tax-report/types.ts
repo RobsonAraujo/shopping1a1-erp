@@ -114,6 +114,8 @@ export type SkuAggregation = {
   impostoOperacionalTotal?: number;
   impostoOperacionalMedioPorVenda?: number;
   impostoOperacionalMedioPercentual?: number;
+  /** SKUs antigos/alternativos unificados nesta linha. */
+  skuAliases?: string[];
   transacoes: DetalhamentoTributario[];
 };
 

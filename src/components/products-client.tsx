@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -99,6 +99,150 @@ function FormSwitchRow({
         onCheckedChange={onCheckedChange}
         aria-label={label}
       />
+    </div>
+  );
+}
+
+function ProductSkuAliasesEditor({ canonicalSku }: { canonicalSku: string }) {
+  const [aliases, setAliases] = useState<string[]>([]);
+  const [draft, setDraft] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadAliases = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/products/${encodeURIComponent(canonicalSku)}/aliases`,
+      );
+      if (!res.ok) {
+        setError(await readApiError(res, "product_aliases_load_failed"));
+        return;
+      }
+      const json = (await res.json()) as { aliases: string[] };
+      setAliases(json.aliases);
+    } catch {
+      setError("Falha ao carregar SKUs associados.");
+    } finally {
+      setLoading(false);
+    }
+  }, [canonicalSku]);
+
+  useEffect(() => {
+    void loadAliases();
+  }, [loadAliases]);
+
+  async function addAlias() {
+    const aliasSku = draft.trim();
+    if (!aliasSku) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/products/${encodeURIComponent(canonicalSku)}/aliases`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ aliasSku }),
+        },
+      );
+      if (!res.ok) {
+        setError(await readApiError(res, "product_alias_create_failed"));
+        return;
+      }
+      const json = (await res.json()) as { aliases: string[] };
+      setAliases(json.aliases);
+      setDraft("");
+    } catch {
+      setError("Falha ao associar SKU.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeAlias(aliasSku: string) {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/products/${encodeURIComponent(canonicalSku)}/aliases/${encodeURIComponent(aliasSku)}`,
+        { method: "DELETE" },
+      );
+      if (!res.ok) {
+        setError(await readApiError(res, "product_alias_delete_failed"));
+        return;
+      }
+      const json = (await res.json()) as { aliases: string[] };
+      setAliases(json.aliases);
+    } catch {
+      setError("Falha ao remover associação.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mt-2 space-y-3 rounded-lg border border-[var(--border)] bg-[var(--muted)]/10 p-4 sm:col-span-2">
+      <div>
+        <p className="text-sm font-medium">SKUs equivalentes / anteriores</p>
+        <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+          Use quando renomear o SKU no Mercado Livre. Vendas antigas continuam
+          com o nome original, mas entram nos totais deste cadastro.
+        </p>
+      </div>
+
+      {loading ? (
+        <p className="text-xs text-[var(--muted-foreground)]">Carregando…</p>
+      ) : aliases.length > 0 ? (
+        <ul className="space-y-2">
+          {aliases.map((alias) => (
+            <li
+              key={alias}
+              className="flex items-start justify-between gap-3 rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
+            >
+              <span className="min-w-0 break-all">{alias}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 shrink-0 px-2 text-[var(--muted-foreground)]"
+                disabled={saving}
+                onClick={() => void removeAlias(alias)}
+                aria-label={`Remover alias ${alias}`}
+              >
+                <X className="size-4" />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-[var(--muted-foreground)]">
+          Nenhum SKU anterior associado.
+        </p>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="SKU antigo ou alternativo"
+          className="min-w-[12rem] flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
+          disabled={saving}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={saving || !draft.trim()}
+          onClick={() => void addAlias()}
+        >
+          Associar SKU
+        </Button>
+      </div>
+
+      {error ? <p className="text-xs text-red-700">{error}</p> : null}
     </div>
   );
 }
@@ -255,6 +399,7 @@ function ProductFormModal({
               }
             />
           </div>
+          {isEdit ? <ProductSkuAliasesEditor canonicalSku={form.sku} /> : null}
           {error ? (
             <p className="mt-4 text-sm text-red-700">{error}</p>
           ) : null}

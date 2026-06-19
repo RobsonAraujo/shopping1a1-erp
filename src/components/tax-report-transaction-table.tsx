@@ -26,12 +26,21 @@ const ROW_HEIGHT = 52;
 const GRID_COLS_DETAIL =
   "5rem 3.25rem minmax(4.25rem,0.55fr) minmax(4rem,0.5fr) minmax(4.5rem,1fr) minmax(4.5rem,1fr) minmax(4rem,1fr) minmax(3.75rem,1fr) minmax(4.5rem,1fr) minmax(4.25rem,1fr)";
 
+const GRID_COLS_WITH_ORDER_SKU =
+  "5rem minmax(5rem,1fr) 3.25rem minmax(4.25rem,0.55fr) minmax(4rem,0.5fr) minmax(4.5rem,1fr) minmax(4.5rem,1fr) minmax(4rem,1fr) minmax(3.75rem,1fr) minmax(4.5rem,1fr) minmax(4.25rem,1fr)";
+
 const GRID_COLS_WITH_SKU =
   "5rem minmax(4rem,1fr) 3.25rem minmax(4.25rem,0.55fr) minmax(4rem,0.5fr) minmax(4.5rem,1fr) minmax(4.5rem,1fr) minmax(4rem,1fr) minmax(3.75rem,1fr) minmax(4.5rem,1fr) minmax(4.25rem,1fr)";
 
-function tableGridStyle(showSku: boolean): CSSProperties {
+function tableGridStyle(options: {
+  showSku?: boolean;
+  showOrderSku?: boolean;
+}): CSSProperties {
+  if (options.showOrderSku) {
+    return { gridTemplateColumns: GRID_COLS_WITH_ORDER_SKU };
+  }
   return {
-    gridTemplateColumns: showSku ? GRID_COLS_WITH_SKU : GRID_COLS_DETAIL,
+    gridTemplateColumns: options.showSku ? GRID_COLS_WITH_SKU : GRID_COLS_DETAIL,
   };
 }
 
@@ -75,13 +84,28 @@ export function TaxReportHeaderWithTip({
   );
 }
 
-function TransactionTableHeader({ showSku }: { showSku: boolean }) {
+function TransactionTableHeader({
+  showSku,
+  showOrderSku,
+}: {
+  showSku?: boolean;
+  showOrderSku?: boolean;
+}) {
   return (
     <div
       className="grid w-full items-center border-b border-[var(--border)] bg-[var(--background)] text-left text-xs text-[var(--muted-foreground)]"
-      style={tableGridStyle(showSku)}
+      style={tableGridStyle({ showSku, showOrderSku })}
     >
       <span className="min-w-0 px-2 py-2.5 whitespace-nowrap">Data</span>
+      {showOrderSku ? (
+        <span className="min-w-0 truncate px-2 py-2.5">
+          <TaxReportHeaderWithTip
+            label="SKU no pedido"
+            tip="Nome do SKU registrado no pedido do Mercado Livre. Pode diferir do cadastro atual quando o SKU foi renomeado."
+            align="left"
+          />
+        </span>
+      ) : null}
       {showSku ? (
         <span className="min-w-0 truncate px-2 py-2.5">SKU</span>
       ) : null}
@@ -132,9 +156,13 @@ function TransactionTableHeader({ showSku }: { showSku: boolean }) {
 function TransactionRowCells({
   row,
   showSku,
+  showOrderSku,
+  canonicalSku,
 }: {
   row: DetalhamentoTributario;
-  showSku: boolean;
+  showSku?: boolean;
+  showOrderSku?: boolean;
+  canonicalSku?: string;
 }) {
   const t = row.transacao;
   const impostoOperacional = impostoOperacionalLinha(row);
@@ -152,6 +180,16 @@ function TransactionRowCells({
       <span className="px-2 text-xs whitespace-nowrap">
         {t.orderDate.slice(0, 10)}
       </span>
+      {showOrderSku ? (
+        <span className="min-w-0 truncate px-2 text-xs" title={t.sku}>
+          <span className="font-medium">{t.sku}</span>
+          {canonicalSku && t.sku !== canonicalSku ? (
+            <span className="mt-0.5 block text-[10px] text-[var(--muted-foreground)]">
+              → {canonicalSku}
+            </span>
+          ) : null}
+        </span>
+      ) : null}
       {showSku ? (
         <span className="truncate px-2 font-medium" title={t.sku}>
           {t.sku}
@@ -225,9 +263,13 @@ function TransactionRowCells({
 export function VirtualizedTaxReportTransactionTable({
   rows,
   showSku = false,
+  showOrderSku = false,
+  canonicalSku,
 }: {
   rows: DetalhamentoTributario[];
   showSku?: boolean;
+  showOrderSku?: boolean;
+  canonicalSku?: string;
 }) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -257,7 +299,7 @@ export function VirtualizedTaxReportTransactionTable({
     <TooltipProvider delayDuration={200}>
       <div className="space-y-4">
         <div className="overflow-hidden rounded-lg border border-[var(--border)] text-sm">
-          <TransactionTableHeader showSku={showSku} />
+          <TransactionTableHeader showSku={showSku} showOrderSku={showOrderSku} />
           <div
             ref={parentRef}
             className="max-h-[32rem] overflow-x-hidden overflow-y-auto"
@@ -285,7 +327,7 @@ export function VirtualizedTaxReportTransactionTable({
                       isSelected && "bg-[var(--primary)]/10",
                     )}
                     style={{
-                      ...tableGridStyle(showSku),
+                      ...tableGridStyle({ showSku, showOrderSku }),
                       height: `${virtualRow.size}px`,
                       transform: `translateY(${virtualRow.start}px)`,
                     }}
@@ -295,7 +337,12 @@ export function VirtualizedTaxReportTransactionTable({
                       )
                     }
                   >
-                    <TransactionRowCells row={row} showSku={showSku} />
+                    <TransactionRowCells
+                      row={row}
+                      showSku={showSku}
+                      showOrderSku={showOrderSku}
+                      canonicalSku={canonicalSku}
+                    />
                   </div>
                 );
               })}

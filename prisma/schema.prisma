@@ -169,7 +169,21 @@ model Product {
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
+  skuAliases ProductSkuAlias[] @relation("ProductCanonicalSku")
+
   @@map("products")
+}
+
+/// SKU antigo/alternativo que aponta para o cadastro canônico em products.
+model ProductSkuAlias {
+  aliasSku     String   @id @map("alias_sku")
+  canonicalSku String   @map("canonical_sku")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  product Product @relation("ProductCanonicalSku", fields: [canonicalSku], references: [sku], onDelete: Cascade)
+
+  @@index([canonicalSku])
+  @@map("product_sku_aliases")
 }
 
 /// PIS/COFINS global da empresa (uma linha).

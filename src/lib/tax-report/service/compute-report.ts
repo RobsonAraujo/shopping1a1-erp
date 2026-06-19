@@ -18,6 +18,7 @@ import {
   calcularPisCofins,
 } from "@/lib/tax-report/calculators/pis-cofins";
 import type { CbsIbsVigenciaRow } from "@/lib/tax-report/calculators/cbs-ibs";
+import type { SkuAliasMap } from "@/lib/product-sku-alias";
 import type {
   DetalhamentoTributario,
   IcmsRateRow,
@@ -115,6 +116,7 @@ export function calcularRelatorioFromTransacoes(input: {
   overrides: Record<string, ManualFiscalOverride>;
   meta: TaxReportPayload["meta"];
   onComputeProgress?: (current: number, total: number) => void;
+  aliasMap?: SkuAliasMap;
 }): TaxReportPayload {
   const total = input.transacoes.length;
   const detalhes = input.transacoes.map((transacao, index) => {
@@ -139,7 +141,7 @@ export function calcularRelatorioFromTransacoes(input: {
     });
   });
 
-  const porSku = agregarPorSku(detalhes);
+  const porSku = agregarPorSku(detalhes, input.aliasMap);
   const consolidado = consolidarRelatorio(detalhes);
 
   return {

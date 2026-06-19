@@ -1,5 +1,8 @@
+import { resolveCanonicalSku, type SkuAliasMap } from "@/lib/product-sku-alias";
+import { loadSkuAliasMap } from "@/lib/product-sku-alias-data";
 import type { CustoProduto } from "@/lib/tax-report/enrichment/custo-produto";
 import { loadCustoBySkuMap } from "@/lib/tax-report/enrichment/obter-custo-por-sku";
+import { findSkuAggregation } from "@/lib/tax-report/aggregation/agregador-por-sku";
 import { calcularRelatorioFromTransacoes } from "@/lib/tax-report/service/compute-report";
 import {
   loadCbsIbsVigencia,
@@ -40,7 +43,46 @@ function enrichTransacao(
   };
 }
 
-function needsApuracaoRepair(payload: TaxReportPayload): boolean {
+function needsSkuAliasRepair(
+  payload: TaxReportPayload,
+  aliasMap: SkuAliasMap,
+): boolean {
+  if (aliasMap.size === 0) return false;
+
+  if (
+    payload.porSku.some((row) => {
+      const canonical = resolveCanonicalSku(row.sku, aliasMap);
+      return row.sku !== canonical;
+    })
+  ) {
+    return true;
+  }
+
+  for (const row of payload.porSku) {
+    const expectedAliases = [...aliasMap.entries()]
+      .filter(([, canonical]) => canonical === row.sku)
+      .map(([alias]) => alias)
+      .sort();
+    const currentAliases = [...(row.skuAliases ?? [])].sort();
+    if (expectedAliases.join("\0") !== currentAliases.join("\0")) {
+      return true;
+    }
+  }
+
+  for (const det of collectDetalhes(payload).filter((d) => d.incluidoNaApuracao)) {
+    const canonical = resolveCanonicalSku(det.transacao.sku, aliasMap);
+    const row = findSkuAggregation(payload.porSku, canonical, aliasMap);
+    if (!row) return true;
+  }
+
+  return false;
+}
+
+function needsApuracaoRepair(
+  payload: TaxReportPayload,
+  aliasMap: SkuAliasMap,
+): boolean {
+  if (needsSkuAliasRepair(payload, aliasMap)) return true;
   if (!payload.consolidado.apuracao) return true;
   if (
     payload.consolidado.irpjEstimado != null ||
@@ -67,14 +109,15 @@ export async function repairTaxReportPayload(
   payload: TaxReportPayload,
 ): Promise<TaxReportPayload> {
   const synced = repairTaxReportPayloadSync(payload);
-  if (!needsApuracaoRepair(synced)) return synced;
+  const aliasMap = await loadSkuAliasMap();
+  if (!needsApuracaoRepair(synced, aliasMap)) return synced;
 
   const detalhes = collectDetalhes(synced);
   if (detalhes.length === 0) return synced;
 
   const skus = [...new Set(detalhes.map((d) => d.transacao.sku).filter(Boolean))];
   const [custoBySku, config, icmsRates, cbsIbsVigencia] = await Promise.all([
-    loadCustoBySkuMap(skus),
+    loadCustoBySkuMap(skus, aliasMap),
     loadTaxCompanyConfig(),
     loadIcmsRatesMap(),
     loadCbsIbsVigencia(synced.year),
@@ -93,6 +136,7 @@ export async function repairTaxReportPayload(
     month: synced.month,
     overrides: synced.overrides,
     meta: synced.meta,
+    aliasMap,
   });
 
   return {

@@ -7,6 +7,12 @@ import {
   type ResolvedProductPricing,
 } from "@/lib/product-pricing";
 import {
+  indexBySkuWithAliases,
+  resolveCanonicalSku,
+  type SkuAliasMap,
+} from "@/lib/product-sku-alias";
+import { loadSkuAliasMap } from "@/lib/product-sku-alias-data";
+import {
   DEFAULT_WHOLESALE_REDUCTIONS,
   WHOLESALE_ANCHOR_MIN_PURCHASE_UNIT,
   type WholesaleReductionSettings,
@@ -159,9 +165,11 @@ export async function resolvePricingForSku(
     return { sku: null, pricing: null, product: null };
   }
 
+  const aliasMap = await loadSkuAliasMap();
+  const canonicalSku = resolveCanonicalSku(normalized, aliasMap);
   const pisCofins = await getCompanyPisCofinsPercent();
   const product = await prisma.product.findUnique({
-    where: { sku: normalized },
+    where: { sku: canonicalSku },
   });
   if (!product) {
     return { sku: normalized, pricing: null, product: null };
@@ -185,26 +193,32 @@ export async function resolvePricingForSku(
 
 export async function loadProductsMapBySku(
   skus: string[],
+  aliasMap?: SkuAliasMap,
 ): Promise<Map<string, ResolvedProductPricing>> {
   const normalized = [
     ...new Set(skus.map((s) => normalizeProductSku(s)).filter(Boolean)),
   ];
   if (normalized.length === 0) return new Map();
 
+  const map = aliasMap ?? (await loadSkuAliasMap());
+  const canonicalSkus = [
+    ...new Set(normalized.map((sku) => resolveCanonicalSku(sku, map))),
+  ].filter(Boolean);
+
   const pisCofins = await getCompanyPisCofinsPercent();
   const products = await prisma.product.findMany({
-    where: { sku: { in: normalized } },
+    where: { sku: { in: canonicalSkus } },
   });
 
-  const map = new Map<string, ResolvedProductPricing>();
+  const byCanonical = new Map<string, ResolvedProductPricing>();
   for (const product of products) {
     const record = productToPricingRecord(product);
     const resolved = resolveProductPricing(record, pisCofins);
     if (resolved) {
-      map.set(product.sku, resolved);
+      byCanonical.set(product.sku, resolved);
     }
   }
-  return map;
+  return indexBySkuWithAliases(byCanonical, normalized, map);
 }
 
 export type ProductWriteInput = {

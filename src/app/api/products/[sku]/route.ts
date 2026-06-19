@@ -8,6 +8,7 @@ import {
   validateProductInput,
   type ProductWriteInput,
 } from "@/lib/product-data";
+import { listAliasesForCanonicalSku } from "@/lib/product-sku-alias-data";
 import { normalizeProductSku } from "@/lib/product-pricing";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 import {
@@ -77,9 +78,11 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     if (!product) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
+    const aliases = await listAliasesForCanonicalSku(sku);
     return NextResponse.json({
       product: buildProductView(product, settings.pisCofinsPercent),
       pisCofinsPercent: settings.pisCofinsPercent,
+      aliases,
     });
   } catch (e) {
     logServerError("api/products/[sku] GET", e);
