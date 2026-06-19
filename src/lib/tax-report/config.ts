@@ -37,8 +37,4 @@ export function getContributorProvider(): "cnpj_ws" | "stub" {
   return isCnpjWsEnabled() ? "cnpj_ws" : "stub";
 }
 
-export function normalizeUf(uf: string | null | undefined): string | null {
-  if (!uf) return null;
-  const normalized = uf.trim().toUpperCase();
-  return normalized.length === 2 ? normalized : null;
-}
+export { normalizeUf } from "@/lib/tax-report/brazilian-ufs";

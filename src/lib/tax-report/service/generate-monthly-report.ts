@@ -1,8 +1,15 @@
 import { prisma } from "@/lib/db";
 import { fetchItemsByIdsBatched, fetchPaidOrdersByPeriod } from "@/lib/mercadolibre/api";
 import { getCalendarMonthRange } from "@/lib/mercadolibre/revenue-periods";
-import { getTaxReportBillingConcurrency, isCnpjWsEnabled } from "@/lib/tax-report/config";
+import {
+  getTaxReportBillingConcurrency,
+  isCnpjWsEnabled,
+} from "@/lib/tax-report/config";
 import { createContributorProvider, resolveContributorStatus } from "@/lib/tax-report/contributor";
+import {
+  CNPJ_WS_WARNING_NOT_CONFIGURED,
+  cnpjWsWarningStubFallbackCount,
+} from "@/lib/tax-report/contributor/user-messages";
 import { buildTransacoesFromOrder } from "@/lib/tax-report/enrichment/build-transacao-venda";
 import { obterCustoPorSku } from "@/lib/tax-report/enrichment/obter-custo-por-sku";
 import type { CustoProduto } from "@/lib/tax-report/enrichment/obter-custo-por-sku";
@@ -11,6 +18,7 @@ import {
   mapWithConcurrency,
 } from "@/lib/tax-report/ml/billing-info-client";
 import { itemIdFromOrderLine } from "@/lib/tax-report/ml/sku-from-order-line";
+import { repairTaxReportPayload } from "@/lib/tax-report/repair-snapshot-uf";
 import { calcularRelatorioFromTransacoes } from "@/lib/tax-report/service/compute-report";
 import {
   loadCbsIbsVigencia,
@@ -190,13 +198,11 @@ export async function generateMonthlyTaxReport(input: {
   const cnpjWsEnabled = isCnpjWsEnabled();
   const contributorWarnings: string[] = [];
   if (!cnpjWsEnabled) {
-    contributorWarnings.push(
-      "Verificação externa de CNPJ contribuinte (CNPJ.ws) está desligada. PJ sem taxpayer_type no ML é tratado como não-contribuinte (aplica DIFAL — postura conservadora).",
-    );
+    contributorWarnings.push(CNPJ_WS_WARNING_NOT_CONFIGURED);
   }
   if (stubFallbackCount > 0) {
     contributorWarnings.push(
-      `${stubFallbackCount} CNPJ(s) usaram fallback interno por falta de taxpayer_type no ML${cnpjWsEnabled ? " ou falha na API" : ""}.`,
+      cnpjWsWarningStubFallbackCount(stubFallbackCount, cnpjWsEnabled),
     );
   }
 
@@ -265,5 +271,6 @@ export async function loadTaxReportSnapshot(
     where: { sellerId_year_month: { sellerId, year, month } },
   });
   if (!row) return null;
-  return row.payload as unknown as TaxReportPayload;
+  const payload = row.payload as unknown as TaxReportPayload;
+  return repairTaxReportPayload(payload);
 }

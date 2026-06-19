@@ -1,6 +1,24 @@
 import { getMercadoLibreConfig } from "@/lib/mercadolibre/config";
-import { normalizeUf } from "@/lib/tax-report/config";
+import {
+  resolveUfDestino,
+  ufFromStateCode,
+  ufFromStateId,
+  ufFromStateName,
+} from "@/lib/tax-report/brazilian-ufs";
 import type { BuyerDocumentType } from "@/lib/tax-report/types";
+
+type MlBillingAdditionalInfo = {
+  type?: string;
+  value?: string;
+};
+
+type MlBillingState =
+  | string
+  | {
+      name?: string;
+      id?: string;
+      code?: string;
+    };
 
 export type OrderBillingInfoResponse = {
   buyer?: {
@@ -10,8 +28,10 @@ export type OrderBillingInfoResponse = {
         number?: string;
       };
       address?: {
-        state?: { name?: string; id?: string };
+        state?: MlBillingState;
+        state_name?: string;
       };
+      additional_info?: MlBillingAdditionalInfo[];
       taxes?: {
         taxpayer_type?: { description?: string; id?: string };
       };
@@ -26,6 +46,43 @@ function parseMlError(text: string): string {
   } catch {
     return text;
   }
+}
+
+function readAdditionalStateName(
+  additionalInfo: MlBillingAdditionalInfo[] | undefined,
+): string | null {
+  if (!additionalInfo?.length) return null;
+  const entry = additionalInfo.find(
+    (item) => item.type?.toUpperCase() === "STATE_NAME",
+  );
+  return entry?.value?.trim() || null;
+}
+
+function readMlBillingStateFields(billing: OrderBillingInfoResponse | null): {
+  stateName: string | null;
+  stateId: string | null;
+  stateCode: string | null;
+} {
+  const address = billing?.buyer?.billing_info?.address;
+  const state = address?.state;
+
+  if (typeof state === "string") {
+    return {
+      stateName: state.trim() || null,
+      stateId: null,
+      stateCode: null,
+    };
+  }
+
+  return {
+    stateName:
+      state?.name?.trim() ||
+      address?.state_name?.trim() ||
+      readAdditionalStateName(billing?.buyer?.billing_info?.additional_info) ||
+      null,
+    stateId: state?.id?.trim() || null,
+    stateCode: state?.code?.trim() || null,
+  };
 }
 
 export async function fetchOrderBillingInfo(
@@ -76,9 +133,19 @@ export function parseTaxpayerTypeFromMl(
 export function parseUfFromBilling(
   billing: OrderBillingInfoResponse | null,
 ): string | null {
-  const stateName = billing?.buyer?.billing_info?.address?.state?.name;
-  const stateId = billing?.buyer?.billing_info?.address?.state?.id;
-  return normalizeUf(stateId) ?? normalizeUf(stateName?.slice(0, 2));
+  const { stateName, stateId, stateCode } = readMlBillingStateFields(billing);
+
+  const fromName = ufFromStateName(stateName);
+  if (fromName) return fromName;
+
+  const fromIdOrCode =
+    ufFromStateId(stateId) ??
+    ufFromStateCode(stateCode) ??
+    ufFromStateName(stateId) ??
+    ufFromStateName(stateCode);
+  if (fromIdOrCode) return fromIdOrCode;
+
+  return resolveUfDestino(stateId ?? stateCode ?? stateName);
 }
 
 export async function mapWithConcurrency<T, R>(

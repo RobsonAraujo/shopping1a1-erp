@@ -1,3 +1,8 @@
+import type {
+  ClienteVerificacaoContribuinte,
+  ContributorVerificationResult,
+} from "@/lib/tax-report/contributor/types";
+
 export class StubContributorProvider implements ClienteVerificacaoContribuinte {
   async verificarContribuinteIcms(
     _cnpj: string,

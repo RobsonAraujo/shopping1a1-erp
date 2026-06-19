@@ -5,6 +5,7 @@ import {
   parseTaxpayerTypeFromMl,
   parseUfFromBilling,
 } from "@/lib/tax-report/ml/billing-info-client";
+import { resolveUfDestino } from "@/lib/tax-report/brazilian-ufs";
 import {
   itemIdFromOrderLine,
   revenueFromOrderItemLine,
@@ -82,7 +83,7 @@ export function buildTransacoesFromOrder(input: {
       itemId,
       quantidade,
       receitaBruta: revenueFromOrderItemLine(line),
-      ufDestino: override?.ufDestino ?? ufFromBilling,
+      ufDestino: resolveUfDestino(override?.ufDestino ?? ufFromBilling),
       tipoDocumento: override?.tipoDocumento ?? docType,
       documento,
       contribuinteIcms,
