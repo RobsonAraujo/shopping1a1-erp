@@ -254,3 +254,24 @@ export function catalogStatusLabel(status: CompetitionStatus): string {
   return "Sem sinal";
 }
 
+export function catalogStatusBadgeClass(status: string | null): string {
+  if (status === "winning") {
+    return "inline-flex rounded-md bg-emerald-600 px-2 py-0.5 text-xs font-semibold text-white";
+  }
+  if (status === "losing") {
+    return "inline-flex rounded-md bg-rose-600 px-2 py-0.5 text-xs font-semibold text-white";
+  }
+  if (status === "shared") {
+    return "inline-flex rounded-md bg-amber-500 px-2 py-0.5 text-xs font-semibold text-white";
+  }
+  return "inline-flex rounded-md bg-[var(--muted)] px-2 py-0.5 text-xs font-semibold text-[var(--muted-foreground)]";
+}
+
+export function catalogPriceGap(
+  sellerPrice: number | null,
+  priceToWin: number | null,
+): number | null {
+  if (sellerPrice == null || priceToWin == null) return null;
+  return Math.round((sellerPrice - priceToWin) * 100) / 100;
+}
+

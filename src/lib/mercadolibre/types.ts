@@ -70,6 +70,10 @@ export type ItemBody = {
   variations?: Array<{
     id: number;
     available_quantity?: number;
+    attribute_combinations?: Array<{
+      name?: string;
+      value_name?: string;
+    }>;
   }>;
   /** Atributos do anúncio (alguns fluxos expõem o SKU aqui como `SELLER_SKU`). */
   attributes?: Array<{

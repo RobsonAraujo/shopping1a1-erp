@@ -15,6 +15,7 @@ import {
   refreshSessionPath,
 } from "@/lib/mercadolibre/session";
 import { countListingsByStatus } from "@/lib/mercadolibre/listing-status";
+import { loadDashboardItemsEnrichment } from "@/lib/dashboard-items-enrichment";
 import { loadOperationsSummaryFromDb } from "@/lib/replenishment-cycle-data";
 
 export default async function DashboardPage() {
@@ -38,23 +39,36 @@ export default async function DashboardPage() {
   let operationsSummary: Awaited<
     ReturnType<typeof loadOperationsSummaryFromDb>
   > | null = null;
+  let enrichment: Awaited<ReturnType<typeof loadDashboardItemsEnrichment>> = {
+    warehouseById: {},
+    leadTimeById: {},
+    catalogById: {},
+    openCycleById: {},
+  };
 
   try {
     const allItems = await fetchOperationalListings(token, userId);
     const allIds = allItems.map((item) => item.id);
-    const [allSales] = await Promise.all([
-        fetchUnitsSoldForItemsInWindowBatched(
-          token,
-          userId,
-          allIds,
-          windowDays,
-          dateField,
-        ),
+    const catalogIds = allItems
+      .filter((i) => i.catalog_listing === true)
+      .map((i) => i.id);
+
+    const [allSales, opsSummary, itemsEnrichment] = await Promise.all([
+      fetchUnitsSoldForItemsInWindowBatched(
+        token,
+        userId,
+        allIds,
+        windowDays,
+        dateField,
+      ),
+      loadOperationsSummaryFromDb(),
+      loadDashboardItemsEnrichment(allIds, catalogIds),
     ]);
 
     items = allItems;
     salesByItem = allSales;
-    operationsSummary = await loadOperationsSummaryFromDb();
+    operationsSummary = opsSummary;
+    enrichment = itemsEnrichment;
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro ao carregar anúncios";
     return (
@@ -130,7 +144,12 @@ export default async function DashboardPage() {
             ownItems.length === 1 ? "anúncio próprio" : "anúncios próprios"
           }`}
         >
-          <DashboardItemsTable items={ownItems} salesByItem={salesByItem} />
+          <DashboardItemsTable
+            items={ownItems}
+            salesByItem={salesByItem}
+            variant="own"
+            enrichment={enrichment}
+          />
         </CollapsibleDashboardSection>
 
         <CollapsibleDashboardSection
@@ -141,7 +160,12 @@ export default async function DashboardPage() {
               : "anúncios do catálogo"
           }`}
         >
-          <DashboardItemsTable items={catalogItems} salesByItem={salesByItem} />
+          <DashboardItemsTable
+            items={catalogItems}
+            salesByItem={salesByItem}
+            variant="catalog"
+            enrichment={enrichment}
+          />
         </CollapsibleDashboardSection>
       </div>
     </div>
