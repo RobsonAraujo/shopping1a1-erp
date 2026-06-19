@@ -20,6 +20,10 @@ import {
   TAX_REPORT_MONTH_NAMES,
   taxReportSkuPath,
 } from "@/lib/tax-report/routes";
+import {
+  skuImpostoOperacionalMedio,
+  skuImpostoOperacionalPercentual,
+} from "@/lib/tax-report/imposto-operacional";
 import type { TaxReportPayload } from "@/lib/tax-report/types";
 import { cn } from "@/lib/utils";
 
@@ -301,15 +305,37 @@ export function MonthlyTaxReportClient() {
                 </p>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[40rem] text-sm">
+                <table className="w-full min-w-[52rem] text-sm">
                   <thead>
                     <tr className="border-b border-[var(--border)] text-left text-xs text-[var(--muted-foreground)]">
                       <th className="py-2 pr-3">SKU</th>
                       <th className="py-2 pr-3 text-right">Vendas</th>
                       <th className="py-2 pr-3 text-right">Unidades</th>
                       <th className="py-2 pr-3 text-right">Receita</th>
-                      <th className="py-2 pr-3 text-right">Imposto médio</th>
-                      <th className="py-2 pr-3 text-right">% s/ receita</th>
+                      <th className="py-2 pr-3 text-right">
+                        <TaxReportHeaderWithTip
+                          label="Imp. oper. médio"
+                          tip="Média de PIS/COFINS + ICMS por venda — sem IRPJ/CSLL."
+                        />
+                      </th>
+                      <th className="py-2 pr-3 text-right">
+                        <TaxReportHeaderWithTip
+                          label="% oper."
+                          tip="Imposto operacional total do SKU sobre a receita."
+                        />
+                      </th>
+                      <th className="py-2 pr-3 text-right">
+                        <TaxReportHeaderWithTip
+                          label="Imposto médio"
+                          tip="Média do imposto total por venda (inclui IRPJ+CSLL estimados)."
+                        />
+                      </th>
+                      <th className="py-2 pr-3 text-right">
+                        <TaxReportHeaderWithTip
+                          label="% total"
+                          tip="Imposto total do SKU (com IRPJ+CSLL) sobre a receita."
+                        />
+                      </th>
                       <th className="py-2 w-8" aria-hidden />
                     </tr>
                   </thead>
@@ -335,6 +361,14 @@ export function MonthlyTaxReportClient() {
                         </td>
                         <td className="py-2 pr-3 text-right tabular-nums">
                           {formatFinancialMoney(row.receitaTotal)}
+                        </td>
+                        <td className="py-2 pr-3 text-right tabular-nums">
+                          {formatFinancialMoney(skuImpostoOperacionalMedio(row))}
+                        </td>
+                        <td className="py-2 pr-3 text-right tabular-nums">
+                          {formatFinancialPercent(
+                            skuImpostoOperacionalPercentual(row),
+                          )}
                         </td>
                         <td className="py-2 pr-3 text-right tabular-nums">
                           {formatFinancialMoney(row.impostoMedioPorVenda)}

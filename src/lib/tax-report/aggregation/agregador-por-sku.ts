@@ -5,6 +5,10 @@ import type {
   SkuAggregation,
 } from "@/lib/tax-report/types";
 
+function impostoOperacionalLinhaValor(det: DetalhamentoTributario): number {
+  return (det.pisCofins?.liquido ?? 0) + (det.icmsDifal?.icmsTotal ?? 0);
+}
+
 export function agregarPorSku(
   transacoes: DetalhamentoTributario[],
 ): SkuAggregation[] {
@@ -21,6 +25,9 @@ export function agregarPorSku(
       impostoTotal: 0,
       impostoMedioPorVenda: 0,
       impostoMedioPercentual: 0,
+      impostoOperacionalTotal: 0,
+      impostoOperacionalMedioPorVenda: 0,
+      impostoOperacionalMedioPercentual: 0,
       transacoes: [],
     };
 
@@ -30,6 +37,9 @@ export function agregarPorSku(
       existing.receitaTotal + det.transacao.receitaBruta,
     );
     existing.impostoTotal = roundMoney(existing.impostoTotal + det.impostoTotal);
+    existing.impostoOperacionalTotal = roundMoney(
+      (existing.impostoOperacionalTotal ?? 0) + impostoOperacionalLinhaValor(det),
+    );
     existing.transacoes.push(det);
     map.set(sku, existing);
   }
@@ -39,6 +49,7 @@ export function agregarPorSku(
       ...row,
       receitaTotal: roundMoney(row.receitaTotal),
       impostoTotal: roundMoney(row.impostoTotal),
+      impostoOperacionalTotal: roundMoney(row.impostoOperacionalTotal ?? 0),
       impostoMedioPorVenda:
         row.quantidadeVendas > 0
           ? roundMoney(row.impostoTotal / row.quantidadeVendas)
@@ -46,6 +57,16 @@ export function agregarPorSku(
       impostoMedioPercentual:
         row.receitaTotal > 0
           ? roundMoney((row.impostoTotal / row.receitaTotal) * 100)
+          : 0,
+      impostoOperacionalMedioPorVenda:
+        row.quantidadeVendas > 0
+          ? roundMoney((row.impostoOperacionalTotal ?? 0) / row.quantidadeVendas)
+          : 0,
+      impostoOperacionalMedioPercentual:
+        row.receitaTotal > 0
+          ? roundMoney(
+              ((row.impostoOperacionalTotal ?? 0) / row.receitaTotal) * 100,
+            )
           : 0,
     }))
     .sort((a, b) => b.receitaTotal - a.receitaTotal);

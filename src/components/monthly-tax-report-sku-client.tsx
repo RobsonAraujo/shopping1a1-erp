@@ -12,6 +12,11 @@ import {
   TAX_REPORT_MONTH_NAMES,
   taxReportPath,
 } from "@/lib/tax-report/routes";
+import {
+  skuImpostoOperacionalMedio,
+  skuImpostoOperacionalPercentual,
+  skuImpostoOperacionalTotal,
+} from "@/lib/tax-report/imposto-operacional";
 import type { SkuAggregation, TaxReportPayload } from "@/lib/tax-report/types";
 
 type MonthlyTaxReportSkuClientProps = {
@@ -21,8 +26,12 @@ type MonthlyTaxReportSkuClientProps = {
 };
 
 function SkuSummaryCard({ data }: { data: SkuAggregation }) {
+  const impostoOperacionalTotal = skuImpostoOperacionalTotal(data);
+  const impostoOperacionalMedio = skuImpostoOperacionalMedio(data);
+  const impostoOperacionalPercentual = skuImpostoOperacionalPercentual(data);
+
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
       <Card className="p-4">
         <p className="text-xs text-[var(--muted-foreground)]">Vendas</p>
         <p className="mt-1 text-xl font-semibold tabular-nums">
@@ -49,6 +58,17 @@ function SkuSummaryCard({ data }: { data: SkuAggregation }) {
         <p className="mt-1 text-xs text-[var(--muted-foreground)]">
           Média {formatFinancialMoney(data.impostoMedioPorVenda)} (
           {formatFinancialPercent(data.impostoMedioPercentual)} s/ receita)
+        </p>
+      </Card>
+      <Card className="p-4">
+        <p className="text-xs text-[var(--muted-foreground)]">Imp. operacional</p>
+        <p className="mt-1 text-xl font-semibold tabular-nums">
+          {formatFinancialMoney(impostoOperacionalTotal)}
+        </p>
+        <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+          Média {formatFinancialMoney(impostoOperacionalMedio)} (
+          {formatFinancialPercent(impostoOperacionalPercentual)} s/ receita) · sem
+          IRPJ/CSLL
         </p>
       </Card>
     </div>

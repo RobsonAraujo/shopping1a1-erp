@@ -17,16 +17,17 @@ import {
   percentOfSale,
 } from "@/lib/financial-margin";
 import type { DetalhamentoTributario } from "@/lib/tax-report/types";
+import { impostoOperacionalLinha } from "@/lib/tax-report/imposto-operacional";
 import { cn } from "@/lib/utils";
 
 const ROW_HEIGHT = 52;
 
-/** 11 colunas — cabe em max-w-7xl sem scroll horizontal. */
+/** 12 colunas — cabe em max-w-7xl sem scroll horizontal. */
 const GRID_COLS_DETAIL =
-  "5rem 3.25rem minmax(4.25rem,0.55fr) minmax(4rem,0.5fr) minmax(4.75rem,1fr) minmax(4.75rem,1fr) minmax(4.25rem,1fr) minmax(4rem,1fr) minmax(4.25rem,1fr) minmax(4.75rem,1fr) minmax(4.25rem,1fr)";
+  "5rem 3.25rem minmax(4.25rem,0.55fr) minmax(4rem,0.5fr) minmax(4.5rem,1fr) minmax(4.5rem,1fr) minmax(4rem,1fr) minmax(3.75rem,1fr) minmax(4rem,1fr) minmax(4.5rem,1fr) minmax(4.5rem,1fr) minmax(4.25rem,1fr)";
 
 const GRID_COLS_WITH_SKU =
-  "5rem minmax(4rem,1fr) 3.25rem minmax(4.25rem,0.55fr) minmax(4rem,0.5fr) minmax(4.75rem,1fr) minmax(4.75rem,1fr) minmax(4.25rem,1fr) minmax(4rem,1fr) minmax(4.25rem,1fr) minmax(4.75rem,1fr) minmax(4.25rem,1fr)";
+  "5rem minmax(4rem,1fr) 3.25rem minmax(4.25rem,0.55fr) minmax(4rem,0.5fr) minmax(4.5rem,1fr) minmax(4.5rem,1fr) minmax(4rem,1fr) minmax(3.75rem,1fr) minmax(4rem,1fr) minmax(4.5rem,1fr) minmax(4.5rem,1fr) minmax(4.25rem,1fr)";
 
 function tableGridStyle(showSku: boolean): CSSProperties {
   return {
@@ -120,6 +121,12 @@ function TransactionTableHeader({ showSku }: { showSku: boolean }) {
       </span>
       <span className="px-2 py-2.5 text-right whitespace-nowrap">
         <TaxReportHeaderWithTip
+          label="Imp. oper."
+          tip="PIS/COFINS + ICMS por venda — sem IRPJ/CSLL. Percentual sobre a receita bruta."
+        />
+      </span>
+      <span className="px-2 py-2.5 text-right whitespace-nowrap">
+        <TaxReportHeaderWithTip
           label="Imposto"
           tip="Imposto total (PIS/COFINS + ICMS + IRPJ+CSLL) e percentual sobre a receita bruta."
         />
@@ -142,6 +149,11 @@ function TransactionRowCells({
   showSku: boolean;
 }) {
   const t = row.transacao;
+  const impostoOperacional = impostoOperacionalLinha(row);
+  const impostoOperacionalPercent =
+    impostoOperacional != null
+      ? percentOfSale(impostoOperacional, t.receitaBruta)
+      : null;
   const impostoPercent = row.incluidoNaApuracao
     ? percentOfSale(row.impostoTotal, t.receitaBruta)
     : null;
@@ -177,6 +189,14 @@ function TransactionRowCells({
         {formatFinancialMoney(
           (row.irpjCsll?.irpjTotal ?? 0) + (row.irpjCsll?.csll ?? 0),
         )}
+      </span>
+      <span className="flex flex-col items-end px-2 text-right tabular-nums">
+        <span className="whitespace-nowrap">
+          {formatFinancialMoney(impostoOperacional)}
+        </span>
+        <span className="text-[10px] text-[var(--muted-foreground)]">
+          {formatFinancialPercent(impostoOperacionalPercent)}
+        </span>
       </span>
       <span className="flex flex-col items-end px-2 text-right tabular-nums">
         <span className="whitespace-nowrap">

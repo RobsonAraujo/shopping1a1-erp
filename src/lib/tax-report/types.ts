@@ -97,6 +97,10 @@ export type SkuAggregation = {
   impostoTotal: number;
   impostoMedioPorVenda: number;
   impostoMedioPercentual: number;
+  /** PIS/COFINS + ICMS (sem IRPJ/CSLL). Ausente em snapshots antigos — calculado na leitura. */
+  impostoOperacionalTotal?: number;
+  impostoOperacionalMedioPorVenda?: number;
+  impostoOperacionalMedioPercentual?: number;
   transacoes: DetalhamentoTributario[];
 };
 
