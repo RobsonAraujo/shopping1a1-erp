@@ -36,8 +36,8 @@ export default async function RelatorioTributarioSkuPage({ params }: PageProps) 
           <h1 className="text-2xl font-bold tracking-tight text-[var(--primary)]">
             Vendas por SKU
           </h1>
-          <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-            SKU: <span className="font-mono font-medium">{sku}</span> ·{" "}
+          <p className="mt-1 break-words text-sm text-[var(--muted-foreground)]">
+            SKU: <span className="font-mono font-medium text-[var(--foreground)]">{sku}</span> ·{" "}
             {periodLabel}
           </p>
         </div>

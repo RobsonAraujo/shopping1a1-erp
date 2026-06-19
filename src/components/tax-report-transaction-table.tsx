@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, type CSSProperties } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Info, X } from "lucide-react";
 import {
@@ -11,34 +11,57 @@ import {
 } from "@/components/ui/tooltip";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { formatFinancialMoney } from "@/lib/financial-margin";
+import {
+  formatFinancialMoney,
+  formatFinancialPercent,
+  percentOfSale,
+} from "@/lib/financial-margin";
 import type { DetalhamentoTributario } from "@/lib/tax-report/types";
 import { cn } from "@/lib/utils";
 
-const ROW_HEIGHT = 44;
+const ROW_HEIGHT = 52;
 
-function gridColsClass(showSku: boolean) {
-  return showSku
-    ? "grid-cols-[6.5rem_8rem_3.5rem_4.5rem_6.5rem_7.5rem_5.5rem_7.5rem_6rem]"
-    : "grid-cols-[6.5rem_3.5rem_4.5rem_6.5rem_7.5rem_5.5rem_7.5rem_6rem]";
+/** 11 colunas — cabe em max-w-7xl sem scroll horizontal. */
+const GRID_COLS_DETAIL =
+  "5rem 2.5rem minmax(3.5rem,0.55fr) minmax(4rem,0.5fr) minmax(4.75rem,1fr) minmax(4.75rem,1fr) minmax(4.25rem,1fr) minmax(4rem,1fr) minmax(4.25rem,1fr) minmax(4.75rem,1fr) minmax(4.25rem,1fr)";
+
+const GRID_COLS_WITH_SKU =
+  "5rem minmax(4rem,1fr) 2.5rem minmax(3.5rem,0.55fr) minmax(4rem,0.5fr) minmax(4.75rem,1fr) minmax(4.75rem,1fr) minmax(4.25rem,1fr) minmax(4rem,1fr) minmax(4.25rem,1fr) minmax(4.75rem,1fr) minmax(4.25rem,1fr)";
+
+function tableGridStyle(showSku: boolean): CSSProperties {
+  return {
+    gridTemplateColumns: showSku ? GRID_COLS_WITH_SKU : GRID_COLS_DETAIL,
+  };
 }
+
+const TABLE_ROW_CLASS =
+  "grid w-full items-center border-b border-[var(--border)]";
 
 export function TaxReportHeaderWithTip({
   label,
   tip,
+  align = "right",
 }: {
   label: string;
   tip: string;
+  align?: "left" | "right" | "center";
 }) {
   return (
-    <span className="inline-flex items-center justify-end gap-1 whitespace-nowrap">
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 whitespace-nowrap",
+        align === "right" && "justify-end",
+        align === "center" && "justify-center",
+      )}
+    >
       {label}
       <Tooltip>
         <TooltipTrigger asChild>
           <button
             type="button"
-            className="text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+            className="relative z-10 shrink-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
             aria-label={`Sobre ${label}`}
+            onClick={(e) => e.stopPropagation()}
           >
             <Info className="size-3.5" />
           </button>
@@ -54,37 +77,59 @@ export function TaxReportHeaderWithTip({
 function TransactionTableHeader({ showSku }: { showSku: boolean }) {
   return (
     <div
-      className={cn(
-        "sticky top-0 z-10 grid items-center border-b border-[var(--border)] bg-[var(--background)] text-left text-xs text-[var(--muted-foreground)]",
-        gridColsClass(showSku),
-      )}
+      className="grid w-full items-center border-b border-[var(--border)] bg-[var(--background)] text-left text-xs text-[var(--muted-foreground)]"
+      style={tableGridStyle(showSku)}
     >
-      <span className="px-3 py-2.5 whitespace-nowrap">Data</span>
+      <span className="min-w-0 px-2 py-2.5 whitespace-nowrap">Data</span>
       {showSku ? (
-        <span className="px-3 py-2.5 whitespace-nowrap">SKU</span>
+        <span className="min-w-0 truncate px-2 py-2.5">SKU</span>
       ) : null}
-      <span className="px-3 py-2.5 whitespace-nowrap">UF</span>
-      <span className="px-3 py-2.5 whitespace-nowrap">Doc.</span>
-      <span className="px-3 py-2.5 text-right whitespace-nowrap">Receita</span>
-      <span className="px-3 py-2.5 text-right whitespace-nowrap">
+      <span className="min-w-0 px-2 py-2.5 whitespace-nowrap">UF</span>
+      <span className="min-w-0 truncate px-2 py-2.5">Doc.</span>
+      <span className="min-w-0 px-2 py-2.5 text-right">
+        <TaxReportHeaderWithTip
+          label="Qtd"
+          tip="Unidades vendidas nesta linha do pedido."
+          align="right"
+        />
+      </span>
+      <span className="px-2 py-2.5 text-right whitespace-nowrap">Receita</span>
+      <span className="px-2 py-2.5 text-right whitespace-nowrap">
         <TaxReportHeaderWithTip
           label="PIS/COFINS"
           tip="Líquido após crédito de CMV."
         />
       </span>
-      <span className="px-3 py-2.5 text-right whitespace-nowrap">
+      <span className="px-2 py-2.5 text-right whitespace-nowrap">
         <TaxReportHeaderWithTip
           label="ICMS"
           tip="Interestadual + DIFAL quando aplicável."
         />
       </span>
-      <span className="px-3 py-2.5 text-right whitespace-nowrap">
+      <span className="px-2 py-2.5 text-right whitespace-nowrap">
+        <TaxReportHeaderWithTip
+          label="DIFAL"
+          tip="Diferencial de alíquota (EC 87/2015) para comprador não contribuinte."
+        />
+      </span>
+      <span className="px-2 py-2.5 text-right whitespace-nowrap">
         <TaxReportHeaderWithTip
           label="IRPJ+CSLL"
           tip="Estimativa por venda; adicional IRPJ 10% no consolidado mensal."
         />
       </span>
-      <span className="px-3 py-2.5 text-right whitespace-nowrap">Margem</span>
+      <span className="px-2 py-2.5 text-right whitespace-nowrap">
+        <TaxReportHeaderWithTip
+          label="Imposto"
+          tip="Imposto total (PIS/COFINS + ICMS + IRPJ+CSLL) e percentual sobre a receita bruta."
+        />
+      </span>
+      <span className="px-2 py-2.5 text-right whitespace-nowrap">
+        <TaxReportHeaderWithTip
+          label="Margem"
+          tip="Receita menos CMV e impostos estimados nesta venda."
+        />
+      </span>
     </div>
   );
 }
@@ -97,31 +142,51 @@ function TransactionRowCells({
   showSku: boolean;
 }) {
   const t = row.transacao;
+  const impostoPercent = row.incluidoNaApuracao
+    ? percentOfSale(row.impostoTotal, t.receitaBruta)
+    : null;
+
   return (
     <>
-      <span className="px-3 text-xs whitespace-nowrap">
+      <span className="px-2 text-xs whitespace-nowrap">
         {t.orderDate.slice(0, 10)}
       </span>
       {showSku ? (
-        <span className="truncate px-3 font-medium">{t.sku}</span>
+        <span className="truncate px-2 font-medium" title={t.sku}>
+          {t.sku}
+        </span>
       ) : null}
-      <span className="px-3 whitespace-nowrap">{t.ufDestino ?? "—"}</span>
-      <span className="px-3 whitespace-nowrap">{t.tipoDocumento}</span>
-      <span className="px-3 text-right tabular-nums whitespace-nowrap">
+      <span className="min-w-0 truncate px-2 whitespace-nowrap">{t.ufDestino ?? "—"}</span>
+      <span className="min-w-0 truncate px-2 whitespace-nowrap">{t.tipoDocumento}</span>
+      <span className="min-w-0 px-2 text-right tabular-nums whitespace-nowrap">
+        {t.quantidade}
+      </span>
+      <span className="px-2 text-right tabular-nums whitespace-nowrap">
         {formatFinancialMoney(t.receitaBruta)}
       </span>
-      <span className="px-3 text-right tabular-nums whitespace-nowrap">
+      <span className="px-2 text-right tabular-nums whitespace-nowrap">
         {formatFinancialMoney(row.pisCofins?.liquido ?? null)}
       </span>
-      <span className="px-3 text-right tabular-nums whitespace-nowrap">
+      <span className="px-2 text-right tabular-nums whitespace-nowrap">
         {formatFinancialMoney(row.icmsDifal?.icmsTotal ?? null)}
       </span>
-      <span className="px-3 text-right tabular-nums whitespace-nowrap">
+      <span className="px-2 text-right tabular-nums whitespace-nowrap">
+        {formatFinancialMoney(row.icmsDifal?.difal ?? null)}
+      </span>
+      <span className="px-2 text-right tabular-nums whitespace-nowrap">
         {formatFinancialMoney(
           (row.irpjCsll?.irpjTotal ?? 0) + (row.irpjCsll?.csll ?? 0),
         )}
       </span>
-      <span className="px-3 text-right tabular-nums whitespace-nowrap">
+      <span className="flex flex-col items-end px-2 text-right tabular-nums">
+        <span className="whitespace-nowrap">
+          {formatFinancialMoney(row.incluidoNaApuracao ? row.impostoTotal : null)}
+        </span>
+        <span className="text-[10px] text-[var(--muted-foreground)]">
+          {formatFinancialPercent(impostoPercent)}
+        </span>
+      </span>
+      <span className="px-2 text-right tabular-nums whitespace-nowrap">
         {formatFinancialMoney(row.margemLiquidaEstimada)}
       </span>
     </>
@@ -142,8 +207,8 @@ export function TaxReportCalculationPanel({
         <div>
           <p className="text-sm font-semibold">Memória de cálculo</p>
           <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-            {t.orderDate.slice(0, 10)} · {t.ufDestino ?? "UF —"} ·{" "}
-            {t.tipoDocumento}
+            {t.orderDate.slice(0, 10)} · Pedido {t.orderId} ·{" "}
+            {t.ufDestino ?? "UF —"} · {t.tipoDocumento} · Qtd {t.quantidade}
           </p>
         </div>
         <Button
@@ -206,13 +271,14 @@ export function VirtualizedTaxReportTransactionTable({
   return (
     <TooltipProvider delayDuration={200}>
       <div className="space-y-4">
-        <div
-          ref={parentRef}
-          className="max-h-[32rem] overflow-auto rounded-lg border border-[var(--border)]"
-        >
-          <div className="min-w-[62rem] text-sm">
-            <TransactionTableHeader showSku={showSku} />
+        <div className="overflow-hidden rounded-lg border border-[var(--border)] text-sm">
+          <TransactionTableHeader showSku={showSku} />
+          <div
+            ref={parentRef}
+            className="max-h-[32rem] overflow-x-hidden overflow-y-auto"
+          >
             <div
+              className="w-full"
               style={{
                 height: `${rowVirtualizer.getTotalSize()}px`,
                 position: "relative",
@@ -228,12 +294,13 @@ export function VirtualizedTaxReportTransactionTable({
                     role="row"
                     aria-selected={isSelected}
                     className={cn(
-                      "absolute left-0 grid w-full cursor-pointer items-center border-b border-[var(--border)] hover:bg-[var(--muted)]/20",
-                      gridColsClass(showSku),
+                      TABLE_ROW_CLASS,
+                      "absolute left-0 cursor-pointer hover:bg-[var(--muted)]/20",
                       !row.incluidoNaApuracao && "bg-amber-50/50",
                       isSelected && "bg-[var(--primary)]/10",
                     )}
                     style={{
+                      ...tableGridStyle(showSku),
                       height: `${virtualRow.size}px`,
                       transform: `translateY(${virtualRow.start}px)`,
                     }}
