@@ -18,7 +18,6 @@ Módulo de apuração fiscal por venda (Mercado Livre) para **Lucro Real** — P
 src/lib/tax-report/
   calculators/     # Funções puras (testáveis)
   ml/              # Pedidos + billing_info ML
-  contributor/     # Verificação CNPJ contribuinte
   enrichment/      # TransacaoVenda
   service/         # Pipeline + snapshot
   tax-config-data.ts
@@ -30,30 +29,12 @@ src/lib/tax-report/
 - **CBS/IBS por ano**: `cbs_ibs_vigencia`
 - **Empresa**: `company_tax_settings` (regime, UF origem, PIS/COFINS)
 
-## Verificação de contribuinte ICMS
+## Contribuinte ICMS
 
-Interface `ClienteVerificacaoContribuinte` em `contributor/types.ts`.
+O status de contribuinte ICMS vem do campo `taxpayer_type` do `billing_info` do Mercado Livre.
 
-### Ordem de decisão
-
-1. `taxpayer_type` do billing_info do Mercado Livre (gratuito, preferencial)
-2. CNPJ.ws — **somente se habilitado explicitamente**
-3. Fallback interno (stub): assume **não-contribuinte** (aplica DIFAL — postura conservadora)
-
-### CNPJ.ws — desligada por padrão
-
-A integração com [CNPJ.ws](https://www.cnpj.ws/) está **implementada mas não usada** por padrão (serviço pago).
-
-| Modo | Quando |
-|------|--------|
-| **Stub (padrão)** | Sem configuração — PJ sem `taxpayer_type` no ML → não-contribuinte |
-| **CNPJ.ws** | Requer **ambos**: `CNPJ_WS_API_KEY` e `CONTRIBUTOR_PROVIDER=cnpj_ws` |
-
-**Importante:** ter só a API key no `.env` **não** ativa a CNPJ.ws. É necessário opt-in explícito.
-
-O relatório inclui avisos em `meta.contributorVerification.warnings` quando o fallback stub foi usado.
-
-Cache: `taxpayer_verification_cache` com TTL (`TAXPAYER_CACHE_TTL_DAYS`, default 7).
+- CNPJ com `taxpayer_type` no ML → contribuinte ou não conforme o valor
+- CNPJ sem dado do ML → `contribuinteIcms: null` → tratado como **não contribuinte** no cálculo (DIFAL)
 
 ## Pedidos considerados
 
@@ -75,7 +56,6 @@ Cache: `taxpayer_verification_cache` com TTL (`TAXPAYER_CACHE_TTL_DAYS`, default
 - IRPJ/CSLL: estimativa gerencial, não substitui LALUR
 - CBS/IBS 2026: informativo, compensado com PIS/COFINS no mesmo período
 - DRE existente continua com % simplificado por SKU (não substituído)
-- CNPJ.ws desligada até contratação e configuração explícita
 
 ## Testes
 

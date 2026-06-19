@@ -5,7 +5,6 @@ import Link from "next/link";
 import { ChevronRight, RefreshCw, Scale } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { CnpjWsInfoBanner } from "@/components/cnpj-ws-info-banner";
 import { FormSelect } from "@/components/ui/form-select";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
@@ -198,8 +197,6 @@ export function MonthlyTaxReportClient() {
           </p>
         </Card>
 
-        <CnpjWsInfoBanner />
-
         <div className="flex flex-wrap items-end gap-3">
           <FormSelect
             id="tax-report-year"
@@ -252,16 +249,6 @@ export function MonthlyTaxReportClient() {
 
         {report ? (
           <>
-            {report.meta.contributorVerification?.warnings?.length ? (
-              <Card className="border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-950">
-                <p className="font-medium">Avisos da apuração</p>
-                <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
-                  {report.meta.contributorVerification.warnings.map((warning) => (
-                    <li key={warning}>{warning}</li>
-                  ))}
-                </ul>
-              </Card>
-            ) : null}
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <SummaryCard
                 label="Faturamento"

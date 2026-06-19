@@ -1,21 +1,14 @@
 import { prisma } from "@/lib/db";
 import { fetchItemsByIdsBatched, fetchPaidOrdersByPeriod } from "@/lib/mercadolibre/api";
 import { getCalendarMonthRange } from "@/lib/mercadolibre/revenue-periods";
-import {
-  getTaxReportBillingConcurrency,
-  isCnpjWsEnabled,
-} from "@/lib/tax-report/config";
-import { createContributorProvider, resolveContributorStatus } from "@/lib/tax-report/contributor";
-import {
-  CNPJ_WS_WARNING_NOT_CONFIGURED,
-  cnpjWsWarningStubFallbackCount,
-} from "@/lib/tax-report/contributor/user-messages";
+import { getTaxReportBillingConcurrency } from "@/lib/tax-report/config";
 import { buildTransacoesFromOrder } from "@/lib/tax-report/enrichment/build-transacao-venda";
 import { obterCustoPorSku } from "@/lib/tax-report/enrichment/obter-custo-por-sku";
 import type { CustoProduto } from "@/lib/tax-report/enrichment/obter-custo-por-sku";
 import {
   fetchOrderBillingInfo,
   mapWithConcurrency,
+  parseTaxpayerTypeFromMl,
 } from "@/lib/tax-report/ml/billing-info-client";
 import { itemIdFromOrderLine } from "@/lib/tax-report/ml/sku-from-order-line";
 import { repairTaxReportPayload } from "@/lib/tax-report/repair-snapshot-uf";
@@ -104,9 +97,7 @@ export async function generateMonthlyTaxReport(input: {
   const items = await fetchItemsByIdsBatched(input.accessToken, itemIds);
   const itemById = new Map(items.map((item) => [item.id, item]));
 
-  const contributorProvider = createContributorProvider();
   const contributorByCnpj = new Map<string, boolean>();
-  let stubFallbackCount = 0;
   const custoBySku = new Map<string, CustoProduto>();
 
   input.onProgress?.({
@@ -130,34 +121,13 @@ export async function generateMonthlyTaxReport(input: {
     const doc =
       billing?.buyer?.billing_info?.identification?.number?.replace(/\D/g, "") ??
       null;
-    const mlTaxpayer =
-      billing?.buyer?.billing_info?.taxes?.taxpayer_type?.description ?? null;
 
     if (doc && doc.length === 14 && !contributorByCnpj.has(doc)) {
-      const fromMl = billing?.buyer?.billing_info?.taxes?.taxpayer_type
-        ?.description;
-      const mlParsed =
-        fromMl?.toLowerCase().includes("contribuinte") &&
-        !fromMl.toLowerCase().includes("não") &&
-        !fromMl.toLowerCase().includes("nao")
-          ? true
-          : fromMl?.toLowerCase().includes("não contribuinte") ||
-              fromMl?.toLowerCase().includes("nao contribuinte")
-            ? false
-            : null;
-
+      const mlParsed = parseTaxpayerTypeFromMl(
+        billing?.buyer?.billing_info?.taxes?.taxpayer_type?.description,
+      );
       if (mlParsed !== null) {
         contributorByCnpj.set(doc, mlParsed);
-      } else {
-        const resolved = await resolveContributorStatus({
-          cnpj: doc,
-          mlTaxpayerType: null,
-          provider: contributorProvider,
-        });
-        contributorByCnpj.set(doc, resolved.contribuinteIcms);
-        if (resolved.source === "stub_fallback") {
-          stubFallbackCount += 1;
-        }
       }
     }
 
@@ -195,17 +165,6 @@ export async function generateMonthlyTaxReport(input: {
     }
   }
 
-  const cnpjWsEnabled = isCnpjWsEnabled();
-  const contributorWarnings: string[] = [];
-  if (!cnpjWsEnabled) {
-    contributorWarnings.push(CNPJ_WS_WARNING_NOT_CONFIGURED);
-  }
-  if (stubFallbackCount > 0) {
-    contributorWarnings.push(
-      cnpjWsWarningStubFallbackCount(stubFallbackCount, cnpjWsEnabled),
-    );
-  }
-
   const payload = calcularRelatorioFromTransacoes({
     transacoes,
     config,
@@ -223,12 +182,6 @@ export async function generateMonthlyTaxReport(input: {
       duracaoMs: Date.now() - started,
       taxRegime: config.taxRegime,
       originUf: config.originUf,
-      contributorVerification: {
-        mode: cnpjWsEnabled ? "cnpj_ws" : "stub",
-        cnpjWsEnabled,
-        stubFallbackCount,
-        warnings: contributorWarnings,
-      },
     },
   });
 

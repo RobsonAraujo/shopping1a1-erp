@@ -132,12 +132,6 @@ export type TaxReportPayload = {
     duracaoMs: number;
     taxRegime: string;
     originUf: string;
-    contributorVerification: {
-      mode: "stub" | "cnpj_ws";
-      cnpjWsEnabled: boolean;
-      stubFallbackCount: number;
-      warnings: string[];
-    };
   };
 };
 

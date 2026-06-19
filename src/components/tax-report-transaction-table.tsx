@@ -192,18 +192,18 @@ function TransactionRowCells({
       </span>
       <span className="flex flex-col items-end px-2 text-right tabular-nums">
         <span className="whitespace-nowrap">
-          {formatFinancialMoney(impostoOperacional)}
+          {formatFinancialPercent(impostoOperacionalPercent)}
         </span>
         <span className="text-[10px] text-[var(--muted-foreground)]">
-          {formatFinancialPercent(impostoOperacionalPercent)}
+          {formatFinancialMoney(impostoOperacional)}
         </span>
       </span>
       <span className="flex flex-col items-end px-2 text-right tabular-nums">
         <span className="whitespace-nowrap">
-          {formatFinancialMoney(row.incluidoNaApuracao ? row.impostoTotal : null)}
+          {formatFinancialPercent(impostoPercent)}
         </span>
         <span className="text-[10px] text-[var(--muted-foreground)]">
-          {formatFinancialPercent(impostoPercent)}
+          {formatFinancialMoney(row.incluidoNaApuracao ? row.impostoTotal : null)}
         </span>
       </span>
       <span className="px-2 text-right tabular-nums whitespace-nowrap">

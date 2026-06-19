@@ -69,7 +69,7 @@ export function buildTransacoesFromOrder(input: {
       const cached = input.contributorByCnpj.get(documento.replace(/\D/g, ""));
       if (cached !== undefined) {
         contribuinteIcms = cached;
-        contribuinteSource = "external_api";
+        contribuinteSource = "ml_taxpayer_type";
       }
     }
 

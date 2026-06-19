@@ -19,22 +19,4 @@ export function getTaxReportBillingConcurrency(): number {
   return Math.min(20, Math.floor(raw));
 }
 
-export function getContributorCacheTtlMs(): number {
-  const days = Number(process.env.TAXPAYER_CACHE_TTL_DAYS ?? "7");
-  if (!Number.isFinite(days) || days < 1) return 7 * 24 * 60 * 60 * 1000;
-  return days * 24 * 60 * 60 * 1000;
-}
-
-/** CNPJ.ws é paga e desligada por padrão — só ativa com opt-in explícito. */
-export function isCnpjWsEnabled(): boolean {
-  return (
-    process.env.CONTRIBUTOR_PROVIDER?.toLowerCase() === "cnpj_ws" &&
-    Boolean(process.env.CNPJ_WS_API_KEY?.trim())
-  );
-}
-
-export function getContributorProvider(): "cnpj_ws" | "stub" {
-  return isCnpjWsEnabled() ? "cnpj_ws" : "stub";
-}
-
 export { normalizeUf } from "@/lib/tax-report/brazilian-ufs";

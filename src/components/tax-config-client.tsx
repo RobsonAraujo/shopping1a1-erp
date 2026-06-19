@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Building2, Pencil } from "lucide-react";
-import { CnpjWsInfoBanner } from "@/components/cnpj-ws-info-banner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FormSelect } from "@/components/ui/form-select";
@@ -164,8 +163,6 @@ export function TaxConfigClient() {
           {message}
         </Card>
       ) : null}
-
-      <CnpjWsInfoBanner />
 
       <Card className="overflow-hidden p-0">
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border)] px-4 py-4 sm:px-5">
