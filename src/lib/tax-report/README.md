@@ -57,6 +57,20 @@ O status de contribuinte ICMS vem do campo `taxpayer_type` do `billing_info` do 
 - CBS/IBS 2026: informativo, compensado com PIS/COFINS no mesmo período
 - DRE existente continua com % simplificado por SKU (não substituído)
 
+## Multi-tenant (futuro)
+
+Impacto SaaS deste módulo (registro completo em [`docs/architecture/saas-migration.md`](../../../docs/architecture/saas-migration.md)):
+
+| Aspecto | Hoje | Na migração |
+|---------|------|-------------|
+| Snapshot mensal | `sellerId` + ano/mês — ok para múltiplos sellers ML | Adicionar `organizationId`; unique `(org, seller, year, month)` |
+| Config fiscal | `company_tax_settings.id = "default"` — global | Uma linha por `organizationId` |
+| CMV / produtos | `products.sku` global | `@@unique([organizationId, sku])` |
+| ICMS interno | `icms_internal_rates` global (editável na UI) | Seed global + override por org, se necessário |
+| Geração | `generateMonthlyTaxReport` usa seller da sessão | Resolver org → sellers ML da org |
+
+**Ao alterar este módulo:** atualizar o registro em `docs/architecture/saas-migration.md` (template em `docs/templates/feature-saas-impact.md`).
+
 ## Testes
 
 ```bash
