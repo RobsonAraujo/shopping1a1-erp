@@ -24,6 +24,9 @@ function baseTransacao(
     contribuinteSource: "ml_taxpayer_type",
     dadosFiscaisIndisponiveis: false,
     custoAquisicaoUnitario: 40,
+    unitCostNf: 50,
+    purchaseIcmsPercent: 18,
+    hasIcmsSt: false,
     extraCostsUnitario: 0,
     mercadoriaImportada: false,
     conteudoImportacaoPercentual: 0,
@@ -39,6 +42,7 @@ function includedRow(
     transacao: baseTransacao(),
     pisCofins: {
       baseDebito: 200,
+      baseCredito: 41,
       pisDebito: 3.3,
       cofinsDebito: 15.2,
       debitoTotal: 18.5,
@@ -59,6 +63,11 @@ function includedRow(
       icmsTotal: 30,
       isContribuinte: false,
       isOperacaoInterna: true,
+    },
+    icmsCreditoCompra: {
+      baseUnitaria: 50,
+      aliquotaPercent: 18,
+      creditoTotal: 9,
     },
     irpjCsll: {
       baseLucro: 100,
@@ -88,7 +97,12 @@ describe("buildSkuSalesExcelRows", () => {
     assert.equal(row.Qtd, 2);
     assert.equal(row.Receita, 200);
     assert.equal(row["PIS/COFINS"], 11.1);
-    assert.equal(row.ICMS, 30);
+    assert.equal(row["PIS débito"], 3.3);
+    assert.equal(row["PIS crédito"], 1.32);
+    assert.equal(row["COFINS débito"], 15.2);
+    assert.equal(row["COFINS crédito"], 6.08);
+    assert.equal(row.ICMS, 24);
+    assert.equal(row["ICMS crédito compra"], 9);
     assert.equal(row.DIFAL, 6);
     assert.equal(row["IRPJ+CSLL"], 24);
     assert.equal(row["Imp. oper. (R$)"], 41.1);

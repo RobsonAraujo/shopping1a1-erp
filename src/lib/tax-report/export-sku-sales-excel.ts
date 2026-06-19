@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import { percentOfSale } from "@/lib/financial-margin";
 import { impostoOperacionalLinha } from "@/lib/tax-report/imposto-operacional";
+import { icmsSemDifal } from "@/lib/tax-report/calculators/icms-difal";
 import type { DetalhamentoTributario } from "@/lib/tax-report/types";
 
 export type SkuSalesExcelRow = {
@@ -11,7 +12,12 @@ export type SkuSalesExcelRow = {
   Qtd: number;
   Receita: number;
   "PIS/COFINS": number | null;
+  "PIS débito": number | null;
+  "PIS crédito": number | null;
+  "COFINS débito": number | null;
+  "COFINS crédito": number | null;
   ICMS: number | null;
+  "ICMS crédito compra": number | null;
   DIFAL: number | null;
   "IRPJ+CSLL": number | null;
   "Imp. oper. (R$)": number | null;
@@ -51,8 +57,23 @@ function mapDetalhamentoToExcelRow(row: DetalhamentoTributario): SkuSalesExcelRo
     "PIS/COFINS": row.incluidoNaApuracao
       ? (row.pisCofins?.liquido ?? null)
       : null,
+    "PIS débito": row.incluidoNaApuracao
+      ? (row.pisCofins?.pisDebito ?? null)
+      : null,
+    "PIS crédito": row.incluidoNaApuracao
+      ? (row.pisCofins?.pisCredito ?? null)
+      : null,
+    "COFINS débito": row.incluidoNaApuracao
+      ? (row.pisCofins?.cofinsDebito ?? null)
+      : null,
+    "COFINS crédito": row.incluidoNaApuracao
+      ? (row.pisCofins?.cofinsCredito ?? null)
+      : null,
     ICMS: row.incluidoNaApuracao
-      ? (row.icmsDifal?.icmsTotal ?? null)
+      ? icmsSemDifal(row.icmsDifal)
+      : null,
+    "ICMS crédito compra": row.incluidoNaApuracao
+      ? (row.icmsCreditoCompra?.creditoTotal ?? null)
       : null,
     DIFAL: row.incluidoNaApuracao
       ? (row.icmsDifal?.difal ?? null)

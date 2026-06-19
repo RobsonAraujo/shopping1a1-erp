@@ -28,6 +28,9 @@ function tx(overrides: Partial<TransacaoVenda> = {}): TransacaoVenda {
     contribuinteSource: null,
     dadosFiscaisIndisponiveis: false,
     custoAquisicaoUnitario: 40,
+    unitCostNf: 50,
+    purchaseIcmsPercent: 18,
+    hasIcmsSt: false,
     extraCostsUnitario: 0,
     mercadoriaImportada: false,
     conteudoImportacaoPercentual: 0,
@@ -56,5 +59,22 @@ describe("calcularPisCofins", () => {
     });
     assert.equal(result.liquido, 0);
     assert.equal(result.debitoTotal, 0);
+  });
+
+  it("credits on unitCostNf minus purchase ICMS, not pricingCost", () => {
+    const result = calcularPisCofins({
+      transacao: tx({
+        unitCostNf: 100,
+        purchaseIcmsPercent: 18,
+        custoAquisicaoUnitario: 74,
+        quantidade: 1,
+      }),
+      config,
+      icmsDestacado: 0,
+    });
+    assert.equal(result.baseCredito, 82);
+    assert.equal(result.pisCredito, 1.35);
+    assert.equal(result.cofinsCredito, 6.23);
+    assert.ok(result.creditoTotal > result.baseCredito * 0.09);
   });
 });

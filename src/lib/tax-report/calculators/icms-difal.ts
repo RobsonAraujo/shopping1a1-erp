@@ -163,3 +163,9 @@ export function icmsDestacadoParaBase(
 ): number {
   return icms?.icmsTotal ?? 0;
 }
+
+/** ICMS próprio/interno ou interestadual — sem a parcela DIFAL (UF destino). */
+export function icmsSemDifal(icms: IcmsDifalBreakdown | null): number {
+  if (!icms) return 0;
+  return roundMoney(icms.icmsTotal - icms.difal);
+}

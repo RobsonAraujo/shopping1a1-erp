@@ -5,6 +5,10 @@ import {
 } from "@/lib/tax-report/aggregation/agregador-por-sku";
 import { calcularCbsIbsInformativo } from "@/lib/tax-report/calculators/cbs-ibs";
 import {
+  buildIcmsCreditoMemoria,
+  calcularIcmsCreditoCompra,
+} from "@/lib/tax-report/calculators/icms-credito-compra";
+import {
   buildIcmsMemoria,
   calcularIcmsDifal,
   icmsDestacadoParaBase,
@@ -44,6 +48,7 @@ export function calcularDetalhamentoTransacao(input: {
       transacao,
       pisCofins: null,
       icmsDifal: null,
+      icmsCreditoCompra: null,
       irpjCsll: null,
       cbsIbs: null,
       impostoTotal: 0,
@@ -68,6 +73,7 @@ export function calcularDetalhamentoTransacao(input: {
     config,
     icmsDestacado,
   });
+  const icmsCreditoCompra = calcularIcmsCreditoCompra(transacao);
   const cmvTotal =
     (transacao.custoAquisicaoUnitario ?? 0) * transacao.quantidade +
     transacao.extraCostsUnitario * transacao.quantidade;
@@ -97,6 +103,7 @@ export function calcularDetalhamentoTransacao(input: {
   const memoriaCalculo = [
     `Receita bruta: R$ ${transacao.receitaBruta.toFixed(2)}`,
     ...(icmsDifal ? buildIcmsMemoria(icmsDifal) : []),
+    ...buildIcmsCreditoMemoria(icmsCreditoCompra),
     ...(pisCofins ? buildPisCofinsMemoria(pisCofins, config) : []),
     ...buildIrpjMemoria(irpjCsll),
   ];
@@ -105,6 +112,7 @@ export function calcularDetalhamentoTransacao(input: {
     transacao,
     pisCofins,
     icmsDifal,
+    icmsCreditoCompra,
     irpjCsll,
     cbsIbs,
     impostoTotal,

@@ -2,7 +2,7 @@
 
 import { useRef, useState, type CSSProperties } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Info, X } from "lucide-react";
+import { AlertTriangle, Info, X } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -17,6 +17,7 @@ import {
   percentOfSale,
 } from "@/lib/financial-margin";
 import type { DetalhamentoTributario } from "@/lib/tax-report/types";
+import { icmsSemDifal } from "@/lib/tax-report/calculators/icms-difal";
 import { impostoOperacionalLinha } from "@/lib/tax-report/imposto-operacional";
 import { cn } from "@/lib/utils";
 
@@ -98,13 +99,13 @@ function TransactionTableHeader({ showSku }: { showSku: boolean }) {
       <span className="px-2 py-2.5 text-right whitespace-nowrap">
         <TaxReportHeaderWithTip
           label="PIS/COFINS"
-          tip="Líquido após crédito de CMV."
+          tip="Líquido após crédito na NF de entrada. Passe o mouse no valor da linha para ver débito e crédito."
         />
       </span>
       <span className="px-2 py-2.5 text-right whitespace-nowrap">
         <TaxReportHeaderWithTip
           label="ICMS"
-          tip="Interestadual + DIFAL quando aplicável."
+          tip="ICMS interno ou interestadual (UF origem) — sem DIFAL."
         />
       </span>
       <span className="px-2 py-2.5 text-right whitespace-nowrap">
@@ -177,10 +178,38 @@ function TransactionRowCells({
         {formatFinancialMoney(t.receitaBruta)}
       </span>
       <span className="px-2 text-right tabular-nums whitespace-nowrap">
-        {formatFinancialMoney(row.pisCofins?.liquido ?? null)}
+        {row.incluidoNaApuracao && row.pisCofins ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex items-center justify-end gap-1">
+                {!t.unitCostNf ? (
+                  <AlertTriangle
+                    className="size-3 shrink-0 text-amber-600"
+                    aria-label="Sem custo NF cadastrado"
+                  />
+                ) : null}
+                {formatFinancialMoney(row.pisCofins.liquido)}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs text-left text-xs">
+              <p>Débito: {formatFinancialMoney(row.pisCofins.debitoTotal)}</p>
+              <p>Crédito: {formatFinancialMoney(row.pisCofins.creditoTotal)}</p>
+              <p>Líquido: {formatFinancialMoney(row.pisCofins.liquido)}</p>
+              {!t.unitCostNf ? (
+                <p className="mt-1 text-amber-700">
+                  Sem custo NF — crédito zerado nesta linha.
+                </p>
+              ) : null}
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          formatFinancialMoney(row.pisCofins?.liquido ?? null)
+        )}
       </span>
       <span className="px-2 text-right tabular-nums whitespace-nowrap">
-        {formatFinancialMoney(row.icmsDifal?.icmsTotal ?? null)}
+        {formatFinancialMoney(
+          row.incluidoNaApuracao ? icmsSemDifal(row.icmsDifal) : null,
+        )}
       </span>
       <span className="px-2 text-right tabular-nums whitespace-nowrap">
         {formatFinancialMoney(row.icmsDifal?.difal ?? null)}
@@ -246,6 +275,12 @@ export function TaxReportCalculationPanel({
         <p className="mb-2 text-xs font-medium text-amber-800">
           Dados fiscais indisponíveis no Mercado Livre — venda excluída da
           apuração até revisão manual.
+        </p>
+      ) : null}
+      {!t.unitCostNf && row.incluidoNaApuracao ? (
+        <p className="mb-2 text-xs font-medium text-amber-800">
+          SKU sem custo NF cadastrado — créditos PIS/COFINS e ICMS de compra
+          zerados nesta linha.
         </p>
       ) : null}
       <ul className="space-y-1 font-mono text-xs text-[var(--muted-foreground)]">

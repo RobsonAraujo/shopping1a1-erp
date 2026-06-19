@@ -18,7 +18,7 @@ import {
   itemIdFromOrderLine,
   skuFromOrderLineWithFallback,
 } from "@/lib/tax-report/ml/sku-from-order-line";
-import { repairTaxReportPayload } from "@/lib/tax-report/repair-snapshot-uf";
+import { repairTaxReportPayload } from "@/lib/tax-report/repair-snapshot-apuracao";
 import { calcularRelatorioFromTransacoes } from "@/lib/tax-report/service/compute-report";
 import {
   loadCbsIbsVigencia,

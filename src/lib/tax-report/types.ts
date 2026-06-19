@@ -21,6 +21,10 @@ export type TransacaoVenda = {
   contribuinteSource: TaxpayerSource | null;
   dadosFiscaisIndisponiveis: boolean;
   custoAquisicaoUnitario: number | null;
+  /** Custo unitário na NF de entrada — base para créditos fiscais. */
+  unitCostNf: number | null;
+  purchaseIcmsPercent: number;
+  hasIcmsSt: boolean;
   extraCostsUnitario: number;
   mercadoriaImportada: boolean;
   conteudoImportacaoPercentual: number;
@@ -35,6 +39,7 @@ export type ManualFiscalOverride = {
 
 export type PisCofinsBreakdown = {
   baseDebito: number;
+  baseCredito: number;
   pisDebito: number;
   cofinsDebito: number;
   debitoTotal: number;
@@ -44,6 +49,12 @@ export type PisCofinsBreakdown = {
   liquido: number;
   icmsExcluidoDaBase: number;
   excludedIcmsFromBase: boolean;
+};
+
+export type IcmsCreditoCompraBreakdown = {
+  baseUnitaria: number;
+  aliquotaPercent: number;
+  creditoTotal: number;
 };
 
 export type IcmsDifalBreakdown = {
@@ -81,6 +92,7 @@ export type DetalhamentoTributario = {
   transacao: TransacaoVenda;
   pisCofins: PisCofinsBreakdown | null;
   icmsDifal: IcmsDifalBreakdown | null;
+  icmsCreditoCompra: IcmsCreditoCompraBreakdown | null;
   irpjCsll: IrpjCsllBreakdown | null;
   cbsIbs: CbsIbsInformativo | null;
   impostoTotal: number;
@@ -104,9 +116,40 @@ export type SkuAggregation = {
   transacoes: DetalhamentoTributario[];
 };
 
+export type ApuracaoImpostoLinha = {
+  debito: number;
+  credito: number;
+  liquido: number;
+};
+
+export type ApuracaoDiagnostico = {
+  receitaSemCustoCadastrado: number;
+  linhasSemCustoCadastrado: number;
+  creditoPisCofinsPerdidoEstimado: number;
+};
+
+export type ApuracaoConsolidada = {
+  pis: ApuracaoImpostoLinha;
+  cofins: ApuracaoImpostoLinha;
+  pisCofinsLiquido: number;
+  icms: ApuracaoImpostoLinha & {
+    icmsSemDifalDebito: number;
+    difalDebito: number;
+  };
+  icmsARecolherSpEstimado: number;
+  difalARecolherEstimado: number;
+  difalPorUf: Record<string, number>;
+  diagnostico: ApuracaoDiagnostico;
+};
+
 export type RelatorioConsolidado = {
   faturamento: number;
   pisCofinsLiquido: number;
+  apuracao?: ApuracaoConsolidada;
+  /** ICMS interno ou interestadual (sem DIFAL). Ausente em snapshots antigos. */
+  icmsSemDifalTotal?: number;
+  /** DIFAL (UF destino, EC 87/2015). Ausente em snapshots antigos. */
+  difalTotal?: number;
   icmsDifalTotal: number;
   irpjEstimado: number;
   csllEstimado: number;

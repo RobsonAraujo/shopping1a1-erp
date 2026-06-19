@@ -31,6 +31,9 @@ describe("custoProdutoFromView", () => {
 
     assert.equal(custo.sku, "SKU-A");
     assert.equal(custo.pricingCost, 95);
+    assert.equal(custo.unitCostNf, 100);
+    assert.equal(custo.purchaseIcmsPercent, 0);
+    assert.equal(custo.hasIcmsSt, false);
     assert.equal(custo.extraCosts, 2);
     assert.equal(custo.isMonophasic, false);
     assert.equal(custo.isImported, true);
@@ -40,5 +43,11 @@ describe("custoProdutoFromView", () => {
   it("handles null pricing cost", () => {
     const custo = custoProdutoFromView(sampleView({ pricingCost: null }));
     assert.equal(custo.pricingCost, null);
+    assert.equal(custo.unitCostNf, 100);
+  });
+
+  it("maps zero unitCostNf to null", () => {
+    const custo = custoProdutoFromView(sampleView({ unitCostNf: 0 }));
+    assert.equal(custo.unitCostNf, null);
   });
 });

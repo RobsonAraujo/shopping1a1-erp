@@ -50,6 +50,8 @@ O status de contribuinte ICMS vem do campo `taxpayer_type` do `billing_info` do 
 - `force: true` no POST recalcula
 - **Persistência:** vendas detalhadas ficam em `porSku[].transacoes`; `transacoes` na raiz do JSON salvo fica vazio (menor volume no banco)
 - **Performance:** custos de produto carregados em batch (`loadCustoBySkuMap`); rota com `maxDuration = 300` (Vercel)
+- **ICMS vs DIFAL:** consolidado e tabela por venda separam ICMS (origem) e DIFAL (UF destino); total em `icmsDifalTotal`
+- **Apuração:** consolidado expõe `apuracao` com débito/crédito/líquido (PIS, COFINS, ICMS) e DIFAL por UF; crédito PIS/COFINS na base NF entrada; crédito ICMS de `purchaseIcmsPercent`
 
 ## Limitações conhecidas
 

@@ -85,6 +85,43 @@ export function computeEffectivePricingCost(
   return roundMoney(grossBase - icmsCredit - pisCofinsCredit);
 }
 
+/** ICMS destacado na NF de entrada (crédito na compra). */
+export function purchaseIcmsCreditUnit(input: {
+  unitCostNf: number;
+  purchaseIcmsPercent: number;
+  hasIcmsSt: boolean;
+}): number {
+  const { unitCostNf, purchaseIcmsPercent, hasIcmsSt } = input;
+  if (
+    hasIcmsSt ||
+    !Number.isFinite(unitCostNf) ||
+    unitCostNf <= 0 ||
+    !Number.isFinite(purchaseIcmsPercent) ||
+    purchaseIcmsPercent <= 0
+  ) {
+    return 0;
+  }
+  return roundMoney(unitCostNf * (purchaseIcmsPercent / 100));
+}
+
+/** Base para crédito PIS/COFINS na aquisição (unitCostNf − ICMS entrada). */
+export function purchasePisCofinsCreditBaseUnit(input: {
+  unitCostNf: number;
+  purchaseIcmsPercent: number;
+  hasIcmsSt: boolean;
+}): number {
+  const { unitCostNf, purchaseIcmsPercent, hasIcmsSt } = input;
+  if (!Number.isFinite(unitCostNf) || unitCostNf <= 0) {
+    return 0;
+  }
+  const icmsEntrada = purchaseIcmsCreditUnit({
+    unitCostNf,
+    purchaseIcmsPercent,
+    hasIcmsSt,
+  });
+  return roundMoney(Math.max(0, unitCostNf - icmsEntrada));
+}
+
 /** Imposto total % para precificação (venda). */
 export function computePricingTaxPercent(
   input: ProductPricingTaxInput,

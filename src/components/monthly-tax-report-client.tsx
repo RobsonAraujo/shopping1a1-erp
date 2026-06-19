@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FormSelect } from "@/components/ui/form-select";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { TaxReportApuracaoPanel } from "@/components/tax-report-apuracao-panel";
 import {
   TaxReportGenerationOverlay,
   type TaxReportProgressState,
@@ -268,7 +269,7 @@ export function MonthlyTaxReportClient() {
 
         {report ? (
           <>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <SummaryCard
                 label="Faturamento"
                 value={formatFinancialMoney(report.consolidado.faturamento)}
@@ -276,13 +277,11 @@ export function MonthlyTaxReportClient() {
               />
               <SummaryCard
                 label="PIS/COFINS líquido"
-                value={formatFinancialMoney(report.consolidado.pisCofinsLiquido)}
-                tip="Débito sobre a venda menos crédito sobre CMV (não-cumulativo). ICMS pode ser excluído da base (RE 574.706)."
-              />
-              <SummaryCard
-                label="ICMS + DIFAL"
-                value={formatFinancialMoney(report.consolidado.icmsDifalTotal)}
-                tip="Interestadual para contribuintes; interestadual + DIFAL para não-contribuintes (EC 87/2015)."
+                value={formatFinancialMoney(
+                  report.consolidado.apuracao?.pisCofinsLiquido ??
+                    report.consolidado.pisCofinsLiquido,
+                )}
+                tip="Débito sobre a venda menos crédito sobre NF de entrada (não-cumulativo)."
               />
               <SummaryCard
                 label="Margem líquida est."
@@ -291,6 +290,13 @@ export function MonthlyTaxReportClient() {
                 highlight
               />
             </div>
+
+            {report.consolidado.apuracao ? (
+              <TaxReportApuracaoPanel
+                apuracao={report.consolidado.apuracao}
+                faturamento={report.consolidado.faturamento}
+              />
+            ) : null}
 
             <p className="text-xs text-[var(--muted-foreground)]">
               Gerado em {new Date(report.meta.geradoEm).toLocaleString("pt-BR")}{" "}

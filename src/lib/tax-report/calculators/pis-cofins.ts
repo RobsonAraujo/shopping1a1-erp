@@ -1,4 +1,5 @@
 import { roundMoney } from "@/lib/financial-margin";
+import { purchasePisCofinsCreditBaseUnit } from "@/lib/product-pricing";
 import type { PisCofinsBreakdown, TaxCompanyConfig, TransacaoVenda } from "@/lib/tax-report/types";
 
 export type PisCofinsInput = {
@@ -13,6 +14,7 @@ export function calcularPisCofins(input: PisCofinsInput): PisCofinsBreakdown {
   if (transacao.isMonophasic) {
     return {
       baseDebito: 0,
+      baseCredito: 0,
       pisDebito: 0,
       cofinsDebito: 0,
       debitoTotal: 0,
@@ -36,14 +38,24 @@ export function calcularPisCofins(input: PisCofinsInput): PisCofinsBreakdown {
   const cofinsDebito = roundMoney(baseDebito * cofinsRate);
   const debitoTotal = roundMoney(pisDebito + cofinsDebito);
 
-  const custoBase =
-    (transacao.custoAquisicaoUnitario ?? 0) * transacao.quantidade;
-  const pisCredito = roundMoney(custoBase * pisRate);
-  const cofinsCredito = roundMoney(custoBase * cofinsRate);
+  const unitCostNf = transacao.unitCostNf;
+  const baseCreditoUnit =
+    unitCostNf != null && unitCostNf > 0
+      ? purchasePisCofinsCreditBaseUnit({
+          unitCostNf,
+          purchaseIcmsPercent: transacao.purchaseIcmsPercent,
+          hasIcmsSt: transacao.hasIcmsSt,
+        })
+      : 0;
+  const baseCredito = roundMoney(baseCreditoUnit * transacao.quantidade);
+
+  const pisCredito = roundMoney(baseCredito * pisRate);
+  const cofinsCredito = roundMoney(baseCredito * cofinsRate);
   const creditoTotal = roundMoney(pisCredito + cofinsCredito);
 
   return {
     baseDebito: roundMoney(baseDebito),
+    baseCredito,
     pisDebito,
     cofinsDebito,
     debitoTotal,
@@ -72,8 +84,9 @@ export function buildPisCofinsMemoria(
   lines.push(
     `PIS ${config.pisRatePercent}% = R$ ${result.pisDebito.toFixed(2)} | COFINS ${config.cofinsRatePercent}% = R$ ${result.cofinsDebito.toFixed(2)}`,
   );
+  lines.push(`(=) Base crédito (NF entrada − ICMS): R$ ${result.baseCredito.toFixed(2)}`);
   lines.push(
-    `(−) Crédito PIS/COFINS sobre CMV: R$ ${result.creditoTotal.toFixed(2)}`,
+    `(−) Crédito PIS/COFINS: R$ ${result.creditoTotal.toFixed(2)}`,
   );
   lines.push(`(=) PIS/COFINS líquido: R$ ${result.liquido.toFixed(2)}`);
   return lines;

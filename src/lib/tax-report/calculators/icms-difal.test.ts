@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   aliquotaInternaTotal,
   calcularIcmsDifal,
+  icmsSemDifal,
   obterAliquotaInterestadual,
 } from "@/lib/tax-report/calculators/icms-difal";
 import type { IcmsRateRow, TransacaoVenda } from "@/lib/tax-report/types";
@@ -25,6 +26,9 @@ function baseTransacao(
     contribuinteSource: null,
     dadosFiscaisIndisponiveis: false,
     custoAquisicaoUnitario: 50,
+    unitCostNf: 60,
+    purchaseIcmsPercent: 18,
+    hasIcmsSt: false,
     extraCostsUnitario: 0,
     mercadoriaImportada: false,
     conteudoImportacaoPercentual: 0,
@@ -137,5 +141,29 @@ describe("calcularIcmsDifal", () => {
     assert.equal(result.icmsInterestadual, 4);
     const interna = aliquotaInternaTotal("RJ", rates);
     assert.equal(result.difal, 100 * (interna - 0.04));
+  });
+});
+
+describe("icmsSemDifal", () => {
+  it("returns icmsTotal minus difal", () => {
+    const result = calcularIcmsDifal({
+      transacao: baseTransacao({ ufDestino: "RJ", tipoDocumento: "CPF" }),
+      ufOrigem: "SP",
+      rates,
+    });
+    assert.ok(result);
+    assert.equal(icmsSemDifal(result), result.icmsInterestadual);
+    assert.equal(icmsSemDifal(result) + result.difal, result.icmsTotal);
+  });
+
+  it("equals icmsTotal when difal is zero", () => {
+    const result = calcularIcmsDifal({
+      transacao: baseTransacao({ ufDestino: "SP" }),
+      ufOrigem: "SP",
+      rates,
+    });
+    assert.ok(result);
+    assert.equal(icmsSemDifal(result), 18);
+    assert.equal(result.difal, 0);
   });
 });

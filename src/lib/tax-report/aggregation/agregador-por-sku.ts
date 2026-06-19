@@ -1,4 +1,6 @@
 import { roundMoney } from "@/lib/financial-margin";
+import { consolidarApuracao } from "@/lib/tax-report/aggregation/consolidar-apuracao";
+import { icmsSemDifal } from "@/lib/tax-report/calculators/icms-difal";
 import type {
   DetalhamentoTributario,
   RelatorioConsolidado,
@@ -89,6 +91,12 @@ export function consolidarRelatorio(
   const pisCofinsLiquido = roundMoney(
     incluidas.reduce((s, t) => s + (t.pisCofins?.liquido ?? 0), 0),
   );
+  const icmsSemDifalTotal = roundMoney(
+    incluidas.reduce((s, t) => s + icmsSemDifal(t.icmsDifal), 0),
+  );
+  const difalTotal = roundMoney(
+    incluidas.reduce((s, t) => s + (t.icmsDifal?.difal ?? 0), 0),
+  );
   const icmsDifalTotal = roundMoney(
     incluidas.reduce((s, t) => s + (t.icmsDifal?.icmsTotal ?? 0), 0),
   );
@@ -117,6 +125,9 @@ export function consolidarRelatorio(
   return {
     faturamento,
     pisCofinsLiquido,
+    apuracao: consolidarApuracao(transacoes),
+    icmsSemDifalTotal,
+    difalTotal,
     icmsDifalTotal,
     irpjEstimado: irpjTotal,
     csllEstimado: csllTotal,
