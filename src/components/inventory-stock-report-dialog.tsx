@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
-import { FileDown, FileSpreadsheet, PackagePlus, SlidersHorizontal, X } from "lucide-react";
+import {
+  FileDown,
+  FileSpreadsheet,
+  Loader2,
+  PackagePlus,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
 import type { InventoryRow } from "@/components/inventory-stock-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,21 +32,39 @@ import {
   aggregateStockReportBySku,
   buildDefaultStockReportHeader,
   buildStockReportRows,
-  defaultStockReportReferenceDate,
+  defaultStockReportSnapshotDate,
   formatStockReportCurrency,
+  formatStockReportSnapshotDateInput,
+  formatStockReportSubtitle,
   formatStockReportUnits,
   inventoryBaseUnits,
+  listingStateFor,
   listingTotalUnits,
-  type StockReportListingExtras,
+  parseStockReportSnapshotDateInput,
+  type StockReportListingState,
   type StockReportMergeGroup,
   type StockReportProductInfo,
 } from "@/lib/inventory-stock-report";
 import { cn } from "@/lib/utils";
 
-const EMPTY_EXTRAS: StockReportListingExtras = {
-  vendasMesSeguinte: 0,
+type ManualListingAdjustments = {
+  nfEmitidaNaoEntregue: number;
+  ajusteManual: number;
+};
+
+const EMPTY_MANUAL: ManualListingAdjustments = {
   nfEmitidaNaoEntregue: 0,
-  estoqueExtra: 0,
+  ajusteManual: 0,
+};
+
+type SalesAdjustmentResponse = {
+  period: { from: string; to: string } | null;
+  salesByMlItemId: Record<string, number>;
+  catalogSnapshotByMlItemId: Record<
+    string,
+    { mlStock: number; snapshotAt: string }
+  >;
+  dateField: string;
 };
 
 type MergeDraft = {
@@ -56,32 +81,40 @@ type InventoryStockReportDialogProps = {
   onClose: () => void;
 };
 
-function parseOptionalUnits(value: string): number {
+function parseNonNegativeUnits(value: string): number {
   const n = parseInt(value, 10);
   if (!Number.isInteger(n) || n < 0) return 0;
   return n;
 }
 
-function extrasFor(
-  map: Record<string, StockReportListingExtras>,
+function parseSignedUnits(value: string): number {
+  if (!value.trim()) return 0;
+  const n = parseInt(value, 10);
+  if (!Number.isInteger(n)) return 0;
+  return n;
+}
+
+function manualFor(
+  map: Record<string, ManualListingAdjustments>,
   mlItemId: string,
-): StockReportListingExtras {
-  return map[mlItemId] ?? EMPTY_EXTRAS;
+): ManualListingAdjustments {
+  return map[mlItemId] ?? EMPTY_MANUAL;
 }
 
-function hasExtras(extras: StockReportListingExtras): boolean {
-  return (
-    extras.vendasMesSeguinte > 0 ||
-    extras.nfEmitidaNaoEntregue > 0 ||
-    extras.estoqueExtra > 0
-  );
+function hasManualAdjustments(manual: ManualListingAdjustments): boolean {
+  return manual.nfEmitidaNaoEntregue !== 0 || manual.ajusteManual !== 0;
 }
 
-function anchorNcm(
-  anchorSkuKey: string,
-  productsBySku: Record<string, StockReportProductInfo>,
-): string {
-  return productsBySku[anchorSkuKey]?.ncm ?? "";
+function formatSnapshotBadgeTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export function InventoryStockReportDialog({
@@ -90,10 +123,23 @@ export function InventoryStockReportDialog({
   onClose,
 }: InventoryStockReportDialogProps) {
   const titleId = useId();
+  const defaultSnapshotDate = defaultStockReportSnapshotDate();
   const [header, setHeader] = useState(buildDefaultStockReportHeader);
-  const [extrasByMlItemId, setExtrasByMlItemId] = useState<
-    Record<string, StockReportListingExtras>
+  const [subtitleEdited, setSubtitleEdited] = useState(false);
+  const [snapshotDateInput, setSnapshotDateInput] = useState(() =>
+    formatStockReportSnapshotDateInput(defaultSnapshotDate),
+  );
+  const [manualByMlItemId, setManualByMlItemId] = useState<
+    Record<string, ManualListingAdjustments>
   >({});
+  const [salesByMlItemId, setSalesByMlItemId] = useState<
+    Record<string, number>
+  >({});
+  const [catalogSnapshotByMlItemId, setCatalogSnapshotByMlItemId] = useState<
+    SalesAdjustmentResponse["catalogSnapshotByMlItemId"]
+  >({});
+  const [salesLoading, setSalesLoading] = useState(false);
+  const [salesError, setSalesError] = useState<string | null>(null);
   const [mergeGroups, setMergeGroups] = useState<StockReportMergeGroup[]>([]);
   const [selectedSkuKeys, setSelectedSkuKeys] = useState<Set<string>>(
     () => new Set(),
@@ -101,6 +147,11 @@ export function InventoryStockReportDialog({
   const [mergeDraft, setMergeDraft] = useState<MergeDraft | null>(null);
   const [listingSearch, setListingSearch] = useState("");
   const [showExtras, setShowExtras] = useState(false);
+
+  const snapshotDate = useMemo(
+    () => parseStockReportSnapshotDateInput(snapshotDateInput),
+    [snapshotDateInput],
+  );
 
   const listings = useMemo(
     () =>
@@ -111,9 +162,41 @@ export function InventoryStockReportDialog({
         mlStock: row.mlStock,
         warehouseStock: row.warehouseStock,
         mlStockOnTheWay: row.mlStockOnTheWay,
+        catalogListing: row.catalogListing,
       })),
     [rows],
   );
+
+  const listingStatesByMlItemId = useMemo(() => {
+    const map: Record<string, StockReportListingState> = {};
+    for (const listing of listings) {
+      const manual = manualFor(manualByMlItemId, listing.mlItemId);
+      const catalogSnap = catalogSnapshotByMlItemId[listing.mlItemId];
+      const snapshotSource =
+        listing.catalogListing && catalogSnap
+          ? {
+              kind: "catalog_snapshot" as const,
+              mlStockAtSnapshot: catalogSnap.mlStock,
+              snapshotAt: catalogSnap.snapshotAt,
+            }
+          : { kind: "sales" as const };
+
+      map[listing.mlItemId] = {
+        adjustment: {
+          salesAfterSnapshot: salesByMlItemId[listing.mlItemId] ?? 0,
+          nfEmitidaNaoEntregue: manual.nfEmitidaNaoEntregue,
+          ajusteManual: manual.ajusteManual,
+        },
+        snapshotSource,
+      };
+    }
+    return map;
+  }, [
+    listings,
+    manualByMlItemId,
+    salesByMlItemId,
+    catalogSnapshotByMlItemId,
+  ]);
 
   const filteredListings = useMemo(
     () =>
@@ -126,20 +209,81 @@ export function InventoryStockReportDialog({
   );
 
   const skuPreview = useMemo(
-    () => aggregateStockReportBySku(listings, extrasByMlItemId, productsBySku),
-    [listings, extrasByMlItemId, productsBySku],
+    () =>
+      aggregateStockReportBySku(
+        listings,
+        listingStatesByMlItemId,
+        productsBySku,
+      ),
+    [listings, listingStatesByMlItemId, productsBySku],
   );
 
   const report = useMemo(
     () =>
       buildStockReportRows(
         listings,
-        extrasByMlItemId,
+        listingStatesByMlItemId,
         productsBySku,
         mergeGroups,
       ),
-    [listings, extrasByMlItemId, productsBySku, mergeGroups],
+    [listings, listingStatesByMlItemId, productsBySku, mergeGroups],
   );
+
+  const catalogItemIds = useMemo(
+    () =>
+      listings
+        .filter((listing) => listing.catalogListing)
+        .map((listing) => listing.mlItemId),
+    [listings],
+  );
+
+  const fetchSalesAdjustment = useCallback(async () => {
+    if (!snapshotDateInput || listings.length === 0) return;
+
+    setSalesLoading(true);
+    setSalesError(null);
+    try {
+      const params = new URLSearchParams({
+        snapshot: snapshotDateInput,
+        itemIds: listings.map((l) => l.mlItemId).join(","),
+      });
+      if (catalogItemIds.length > 0) {
+        params.set("catalogItemIds", catalogItemIds.join(","));
+      }
+
+      const res = await fetch(
+        `/api/inventory/stock-report/sales-adjustment?${params.toString()}`,
+      );
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(body?.error ?? `Erro ${res.status}`);
+      }
+
+      const data = (await res.json()) as SalesAdjustmentResponse;
+      setSalesByMlItemId(data.salesByMlItemId ?? {});
+      setCatalogSnapshotByMlItemId(data.catalogSnapshotByMlItemId ?? {});
+    } catch (e) {
+      setSalesError(e instanceof Error ? e.message : "Erro ao buscar vendas");
+      setSalesByMlItemId({});
+      setCatalogSnapshotByMlItemId({});
+    } finally {
+      setSalesLoading(false);
+    }
+  }, [snapshotDateInput, listings, catalogItemIds]);
+
+  useEffect(() => {
+    void fetchSalesAdjustment();
+  }, [fetchSalesAdjustment]);
+
+  useEffect(() => {
+    if (subtitleEdited || !snapshotDate) return;
+    setHeader((prev) => ({
+      ...prev,
+      subtitle: formatStockReportSubtitle(snapshotDate),
+    }));
+  }, [snapshotDate, subtitleEdited]);
 
   const handleBackdrop = useCallback(
     (e: React.MouseEvent) => {
@@ -156,16 +300,19 @@ export function InventoryStockReportDialog({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  function updateExtra(
+  function updateManual(
     mlItemId: string,
-    field: keyof StockReportListingExtras,
+    field: keyof ManualListingAdjustments,
     value: string,
   ) {
-    setExtrasByMlItemId((prev) => ({
+    setManualByMlItemId((prev) => ({
       ...prev,
       [mlItemId]: {
-        ...extrasFor(prev, mlItemId),
-        [field]: parseOptionalUnits(value),
+        ...manualFor(prev, mlItemId),
+        [field]:
+          field === "ajusteManual"
+            ? parseSignedUnits(value)
+            : parseNonNegativeUnits(value),
       },
     }));
   }
@@ -224,7 +371,7 @@ export function InventoryStockReportDialog({
     setMergeGroups((prev) => prev.filter((group) => group.id !== mergeId));
   }
 
-  const referenceDate = defaultStockReportReferenceDate();
+  const referenceDate = snapshotDate ?? defaultStockReportSnapshotDate();
   const mergeAnchorOptions = mergeDraft
     ? mergeDraft.skuKeys.map((key) => {
         const row = skuPreview.find((r) => r.rowKey === key);
@@ -255,8 +402,8 @@ export function InventoryStockReportDialog({
               Saldo em estoque
             </h2>
             <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-              Ajuste o cabeçalho, opcionalmente some unidades extras por anúncio
-              e baixe em PDF ou Excel. Nada é salvo no sistema.
+              Estime o saldo em uma data passada: estoque de hoje + vendas ML
+              depois da data (ou snapshot de catálogo). Nada é salvo no sistema.
             </p>
           </div>
           <Button
@@ -271,7 +418,13 @@ export function InventoryStockReportDialog({
         </div>
 
         <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
-          <section className="grid gap-3 sm:grid-cols-2">
+          <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <FormInput
+              label="Data do saldo"
+              type="date"
+              value={snapshotDateInput}
+              onChange={(e) => setSnapshotDateInput(e.target.value)}
+            />
             <FormInput
               label="Empresa"
               value={header.companyName}
@@ -285,11 +438,22 @@ export function InventoryStockReportDialog({
             <FormInput
               label="Título do relatório"
               value={header.subtitle}
-              onChange={(e) =>
-                setHeader((prev) => ({ ...prev, subtitle: e.target.value }))
-              }
+              onChange={(e) => {
+                setSubtitleEdited(true);
+                setHeader((prev) => ({ ...prev, subtitle: e.target.value }));
+              }}
             />
           </section>
+
+          {salesLoading ? (
+            <p className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
+              <Loader2 className="size-4 animate-spin" aria-hidden />
+              Buscando vendas ML e snapshots de catálogo…
+            </p>
+          ) : null}
+          {salesError ? (
+            <p className="text-sm text-red-600">{salesError}</p>
+          ) : null}
 
           <section>
             <Card
@@ -311,8 +475,8 @@ export function InventoryStockReportDialog({
                       Ajustes por anúncio (opcional)
                     </p>
                     <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-                      Adicione unidades extras ou inclua produtos sem estoque
-                      no relatório.
+                      NF emitida, ajuste manual (+/−) e transparência do cálculo
+                      por anúncio.
                     </p>
                   </div>
                 </div>
@@ -327,6 +491,12 @@ export function InventoryStockReportDialog({
 
             {showExtras ? (
               <div className="mt-3 space-y-3">
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  Estimativa: estoque de hoje + vendas feitas depois da data
+                  escolhida. Não inclui entradas Full/galpão automáticas — use
+                  Ajuste manual. Para catálogo com snapshot, galpão e a caminho
+                  usam o estoque atual.
+                </p>
                 <ItemListSearch
                   value={listingSearch}
                   onChange={setListingSearch}
@@ -334,15 +504,15 @@ export function InventoryStockReportDialog({
                   totalCount={listings.length}
                 />
                 <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
-                  <table className="w-full min-w-[48rem] text-left text-sm">
+                  <table className="w-full min-w-[56rem] text-left text-sm">
                     <thead className="border-b border-[var(--border)] bg-[var(--muted)]/80 text-xs uppercase tracking-wide text-[var(--muted-foreground)]">
                       <tr>
                         <th className="px-3 py-2.5">Anúncio</th>
-                        <th className="px-3 py-2.5">Base</th>
-                        <th className="px-3 py-2.5">Vendas mês sequente</th>
-                        <th className="px-3 py-2.5">NF emitida não entregue</th>
-                        <th className="px-3 py-2.5">Estoque extra</th>
-                        <th className="px-3 py-2.5">Total</th>
+                        <th className="px-3 py-2.5">Estoque hoje</th>
+                        <th className="px-3 py-2.5">Vendas após data (+)</th>
+                        <th className="px-3 py-2.5">NF não entregue</th>
+                        <th className="px-3 py-2.5">Ajuste manual (+/−)</th>
+                        <th className="px-3 py-2.5">Estoque na data</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -357,14 +527,22 @@ export function InventoryStockReportDialog({
                         </tr>
                       ) : (
                         filteredListings.map((listing) => {
-                          const extras = extrasFor(
-                            extrasByMlItemId,
+                          const state = listingStateFor(
+                            listingStatesByMlItemId,
                             listing.mlItemId,
                           );
-                          const base = inventoryBaseUnits(listing);
-                          const total = listingTotalUnits(listing, extras);
+                          const manual = manualFor(
+                            manualByMlItemId,
+                            listing.mlItemId,
+                          );
+                          const currentUnits = inventoryBaseUnits(listing);
+                          const total = listingTotalUnits(listing, state);
                           const included = total > 0;
-                          const zeroBase = base === 0 && !hasExtras(extras);
+                          const usesCatalogSnapshot =
+                            state.snapshotSource.kind === "catalog_snapshot";
+                          const zeroBase =
+                            currentUnits === 0 && !hasManualAdjustments(manual);
+
                           return (
                             <tr
                               key={listing.mlItemId}
@@ -383,43 +561,102 @@ export function InventoryStockReportDialog({
                                       {listing.title}
                                     </p>
                                   </div>
+                                  {usesCatalogSnapshot &&
+                                  state.snapshotSource.kind ===
+                                    "catalog_snapshot" ? (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Badge
+                                          variant="outline"
+                                          className="text-[10px]"
+                                        >
+                                          ML via snapshot
+                                        </Badge>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="max-w-xs">
+                                        Estoque ML de{" "}
+                                        {formatSnapshotBadgeTime(
+                                          state.snapshotSource.snapshotAt,
+                                        )}{" "}
+                                        (SP). Galpão e a caminho = estoque
+                                        atual.
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  ) : (
+                                    <Badge
+                                      variant="secondary"
+                                      className="text-[10px]"
+                                    >
+                                      Estimado por vendas
+                                    </Badge>
+                                  )}
                                   {included ? (
-                                    <Badge variant="default" className="text-[10px]">
+                                    <Badge
+                                      variant="default"
+                                      className="text-[10px]"
+                                    >
                                       Incluído
                                     </Badge>
                                   ) : (
-                                    <Badge variant="secondary" className="text-[10px]">
+                                    <Badge
+                                      variant="secondary"
+                                      className="text-[10px]"
+                                    >
                                       Fora do relatório
                                     </Badge>
                                   )}
                                 </div>
                               </td>
-                              <td className="px-3 py-2 tabular-nums">{base}</td>
-                              {(
-                                [
-                                  "vendasMesSeguinte",
-                                  "nfEmitidaNaoEntregue",
-                                  "estoqueExtra",
-                                ] as const
-                              ).map((field) => (
-                                <td key={field} className="px-3 py-2">
-                                  <FormInput
-                                    type="number"
-                                    min={0}
-                                    step={1}
-                                    value={extras[field] || ""}
-                                    onChange={(e) =>
-                                      updateExtra(
-                                        listing.mlItemId,
-                                        field,
-                                        e.target.value,
-                                      )
-                                    }
-                                    inputClassName="h-8 w-20 tabular-nums"
-                                    aria-label={field}
-                                  />
-                                </td>
-                              ))}
+                              <td className="px-3 py-2 tabular-nums">
+                                {currentUnits}
+                              </td>
+                              <td className="px-3 py-2 tabular-nums">
+                                {usesCatalogSnapshot ? (
+                                  <span className="text-[var(--muted-foreground)]">
+                                    —
+                                  </span>
+                                ) : (
+                                  state.adjustment.salesAfterSnapshot
+                                )}
+                              </td>
+                              <td className="px-3 py-2">
+                                <FormInput
+                                  type="number"
+                                  min={0}
+                                  step={1}
+                                  value={manual.nfEmitidaNaoEntregue || ""}
+                                  onChange={(e) =>
+                                    updateManual(
+                                      listing.mlItemId,
+                                      "nfEmitidaNaoEntregue",
+                                      e.target.value,
+                                    )
+                                  }
+                                  inputClassName="h-8 w-20 tabular-nums"
+                                  aria-label="NF emitida não entregue"
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <FormInput
+                                  type="number"
+                                  step={1}
+                                  placeholder="−50"
+                                  value={
+                                    manual.ajusteManual === 0
+                                      ? ""
+                                      : manual.ajusteManual
+                                  }
+                                  onChange={(e) =>
+                                    updateManual(
+                                      listing.mlItemId,
+                                      "ajusteManual",
+                                      e.target.value,
+                                    )
+                                  }
+                                  inputClassName="h-8 w-24 tabular-nums"
+                                  aria-label="Ajuste manual"
+                                />
+                              </td>
                               <td className="px-3 py-2 tabular-nums font-medium">
                                 {total}
                               </td>
@@ -441,7 +678,8 @@ export function InventoryStockReportDialog({
                   Prévia do relatório (por SKU)
                 </h3>
                 <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                  Só entram produtos com estoque total maior que zero.
+                  Só entram produtos com estoque total maior que zero na data
+                  escolhida.
                 </p>
                 {report.missingCostCount > 0 ? (
                   <p className="mt-1 text-xs text-amber-700">
@@ -480,7 +718,9 @@ export function InventoryStockReportDialog({
                           ? {
                               ...prev,
                               anchorSkuKey,
-                              ncm: prev.ncm || anchorNcm(anchorSkuKey, productsBySku),
+                              ncm:
+                                prev.ncm ||
+                                anchorNcm(anchorSkuKey, productsBySku),
                             }
                           : prev,
                       )
@@ -660,9 +900,7 @@ export function InventoryStockReportDialog({
           <Button
             type="button"
             disabled={report.rows.length === 0}
-            onClick={() =>
-              downloadStockReportPdf(header, report, referenceDate)
-            }
+            onClick={() => downloadStockReportPdf(header, report, referenceDate)}
           >
             <FileDown className="size-4" />
             Baixar PDF
@@ -671,6 +909,13 @@ export function InventoryStockReportDialog({
       </div>
     </div>
   );
+}
+
+function anchorNcm(
+  anchorSkuKey: string,
+  productsBySku: Record<string, StockReportProductInfo>,
+): string {
+  return productsBySku[anchorSkuKey]?.ncm ?? "";
 }
 
 type InventoryStockReportLauncherProps = {
@@ -694,7 +939,8 @@ export function InventoryStockReportLauncher({
           </Button>
         </TooltipTrigger>
         <TooltipContent side="bottom" className="max-w-xs">
-          Monta o saldo em estoque por SKU e exporta em PDF ou Excel.
+          Monta o saldo em estoque por SKU na data escolhida e exporta em PDF ou
+          Excel.
         </TooltipContent>
       </Tooltip>
       {open ? (

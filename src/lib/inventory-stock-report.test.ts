@@ -5,7 +5,8 @@ import {
   applyStockReportMergeGroups,
   buildStockReportRows,
   inventoryBaseUnits,
-  listingTotalUnits,
+  listingUnitsAtSnapshot,
+  stockReportSalesAdjustmentRange,
 } from "./inventory-stock-report";
 
 describe("inventory-stock-report", () => {
@@ -20,9 +21,101 @@ describe("inventory-stock-report", () => {
     );
   });
 
-  it("adds optional extras to listing units", () => {
+  it("reconstructs own listing stock by adding sales after snapshot date", () => {
     assert.equal(
-      listingTotalUnits(
+      listingUnitsAtSnapshot(
+        {
+          mlItemId: "MLB1",
+          sku: "SKU A",
+          title: "Produto",
+          warehouseStock: 50,
+          mlStock: 30,
+          mlStockOnTheWay: 5,
+          catalogListing: false,
+        },
+        {
+          salesAfterSnapshot: 15,
+          nfEmitidaNaoEntregue: 0,
+          ajusteManual: 0,
+        },
+        { kind: "sales" },
+      ),
+      100,
+    );
+  });
+
+  it("uses catalog snapshot ml stock without sales adjustment", () => {
+    assert.equal(
+      listingUnitsAtSnapshot(
+        {
+          mlItemId: "MLB1",
+          sku: "SKU A",
+          title: "Produto",
+          warehouseStock: 10,
+          mlStock: 999,
+          mlStockOnTheWay: 0,
+          catalogListing: true,
+        },
+        {
+          salesAfterSnapshot: 50,
+          nfEmitidaNaoEntregue: 0,
+          ajusteManual: 0,
+        },
+        {
+          kind: "catalog_snapshot",
+          mlStockAtSnapshot: 90,
+          snapshotAt: "2026-06-30T17:00:00.000Z",
+        },
+      ),
+      100,
+    );
+  });
+
+  it("applies manual negative adjustment and clamps at zero", () => {
+    assert.equal(
+      listingUnitsAtSnapshot(
+        {
+          mlItemId: "MLB1",
+          sku: "SKU A",
+          title: "Produto",
+          warehouseStock: 100,
+          mlStock: 0,
+          mlStockOnTheWay: 0,
+        },
+        {
+          salesAfterSnapshot: 0,
+          nfEmitidaNaoEntregue: 0,
+          ajusteManual: -50,
+        },
+        { kind: "sales" },
+      ),
+      50,
+    );
+
+    assert.equal(
+      listingUnitsAtSnapshot(
+        {
+          mlItemId: "MLB1",
+          sku: "SKU A",
+          title: "Produto",
+          warehouseStock: 10,
+          mlStock: 0,
+          mlStockOnTheWay: 0,
+        },
+        {
+          salesAfterSnapshot: 0,
+          nfEmitidaNaoEntregue: 0,
+          ajusteManual: -50,
+        },
+        { kind: "sales" },
+      ),
+      0,
+    );
+  });
+
+  it("adds nf and manual extras to listing units", () => {
+    assert.equal(
+      listingUnitsAtSnapshot(
         {
           mlItemId: "MLB1",
           sku: "SKU A",
@@ -32,10 +125,11 @@ describe("inventory-stock-report", () => {
           mlStockOnTheWay: 0,
         },
         {
-          vendasMesSeguinte: 10,
+          salesAfterSnapshot: 10,
           nfEmitidaNaoEntregue: 20,
-          estoqueExtra: 30,
+          ajusteManual: 30,
         },
+        { kind: "sales" },
       ),
       210,
     );
@@ -61,13 +155,7 @@ describe("inventory-stock-report", () => {
           mlStockOnTheWay: 0,
         },
       ],
-      {
-        MLB1: {
-          vendasMesSeguinte: 0,
-          nfEmitidaNaoEntregue: 0,
-          estoqueExtra: 0,
-        },
-      },
+      {},
       {
         "TECNIFORTE - Cabo": {
           ncm: "85444200",
@@ -238,9 +326,12 @@ describe("inventory-stock-report", () => {
       ],
       {
         MLB1: {
-          vendasMesSeguinte: 0,
-          nfEmitidaNaoEntregue: 0,
-          estoqueExtra: 5,
+          adjustment: {
+            salesAfterSnapshot: 0,
+            nfEmitidaNaoEntregue: 0,
+            ajusteManual: 5,
+          },
+          snapshotSource: { kind: "sales" },
         },
       },
       {
@@ -284,5 +375,21 @@ describe("inventory-stock-report", () => {
     assert.equal(result.rows.length, 2);
     assert.equal(result.totalValue, 20);
     assert.equal(result.missingCostCount, 1);
+  });
+
+  it("returns sales adjustment range starting day after snapshot", () => {
+    const snapshot = new Date("2026-06-30T23:59:59.999-03:00");
+    const asOf = new Date("2026-07-02T12:00:00.000-03:00");
+    const range = stockReportSalesAdjustmentRange(
+      snapshot,
+      asOf,
+      "America/Sao_Paulo",
+    );
+    assert.ok(range);
+    assert.equal(
+      range.from.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }),
+      "2026-07-01",
+    );
+    assert.equal(range.to.getTime(), asOf.getTime());
   });
 });

@@ -57,6 +57,7 @@ export type InventoryRow = {
   mlStock: number;
   warehouseStock: number;
   isFulfillment: boolean;
+  catalogListing: boolean;
   mlStockOnTheWay: number;
   mlProcessTransfer: number;
   mlProcessInternal: number;
@@ -115,7 +116,7 @@ function StockColumnHeader({
   );
 }
 
-function formatOnTheWayCell(row: InventoryRow): {
+ function formatOnTheWayCell(row: InventoryRow): {
   display: string;
   muted: boolean;
   showTooltip: boolean;

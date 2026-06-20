@@ -1,8 +1,7 @@
 import { reportsConfig } from "@/config/reports";
 import { roundMoney } from "@/lib/financial-margin";
-import { getCalendarMonthRange } from "@/lib/mercadolibre/revenue-periods";
+import { getZonedParts, zonedLocalToUtc } from "@/lib/report-timezone";
 import { normalizeProductSku } from "@/lib/product-pricing";
-import { getZonedParts } from "@/lib/report-timezone";
 
 const MONTH_NAMES_PT = [
   "Janeiro",
@@ -21,10 +20,19 @@ const MONTH_NAMES_PT = [
 
 export const DEFAULT_STOCK_REPORT_COMPANY = "Shopping Um a Um LTDA";
 
-export type StockReportListingExtras = {
-  vendasMesSeguinte: number;
+export type StockReportListingAdjustment = {
+  salesAfterSnapshot: number;
   nfEmitidaNaoEntregue: number;
-  estoqueExtra: number;
+  ajusteManual: number;
+};
+
+export type StockReportListingSnapshotSource =
+  | { kind: "sales" }
+  | { kind: "catalog_snapshot"; mlStockAtSnapshot: number; snapshotAt: string };
+
+export type StockReportListingState = {
+  adjustment: StockReportListingAdjustment;
+  snapshotSource: StockReportListingSnapshotSource;
 };
 
 export type StockReportProductInfo = {
@@ -40,6 +48,7 @@ export type StockReportListingInput = {
   mlStock: number;
   warehouseStock: number;
   mlStockOnTheWay: number;
+  catalogListing?: boolean;
 };
 
 export type StockReportRow = {
@@ -72,9 +81,22 @@ export type StockReportBuildResult = {
   missingCostCount: number;
 };
 
+const EMPTY_ADJUSTMENT: StockReportListingAdjustment = {
+  salesAfterSnapshot: 0,
+  nfEmitidaNaoEntregue: 0,
+  ajusteManual: 0,
+};
+
+const SALES_SNAPSHOT_SOURCE: StockReportListingSnapshotSource = { kind: "sales" };
+
 function stockUnits(value: number | null | undefined): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return 0;
   return Math.max(0, Math.floor(value));
+}
+
+function manualUnits(value: number | null | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  return Math.floor(value);
 }
 
 export function inventoryBaseUnits(
@@ -90,16 +112,41 @@ export function inventoryBaseUnits(
   );
 }
 
+export function listingUnitsAtSnapshot(
+  row: StockReportListingInput,
+  adjustment: StockReportListingAdjustment = EMPTY_ADJUSTMENT,
+  snapshotSource: StockReportListingSnapshotSource = SALES_SNAPSHOT_SOURCE,
+): number {
+  const nf = stockUnits(adjustment.nfEmitidaNaoEntregue);
+  const manual = manualUnits(adjustment.ajusteManual);
+
+  const base =
+    snapshotSource.kind === "catalog_snapshot"
+      ? stockUnits(snapshotSource.mlStockAtSnapshot) +
+        stockUnits(row.warehouseStock) +
+        stockUnits(row.mlStockOnTheWay)
+      : inventoryBaseUnits(row) + stockUnits(adjustment.salesAfterSnapshot);
+
+  return Math.max(0, base + nf + manual);
+}
+
+export function listingStateFor(
+  map: Record<string, StockReportListingState | undefined>,
+  mlItemId: string,
+): StockReportListingState {
+  return (
+    map[mlItemId] ?? {
+      adjustment: EMPTY_ADJUSTMENT,
+      snapshotSource: SALES_SNAPSHOT_SOURCE,
+    }
+  );
+}
+
 export function listingTotalUnits(
   row: StockReportListingInput,
-  extras: StockReportListingExtras,
+  state: StockReportListingState,
 ): number {
-  return (
-    inventoryBaseUnits(row) +
-    stockUnits(extras.vendasMesSeguinte) +
-    stockUnits(extras.nfEmitidaNaoEntregue) +
-    stockUnits(extras.estoqueExtra)
-  );
+  return listingUnitsAtSnapshot(row, state.adjustment, state.snapshotSource);
 }
 
 export function skuKeyFromListing(sku: string | null, mlItemId: string): string {
@@ -112,12 +159,117 @@ export function skuLabelFromKey(skuKey: string): string {
   return skuKey;
 }
 
-export function defaultStockReportReferenceDate(
+export function defaultStockReportSnapshotDate(
   now: Date = new Date(),
   timeZone: string = reportsConfig.catalogCompetitionTimezone,
 ): Date {
   const parts = getZonedParts(now, timeZone);
-  return getCalendarMonthRange(parts.year, parts.month, timeZone).to;
+  let year = parts.year;
+  let month = parts.month - 1;
+  if (month < 1) {
+    month = 12;
+    year -= 1;
+  }
+  const daysInMonth = new Date(year, month, 0).getDate();
+  return zonedLocalToUtc(
+    year,
+    month,
+    daysInMonth,
+    23,
+    59,
+    59,
+    999,
+    timeZone,
+  );
+}
+
+/** @deprecated Use defaultStockReportSnapshotDate */
+export function defaultStockReportReferenceDate(
+  now: Date = new Date(),
+  timeZone: string = reportsConfig.catalogCompetitionTimezone,
+): Date {
+  return defaultStockReportSnapshotDate(now, timeZone);
+}
+
+export function formatStockReportSnapshotDateInput(
+  date: Date,
+  timeZone: string = reportsConfig.catalogCompetitionTimezone,
+): string {
+  const parts = getZonedParts(date, timeZone);
+  const y = String(parts.year);
+  const m = String(parts.month).padStart(2, "0");
+  const d = String(parts.day).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+export function parseStockReportSnapshotDateInput(
+  value: string,
+  timeZone: string = reportsConfig.catalogCompetitionTimezone,
+): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(month) ||
+    !Number.isInteger(day) ||
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31
+  ) {
+    return null;
+  }
+  const daysInMonth = new Date(year, month, 0).getDate();
+  if (day > daysInMonth) return null;
+  return zonedLocalToUtc(year, month, day, 23, 59, 59, 999, timeZone);
+}
+
+export function stockReportSalesAdjustmentRange(
+  snapshotDate: Date,
+  asOf: Date = new Date(),
+  timeZone: string = reportsConfig.catalogCompetitionTimezone,
+): { from: Date; to: Date } | null {
+  const parts = getZonedParts(snapshotDate, timeZone);
+  const snapshotDayEnd = zonedLocalToUtc(
+    parts.year,
+    parts.month,
+    parts.day,
+    23,
+    59,
+    59,
+    999,
+    timeZone,
+  );
+  if (snapshotDayEnd.getTime() >= asOf.getTime()) return null;
+
+  const noonUtc = zonedLocalToUtc(
+    parts.year,
+    parts.month,
+    parts.day,
+    12,
+    0,
+    0,
+    0,
+    timeZone,
+  );
+  const nextDay = getZonedParts(
+    new Date(noonUtc.getTime() + 24 * 60 * 60 * 1000),
+    timeZone,
+  );
+  const from = zonedLocalToUtc(
+    nextDay.year,
+    nextDay.month,
+    nextDay.day,
+    0,
+    0,
+    0,
+    0,
+    timeZone,
+  );
+  return { from, to: asOf };
 }
 
 export function formatStockReportSubtitle(
@@ -132,10 +284,10 @@ export function formatStockReportSubtitle(
 export function buildDefaultStockReportHeader(
   now: Date = new Date(),
 ): StockReportHeader {
-  const referenceDate = defaultStockReportReferenceDate(now);
+  const snapshotDate = defaultStockReportSnapshotDate(now);
   return {
     companyName: DEFAULT_STOCK_REPORT_COMPANY,
-    subtitle: formatStockReportSubtitle(referenceDate),
+    subtitle: formatStockReportSubtitle(snapshotDate),
   };
 }
 
@@ -206,19 +358,15 @@ function buildSkuRow(
 
 export function aggregateStockReportBySku(
   listings: StockReportListingInput[],
-  extrasByMlItemId: Record<string, StockReportListingExtras | undefined>,
+  listingStatesByMlItemId: Record<string, StockReportListingState | undefined>,
   productsBySku: Record<string, StockReportProductInfo | undefined>,
 ): StockReportRow[] {
   const unitsBySku = new Map<string, number>();
 
   for (const listing of listings) {
     const skuKey = skuKeyFromListing(listing.sku, listing.mlItemId);
-    const extras = extrasByMlItemId[listing.mlItemId] ?? {
-      vendasMesSeguinte: 0,
-      nfEmitidaNaoEntregue: 0,
-      estoqueExtra: 0,
-    };
-    const units = listingTotalUnits(listing, extras);
+    const state = listingStateFor(listingStatesByMlItemId, listing.mlItemId);
+    const units = listingTotalUnits(listing, state);
     if (units <= 0) continue;
     unitsBySku.set(skuKey, (unitsBySku.get(skuKey) ?? 0) + units);
   }
@@ -288,13 +436,13 @@ export function applyStockReportMergeGroups(
 
 export function buildStockReportRows(
   listings: StockReportListingInput[],
-  extrasByMlItemId: Record<string, StockReportListingExtras | undefined>,
+  listingStatesByMlItemId: Record<string, StockReportListingState | undefined>,
   productsBySku: Record<string, StockReportProductInfo | undefined>,
   mergeGroups: StockReportMergeGroup[] = [],
 ): StockReportBuildResult {
   const aggregated = aggregateStockReportBySku(
     listings,
-    extrasByMlItemId,
+    listingStatesByMlItemId,
     productsBySku,
   );
   const rows = applyStockReportMergeGroups(aggregated, mergeGroups);
@@ -315,5 +463,6 @@ export function buildStockReportFilename(
     reportsConfig.catalogCompetitionTimezone,
   );
   const month = String(parts.month).padStart(2, "0");
-  return `saldo-estoque-${parts.year}-${month}.${extension}`;
+  const day = String(parts.day).padStart(2, "0");
+  return `saldo-estoque-${parts.year}-${month}-${day}.${extension}`;
 }

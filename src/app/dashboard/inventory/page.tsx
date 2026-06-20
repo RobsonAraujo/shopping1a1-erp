@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { stockPlanningConfig } from "@/config/stock-planning";
-import { InventoryStockTable } from "@/components/inventory-stock-table";
+import { InventoryStockTable, type InventoryRow } from "@/components/inventory-stock-table";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   enrichItemsWithFulfillmentStock,
@@ -46,21 +46,7 @@ export default async function InventoryPage() {
   let statusCounts = { active: 0, paused: 0, other: 0 };
   let warehouseLoadFailed = false;
   let productsBySku: Record<string, StockReportProductInfo> = {};
-  let rows: {
-    mlItemId: string;
-    sku: string | null;
-    title: string;
-    imageUrl?: string;
-    mlStatus: string;
-    mlStock: number;
-    warehouseStock: number;
-    isFulfillment: boolean;
-    mlStockOnTheWay: number;
-    mlProcessTransfer: number;
-    mlProcessInternal: number;
-    leadTimeDays: number | null;
-    needsPurchaseAttention: boolean;
-  }[] = [];
+  let rows: InventoryRow[] = [];
 
   try {
     const items = await fetchOperationalListings(token, userId);
@@ -135,6 +121,7 @@ export default async function InventoryPage() {
       title: item.title,
       imageUrl: bestItemImageUrl(item),
       mlStatus: item.status,
+      catalogListing: item.catalog_listing === true,
     }));
 
     total = items.length;

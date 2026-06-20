@@ -792,6 +792,49 @@ export async function fetchUnitsSoldForItemsInWindowBatched(
   return out;
 }
 
+/** Unidades vendidas por anúncio em intervalo explícito (exceto cancelados). */
+export async function fetchUnitsSoldForItemsInDateRangeBatched(
+  accessToken: string,
+  sellerId: number,
+  itemIds: string[],
+  from: Date,
+  to: Date,
+  dateField: SalesWindowDateField = "date_closed",
+  chunkSize = 12,
+): Promise<Record<string, number>> {
+  const unique = [...new Set(itemIds.filter(Boolean))];
+  if (unique.length === 0) return {};
+  if (from.getTime() >= to.getTime()) {
+    return Object.fromEntries(unique.map((id) => [id, 0]));
+  }
+
+  const fromStr = from.toISOString();
+  const toStr = to.toISOString();
+  const out: Record<string, number> = {};
+
+  for (let i = 0; i < unique.length; i += chunkSize) {
+    const chunk = unique.slice(i, i + chunkSize);
+    const results = await Promise.all(
+      chunk.map(async (itemId) => {
+        const n = await fetchUnitsSoldForOneItem(
+          accessToken,
+          sellerId,
+          itemId,
+          fromStr,
+          toStr,
+          dateField,
+        );
+        return [itemId, n] as const;
+      }),
+    );
+    for (const [itemId, units] of results) {
+      out[itemId] = units;
+    }
+  }
+
+  return out;
+}
+
 async function mapWithConcurrency<T, R>(
   items: T[],
   concurrency: number,
