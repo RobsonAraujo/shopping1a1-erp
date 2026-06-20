@@ -737,6 +737,21 @@ export async function fetchOperationalListings(
   return fetchItemsByIdsBatched(accessToken, ids);
 }
 
+export async function fetchSellerFulfillmentInventoryIds(
+  accessToken: string,
+  userId: number,
+): Promise<string[]> {
+  const items = await fetchOperationalListings(accessToken, userId);
+  const ids = new Set<string>();
+  for (const item of items) {
+    if (!isFulfillmentListing(item)) continue;
+    for (const inventoryId of collectInventoryIdsFromItem(item)) {
+      ids.add(inventoryId);
+    }
+  }
+  return [...ids];
+}
+
 export async function fetchItemsByIdsBatched(
   accessToken: string,
   ids: string[],

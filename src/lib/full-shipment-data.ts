@@ -4,7 +4,7 @@ import {
   defaultShippedAtForBillingPeriod,
   fetchFullInboundShipmentsForPeriod,
 } from "@/lib/mercadolibre/billing-full-collect";
-import { billingMonthUtcBounds } from "@/lib/full-shipment-period";
+import { activityMonthBounds } from "@/lib/full-shipment-period";
 import {
   type FullShipmentRecord,
   type FullShipmentWriteInput,
@@ -49,20 +49,10 @@ export async function listFullShipmentsForPeriod(
   year: number,
   month: number,
 ): Promise<FullShipmentRecord[]> {
-  const { start, end } = billingMonthUtcBounds(year, month);
+  const { start, end } = activityMonthBounds(year, month);
   const rows = await prisma.fullShipment.findMany({
     where: {
-      OR: [
-        {
-          source: "ml_billing",
-          billingYear: year,
-          billingMonth: month,
-        },
-        {
-          source: "manual",
-          shippedAt: { gte: start, lte: end },
-        },
-      ],
+      shippedAt: { gte: start, lte: end },
     },
     orderBy: [{ shippedAt: "desc" }, { createdAt: "desc" }],
   });
@@ -156,6 +146,7 @@ export type ImportFullShipmentsResult = {
   probe: {
     fullDetailsRowCount: number;
     groupedInboundCount: number;
+    opsInboundCount: number;
     mlDetailsCount: number;
     summaryCount: number;
     unassignedCount: number;
@@ -176,11 +167,11 @@ export async function importFullCollectChargesFromBilling(
     month,
   );
 
+  const { start, end } = activityMonthBounds(year, month);
   const replaced = await prisma.fullShipment.deleteMany({
     where: {
       source: "ml_billing",
-      billingYear: year,
-      billingMonth: month,
+      shippedAt: { gte: start, lte: end },
     },
   });
 

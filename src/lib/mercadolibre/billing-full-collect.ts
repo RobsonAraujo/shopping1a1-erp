@@ -11,12 +11,16 @@ import {
   extractBillingSummaryEntries,
   fetchBillingSummaryRawForDebug,
 } from "./billing-summary";
-import { fetchWithRetry } from "./fetch-with-retry";
+import type { FullInboundShipment } from "./billing-full-collect-types";
+export type { FullInboundShipment } from "./billing-full-collect-types";
 import {
-  applyOperationEnrichment,
-  fetchInboundReceptionSummaries,
-  operationSearchDateRangeForBillingMonth,
-} from "./fulfillment-inbound-operations";
+  filterShipmentsByActivityMonth,
+  mergeOperationsWithBillingCosts,
+  nextCalendarMonth,
+} from "./billing-inbound-merge";
+export { mergeOperationsWithBillingCosts } from "./billing-inbound-merge";
+import { fetchWithRetry, MlApiFetchError } from "./fetch-with-retry";
+import { fetchInboundReceptionsForActivityMonth } from "./fulfillment-inbound-operations";
 
 export type FullCollectCharge = {
   detailId: string;
@@ -26,19 +30,6 @@ export type FullCollectCharge = {
   subType: string;
   source: "full_details" | "ml_details" | "summary";
   rawDateFields: Record<string, string | undefined>;
-};
-
-export type FullInboundShipment = {
-  inboundId: string;
-  shippedAt: string | null;
-  totalCost: number;
-  totalUnits: number;
-  productCount: number;
-  chargeDetailIds: string[];
-  inventoryIds: string[];
-  label: string;
-  source: "full_details" | "ml_details" | "summary";
-  unassigned: boolean;
 };
 
 type FullBillingChargeInfo = {
@@ -456,10 +447,22 @@ export async function fetchAllMlFullBillingDetails(
       u.searchParams.set("limit", String(limit));
       u.searchParams.set("from_id", String(fromId));
 
-      const res = await fetchWithRetry(u.toString(), {
-        headers: { Authorization: `Bearer ${accessToken}` },
-        cache: "no-store",
-      });
+      let res: Response;
+      try {
+        res = await fetchWithRetry(
+          u.toString(),
+          {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            cache: "no-store",
+          },
+          { maxAttempts: 5, backoffMs: [1000, 2000, 3000, 5000] },
+        );
+      } catch (e) {
+        if (e instanceof MlApiFetchError && allRows.length > 0) {
+          break;
+        }
+        throw e;
+      }
 
       const data = (await res.json()) as FullBillingDetailsResponse;
       const batch = data.results ?? [];
@@ -485,40 +488,63 @@ export async function fetchAllMlFullBillingDetails(
 export type FullInboundBillingProbe = {
   fullDetailsRowCount: number;
   groupedInboundCount: number;
+  opsInboundCount: number;
   mlDetailsCount: number;
   summaryCount: number;
   unassignedCount: number;
 };
 
-export async function fetchFullInboundShipmentsForPeriod(
+async function fetchBillingGroupedInboundsForPeriods(
   accessToken: string,
-  sellerId: number,
   year: number,
   month: number,
-): Promise<{ shipments: FullInboundShipment[]; probe: FullInboundBillingProbe }> {
+): Promise<{ grouped: FullInboundShipment[]; fullDetailsRowCount: number }> {
+  const next = nextCalendarMonth(year, month);
+  const keys = [
+    billingPeriodKey(year, month),
+    billingPeriodKey(next.year, next.month),
+  ];
+
+  const groupedByInbound = new Map<string, FullInboundShipment>();
+  let fullDetailsRowCount = 0;
+
+  for (const key of keys) {
+    try {
+      const rows = await fetchAllMlFullBillingDetails(accessToken, key);
+      fullDetailsRowCount += rows.length;
+      for (const shipment of groupFullDetailsIntoInboundShipments(rows)) {
+        const existing = groupedByInbound.get(shipment.inboundId);
+        if (!existing || shipment.totalCost > existing.totalCost) {
+          groupedByInbound.set(shipment.inboundId, shipment);
+        }
+      }
+    } catch (e) {
+      if (!(e instanceof MlApiFetchError)) throw e;
+    }
+  }
+
+  return {
+    grouped: [...groupedByInbound.values()],
+    fullDetailsRowCount,
+  };
+}
+
+async function fetchFullInboundShipmentsBillingFallback(
+  accessToken: string,
+  year: number,
+  month: number,
+): Promise<{
+  shipments: FullInboundShipment[];
+  fullDetailsRowCount: number;
+  groupedInboundCount: number;
+  mlDetailsCount: number;
+  summaryCount: number;
+}> {
   const key = billingPeriodKey(year, month);
   const shipmentMap = new Map<string, FullInboundShipment>();
 
   const fullDetailRows = await fetchAllMlFullBillingDetails(accessToken, key);
-  let grouped = groupFullDetailsIntoInboundShipments(fullDetailRows);
-  if (grouped.length > 0) {
-    const inventoryIds = [
-      ...new Set(grouped.flatMap((shipment) => shipment.inventoryIds)),
-    ];
-    const { dateFrom, dateTo } = operationSearchDateRangeForBillingMonth(
-      year,
-      month,
-    );
-    const ops = await fetchInboundReceptionSummaries(
-      accessToken,
-      sellerId,
-      inventoryIds,
-      dateFrom,
-      dateTo,
-    );
-    grouped = applyOperationEnrichment(grouped, ops);
-  }
-
+  const grouped = groupFullDetailsIntoInboundShipments(fullDetailRows);
   for (const shipment of grouped) {
     shipmentMap.set(shipment.inboundId, shipment);
   }
@@ -552,15 +578,95 @@ export async function fetchFullInboundShipmentsForPeriod(
     }
   }
 
-  const shipments = [...shipmentMap.values()];
   return {
-    shipments,
+    shipments: filterShipmentsByActivityMonth(
+      [...shipmentMap.values()],
+      year,
+      month,
+    ),
+    fullDetailsRowCount: fullDetailRows.length,
+    groupedInboundCount: grouped.length,
+    mlDetailsCount,
+    summaryCount,
+  };
+}
+
+export async function fetchFullInboundShipmentsForPeriod(
+  accessToken: string,
+  sellerId: number,
+  year: number,
+  month: number,
+): Promise<{ shipments: FullInboundShipment[]; probe: FullInboundBillingProbe }> {
+  const { fetchSellerFulfillmentInventoryIds } = await import("./api");
+  const inventoryIds = await fetchSellerFulfillmentInventoryIds(
+    accessToken,
+    sellerId,
+  );
+
+  const [billing, discoveries] = await Promise.all([
+    fetchBillingGroupedInboundsForPeriods(accessToken, year, month),
+    fetchInboundReceptionsForActivityMonth(
+      accessToken,
+      sellerId,
+      inventoryIds,
+      year,
+      month,
+    ),
+  ]);
+
+  if (discoveries.size > 0) {
+    const shipments = mergeOperationsWithBillingCosts(
+      discoveries,
+      billing.grouped,
+    );
+
+    return {
+      shipments,
+      probe: {
+        fullDetailsRowCount: billing.fullDetailsRowCount,
+        groupedInboundCount: billing.grouped.length,
+        opsInboundCount: discoveries.size,
+        mlDetailsCount: 0,
+        summaryCount: 0,
+        unassignedCount: shipments.filter((s) => s.unassigned).length,
+      },
+    };
+  }
+
+  const fromBilling = filterShipmentsByActivityMonth(
+    billing.grouped,
+    year,
+    month,
+  );
+  if (fromBilling.length > 0) {
+    return {
+      shipments: fromBilling,
+      probe: {
+        fullDetailsRowCount: billing.fullDetailsRowCount,
+        groupedInboundCount: billing.grouped.length,
+        opsInboundCount: 0,
+        mlDetailsCount: 0,
+        summaryCount: 0,
+        unassignedCount: fromBilling.filter((s) => s.unassigned).length,
+      },
+    };
+  }
+
+  const fallback = await fetchFullInboundShipmentsBillingFallback(
+    accessToken,
+    year,
+    month,
+  );
+
+  return {
+    shipments: fallback.shipments,
     probe: {
-      fullDetailsRowCount: fullDetailRows.length,
-      groupedInboundCount: grouped.length,
-      mlDetailsCount,
-      summaryCount,
-      unassignedCount: shipments.filter((s) => s.unassigned).length,
+      fullDetailsRowCount: fallback.fullDetailsRowCount,
+      groupedInboundCount: fallback.groupedInboundCount,
+      opsInboundCount: 0,
+      mlDetailsCount: fallback.mlDetailsCount,
+      summaryCount: fallback.summaryCount,
+      unassignedCount: fallback.shipments.filter((s) => s.unassigned).length,
     },
   };
 }

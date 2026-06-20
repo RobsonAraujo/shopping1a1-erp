@@ -3,12 +3,28 @@
  *
  * Usage:
  *   npx tsx scripts/debug-full-inbound.ts 2026 6 69719031
+ *   npx tsx scripts/debug-full-inbound.ts 2026 6 scan
  */
 import "dotenv/config";
 import { prisma } from "../src/lib/db";
-import { getMercadoLibreConfig } from "../src/lib/mercadolibre/config";
+import { fetchSellerFulfillmentInventoryIds } from "../src/lib/mercadolibre/api";
+import {
+  fetchFullInboundShipmentsForPeriod,
+  groupFullDetailsIntoInboundShipments,
+} from "../src/lib/mercadolibre/billing-full-collect";
 import { billingPeriodKey } from "../src/lib/mercadolibre/billing-shared";
+import { getMercadoLibreConfig } from "../src/lib/mercadolibre/config";
+import { fetchInboundReceptionsForActivityMonth } from "../src/lib/mercadolibre/fulfillment-inbound-operations";
 import { resolveSellerAccessToken } from "../src/lib/mercadolibre/persist-seller-tokens";
+
+const EXPECTED_JUNE_2026 = [
+  "69719031",
+  "68605584",
+  "69546476",
+  "69534372",
+  "69526222",
+  "68712023",
+];
 
 type FullBillingDetailRow = {
   charge_info?: {
@@ -150,6 +166,82 @@ function formatDateYmd(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+function nextCalendarMonth(year: number, month: number) {
+  if (month === 12) return { year: year + 1, month: 1 };
+  return { year, month: month + 1 };
+}
+
+async function scanActivityMonth(
+  token: string,
+  sellerId: number,
+  year: number,
+  month: number,
+): Promise<void> {
+  console.log(`\n=== Activity month scan ${year}-${String(month).padStart(2, "0")} ===\n`);
+
+  const inventoryIds = await fetchSellerFulfillmentInventoryIds(token, sellerId);
+  console.log(`Fulfillment inventory_ids: ${inventoryIds.length}`);
+
+  const discoveries = await fetchInboundReceptionsForActivityMonth(
+    token,
+    sellerId,
+    inventoryIds,
+    year,
+    month,
+  );
+  console.log(`Operations inbound_ids in month: ${discoveries.size}`);
+  for (const discovery of [...discoveries.values()].sort((a, b) =>
+    (a.shippedAt ?? "").localeCompare(b.shippedAt ?? ""),
+  )) {
+    console.log({
+      inboundId: discovery.inboundId,
+      shippedAt: discovery.shippedAt,
+      totalUnits: discovery.totalUnits,
+      productCount: discovery.productCount,
+    });
+  }
+
+  const next = nextCalendarMonth(year, month);
+  const billingKeys = [
+    billingPeriodKey(year, month),
+    billingPeriodKey(next.year, next.month),
+  ];
+  const billingInboundIds = new Set<string>();
+  for (const key of billingKeys) {
+    const rows = await fetchAllFullDetails(token, key);
+    for (const shipment of groupFullDetailsIntoInboundShipments(rows)) {
+      billingInboundIds.add(shipment.inboundId);
+    }
+    console.log(`Billing key ${key}: ${rows.length} rows`);
+  }
+  console.log(`Distinct inbound_ids in billing M/M+1: ${billingInboundIds.size}`);
+
+  const merged = await fetchFullInboundShipmentsForPeriod(
+    token,
+    sellerId,
+    year,
+    month,
+  );
+  console.log("\n--- Merged import preview ---");
+  console.log(merged.probe);
+  for (const shipment of merged.shipments) {
+    console.log({
+      inboundId: shipment.inboundId,
+      shippedAt: shipment.shippedAt,
+      totalUnits: shipment.totalUnits,
+      totalCost: shipment.totalCost,
+    });
+  }
+
+  if (year === 2026 && month === 6) {
+    const found = new Set(merged.shipments.map((s) => s.inboundId));
+    console.log("\n--- Expected June 2026 inbound_ids ---");
+    for (const inboundId of EXPECTED_JUNE_2026) {
+      console.log(`${inboundId}: ${found.has(inboundId) ? "FOUND" : "MISSING"}`);
+    }
+  }
+}
+
 async function main() {
   const year = Number(process.argv[2] ?? new Date().getFullYear());
   const month = Number(process.argv[3] ?? new Date().getMonth() + 1);
@@ -157,13 +249,18 @@ async function main() {
 
   if (!Number.isInteger(year) || !Number.isInteger(month)) {
     throw new Error(
-      "Usage: npx tsx scripts/debug-full-inbound.ts <year> <month> [inboundId]",
+      "Usage: npx tsx scripts/debug-full-inbound.ts <year> <month> [inboundId|scan]",
     );
   }
 
   const mlUserId = await resolveMlUserId();
   const token = await resolveSellerAccessToken(mlUserId);
   if (!token) throw new Error(`No token for seller ${mlUserId}`);
+
+  if (inboundTarget === "scan") {
+    await scanActivityMonth(token, mlUserId, year, month);
+    return;
+  }
 
   const key = billingPeriodKey(year, month);
   console.log(

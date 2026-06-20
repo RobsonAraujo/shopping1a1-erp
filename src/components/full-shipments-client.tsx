@@ -103,7 +103,7 @@ function buildImportMessage(data: {
   if (found === 0) {
     return {
       tone: "warning",
-      text: `Nenhum envio Full encontrado no faturamento de ${monthName}/${data.year}. O mês pode ainda não estar fechado no ML, ou a cobrança ainda não apareceu no extrato.`,
+      text: `Nenhuma coleta Full encontrada em ${monthName}/${data.year}. Verifique se os envios já foram recebidos no Full neste mês.`,
     };
   }
 
@@ -114,12 +114,12 @@ function buildImportMessage(data: {
 
   const unitsHint =
     imported > 0
-      ? " Unidades e produtos vieram do faturamento ML quando disponíveis."
+      ? " Unidades e datas vieram das operações ML; custos do faturamento quando disponíveis."
       : "";
 
   return {
     tone: "success",
-    text: `${imported} envio(s) importado(s) de ${monthName}/${data.year} (${found} agrupado(s) por inbound_id).${replacedText}${unitsHint}`,
+    text: `${imported} coleta(s) de ${monthName}/${data.year} importada(s) (${found} envio(s) agrupado(s) por inbound_id).${replacedText}${unitsHint}`,
   };
 }
 
@@ -150,6 +150,7 @@ export function FullShipmentsClient({
   const [viewMonth, setViewMonth] = useState(initialMonth);
   const loadRequestIdRef = useRef(0);
   const skipInitialLoadRef = useRef(true);
+  const prevViewPeriodRef = useRef({ year: initialYear, month: initialMonth });
 
   const previewCostPerUnit = useMemo(
     () => parsePreviewCostPerUnit(form.totalCost, form.totalUnits),
@@ -229,8 +230,14 @@ export function FullShipmentsClient({
 
     const requestId = ++loadRequestIdRef.current;
     let cancelled = false;
+    const periodChanged =
+      prevViewPeriodRef.current.year !== viewYear ||
+      prevViewPeriodRef.current.month !== viewMonth;
+    prevViewPeriodRef.current = { year: viewYear, month: viewMonth };
     setLoading(true);
-    setError(null);
+    if (periodChanged) {
+      setError(null);
+    }
     void loadShipmentsForPeriod(viewYear, viewMonth, requestId)
       .catch((e: unknown) => {
         if (!cancelled && requestId === loadRequestIdRef.current) {
@@ -412,7 +419,7 @@ export function FullShipmentsClient({
       {importing ? (
         <FullShipmentImportOverlay
           progress={{
-            message: `Consultando coletas Full de ${viewMonthName}/${viewYear} no faturamento Mercado Livre…`,
+            message: `Buscando coletas Full de ${viewMonthName}/${viewYear}…`,
           }}
         />
       ) : null}
@@ -579,6 +586,8 @@ export function FullShipmentsClient({
               ) : (
                 shipments.map((shipment) => {
                   const needsUnits = shipment.totalUnits === 0;
+                  const needsCost =
+                    shipment.source === "ml_billing" && shipment.totalCost === 0;
                   const inboundLabel = shipment.mlInboundId
                     ? shipment.mlInboundId.startsWith("unassigned-")
                       ? "—"
@@ -601,7 +610,17 @@ export function FullShipmentsClient({
                           : "—"}
                       </td>
                       <td className="px-4 py-3.5 tabular-nums">
-                        {formatFinancialMoney(shipment.totalCost)}
+                        <span className="inline-flex flex-wrap items-center gap-2">
+                          {formatFinancialMoney(shipment.totalCost)}
+                          {needsCost ? (
+                            <Badge
+                              variant="warning"
+                              className="h-5 px-1.5 text-[10px]"
+                            >
+                              Custo pendente
+                            </Badge>
+                          ) : null}
+                        </span>
                       </td>
                       <td className="px-4 py-3.5 tabular-nums">
                         <span className="inline-flex items-center gap-2">
