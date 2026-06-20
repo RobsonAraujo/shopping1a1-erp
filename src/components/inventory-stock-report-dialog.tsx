@@ -191,12 +191,7 @@ export function InventoryStockReportDialog({
       };
     }
     return map;
-  }, [
-    listings,
-    manualByMlItemId,
-    salesByMlItemId,
-    catalogSnapshotByMlItemId,
-  ]);
+  }, [listings, manualByMlItemId, salesByMlItemId, catalogSnapshotByMlItemId]);
 
   const filteredListings = useMemo(
     () =>
@@ -339,9 +334,7 @@ export function InventoryStockReportDialog({
       skuKeys,
       anchorSkuKey,
       label: editingGroup?.label ?? "",
-      ncm:
-        editingGroup?.ncmOverride ??
-        anchorNcm(anchorSkuKey, productsBySku),
+      ncm: editingGroup?.ncmOverride ?? anchorNcm(anchorSkuKey, productsBySku),
       editingGroupId: editingGroup?.id ?? null,
     });
   }
@@ -640,7 +633,6 @@ export function InventoryStockReportDialog({
                                 <FormInput
                                   type="number"
                                   step={1}
-                                  placeholder="−50"
                                   value={
                                     manual.ajusteManual === 0
                                       ? ""
@@ -900,7 +892,9 @@ export function InventoryStockReportDialog({
           <Button
             type="button"
             disabled={report.rows.length === 0}
-            onClick={() => downloadStockReportPdf(header, report, referenceDate)}
+            onClick={() =>
+              downloadStockReportPdf(header, report, referenceDate)
+            }
           >
             <FileDown className="size-4" />
             Baixar PDF
