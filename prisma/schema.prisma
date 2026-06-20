@@ -69,6 +69,33 @@ enum ReplenishmentStatus {
   completed
 }
 
+enum FullShipmentSource {
+  manual
+  ml_billing
+}
+
+/// Envio de estoque ao Mercado Livre Full (coleta) com custo e unidades.
+model FullShipment {
+  id               String             @id @default(cuid())
+  shippedAt        DateTime           @map("shipped_at")
+  totalCost        Decimal            @map("total_cost") @db.Decimal(18, 2)
+  totalUnits       Int                @map("total_units")
+  costPerUnit      Decimal            @map("cost_per_unit") @db.Decimal(18, 4)
+  source           FullShipmentSource @default(manual)
+  mlInboundId      String?            @unique @map("ml_inbound_id")
+  productCount     Int?               @map("product_count")
+  billingYear      Int?               @map("billing_year")
+  billingMonth     Int?               @map("billing_month")
+  mlChargeDetailId String?            @map("ml_charge_detail_id")
+  notes            String?
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+
+  @@index([shippedAt])
+  @@index([billingYear, billingMonth])
+  @@map("full_shipments")
+}
+
 /// Ciclo operacional por anúncio (compra ou envio Full), independente por kind.
 model ReplenishmentCycle {
   id                    String              @id @default(cuid())

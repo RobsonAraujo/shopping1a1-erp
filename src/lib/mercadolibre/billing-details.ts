@@ -13,6 +13,9 @@ type ChargeInfo = {
   detail_sub_type?: string;
   transaction_detail?: string;
   detail_id?: number;
+  detail_date?: string;
+  date?: string;
+  creation_date?: string;
 };
 
 type SalesInfo = {
@@ -31,7 +34,12 @@ type MlDetailEntry = {
   order_id?: number;
   sale_fee?: SalesInfo["sale_fee"];
   payment_info?: Array<{ transaction_amount?: number }>;
+  charge_date?: string;
+  creation_date?: string;
+  date_created?: string;
 };
+
+export type MlBillingDetailEntry = MlDetailEntry;
 
 type MlDetailsResponse = {
   results?: MlDetailEntry[];

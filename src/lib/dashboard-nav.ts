@@ -10,6 +10,7 @@ import {
   Settings,
   ShoppingCart,
   TrendingUp,
+  Truck,
   Warehouse,
 } from "lucide-react";
 import { DRE_DISCLAIMER_MENU } from "@/lib/dre-disclaimer";
@@ -79,6 +80,12 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
         label: "Operações",
         description: "Fluxo de compra, galpão e Full",
         icon: Kanban,
+      },
+      {
+        href: "/dashboard/envios-full",
+        label: "Envios Full",
+        description: "Custo de coleta ao Full por unidade enviada",
+        icon: Truck,
       },
       {
         href: "/dashboard/produtos",
