@@ -17,6 +17,10 @@ import {
   WHOLESALE_ANCHOR_MIN_PURCHASE_UNIT,
   type WholesaleReductionSettings,
 } from "@/lib/wholesale-pricing";
+import {
+  stockReportUnitCostFromProduct,
+  type StockReportProductInfo,
+} from "@/lib/inventory-stock-report";
 import type { CompanyTaxSettings, Product } from "@/generated/prisma/client";
 
 function decimalToNumber(value: unknown): number | null {
@@ -219,6 +223,49 @@ export async function loadProductsMapBySku(
     }
   }
   return indexBySkuWithAliases(byCanonical, normalized, map);
+}
+
+export async function loadStockReportProductsBySku(
+  skus: string[],
+): Promise<Record<string, StockReportProductInfo>> {
+  const normalized = [
+    ...new Set(skus.map((s) => normalizeProductSku(s)).filter(Boolean)),
+  ];
+  if (normalized.length === 0) return {};
+
+  const aliasMap = await loadSkuAliasMap();
+  const canonicalSkus = [
+    ...new Set(normalized.map((sku) => resolveCanonicalSku(sku, aliasMap))),
+  ].filter(Boolean);
+
+  const products = await prisma.product.findMany({
+    where: { sku: { in: canonicalSkus } },
+    select: {
+      sku: true,
+      ncm: true,
+      unitCostNf: true,
+      hasIcmsSt: true,
+      purchaseCostWithSt: true,
+    },
+  });
+
+  const byCanonical = new Map<string, StockReportProductInfo>();
+  for (const product of products) {
+    const unitCostNf = decimalToNumber(product.unitCostNf) ?? 0;
+    const purchaseCostWithSt = decimalToNumber(product.purchaseCostWithSt);
+    byCanonical.set(product.sku, {
+      ncm: product.ncm,
+      hasIcmsSt: product.hasIcmsSt,
+      unitCost: stockReportUnitCostFromProduct({
+        unitCostNf,
+        hasIcmsSt: product.hasIcmsSt,
+        purchaseCostWithSt,
+      }),
+    });
+  }
+
+  const indexed = indexBySkuWithAliases(byCanonical, normalized, aliasMap);
+  return Object.fromEntries(indexed.entries());
 }
 
 export type ProductWriteInput = {

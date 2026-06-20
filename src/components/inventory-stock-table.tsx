@@ -31,6 +31,8 @@ import {
 } from "@/components/item-list-search";
 import { groupBySkuSupplier } from "@/lib/mercadolibre/item-sku";
 import { filterByItemListSearch } from "@/lib/item-list-search";
+import type { StockReportProductInfo } from "@/lib/inventory-stock-report";
+import { InventoryStockReportLauncher } from "@/components/inventory-stock-report-dialog";
 import { cn } from "@/lib/utils";
 
 const MAX_LEAD_DAYS = 365;
@@ -64,6 +66,7 @@ export type InventoryRow = {
 
 type InventoryStockTableProps = {
   rows: InventoryRow[];
+  productsBySku: Record<string, StockReportProductInfo>;
 };
 
 function formatLeadTimeDisplay(days: number | null): string {
@@ -175,7 +178,10 @@ function formatOnTheWayCell(row: InventoryRow): {
   };
 }
 
-export function InventoryStockTable({ rows }: InventoryStockTableProps) {
+export function InventoryStockTable({
+  rows,
+  productsBySku,
+}: InventoryStockTableProps) {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [editId, setEditId] = useState<string | null>(null);
@@ -203,6 +209,12 @@ export function InventoryStockTable({ rows }: InventoryStockTableProps) {
   return (
     <TooltipProvider delayDuration={200}>
       <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <InventoryStockReportLauncher
+            rows={rows}
+            productsBySku={productsBySku}
+          />
+        </div>
         <ItemListSearch
           value={searchQuery}
           onChange={setSearchQuery}

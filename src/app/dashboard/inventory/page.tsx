@@ -14,6 +14,8 @@ import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { getItemSku } from "@/lib/mercadolibre/item-sku";
 import { countListingsByStatus } from "@/lib/mercadolibre/listing-status";
 import { computeStockPlanningDisplay } from "@/lib/stock-planning";
+import { loadStockReportProductsBySku } from "@/lib/product-data";
+import type { StockReportProductInfo } from "@/lib/inventory-stock-report";
 import { prisma } from "@/lib/db";
 import {
   getSessionAccessState,
@@ -43,6 +45,7 @@ export default async function InventoryPage() {
   let total = 0;
   let statusCounts = { active: 0, paused: 0, other: 0 };
   let warehouseLoadFailed = false;
+  let productsBySku: Record<string, StockReportProductInfo> = {};
   let rows: {
     mlItemId: string;
     sku: string | null;
@@ -136,6 +139,11 @@ export default async function InventoryPage() {
 
     total = items.length;
     statusCounts = countListingsByStatus(items);
+
+    const skus = rows
+      .map((row) => row.sku)
+      .filter((sku): sku is string => Boolean(sku?.trim()));
+    productsBySku = await loadStockReportProductsBySku(skus);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro ao carregar anúncios";
     return (
@@ -176,7 +184,7 @@ export default async function InventoryPage() {
         </Card>
       ) : null}
 
-      <InventoryStockTable rows={rows} />
+      <InventoryStockTable rows={rows} productsBySku={productsBySku} />
 
       <Card>
         <CardContent className="p-4 text-sm text-[var(--muted-foreground)] sm:py-4">
