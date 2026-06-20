@@ -146,6 +146,30 @@ describe("groupFullDetailsIntoInboundShipments", () => {
     assert.equal(shipments[0]?.inboundId, "unassigned-555");
     assert.equal(shipments[0]?.unassigned, true);
   });
+
+  it("does not double-count duplicate detail_id rows", () => {
+    const row = {
+      charge_info: {
+        detail_amount: 10,
+        detail_type: "CHARGE",
+        detail_sub_type: "CFCBI",
+        transaction_detail: "Custo do serviço de coleta Full",
+        detail_id: 999001,
+        creation_date_time: "2026-06-11T10:00:00",
+      },
+      fulfillment_info: {
+        type: "INBOUND_COLLECT",
+        inbound_id: 69526222,
+        quantity: 123,
+        sku: "SKU-A",
+      },
+    };
+
+    const shipments = groupFullDetailsIntoInboundShipments([row, row]);
+    assert.equal(shipments.length, 1);
+    assert.equal(shipments[0]?.totalUnits, 123);
+    assert.equal(shipments[0]?.totalCost, 10);
+  });
 });
 
 describe("extractFullCollectChargesFromSummary", () => {

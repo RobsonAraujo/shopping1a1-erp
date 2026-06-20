@@ -22,6 +22,41 @@ export { mergeOperationsWithBillingCosts } from "./billing-inbound-merge";
 import { fetchWithRetry, MlApiFetchError } from "./fetch-with-retry";
 import { fetchInboundReceptionsForActivityMonth } from "./fulfillment-inbound-operations";
 
+const DEBUG_TARGET_INBOUNDS = new Set([
+  "69719031",
+  "68605584",
+  "69546476",
+  "69534372",
+  "69526222",
+  "68712023",
+  "68093201",
+]);
+
+function debugLog(
+  location: string,
+  message: string,
+  data: Record<string, unknown>,
+  hypothesisId: string,
+): void {
+  // #region agent log
+  fetch("http://127.0.0.1:7821/ingest/fd7b9565-8dcc-457b-baf8-0a4c4f85b917", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "72aad8",
+    },
+    body: JSON.stringify({
+      sessionId: "72aad8",
+      location,
+      message,
+      data,
+      hypothesisId,
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+}
+
 export type FullCollectCharge = {
   detailId: string;
   shippedAt: string | null;
@@ -101,8 +136,8 @@ function parseBillingDate(
   info: FullBillingChargeInfo,
 ): string | null {
   const candidates = [
-    info.creation_date_time,
     info.detail_date,
+    info.creation_date_time,
     info.date,
     info.creation_date,
     entry.charge_date,
@@ -219,6 +254,8 @@ export function groupFullDetailsIntoInboundShipments(
     }
   >();
 
+  const seenDetailIds = new Set<string>();
+
   for (const row of rows) {
     const info = row.charge_info;
     if (!info) continue;
@@ -231,6 +268,8 @@ export function groupFullDetailsIntoInboundShipments(
       info,
       `full-details-${groups.size + 1}-${amount}`,
     );
+    if (seenDetailIds.has(detailId)) continue;
+    seenDetailIds.add(detailId);
     const { inboundId, unassigned } = inboundGroupKey(row, detailId);
     const shippedAt = parseBillingDate(row, info);
     const qty = Number(row.fulfillment_info?.quantity ?? 0);
@@ -432,12 +471,15 @@ export function extractFullCollectCharges(
 export async function fetchAllMlFullBillingDetails(
   accessToken: string,
   key: string,
+  options?: { documentTypes?: readonly ("BILL" | "CREDIT_NOTE")[] },
 ): Promise<FullBillingDetailRow[]> {
   const { apiBase } = getMercadoLibreConfig();
   const limit = 1000;
   const allRows: FullBillingDetailRow[] = [];
+  const documentTypes = options?.documentTypes ?? ["BILL", "CREDIT_NOTE"];
 
-  for (const documentType of ["BILL", "CREDIT_NOTE"] as const) {
+  for (const documentType of documentTypes) {
+    const rowsBefore = allRows.length;
     let fromId = 0;
     for (;;) {
       const u = new URL(
@@ -480,6 +522,51 @@ export async function fetchAllMlFullBillingDetails(
       }
       fromId = lastId;
     }
+
+    const docRows = allRows.slice(rowsBefore);
+    const byInbound: Record<
+      string,
+      {
+        lines: number;
+        units: number;
+        cost: number;
+        detailTypes: string[];
+        dates: Array<string | null>;
+      }
+    > = {};
+    for (const row of docRows) {
+      const id = row.fulfillment_info?.inbound_id;
+      if (id == null || !DEBUG_TARGET_INBOUNDS.has(String(id))) continue;
+      if (!isInboundCollectFromFullDetailsRow(row)) continue;
+      const inboundId = String(id);
+      const bucket = byInbound[inboundId] ?? {
+        lines: 0,
+        units: 0,
+        cost: 0,
+        detailTypes: [],
+        dates: [],
+      };
+      bucket.lines += 1;
+      bucket.units += Number(row.fulfillment_info?.quantity ?? 0);
+      bucket.cost += chargeAmount(row.charge_info);
+      bucket.detailTypes.push(
+        (row.charge_info?.detail_type ?? "unknown").toUpperCase(),
+      );
+      bucket.dates.push(
+        row.charge_info?.creation_date_time ??
+          row.charge_info?.detail_date ??
+          null,
+      );
+      byInbound[inboundId] = bucket;
+    }
+    if (Object.keys(byInbound).length > 0) {
+      debugLog(
+        "billing-full-collect.ts:fetchAllMlFullBillingDetails",
+        "target inbound rows per document type",
+        { key, documentType, byInbound },
+        "H2",
+      );
+    }
   }
 
   return allRows;
@@ -510,7 +597,9 @@ async function fetchBillingGroupedInboundsForPeriods(
 
   for (const key of keys) {
     try {
-      const rows = await fetchAllMlFullBillingDetails(accessToken, key);
+      const rows = await fetchAllMlFullBillingDetails(accessToken, key, {
+        documentTypes: ["BILL"],
+      });
       fullDetailsRowCount += rows.length;
       for (const shipment of groupFullDetailsIntoInboundShipments(rows)) {
         const existing = groupedByInbound.get(shipment.inboundId);
@@ -543,7 +632,9 @@ async function fetchFullInboundShipmentsBillingFallback(
   const key = billingPeriodKey(year, month);
   const shipmentMap = new Map<string, FullInboundShipment>();
 
-  const fullDetailRows = await fetchAllMlFullBillingDetails(accessToken, key);
+  const fullDetailRows = await fetchAllMlFullBillingDetails(accessToken, key, {
+    documentTypes: ["BILL"],
+  });
   const grouped = groupFullDetailsIntoInboundShipments(fullDetailRows);
   for (const shipment of grouped) {
     shipmentMap.set(shipment.inboundId, shipment);
@@ -614,6 +705,40 @@ export async function fetchFullInboundShipmentsForPeriod(
     ),
   ]);
 
+  const fromBilling = filterShipmentsByActivityMonth(
+    billing.grouped,
+    year,
+    month,
+  );
+
+  debugLog(
+    "billing-full-collect.ts:fetchFullInboundShipmentsForPeriod",
+    "import branch summary",
+    {
+      year,
+      month,
+      opsDiscoveries: discoveries.size,
+      billingGrouped: billing.grouped.length,
+      fromBilling: fromBilling.length,
+      targets: Object.fromEntries(
+        [...DEBUG_TARGET_INBOUNDS].map((id) => {
+          const grouped = billing.grouped.find((s) => s.inboundId === id);
+          const filtered = fromBilling.find((s) => s.inboundId === id);
+          const discovery = discoveries.get(id);
+          return [
+            id,
+            {
+              discovery: discovery ?? null,
+              grouped: grouped ?? null,
+              filtered: filtered ?? null,
+            },
+          ];
+        }),
+      ),
+    },
+    discoveries.size > 0 ? "H4" : fromBilling.length > 0 ? "H2" : "H5",
+  );
+
   if (discoveries.size > 0) {
     const shipments = mergeOperationsWithBillingCosts(
       discoveries,
@@ -633,11 +758,6 @@ export async function fetchFullInboundShipmentsForPeriod(
     };
   }
 
-  const fromBilling = filterShipmentsByActivityMonth(
-    billing.grouped,
-    year,
-    month,
-  );
   if (fromBilling.length > 0) {
     return {
       shipments: fromBilling,
@@ -687,7 +807,9 @@ export async function fetchFullCollectChargesForPeriod(
   const key = billingPeriodKey(year, month);
   const chargeMap = new Map<string, FullCollectCharge>();
 
-  const fullDetailRows = await fetchAllMlFullBillingDetails(accessToken, key);
+  const fullDetailRows = await fetchAllMlFullBillingDetails(accessToken, key, {
+    documentTypes: ["BILL"],
+  });
   const fromFullDetails = extractFullCollectChargesFromFullDetails(fullDetailRows);
   for (const charge of fromFullDetails) {
     pushCharge(chargeMap, charge);
