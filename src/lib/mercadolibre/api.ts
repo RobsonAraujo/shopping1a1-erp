@@ -488,11 +488,10 @@ export async function fetchRevenueByItemForCalendarMonths(
 
 /**
  * Soma **unidades** (soma de `quantity` em cada linha de `order_items`) de **um**
- * anúncio na janela, contando **todos os pedidos exceto** `status === "cancelled"`.
- * Um pedido pode ter várias unidades na mesma linha ou várias linhas do mesmo anúncio.
+ * anúncio na janela.
  *
- * - Filtro `item=<id>` (doc ML) para o anúncio.
- * - `display=complete` para trazer `order_items` com `quantity` e `item.id`.
+ * - Por padrão, exclui `status === "cancelled"`.
+ * - Com `includeCancelled: true`, conta todos os pedidos retornados pela API.
  */
 async function fetchUnitsSoldForOneItem(
   accessToken: string,
@@ -501,6 +500,7 @@ async function fetchUnitsSoldForOneItem(
   fromStr: string,
   toStr: string,
   dateField: SalesWindowDateField,
+  options?: { includeCancelled?: boolean },
 ): Promise<number> {
   const { apiBase } = getMercadoLibreConfig();
   let sum = 0;
@@ -536,7 +536,7 @@ async function fetchUnitsSoldForOneItem(
 
     const batch = data.results ?? [];
     for (const order of batch) {
-      if (order.status === "cancelled") continue;
+      if (!options?.includeCancelled && order.status === "cancelled") continue;
       for (const line of order.order_items ?? []) {
         if (listingIdFromOrderLine(line) !== itemId) continue;
         sum += quantityFromOrderLine(line);
@@ -792,7 +792,7 @@ export async function fetchUnitsSoldForItemsInWindowBatched(
   return out;
 }
 
-/** Unidades vendidas por anúncio em intervalo explícito (exceto cancelados). */
+/** Unidades vendidas por anúncio em intervalo explícito. */
 export async function fetchUnitsSoldForItemsInDateRangeBatched(
   accessToken: string,
   sellerId: number,
@@ -801,6 +801,7 @@ export async function fetchUnitsSoldForItemsInDateRangeBatched(
   to: Date,
   dateField: SalesWindowDateField = "date_closed",
   chunkSize = 12,
+  options?: { includeCancelled?: boolean },
 ): Promise<Record<string, number>> {
   const unique = [...new Set(itemIds.filter(Boolean))];
   if (unique.length === 0) return {};
@@ -823,6 +824,7 @@ export async function fetchUnitsSoldForItemsInDateRangeBatched(
           fromStr,
           toStr,
           dateField,
+          { includeCancelled: options?.includeCancelled === true },
         );
         return [itemId, n] as const;
       }),

@@ -91,6 +91,9 @@ export async function GET(request: NextRequest) {
     const period = stockReportSalesAdjustmentRange(snapshotDate);
     const dateField = stockPlanningConfig.salesWindowDateField;
 
+    const includeCancelled =
+      request.nextUrl.searchParams.get("includeCancelled") === "true";
+
     let salesByMlItemId: Record<string, number> = {};
     if (period && salesItemIds.length > 0) {
       salesByMlItemId = await fetchUnitsSoldForItemsInDateRangeBatched(
@@ -100,6 +103,8 @@ export async function GET(request: NextRequest) {
         period.from,
         period.to,
         dateField,
+        12,
+        { includeCancelled },
       );
     }
 
@@ -110,6 +115,7 @@ export async function GET(request: NextRequest) {
       salesByMlItemId,
       catalogSnapshotByMlItemId,
       dateField,
+      includeCancelled,
     });
   } catch (e) {
     logServerError("api/inventory/stock-report/sales-adjustment GET", e);

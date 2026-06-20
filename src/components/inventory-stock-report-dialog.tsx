@@ -65,6 +65,7 @@ type SalesAdjustmentResponse = {
     { mlStock: number; snapshotAt: string }
   >;
   dateField: string;
+  includeCancelled?: boolean;
 };
 
 type MergeDraft = {
@@ -147,6 +148,7 @@ export function InventoryStockReportDialog({
   const [mergeDraft, setMergeDraft] = useState<MergeDraft | null>(null);
   const [listingSearch, setListingSearch] = useState("");
   const [showExtras, setShowExtras] = useState(false);
+  const [includeCancelledSales, setIncludeCancelledSales] = useState(false);
 
   const snapshotDate = useMemo(
     () => parseStockReportSnapshotDateInput(snapshotDateInput),
@@ -245,6 +247,9 @@ export function InventoryStockReportDialog({
       if (catalogItemIds.length > 0) {
         params.set("catalogItemIds", catalogItemIds.join(","));
       }
+      if (includeCancelledSales) {
+        params.set("includeCancelled", "true");
+      }
 
       const res = await fetch(
         `/api/inventory/stock-report/sales-adjustment?${params.toString()}`,
@@ -266,7 +271,7 @@ export function InventoryStockReportDialog({
     } finally {
       setSalesLoading(false);
     }
-  }, [snapshotDateInput, listings, catalogItemIds]);
+  }, [snapshotDateInput, listings, catalogItemIds, includeCancelledSales]);
 
   useEffect(() => {
     void fetchSalesAdjustment();
@@ -438,6 +443,26 @@ export function InventoryStockReportDialog({
             />
           </section>
 
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--border)] px-4 py-3">
+            <Switch
+              id={`${titleId}-include-cancelled`}
+              checked={includeCancelledSales}
+              onCheckedChange={setIncludeCancelledSales}
+              aria-label="Incluir vendas canceladas"
+            />
+            <label
+              htmlFor={`${titleId}-include-cancelled`}
+              className="cursor-pointer text-sm text-[var(--foreground)]"
+            >
+              Incluir vendas canceladas no ajuste automático
+            </label>
+            <p className="text-xs text-[var(--muted-foreground)] sm:ml-auto">
+              {includeCancelledSales
+                ? "Somando todos os pedidos no período, inclusive cancelados."
+                : "Padrão: exclui apenas pedidos cancelados."}
+            </p>
+          </div>
+
           {salesLoading ? (
             <p className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
               <Loader2 className="size-4 animate-spin" aria-hidden />
@@ -485,10 +510,10 @@ export function InventoryStockReportDialog({
             {showExtras ? (
               <div className="mt-3 space-y-3">
                 <p className="text-xs text-[var(--muted-foreground)]">
-                  Estimativa: estoque de hoje + vendas feitas depois da data
-                  escolhida. Não inclui entradas Full/galpão automáticas — use
-                  Ajuste manual. Para catálogo com snapshot, galpão e a caminho
-                  usam o estoque atual.
+                  Estimativa: estoque de hoje + vendas ML depois da data escolhida.
+                  Não inclui entradas Full/galpão automáticas — use Ajuste manual.
+                  Para catálogo com snapshot, galpão e a caminho usam o estoque
+                  atual.
                 </p>
                 <ItemListSearch
                   value={listingSearch}
