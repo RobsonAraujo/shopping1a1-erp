@@ -16,3 +16,7 @@ Ao implementar **feature nova** ou alterar módulo que toca **dados, APIs ou aut
 4. Módulos com README próprio (ex.: `src/lib/tax-report/README.md`) podem ganhar subseção **Multi-tenant (futuro)** se o impacto for específico do domínio
 
 Índice geral: [`docs/README.md`](docs/README.md).
+
+## UI components
+
+Preferir componentes de `src/components/ui/` (wrappers Radix): `Button`, `FormSelect`, `Switch`, `Card`, `Tooltip`, `Popover`, `Badge`, `FormInput`. Evitar `<input>`/`<select>` HTML cru em telas novas.

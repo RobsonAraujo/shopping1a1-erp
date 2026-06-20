@@ -61,7 +61,9 @@ export type StockReportHeader = {
 export type StockReportMergeGroup = {
   id: string;
   skuKeys: string[];
+  anchorSkuKey: string;
   label?: string;
+  ncmOverride?: string | null;
 };
 
 export type StockReportBuildResult = {
@@ -217,25 +219,25 @@ export function aggregateStockReportBySku(
       estoqueExtra: 0,
     };
     const units = listingTotalUnits(listing, extras);
+    if (units <= 0) continue;
     unitsBySku.set(skuKey, (unitsBySku.get(skuKey) ?? 0) + units);
   }
 
   return [...unitsBySku.entries()]
     .map(([skuKey, units]) => buildSkuRow(skuKey, units, productsBySku))
+    .filter((row) => row.units > 0)
     .sort((a, b) => a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" }));
 }
 
-function mergeNcm(rows: StockReportRow[]): string | null {
-  const ncms = [...new Set(rows.map((row) => row.ncm).filter(Boolean))];
-  if (ncms.length === 1) return ncms[0] ?? null;
-  return null;
+function filterPositiveUnitRows(rows: StockReportRow[]): StockReportRow[] {
+  return rows.filter((row) => row.units > 0);
 }
 
 export function applyStockReportMergeGroups(
   rows: StockReportRow[],
   mergeGroups: StockReportMergeGroup[],
 ): StockReportRow[] {
-  if (mergeGroups.length === 0) return rows;
+  if (mergeGroups.length === 0) return filterPositiveUnitRows(rows);
 
   const mergedKeys = new Set<string>();
   const result: StockReportRow[] = [];
@@ -245,6 +247,9 @@ export function applyStockReportMergeGroups(
       .map((key) => rows.find((row) => row.rowKey === key))
       .filter((row): row is StockReportRow => row != null);
     if (members.length < 2) continue;
+
+    const anchor =
+      members.find((row) => row.rowKey === group.anchorSkuKey) ?? members[0];
 
     for (const member of members) mergedKeys.add(member.rowKey);
 
@@ -259,13 +264,12 @@ export function applyStockReportMergeGroups(
         ? roundMoney(stockValue / units)
         : null;
 
+    const ncmOverride = group.ncmOverride?.trim();
     result.push({
       rowKey: group.id,
-      label:
-        group.label?.trim() ||
-        members.map((row) => row.label).join(" + "),
+      label: group.label?.trim() || anchor.label,
       skus: members.flatMap((row) => row.skus),
-      ncm: mergeNcm(members),
+      ncm: ncmOverride || anchor.ncm,
       unitCost,
       units,
       stockValue: hasMissingCost ? null : roundMoney(stockValue),
@@ -277,7 +281,7 @@ export function applyStockReportMergeGroups(
     if (!mergedKeys.has(row.rowKey)) result.push(row);
   }
 
-  return result.sort((a, b) =>
+  return filterPositiveUnitRows(result).sort((a, b) =>
     a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" }),
   );
 }
