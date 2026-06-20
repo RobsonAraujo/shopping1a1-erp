@@ -13,6 +13,7 @@ import {
 } from "./billing-summary";
 import type { FullInboundShipment } from "./billing-full-collect-types";
 export type { FullInboundShipment } from "./billing-full-collect-types";
+import { shipmentShippedAtInCalendarMonth } from "@/lib/full-shipment-period";
 import {
   filterShipmentsByActivityMonth,
   mergeOperationsWithBillingCosts,
@@ -30,6 +31,7 @@ const DEBUG_TARGET_INBOUNDS = new Set([
   "69526222",
   "68712023",
   "68093201",
+  "66022624",
 ]);
 
 function debugLog(
@@ -585,7 +587,11 @@ async function fetchBillingGroupedInboundsForPeriods(
   accessToken: string,
   year: number,
   month: number,
-): Promise<{ grouped: FullInboundShipment[]; fullDetailsRowCount: number }> {
+): Promise<{
+  grouped: FullInboundShipment[];
+  fullDetailsRowCount: number;
+  inboundBillingKeys: Map<string, Set<string>>;
+}> {
   const next = nextCalendarMonth(year, month);
   const keys = [
     billingPeriodKey(year, month),
@@ -593,6 +599,7 @@ async function fetchBillingGroupedInboundsForPeriods(
   ];
 
   const groupedByInbound = new Map<string, FullInboundShipment>();
+  const inboundBillingKeys = new Map<string, Set<string>>();
   let fullDetailsRowCount = 0;
 
   for (const key of keys) {
@@ -602,6 +609,13 @@ async function fetchBillingGroupedInboundsForPeriods(
       });
       fullDetailsRowCount += rows.length;
       for (const shipment of groupFullDetailsIntoInboundShipments(rows)) {
+        let seenKeys = inboundBillingKeys.get(shipment.inboundId);
+        if (!seenKeys) {
+          seenKeys = new Set<string>();
+          inboundBillingKeys.set(shipment.inboundId, seenKeys);
+        }
+        seenKeys.add(key);
+
         const existing = groupedByInbound.get(shipment.inboundId);
         if (!existing || shipment.totalCost > existing.totalCost) {
           groupedByInbound.set(shipment.inboundId, shipment);
@@ -615,6 +629,7 @@ async function fetchBillingGroupedInboundsForPeriods(
   return {
     grouped: [...groupedByInbound.values()],
     fullDetailsRowCount,
+    inboundBillingKeys,
   };
 }
 
@@ -669,11 +684,23 @@ async function fetchFullInboundShipmentsBillingFallback(
     }
   }
 
+  const currentPeriodKey = billingPeriodKey(year, month);
+  const next = nextCalendarMonth(year, month);
+  const inboundBillingKeys = new Map<string, Set<string>>();
+  for (const shipment of shipmentMap.values()) {
+    inboundBillingKeys.set(shipment.inboundId, new Set([currentPeriodKey]));
+  }
+
   return {
     shipments: filterShipmentsByActivityMonth(
       [...shipmentMap.values()],
       year,
       month,
+      {
+        currentPeriodKey,
+        nextPeriodKey: billingPeriodKey(next.year, next.month),
+        inboundBillingKeys,
+      },
     ),
     fullDetailsRowCount: fullDetailRows.length,
     groupedInboundCount: grouped.length,
@@ -705,10 +732,26 @@ export async function fetchFullInboundShipmentsForPeriod(
     ),
   ]);
 
+  const currentPeriodKey = billingPeriodKey(year, month);
+  const next = nextCalendarMonth(year, month);
+  const bleedGuard = {
+    currentPeriodKey,
+    nextPeriodKey: billingPeriodKey(next.year, next.month),
+    inboundBillingKeys: billing.inboundBillingKeys,
+  };
+
   const fromBilling = filterShipmentsByActivityMonth(
     billing.grouped,
     year,
     month,
+    bleedGuard,
+  );
+
+  const bleedExcluded = billing.grouped.filter(
+    (shipment) =>
+      shipment.shippedAt != null &&
+      shipmentShippedAtInCalendarMonth(shipment.shippedAt, year, month) &&
+      !fromBilling.some((row) => row.inboundId === shipment.inboundId),
   );
 
   debugLog(
@@ -720,6 +763,13 @@ export async function fetchFullInboundShipmentsForPeriod(
       opsDiscoveries: discoveries.size,
       billingGrouped: billing.grouped.length,
       fromBilling: fromBilling.length,
+      bleedExcluded: bleedExcluded.map((shipment) => ({
+        inboundId: shipment.inboundId,
+        shippedAt: shipment.shippedAt,
+        billingKeys: [
+          ...(billing.inboundBillingKeys.get(shipment.inboundId) ?? []),
+        ],
+      })),
       targets: Object.fromEntries(
         [...DEBUG_TARGET_INBOUNDS].map((id) => {
           const grouped = billing.grouped.find((s) => s.inboundId === id);
@@ -731,12 +781,15 @@ export async function fetchFullInboundShipmentsForPeriod(
               discovery: discovery ?? null,
               grouped: grouped ?? null,
               filtered: filtered ?? null,
+              billingKeys: [
+                ...(billing.inboundBillingKeys.get(id) ?? []),
+              ],
             },
           ];
         }),
       ),
     },
-    discoveries.size > 0 ? "H4" : fromBilling.length > 0 ? "H2" : "H5",
+    bleedExcluded.length > 0 ? "H1" : discoveries.size > 0 ? "H4" : "H2",
   );
 
   if (discoveries.size > 0) {
