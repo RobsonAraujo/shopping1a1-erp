@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  applyDreIncludeCancelledView,
   computeDreTotals,
   percentOfRevenue,
   sumYearLineAmounts,
@@ -72,6 +73,38 @@ describe("sumYearLineAmounts", () => {
     ]);
     assert.equal(sum.revenueMl, 300);
     assert.equal(sum.saleFeeMl, -15);
+  });
+});
+
+describe("applyDreIncludeCancelledView", () => {
+  it("moves cancelled revenue into entrada and clears cancelled line", () => {
+    const lines = {
+      ...BASE_LINES,
+      revenueMl: 1000,
+      cancelledSalesMl: -150,
+      productCostErp: -400,
+      taxErp: -100,
+    };
+    const adjusted = applyDreIncludeCancelledView(lines, {
+      revenueGross: 150,
+      productCostErp: -50,
+      taxErp: -15,
+    });
+    assert.equal(adjusted.revenueMl, 1150);
+    assert.equal(adjusted.cancelledSalesMl, 0);
+    assert.equal(adjusted.productCostErp, -450);
+    assert.equal(adjusted.taxErp, -115);
+  });
+
+  it("falls back to cancelled line when overlay is missing", () => {
+    const lines = {
+      ...BASE_LINES,
+      revenueMl: 500,
+      cancelledSalesMl: -80,
+    };
+    const adjusted = applyDreIncludeCancelledView(lines);
+    assert.equal(adjusted.revenueMl, 580);
+    assert.equal(adjusted.cancelledSalesMl, 0);
   });
 });
 

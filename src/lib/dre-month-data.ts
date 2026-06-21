@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { logServerError } from "@/lib/server-public-error";
 import {
   computeDreTotals,
+  type DreCancelledIncludeOverlay,
   type DreMonthSnapshotPayload,
 } from "@/lib/dre-calculations";
 import { loadProductsMapBySku } from "@/lib/product-data";
@@ -11,6 +12,7 @@ import { roundMoney } from "@/lib/financial-margin";
 import { getItemSku } from "@/lib/mercadolibre/item-sku";
 import { normalizeProductSku } from "@/lib/product-pricing";
 import {
+  fetchCancelledOrderLinesInDateRange,
   fetchCancelledOrderRevenueInDateRange,
   fetchOrderMetricsByItemInDateRange,
   fetchPaidOrderLinesInDateRange,
@@ -366,6 +368,33 @@ export async function buildDreMonthSnapshot(
     );
   }
 
+  let cancelledIncludeOverlay: DreCancelledIncludeOverlay | undefined;
+  try {
+    const cancelledLines = await fetchCancelledOrderLinesInDateRange(
+      accessToken,
+      sellerId,
+      calendarRange.from,
+      calendarRange.to,
+      stockPlanningConfig.salesWindowDateField,
+    );
+    if (cancelledLines.length > 0) {
+      const revenueGross = roundMoney(
+        cancelledLines.reduce((sum, line) => sum + line.revenue, 0),
+      );
+      const cancelledErpCosts = await computeErpCostsFromOrderLines(
+        accessToken,
+        cancelledLines,
+      );
+      cancelledIncludeOverlay = {
+        revenueGross,
+        productCostErp: cancelledErpCosts.productCostErp,
+        taxErp: cancelledErpCosts.taxErp,
+      };
+    }
+  } catch (error) {
+    logServerError("dre-month-data cancelled overlay", error);
+  }
+
   return {
     revenueMl,
     cancelledSalesMl,
@@ -382,6 +411,7 @@ export async function buildDreMonthSnapshot(
     isPartial,
     incompleteProductCostCount: erpCosts.incompleteProductCostCount,
     syncWarnings,
+    cancelledIncludeOverlay,
   };
 }
 
@@ -431,6 +461,26 @@ export function parseSnapshotPayload(raw: unknown): DreMonthSnapshotPayload | nu
     const v = Number(p[key] ?? 0);
     return Number.isFinite(v) ? v : 0;
   };
+  const numFrom = (v: unknown) => {
+    const n = Number(v ?? 0);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const overlayRaw = p.cancelledIncludeOverlay;
+  const cancelledIncludeOverlay =
+    overlayRaw &&
+    typeof overlayRaw === "object" &&
+    !Array.isArray(overlayRaw)
+      ? {
+          revenueGross: numFrom(
+            (overlayRaw as Record<string, unknown>).revenueGross,
+          ),
+          productCostErp: numFrom(
+            (overlayRaw as Record<string, unknown>).productCostErp,
+          ),
+          taxErp: numFrom((overlayRaw as Record<string, unknown>).taxErp),
+        }
+      : undefined;
+
   return {
     revenueMl: num("revenueMl"),
     cancelledSalesMl: num("cancelledSalesMl"),
@@ -450,5 +500,6 @@ export function parseSnapshotPayload(raw: unknown): DreMonthSnapshotPayload | nu
     syncWarnings: Array.isArray(p.syncWarnings)
       ? p.syncWarnings.filter((w): w is string => typeof w === "string")
       : [],
+    cancelledIncludeOverlay,
   };
 }

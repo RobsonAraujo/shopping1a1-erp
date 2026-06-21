@@ -15,12 +15,20 @@ export type DreLineAmounts = {
 
 export type DreBillingSource = "billing" | "fallback";
 
+/** Valores de pedidos cancelados para visão compatível com o painel ML. */
+export type DreCancelledIncludeOverlay = {
+  revenueGross: number;
+  productCostErp: number;
+  taxErp: number;
+};
+
 export type DreMonthSnapshotPayload = DreLineAmounts & {
   adsCost: number;
   billingSource: DreBillingSource;
   isPartial: boolean;
   incompleteProductCostCount: number;
   syncWarnings: string[];
+  cancelledIncludeOverlay?: DreCancelledIncludeOverlay;
 };
 
 export type DreManualCostInput = {
@@ -115,6 +123,34 @@ export function computeDreTotals(
     totalCustoFixo,
     lucroLiquido,
     lucroLiquidoPercent,
+  };
+}
+
+/** Inclui vendas canceladas na entrada (como o painel ML) e zera a linha de canceladas. */
+export function applyDreIncludeCancelledView(
+  lines: DreLineAmounts,
+  overlay?: DreCancelledIncludeOverlay | null,
+): DreLineAmounts {
+  const cancelledLine = lines.cancelledSalesMl ?? 0;
+  const revenueAdd =
+    overlay && overlay.revenueGross > 0
+      ? overlay.revenueGross
+      : cancelledLine < 0
+        ? Math.abs(cancelledLine)
+        : 0;
+
+  if (revenueAdd <= 0 && cancelledLine === 0) {
+    return lines;
+  }
+
+  return {
+    ...lines,
+    revenueMl: roundMoney(lines.revenueMl + revenueAdd),
+    cancelledSalesMl: 0,
+    productCostErp: roundMoney(
+      lines.productCostErp + (overlay?.productCostErp ?? 0),
+    ),
+    taxErp: roundMoney(lines.taxErp + (overlay?.taxErp ?? 0)),
   };
 }
 

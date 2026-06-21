@@ -1,27 +1,41 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { HelpCircle, RefreshCw } from "lucide-react";
 import { DreCostItemsModal } from "@/components/dre-fixed-costs-modal";
 import { DreYearTable } from "@/components/dre-year-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FormSelect } from "@/components/ui/form-select";
+import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { readApiError } from "@/lib/api-client-error";
 import {
   formatFinancialMoney,
   formatFinancialPercent,
 } from "@/lib/financial-margin";
+import {
+  applyDreIncludeCancelledView,
+  computeDreTotals,
+  sumYearLineAmounts,
+} from "@/lib/dre-calculations";
 import type { DreYearView } from "@/lib/dre-year-data";
 import { getZonedYearMonth, isDreMonthSyncable } from "@/lib/mercadolibre/revenue-periods";
 
 export function DreClient() {
+  const titleId = useId();
   const currentYear = useMemo(() => getZonedYearMonth().year, []);
   const [year, setYear] = useState(currentYear);
   const [data, setData] = useState<DreYearView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(true);
+  const [includeCancelledSales, setIncludeCancelledSales] = useState(false);
   const [fixedCostsModalOpen, setFixedCostsModalOpen] = useState(false);
   const [operationalCostsModalOpen, setOperationalCostsModalOpen] =
     useState(false);
@@ -137,7 +151,97 @@ export function DreClient() {
 
   const syncedCount = data?.months.filter((m) => m.syncedAt).length ?? 0;
 
+  const displayData = useMemo(() => {
+    if (!data || !includeCancelledSales) return data;
+
+    // map months applying cancelled overlay and recomputing totals client-side
+    const months = data.months.map((month) => {
+      if (!month.lines) return month;
+
+      const lines = applyDreIncludeCancelledView(
+        month.lines,
+        month.cancelledIncludeOverlay ?? undefined,
+      );
+
+      const fixedCosts = data.costItems.map((item) => ({
+        costItemId: item.id,
+        amount: month.fixedCostValues[item.id] ?? 0,
+      }));
+      const operationalCosts = data.operationalCostItems.map((item) => ({
+        costItemId: item.id,
+        amount: month.operationalCostValues[item.id] ?? 0,
+      }));
+
+      const totals =
+        month.adsCost !== null
+          ? computeDreTotals(
+              lines,
+              month.adsCost,
+              fixedCosts.filter((r) => r.amount > 0),
+              operationalCosts.filter((r) => r.amount > 0),
+            )
+          : month.totals;
+
+      return { ...month, lines, totals };
+    });
+
+    // compute year totals similar to server
+    const monthLines = months.map((m) => m.lines).filter((l): l is any => l !== null);
+    const yearLines = monthLines.length > 0 ? sumYearLineAmounts(monthLines) : null;
+    const yearAds = months.reduce((s, m) => s + (m.adsCost ?? 0), 0);
+
+    const yearFixedByItem = new Map<string, number>();
+    for (const item of data.costItems) {
+      let sum = 0;
+      for (const month of months) {
+        sum += month.fixedCostValues[item.id] ?? 0;
+      }
+      yearFixedByItem.set(item.id, sum);
+    }
+    const yearOperationalByItem = new Map<string, number>();
+    for (const item of data.operationalCostItems) {
+      let sum = 0;
+      for (const month of months) {
+        sum += month.operationalCostValues[item.id] ?? 0;
+      }
+      yearOperationalByItem.set(item.id, sum);
+    }
+
+    const yearManualFixed = data.costItems
+      .map((item) => ({ costItemId: item.id, amount: yearFixedByItem.get(item.id) ?? 0 }))
+      .filter((r) => r.amount > 0);
+    const yearManualOperational = data.operationalCostItems
+      .map((item) => ({ costItemId: item.id, amount: yearOperationalByItem.get(item.id) ?? 0 }))
+      .filter((r) => r.amount > 0);
+
+    const yearTotals =
+      yearLines !== null
+        ? computeDreTotals(yearLines, yearAds, yearManualFixed, yearManualOperational)
+        : yearManualFixed.length > 0 || yearManualOperational.length > 0
+        ? computeDreTotals(
+            {
+              revenueMl: 0,
+              cancelledSalesMl: 0,
+              saleFeeMl: 0,
+              partialReturnsMl: 0,
+              productCostErp: 0,
+              taxErp: 0,
+              sellerShippingMl: 0,
+              fullShippingMl: 0,
+              fullStorageMl: 0,
+              fullNonComplianceMl: 0,
+            },
+            0,
+            yearManualFixed,
+            yearManualOperational,
+          )
+        : null;
+
+    return { ...data, months, yearTotals };
+  }, [data, includeCancelledSales]);
+
   return (
+    <TooltipProvider delayDuration={200}>
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-end gap-2">
@@ -195,7 +299,51 @@ export function DreClient() {
         </div>
       </div>
 
-      {data?.yearTotals ? (
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--border)] px-4 py-3">
+        <Switch
+          id={`${titleId}-include-cancelled`}
+          checked={includeCancelledSales}
+          onCheckedChange={setIncludeCancelledSales}
+          aria-label="Incluir vendas canceladas no DRE"
+        />
+        <label
+          htmlFor={`${titleId}-include-cancelled`}
+          className="cursor-pointer text-sm text-[var(--foreground)]"
+        >
+          Incluir vendas canceladas no faturamento
+        </label>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              className="inline-flex size-5 items-center justify-center rounded-full text-[var(--muted-foreground)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+              aria-label="O que significa incluir vendas canceladas"
+            >
+              <HelpCircle className="size-4" aria-hidden />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="max-w-[20rem] text-left">
+            <p>
+              Por padrão, o DRE trata vendas canceladas em linha separada
+              (negativa). O Mercado Livre, no painel de vendas, conta esses
+              pedidos no faturamento bruto.
+            </p>
+            <p className="mt-2">
+              Ative para ver o DRE no mesmo critério do ML. Meses sincronizados
+              antes desta atualização usam a linha de canceladas como
+              referência; re-sincronize para incluir custo de produto e imposto
+              das canceladas.
+            </p>
+          </TooltipContent>
+        </Tooltip>
+        <p className="text-xs text-[var(--muted-foreground)] sm:ml-auto">
+          {includeCancelledSales
+            ? "Visão compatível com o painel ML."
+            : "Padrão: faturamento só de pedidos pagos."}
+        </p>
+      </div>
+
+      {displayData?.yearTotals ? (
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <Card className="shadow-sm">
             <CardHeader className="px-3 pb-1 pt-3">
@@ -204,7 +352,7 @@ export function DreClient() {
               </CardTitle>
             </CardHeader>
             <CardContent className="px-3 pb-3 text-base font-semibold">
-              {formatFinancialMoney(data.yearTotals.totalEntrada)}
+              {formatFinancialMoney(displayData.yearTotals.totalEntrada)}
             </CardContent>
           </Card>
           <Card className="shadow-sm">
@@ -214,9 +362,9 @@ export function DreClient() {
               </CardTitle>
             </CardHeader>
             <CardContent className="px-3 pb-3 text-base font-semibold">
-              {formatFinancialMoney(data.yearTotals.margemContribuicao)}{" "}
+              {formatFinancialMoney(displayData.yearTotals.margemContribuicao)}{" "}
               <span className="text-xs font-normal text-[var(--muted-foreground)]">
-                ({formatFinancialPercent(data.yearTotals.margemContribuicaoPercent)})
+                ({formatFinancialPercent(displayData.yearTotals.margemContribuicaoPercent)})
               </span>
             </CardContent>
           </Card>
@@ -227,9 +375,9 @@ export function DreClient() {
               </CardTitle>
             </CardHeader>
             <CardContent className="px-3 pb-3 text-base font-semibold">
-              {formatFinancialMoney(data.yearTotals.lucroLiquido)}{" "}
+              {formatFinancialMoney(displayData.yearTotals.lucroLiquido)}{" "}
               <span className="text-xs font-normal text-[var(--muted-foreground)]">
-                ({formatFinancialPercent(data.yearTotals.lucroLiquidoPercent)})
+                ({formatFinancialPercent(displayData.yearTotals.lucroLiquidoPercent)})
               </span>
             </CardContent>
           </Card>
@@ -259,9 +407,9 @@ export function DreClient() {
         <p className="text-sm text-[var(--muted-foreground)]">Carregando…</p>
       ) : null}
 
-      {data ? (
+      {displayData ? (
         <DreYearTable
-          data={data}
+          data={displayData}
           showDetails={showDetails}
           syncingMonths={syncingMonths}
           onSyncMonth={(month) => void syncMonth(month)}
@@ -295,5 +443,6 @@ export function DreClient() {
         onError={setError}
       />
     </div>
+    </TooltipProvider>
   );
 }

@@ -1,5 +1,6 @@
 import { stockPlanningConfig } from "@/config/stock-planning";
 import { prisma } from "@/lib/db";
+import { roundMoney } from "@/lib/financial-margin";
 import { getMercadoLibreConfig } from "./config";
 import {
   aggregateFulfillmentSnapshots,
@@ -326,17 +327,40 @@ export async function fetchCancelledOrderRevenueInDateRange(
   to: Date,
   dateField: SalesWindowDateField = stockPlanningConfig.salesWindowDateField,
 ): Promise<number> {
+  const lines = await fetchCancelledOrderLinesInDateRange(
+    accessToken,
+    sellerId,
+    from,
+    to,
+    dateField,
+  );
+  return roundMoney(lines.reduce((sum, line) => sum + line.revenue, 0));
+}
+
+export async function fetchCancelledOrderLinesInDateRange(
+  accessToken: string,
+  sellerId: number,
+  from: Date,
+  to: Date,
+  dateField: SalesWindowDateField = stockPlanningConfig.salesWindowDateField,
+): Promise<PaidOrderLine[]> {
   const orders = await fetchOrdersInDateRange(accessToken, sellerId, from, to, {
     dateField,
     orderStatus: "cancelled",
   });
-  let total = 0;
+  const lines: PaidOrderLine[] = [];
   for (const order of orders) {
     for (const line of order.order_items ?? []) {
-      total += revenueFromOrderLine(line);
+      const itemId = listingIdFromOrderLine(line);
+      if (!itemId) continue;
+      lines.push({
+        itemId,
+        quantity: quantityFromOrderLine(line),
+        revenue: revenueFromOrderLine(line),
+      });
     }
   }
-  return Math.round(total * 100) / 100;
+  return lines;
 }
 
 /**
