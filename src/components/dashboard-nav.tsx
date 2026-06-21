@@ -3,15 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { ChevronDown, LayoutGrid, List } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useDashboardNavLayout } from "@/hooks/use-dashboard-nav-layout";
 import {
   DASHBOARD_DROPDOWN_NAV_GROUPS,
   DASHBOARD_TOP_NAV_ITEMS,
-  getAllDashboardNavItems,
   type DashboardNavGroup,
   type DashboardNavItem,
   isDashboardNavActive,
@@ -55,46 +53,6 @@ function NavPopoverLink({
         </Badge>
       ) : null}
     </Link>
-  );
-}
-
-function NavFlatLink({
-  item,
-  active,
-}: {
-  item: DashboardNavItem;
-  active: boolean;
-}) {
-  const Icon = item.icon;
-  const isCatalog = item.href === "/dashboard/catalog-report";
-
-  return (
-    <Button variant="ghost" size="sm" asChild>
-      <Link
-        href={item.href}
-        title={item.title}
-        className={cn(
-          "gap-2",
-          active && "bg-[var(--accent)] text-[var(--accent-foreground)]",
-        )}
-        aria-current={active ? "page" : undefined}
-      >
-        <Icon className="size-4" aria-hidden />
-        {isCatalog ? (
-          <>
-            <span className="hidden xl:inline">Relatório catálogo</span>
-            <span className="xl:hidden">Catálogo</span>
-          </>
-        ) : (
-          item.label
-        )}
-        {item.badge ? (
-          <Badge variant={item.badge.variant} className="px-1.5 py-0 text-[10px]">
-            {item.badge.label}
-          </Badge>
-        ) : null}
-      </Link>
-    </Button>
   );
 }
 
@@ -153,36 +111,6 @@ function NavDropdownGroup({
   );
 }
 
-function NavLayoutToggle() {
-  const { layout, toggleLayout } = useDashboardNavLayout();
-  const isCategorized = layout === "categorized";
-
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon-sm"
-      className="ml-auto size-7 shrink-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-      onClick={toggleLayout}
-      aria-label={
-        isCategorized
-          ? "Mostrar menu completo sem categorias"
-          : "Mostrar menu por categorias"
-      }
-      title={
-        isCategorized
-          ? "Menu completo (todos os links)"
-          : "Menu por categorias"
-      }
-    >
-      {isCategorized ? (
-        <List className="size-3.5" aria-hidden />
-      ) : (
-        <LayoutGrid className="size-3.5" aria-hidden />
-      )}
-    </Button>
-  );
-}
 
 function CategorizedNav({ pathname }: { pathname: string }) {
   return (
@@ -214,40 +142,15 @@ function CategorizedNav({ pathname }: { pathname: string }) {
   );
 }
 
-function FlatNav({ pathname }: { pathname: string }) {
-  return (
-    <>
-      {getAllDashboardNavItems().map((item) => (
-        <NavFlatLink
-          key={item.href}
-          item={item}
-          active={isDashboardNavActive(pathname, item.href)}
-        />
-      ))}
-    </>
-  );
-}
-
 export function DashboardNav() {
   const pathname = usePathname();
-  const { layout } = useDashboardNavLayout();
 
   return (
     <nav
-      className={cn(
-        "mt-3 hidden border-t border-[var(--border)] pt-3 sm:flex",
-        layout === "flat"
-          ? "flex-wrap items-center gap-1"
-          : "items-center gap-0.5",
-      )}
+      className="mt-3 hidden border-t border-[var(--border)] pt-3 sm:flex items-center gap-0.5"
       aria-label="Principal"
     >
-      {layout === "categorized" ? (
-        <CategorizedNav pathname={pathname} />
-      ) : (
-        <FlatNav pathname={pathname} />
-      )}
-      <NavLayoutToggle />
+      <CategorizedNav pathname={pathname} />
     </nav>
   );
 }
