@@ -66,8 +66,28 @@ export function SlowMoversCard({ allRows }: { allRows: SlowMoverRow[] }) {
                   key={row.mlItemId}
                   className="border-b border-[var(--border)] last:border-0"
                 >
-                  <td className="py-2 pr-3 max-w-[200px] truncate" title={row.title}>
-                    {row.title}
+                  <td className="py-2 pr-3 max-w-[220px]">
+                    <a
+                      href={`/dashboard/items/${row.mlItemId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block truncate font-medium text-[var(--primary)] hover:underline"
+                      title={row.title}
+                    >
+                      {row.title}
+                    </a>
+                    {row.catalogListing && (
+                      <a
+                        href={`/dashboard/catalog-report/${row.mlItemId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-0.5 inline-block"
+                      >
+                        <Badge variant="secondary" className="text-[10px] px-1 py-0 hover:opacity-80">
+                          catálogo ↗
+                        </Badge>
+                      </a>
+                    )}
                   </td>
                   <td className="py-2 pr-3 font-mono text-xs text-[var(--muted-foreground)]">
                     {row.sku ?? "—"}

@@ -19,6 +19,7 @@ export function buildRupturaRows(rows: PurchaseAnalysisItemRow[]): RupturaRow[] 
       dailyAvg: row.analysis.dailyAvg,
       unitsSoldInWindow: row.analysis.unitsSoldInWindow,
       performanceTier: row.analysis.performanceTier,
+      catalogListing: row.item.catalog_listing ?? false,
     }))
     .sort((a, b) => {
       const da = a.coverageDays ?? 0;

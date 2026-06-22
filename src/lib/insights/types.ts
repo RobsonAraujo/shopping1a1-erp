@@ -20,6 +20,7 @@ export type SlowMoverRow = Pick<
   dailyAvg: number;
   unitsSoldInWindow: number;
   performanceTier: PurchaseAnalysisItemRow["analysis"]["performanceTier"];
+  catalogListing: boolean;
 };
 
 // ---------------------------------------------------------------------------

@@ -14,12 +14,13 @@ function toSlowMoverRow(row: PurchaseAnalysisItemRow): SlowMoverRow {
     dailyAvg: row.analysis.dailyAvg,
     unitsSoldInWindow: row.analysis.unitsSoldInWindow,
     performanceTier: row.analysis.performanceTier,
+    catalogListing: row.item.catalog_listing ?? false,
   };
 }
 
-/** Mapeia todos os rows para SlowMoverRow (sem filtro) — usado pelo client component. */
+/** Mapeia todos os rows para SlowMoverRow (sem filtro de threshold) — apenas anúncios ativos. */
 export function mapToSlowMoverRows(rows: PurchaseAnalysisItemRow[]): SlowMoverRow[] {
-  return rows.map(toSlowMoverRow);
+  return rows.filter((r) => r.item.status === "active").map(toSlowMoverRow);
 }
 
 /** Filtra rows com cobertura acima do threshold ou sem vendas. */
