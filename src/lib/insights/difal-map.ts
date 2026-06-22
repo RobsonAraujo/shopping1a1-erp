@@ -7,18 +7,20 @@ export function buildDifalMap(payload: TaxReportPayload): DifalMapRow[] {
     { receita: number; unidades: number; margemSoma: number; count: number }
   >();
 
-  for (const sku of payload.porSku) {
-    for (const det of sku.transacoes) {
-      if (!det.incluidoNaApuracao) continue;
-      const uf = det.transacao.ufDestino;
-      if (!uf) continue;
-      const entry = byUf.get(uf) ?? { receita: 0, unidades: 0, margemSoma: 0, count: 0 };
-      entry.receita += det.transacao.receitaBruta;
-      entry.unidades += det.transacao.quantidade;
-      entry.margemSoma += det.margemOperacionalEstimada;
-      entry.count += 1;
-      byUf.set(uf, entry);
-    }
+  // Snapshots antigos guardavam transações na raiz; os novos guardam em porSku[].transacoes
+  const fromPorSku = payload.porSku.flatMap((sku) => sku.transacoes);
+  const detalhes = fromPorSku.length > 0 ? fromPorSku : (payload.transacoes ?? []);
+
+  for (const det of detalhes) {
+    if (!det.incluidoNaApuracao) continue;
+    const uf = det.transacao.ufDestino;
+    if (!uf) continue;
+    const entry = byUf.get(uf) ?? { receita: 0, unidades: 0, margemSoma: 0, count: 0 };
+    entry.receita += det.transacao.receitaBruta;
+    entry.unidades += det.transacao.quantidade;
+    entry.margemSoma += det.margemOperacionalEstimada;
+    entry.count += 1;
+    byUf.set(uf, entry);
   }
 
   return Array.from(byUf.entries())
