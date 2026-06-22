@@ -183,17 +183,22 @@ export async function fetchLastSaleFeeRebate(
 
   const saleFee = billingData.results?.[0]?.sale_fee;
   const rebateRaw = saleFee?.rebate;
-  const rebate = Number(rebateRaw);
-  if (Number.isFinite(rebate) && rebate > 0) {
+  const rebateTotal = Number(rebateRaw);
+  if (Number.isFinite(rebateTotal) && rebateTotal > 0) {
+    // rebate da billing API é o total do pedido; divide pela quantidade para obter por unidade
+    const line = orderItemForListing(lastOrder, itemId);
+    const qty = Math.max(1, Math.floor(Number(line?.quantity ?? 1)));
+    const rebate = Math.round((rebateTotal / qty) * 100) / 100;
+
     const grossRaw = saleFee?.gross;
     const netRaw = saleFee?.net;
     const gross =
       grossRaw !== undefined && Number.isFinite(Number(grossRaw))
-        ? Number(grossRaw)
+        ? Math.round((Number(grossRaw) / qty) * 100) / 100
         : null;
     const net =
       netRaw !== undefined && Number.isFinite(Number(netRaw))
-        ? Number(netRaw)
+        ? Math.round((Number(netRaw) / qty) * 100) / 100
         : null;
 
     return {
