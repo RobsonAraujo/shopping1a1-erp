@@ -51,24 +51,16 @@ export function aliquotaInternaTotal(
 
 /**
  * Alíquota ICMS na saída em operação interna (mesma UF).
- * ST na compra → usa saleIcmsPercent (residual; padrão 0).
- * Sem ST → saleIcmsPercent do cadastro ou alíquota interna da tabela UF.
+ * ST na compra → 0% (imposto já recolhido pelo substituto tributário).
+ * Sem ST → alíquota interna da tabela UF (saleIcmsPercent do cadastro é campo de precificação).
  */
 export function obterAliquotaIcmsSaidaInterna(
   transacao: TransacaoVenda,
   aliquotaInternaTabela: number,
 ): number {
-  const salePercent = transacao.saleIcmsPercent;
-  const hasSalePercent = Number.isFinite(salePercent) && salePercent >= 0;
-
   if (transacao.hasIcmsSt) {
-    return hasSalePercent ? salePercent / 100 : 0;
+    return 0;
   }
-
-  if (hasSalePercent && salePercent > 0) {
-    return salePercent / 100;
-  }
-
   return aliquotaInternaTabela;
 }
 
@@ -157,23 +149,14 @@ export function calcularIcmsDifal(input: IcmsDifalInput): IcmsDifalBreakdown | n
 
 export function buildIcmsMemoria(result: IcmsDifalBreakdown): string[] {
   if (result.isOperacaoInterna) {
-    const saidaPct = (result.aliquotaSaidaEfetiva ?? result.aliquotaInternaTotal) * 100;
     const tabelaPct = result.aliquotaInternaTotal * 100;
     const lines = [
       `Operação interna ${result.ufOrigem} → ${result.ufDestino}`,
     ];
     if (result.icmsStNaCompra) {
-      lines.push("ICMS-ST na compra — alíquota residual na saída");
-    }
-    if (
-      result.aliquotaSaidaEfetiva != null &&
-      Math.abs(result.aliquotaSaidaEfetiva - result.aliquotaInternaTotal) > 0.0001
-    ) {
-      lines.push(
-        `Alíquota interna tabela ${tabelaPct.toFixed(2)}% → saída ${saidaPct.toFixed(2)}%`,
-      );
+      lines.push("ICMS-ST na compra — ICMS na saída = 0%");
     } else {
-      lines.push(`Alíquota ICMS saída ${saidaPct.toFixed(2)}%`);
+      lines.push(`Alíquota interna tabela ${tabelaPct.toFixed(2)}%`);
     }
     lines.push(`ICMS = R$ ${result.icmsTotal.toFixed(2)}`);
     return lines;

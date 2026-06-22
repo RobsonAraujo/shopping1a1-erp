@@ -24,6 +24,8 @@ export function calcularPisCofins(input: PisCofinsInput): PisCofinsBreakdown {
       liquido: 0,
       icmsExcluidoDaBase: 0,
       excludedIcmsFromBase: config.excludeIcmsFromPisCofinsBase,
+      pisRatePercent: config.pisRatePercent,
+      cofinsRatePercent: config.cofinsRatePercent,
     };
   }
 
@@ -45,6 +47,7 @@ export function calcularPisCofins(input: PisCofinsInput): PisCofinsBreakdown {
           unitCostNf,
           purchaseIcmsPercent: transacao.purchaseIcmsPercent,
           hasIcmsSt: transacao.hasIcmsSt,
+          purchaseCostWithSt: transacao.purchaseCostWithSt,
         })
       : 0;
   const baseCredito = roundMoney(baseCreditoUnit * transacao.quantidade);
@@ -67,6 +70,8 @@ export function calcularPisCofins(input: PisCofinsInput): PisCofinsBreakdown {
       ? roundMoney(icmsDestacado)
       : 0,
     excludedIcmsFromBase: config.excludeIcmsFromPisCofinsBase,
+    pisRatePercent: config.pisRatePercent,
+    cofinsRatePercent: config.cofinsRatePercent,
   };
 }
 
@@ -86,8 +91,11 @@ export function buildPisCofinsMemoria(
   );
   lines.push(`(=) Base crédito (NF entrada − ICMS): R$ ${result.baseCredito.toFixed(2)}`);
   lines.push(
-    `(−) Crédito PIS/COFINS: R$ ${result.creditoTotal.toFixed(2)}`,
+    `(−) Crédito PIS ${config.pisRatePercent}% = R$ ${result.pisCredito.toFixed(2)} | COFINS ${config.cofinsRatePercent}% = R$ ${result.cofinsCredito.toFixed(2)}`,
   );
-  lines.push(`(=) PIS/COFINS líquido: R$ ${result.liquido.toFixed(2)}`);
+  const liquidoPct = result.baseDebito > 0
+    ? ((result.liquido / result.baseDebito) * 100).toFixed(2)
+    : "0,00";
+  lines.push(`(=) PIS/COFINS líquido: ${liquidoPct}% (R$ ${result.liquido.toFixed(2)})`);
   return lines;
 }

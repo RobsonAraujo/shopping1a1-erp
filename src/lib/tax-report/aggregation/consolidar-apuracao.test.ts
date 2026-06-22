@@ -43,6 +43,8 @@ function detalhe(
       liquido: 3.59,
       icmsExcluidoDaBase: 12,
       excludedIcmsFromBase: true,
+      pisRatePercent: 1.65,
+      cofinsRatePercent: 7.6,
     },
     icmsDifal: {
       ufOrigem: "SP",
@@ -103,6 +105,8 @@ describe("consolidarApuracao", () => {
         liquido: 4.63,
         icmsExcluidoDaBase: 0,
         excludedIcmsFromBase: true,
+        pisRatePercent: 1.65,
+        cofinsRatePercent: 7.6,
       },
       icmsCreditoCompra: {
         baseUnitaria: 0,

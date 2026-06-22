@@ -82,12 +82,7 @@ export function TaxReportCalculationPanel({
   const margemOperacional = margemOperacionalEstimadaLinha(row);
   const margemPercent = percentOfSale(margemOperacional, t.receitaBruta);
 
-  const saidaPct =
-    icms?.aliquotaSaidaEfetiva != null
-      ? icms.aliquotaSaidaEfetiva * 100
-      : icms
-        ? icms.aliquotaInternaTotal * 100
-        : null;
+  const liquidoPisCofinsPercent = pis ? percentOfSale(pis.liquido, t.receitaBruta) : null;
 
   return (
     <Card className="border-[var(--primary)]/20 bg-[var(--muted)]/10 p-4">
@@ -128,6 +123,30 @@ export function TaxReportCalculationPanel({
         </p>
       ) : null}
 
+      <MemoriaSection title="Dados de entrada" className="mb-3">
+        <MemoriaRow
+          label="Custo NF"
+          value={t.unitCostNf ? formatFinancialMoney(t.unitCostNf) : "não cadastrado"}
+          muted={!t.unitCostNf}
+        />
+        <MemoriaRow
+          label="ICMS compra"
+          value={`${t.purchaseIcmsPercent.toFixed(2)}%`}
+        />
+        {t.hasIcmsSt ? (
+          <MemoriaRow
+            label="ICMS-ST"
+            value={
+              t.purchaseCostWithSt
+                ? `Sim — custo c/ ST ${formatFinancialMoney(t.purchaseCostWithSt)}`
+                : "Sim — custo c/ ST não informado"
+            }
+          />
+        ) : (
+          <MemoriaRow label="ICMS-ST" value="Não" muted />
+        )}
+      </MemoriaSection>
+
       <div className="grid gap-3 sm:grid-cols-2">
         <MemoriaSection title="Receita">
           <MemoriaRow
@@ -152,28 +171,13 @@ export function TaxReportCalculationPanel({
                 {icms.icmsStNaCompra ? (
                   <MemoriaRow
                     label="Regime"
-                    value="ICMS-ST na compra (alíquota residual na saída)"
+                    value="ICMS-ST na compra — ICMS saída 0%"
                     muted
                   />
-                ) : null}
-                {icms.aliquotaSaidaEfetiva != null &&
-                Math.abs(icms.aliquotaSaidaEfetiva - icms.aliquotaInternaTotal) >
-                  0.0001 ? (
-                  <>
-                    <MemoriaRow
-                      label="Alíquota tabela UF"
-                      value={`${(icms.aliquotaInternaTotal * 100).toFixed(2)}%`}
-                      muted
-                    />
-                    <MemoriaRow
-                      label="Alíquota saída (cadastro)"
-                      value={`${saidaPct!.toFixed(2)}%`}
-                    />
-                  </>
                 ) : (
                   <MemoriaRow
-                    label="Alíquota saída"
-                    value={`${saidaPct!.toFixed(2)}%`}
+                    label="Alíquota interna (tabela)"
+                    value={`${(icms.aliquotaInternaTotal * 100).toFixed(2)}%`}
                   />
                 )}
                 <MemoriaDivider />
@@ -275,11 +279,11 @@ export function TaxReportCalculationPanel({
                   />
                 ) : null}
                 <MemoriaRow
-                  label="PIS débito"
+                  label={`PIS débito (${pis.pisRatePercent}%)`}
                   value={formatFinancialMoney(pis.pisDebito)}
                 />
                 <MemoriaRow
-                  label="COFINS débito"
+                  label={`COFINS débito (${pis.cofinsRatePercent}%)`}
                   value={formatFinancialMoney(pis.cofinsDebito)}
                 />
                 <MemoriaDivider />
@@ -287,21 +291,25 @@ export function TaxReportCalculationPanel({
                   Crédito
                 </p>
                 <MemoriaRow
-                  label="Base (NF − ICMS entrada)"
+                  label={t.hasIcmsSt ? "Base (custo c/ ST)" : "Base (NF − ICMS entrada)"}
                   value={formatFinancialMoney(pis.baseCredito)}
                 />
                 <MemoriaRow
-                  label="PIS crédito"
+                  label={`PIS crédito (${pis.pisRatePercent}%)`}
                   value={formatFinancialMoney(pis.pisCredito)}
                 />
                 <MemoriaRow
-                  label="COFINS crédito"
+                  label={`COFINS crédito (${pis.cofinsRatePercent}%)`}
                   value={formatFinancialMoney(pis.cofinsCredito)}
                 />
                 <MemoriaDivider />
                 <MemoriaRow
                   label="PIS/COFINS líquido"
-                  value={formatFinancialMoney(pis.liquido)}
+                  value={
+                    liquidoPisCofinsPercent != null
+                      ? `${formatFinancialPercent(liquidoPisCofinsPercent)} (${formatFinancialMoney(pis.liquido)})`
+                      : formatFinancialMoney(pis.liquido)
+                  }
                   emphasis
                 />
               </>

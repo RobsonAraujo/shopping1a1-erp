@@ -129,7 +129,7 @@ describe("calcularIcmsDifal", () => {
     assert.equal(result.aliquotaSaidaEfetiva, 0.18);
   });
 
-  it("SP to SP with ICMS-ST: uses saleIcmsPercent residual (0%)", () => {
+  it("SP to SP with ICMS-ST: ICMS na saída sempre 0%", () => {
     const result = calcularIcmsDifal({
       transacao: baseTransacao({
         ufDestino: "SP",
@@ -145,7 +145,7 @@ describe("calcularIcmsDifal", () => {
     assert.equal(result.aliquotaSaidaEfetiva, 0);
   });
 
-  it("SP to SP with ICMS-ST: uses saleIcmsPercent 3%", () => {
+  it("SP to SP com ICMS-ST ignora saleIcmsPercent (sempre 0%)", () => {
     const result = calcularIcmsDifal({
       transacao: baseTransacao({
         ufDestino: "SP",
@@ -157,16 +157,31 @@ describe("calcularIcmsDifal", () => {
       rates,
     });
     assert.ok(result);
-    assert.equal(result.icmsTotal, 3);
-    assert.equal(result.aliquotaSaidaEfetiva, 0.03);
+    assert.equal(result.icmsTotal, 0);
+    assert.equal(result.aliquotaSaidaEfetiva, 0);
   });
 
-  it("SP to SP without ST falls back to UF table when saleIcmsPercent is 0", () => {
+  it("SP to SP sem ST usa tabela UF (ignora saleIcmsPercent zerado)", () => {
     const result = calcularIcmsDifal({
       transacao: baseTransacao({
         ufDestino: "SP",
         hasIcmsSt: false,
         saleIcmsPercent: 0,
+      }),
+      ufOrigem: "SP",
+      rates,
+    });
+    assert.ok(result);
+    assert.equal(result.icmsTotal, 18);
+    assert.equal(result.aliquotaSaidaEfetiva, 0.18);
+  });
+
+  it("SP to SP sem ST ignora saleIcmsPercent mesmo quando não-zero", () => {
+    const result = calcularIcmsDifal({
+      transacao: baseTransacao({
+        ufDestino: "SP",
+        hasIcmsSt: false,
+        saleIcmsPercent: 12,
       }),
       ufOrigem: "SP",
       rates,
@@ -195,7 +210,7 @@ describe("calcularIcmsDifal", () => {
 });
 
 describe("obterAliquotaIcmsSaidaInterna", () => {
-  it("ST uses sale percent including zero", () => {
+  it("ST sempre 0% independente de saleIcmsPercent", () => {
     assert.equal(
       obterAliquotaIcmsSaidaInterna(
         baseTransacao({ hasIcmsSt: true, saleIcmsPercent: 0 }),
@@ -208,14 +223,21 @@ describe("obterAliquotaIcmsSaidaInterna", () => {
         baseTransacao({ hasIcmsSt: true, saleIcmsPercent: 3 }),
         0.18,
       ),
-      0.03,
+      0,
     );
   });
 
-  it("non-ST uses table when sale percent is zero", () => {
+  it("sem ST usa tabela UF independente de saleIcmsPercent", () => {
     assert.equal(
       obterAliquotaIcmsSaidaInterna(
         baseTransacao({ hasIcmsSt: false, saleIcmsPercent: 0 }),
+        0.18,
+      ),
+      0.18,
+    );
+    assert.equal(
+      obterAliquotaIcmsSaidaInterna(
+        baseTransacao({ hasIcmsSt: false, saleIcmsPercent: 12 }),
         0.18,
       ),
       0.18,

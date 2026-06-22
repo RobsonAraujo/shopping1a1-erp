@@ -89,6 +89,8 @@ function aliasLineWithoutCost(): DetalhamentoTributario {
       liquido: 7.58,
       icmsExcluidoDaBase: 18,
       excludedIcmsFromBase: true,
+      pisRatePercent: 1.65,
+      cofinsRatePercent: 7.6,
     },
     icmsDifal: {
       ufOrigem: "SP",

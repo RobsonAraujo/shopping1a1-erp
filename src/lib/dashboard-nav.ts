@@ -4,6 +4,7 @@ import {
   ChartNoAxesColumn,
   Kanban,
   LayoutGrid,
+  Lightbulb,
   LineChart,
   Package,
   Scale,
@@ -100,6 +101,12 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
     label: "Análises",
     kind: "dropdown",
     items: [
+      {
+        href: "/dashboard/insights",
+        label: "Insights",
+        description: "Rotação baixa, ruptura, ads e concentração de receita",
+        icon: Lightbulb,
+      },
       {
         href: "/dashboard/catalog-report",
         label: "Catálogo",

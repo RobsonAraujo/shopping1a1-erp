@@ -8,6 +8,7 @@ Documentação de arquitetura e processos do projeto. O README na raiz cobre set
 |-----------|----------|
 | [Migração SaaS multi-tenant](architecture/saas-migration.md) | Estado atual single-tenant, modelo alvo, fases, mapa de arquivos e **registro de features** |
 | [Modelo de dados do tenant](architecture/tenant-data-model.md) | Proposta de `Organization`, `User`, vínculo com Mercado Livre |
+| [Mapa de fontes de dados](architecture/erp-data-sources.md) | Onde cada dado vive, tipos canônicos, APIs existentes e como carregar dados nos insights |
 
 ## Templates
 

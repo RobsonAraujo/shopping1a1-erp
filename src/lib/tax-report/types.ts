@@ -25,7 +25,9 @@ export type TransacaoVenda = {
   unitCostNf: number | null;
   purchaseIcmsPercent: number;
   hasIcmsSt: boolean;
-  /** % ICMS na venda (cadastro) — usado em operação interna e precificação. */
+  /** Custo total de aquisição incluindo ICMS-ST repassado — base de crédito PIS/COFINS quando hasIcmsSt=true. */
+  purchaseCostWithSt?: number | null;
+  /** % ICMS na venda (cadastro) — usado apenas em precificação, não no cálculo tributário. */
   saleIcmsPercent: number;
   extraCostsUnitario: number;
   mercadoriaImportada: boolean;
@@ -51,6 +53,8 @@ export type PisCofinsBreakdown = {
   liquido: number;
   icmsExcluidoDaBase: number;
   excludedIcmsFromBase: boolean;
+  pisRatePercent: number;
+  cofinsRatePercent: number;
 };
 
 export type IcmsCreditoCompraBreakdown = {

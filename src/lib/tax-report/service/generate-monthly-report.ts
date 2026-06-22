@@ -260,3 +260,15 @@ export async function loadTaxReportSnapshot(
   const payload = row.payload as unknown as TaxReportPayload;
   return repairTaxReportPayload(payload);
 }
+
+export async function loadLatestTaxReportSnapshot(
+  sellerId: number,
+): Promise<TaxReportPayload | null> {
+  const row = await prisma.taxReportMonthSnapshot.findFirst({
+    where: { sellerId },
+    orderBy: [{ year: "desc" }, { month: "desc" }],
+  });
+  if (!row) return null;
+  const payload = row.payload as unknown as TaxReportPayload;
+  return repairTaxReportPayload(payload);
+}

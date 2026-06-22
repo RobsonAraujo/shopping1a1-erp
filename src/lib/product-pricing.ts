@@ -104,20 +104,29 @@ export function purchaseIcmsCreditUnit(input: {
   return roundMoney(unitCostNf * (purchaseIcmsPercent / 100));
 }
 
-/** Base para crédito PIS/COFINS na aquisição (unitCostNf − ICMS entrada). */
+/** Base para crédito PIS/COFINS na aquisição.
+ * ICMS-ST: usa purchaseCostWithSt (custo total com ST) quando disponível.
+ * Sem ST: unitCostNf − ICMS entrada. */
 export function purchasePisCofinsCreditBaseUnit(input: {
   unitCostNf: number;
   purchaseIcmsPercent: number;
   hasIcmsSt: boolean;
+  purchaseCostWithSt?: number | null;
 }): number {
-  const { unitCostNf, purchaseIcmsPercent, hasIcmsSt } = input;
+  const { unitCostNf, purchaseIcmsPercent, hasIcmsSt, purchaseCostWithSt } = input;
   if (!Number.isFinite(unitCostNf) || unitCostNf <= 0) {
     return 0;
+  }
+  if (hasIcmsSt) {
+    if (purchaseCostWithSt != null && Number.isFinite(purchaseCostWithSt) && purchaseCostWithSt > 0) {
+      return roundMoney(purchaseCostWithSt);
+    }
+    return roundMoney(unitCostNf);
   }
   const icmsEntrada = purchaseIcmsCreditUnit({
     unitCostNf,
     purchaseIcmsPercent,
-    hasIcmsSt,
+    hasIcmsSt: false,
   });
   return roundMoney(Math.max(0, unitCostNf - icmsEntrada));
 }

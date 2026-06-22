@@ -45,6 +45,8 @@ function detalhe(sku: string, receita: number): DetalhamentoTributario {
       liquido: 1.5,
       icmsExcluidoDaBase: 0,
       excludedIcmsFromBase: false,
+      pisRatePercent: 1.65,
+      cofinsRatePercent: 7.6,
     },
     icmsDifal: {
       ufOrigem: "SP",

@@ -53,6 +53,8 @@ function includedRow(
       liquido: 11.1,
       icmsExcluidoDaBase: 24,
       excludedIcmsFromBase: true,
+      pisRatePercent: 1.65,
+      cofinsRatePercent: 7.6,
     },
     icmsDifal: {
       ufOrigem: "SP",
