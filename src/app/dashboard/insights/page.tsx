@@ -6,7 +6,6 @@ import {
   Map,
   PieChart,
   TrendingDown,
-  Zap,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -151,17 +150,7 @@ export default async function InsightsPage() {
           </>
         )}
 
-        <InsightExpandableCard
-          title="Ads que destroem margem"
-          subtitle="Anúncios onde TACOS supera a margem operacional — ads gerando prejuízo"
-          icon={<Zap className="size-4" aria-hidden />}
-          iconClassName="bg-purple-100 text-purple-700"
-          accentClassName="border-l-purple-400"
-          badge="carregando…"
-          badgeVariant="secondary"
-        >
-          <AdsMargemCard />
-        </InsightExpandableCard>
+        <AdsMargemCard />
 
         {taxSnapshot && taxPeriod && (
           <>
