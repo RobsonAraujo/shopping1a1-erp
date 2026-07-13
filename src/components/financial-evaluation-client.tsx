@@ -516,15 +516,11 @@ export function FinancialEvaluationClient() {
         return compareNullableNumber(a.salePrice, b.salePrice, sortDir);
       }
       if (sortKey === "margin") {
-        const aVal =
-          marginBasis === "afterAds"
-            ? a.marginAfterAdsPercent
-            : a.breakdown?.marginPercent;
-        const bVal =
-          marginBasis === "afterAds"
-            ? b.marginAfterAdsPercent
-            : b.breakdown?.marginPercent;
-        return compareNullableNumber(aVal, bVal, sortDir);
+        return compareNullableNumber(
+          a.breakdown?.marginPercent,
+          b.breakdown?.marginPercent,
+          sortDir,
+        );
       }
       return compareNullableNumber(
         a.marginAfterAdsPercent,
@@ -533,7 +529,50 @@ export function FinancialEvaluationClient() {
       );
     });
     return rows;
-  }, [filteredItems, sortKey, sortDir, marginBasis]);
+  }, [filteredItems, sortKey, sortDir]);
+
+  const overallAverages = useMemo(() => {
+    if (!data?.length) {
+      return {
+        contributionPercent: null as number | null,
+        afterAdsPercent: null as number | null,
+        listingCount: 0,
+      };
+    }
+
+    let contributionSum = 0;
+    let contributionCount = 0;
+    let afterAdsSum = 0;
+    let afterAdsCount = 0;
+
+    for (const row of data) {
+      const contribution = row.breakdown?.marginPercent;
+      if (contribution !== null && contribution !== undefined) {
+        contributionSum += contribution;
+        contributionCount += 1;
+      }
+      if (
+        row.adsMetricsAvailable &&
+        row.marginAfterAdsPercent !== null &&
+        row.marginAfterAdsPercent !== undefined
+      ) {
+        afterAdsSum += row.marginAfterAdsPercent;
+        afterAdsCount += 1;
+      }
+    }
+
+    return {
+      contributionPercent:
+        contributionCount > 0
+          ? Math.round((contributionSum / contributionCount) * 100) / 100
+          : null,
+      afterAdsPercent:
+        afterAdsCount > 0
+          ? Math.round((afterAdsSum / afterAdsCount) * 100) / 100
+          : null,
+      listingCount: data.length,
+    };
+  }, [data]);
 
   const selectedRow = useMemo(
     () => data?.find((row) => row.mlItemId === selectedId) ?? null,
@@ -911,6 +950,50 @@ export function FinancialEvaluationClient() {
               </p>
             ) : null}
           </div>
+
+          {data && overallAverages.listingCount > 0 ? (
+            <div className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2.5">
+              <p className="text-sm text-[var(--foreground)]">
+                No geral
+                {isPeriodMode && appliedFrom && appliedTo
+                  ? appliedFrom === appliedTo
+                    ? ` (dia ${appliedFrom})`
+                    : ` (${appliedFrom} → ${appliedTo})`
+                  : ""}
+                , lucratividade média de{" "}
+                <span
+                  className={cn(
+                    "font-semibold tabular-nums",
+                    marginTone(overallAverages.contributionPercent),
+                  )}
+                >
+                  {formatFinancialPercent(overallAverages.contributionPercent)}
+                </span>{" "}
+                <span className="text-[var(--muted-foreground)]">
+                  (contribuição)
+                </span>
+                {overallAverages.afterAdsPercent !== null ? (
+                  <>
+                    {" · "}
+                    Pós ADS{" "}
+                    <span
+                      className={cn(
+                        "font-semibold tabular-nums",
+                        marginTone(overallAverages.afterAdsPercent),
+                      )}
+                    >
+                      {formatFinancialPercent(overallAverages.afterAdsPercent)}
+                    </span>
+                  </>
+                ) : null}
+                <span className="text-[var(--muted-foreground)]">
+                  {" "}
+                  · média entre {overallAverages.listingCount} anúncio
+                  {overallAverages.listingCount === 1 ? "" : "s"}
+                </span>
+              </p>
+            </div>
+          ) : null}
 
           {error ? (
             <p className="text-sm text-red-600" role="alert">
