@@ -234,6 +234,17 @@ Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templ
 - **APIs:** `/api/financial-evaluation/*`
 - **Ação futura:** `loadFinancialEvaluationRows(token, userId, { organizationId })`
 
+### Lucratividade — ordenação e margem por período — 2026-07-13
+
+- **Tabelas novas/alteradas:** nenhuma
+- **Precisa `organizationId`?** parcial — custos vêm de `products` (hoje global); vendas/ads por seller ML da sessão
+- **APIs afetadas:** `GET /api/financial-evaluation` (`from`/`to` opcionais → modo período)
+- **Assume singleton?** não em vendas; custos ainda via `Product.sku` global
+- **Cron/background:** nenhum
+- **Dados globais vs por org:** preço médio e TACOS do período por seller; CMV/alíquota do cadastro atual
+- **Código já tenant-ready?** parcial — passar `organizationId` em `loadProductsMapBySku` / loaders novos
+- **Ação futura na migração:** `loadFinancialEvaluationRowsForPeriod(..., { organizationId })`; escopar produtos por org
+
 ### Compras e estoque — baseline
 
 - **Tabelas:** `listings`, `warehouse_stock`, `replenishment_cycles`

@@ -15,7 +15,7 @@
 | `/dashboard/operacoes` | Fluxo de reposição (compra → Full) | DB `replenishment_cycles` |
 | `/dashboard/envios-full` | Custo de coleta Full por unidade | DB `full_shipments` |
 | `/dashboard/produtos` | Cadastro fiscal e custo por SKU | DB `products` |
-| `/dashboard/lucratividade` | Margem por anúncio (taxa ML, frete, impostos, ads) | ML API (preço, taxas, ads) + DB `products` |
+| `/dashboard/lucratividade` | Margem por anúncio (taxa ML, frete, impostos, ads); modo atual ou por data/range | ML API (preço/vendas, taxas, ads) + DB `products` |
 | `/dashboard/catalog-report` | Status de competição no catálogo | DB `catalog_competition_snapshots` |
 | `/dashboard/dre` | DRE mensal (receita, COGS, resultado) | ML API + DB |
 | `/dashboard/relatorio-tributario` | Apuração fiscal PIS/COFINS + ICMS/DIFAL por venda | DB `tax_report_month_snapshots` + ML API |
@@ -75,7 +75,7 @@
 - Retorna `FinancialEvaluationRow[]` com margem por anúncio ativo
 - Chama ML API (preços, taxas, ads PADS) + DB (custos de produto)
 - Lento (~5s) pois vai ao ML em tempo real
-
+- Query opcional `from`/`to` (`YYYY-MM-DD`): modo período — só anúncios com venda paga; preço médio das vendas; TACOS do mesmo intervalo; resposta inclui `mode`, `salesCount`, `periodDays`
 ### `GET /api/dre?year=&month=`
 - Retorna DRE mensal
 - Combina ML API + DB

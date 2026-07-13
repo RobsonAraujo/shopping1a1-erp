@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { reportsConfig } from "@/config/reports";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 
 type DetailResponse = {
   from: string;
@@ -264,27 +265,18 @@ export function CatalogCompetitionItemReportClient({ itemId }: { itemId: string 
     <div className="space-y-6">
       <div className="flex flex-wrap items-end gap-3">
         <div>
-          <label className="mb-1 block text-xs text-[var(--muted-foreground)]">De</label>
-          <input
-            type="date"
-            value={fromDate}
-            onChange={(e) => {
+          <label className="mb-1 block text-xs text-[var(--muted-foreground)]">
+            Período
+          </label>
+          <DateRangePicker
+            fromYmd={fromDate}
+            toYmd={toDate}
+            disabled={loading}
+            onChange={(from, to) => {
               setRangePreset("custom");
-              setFromDate(e.target.value);
+              setFromDate(from);
+              setToDate(to);
             }}
-            className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs text-[var(--muted-foreground)]">Até</label>
-          <input
-            type="date"
-            value={toDate}
-            onChange={(e) => {
-              setRangePreset("custom");
-              setToDate(e.target.value);
-            }}
-            className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
           />
         </div>
         <div className="flex flex-wrap items-center gap-2">

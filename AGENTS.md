@@ -19,4 +19,4 @@ Ao implementar **feature nova** ou alterar módulo que toca **dados, APIs ou aut
 
 ## UI components
 
-Preferir componentes de `src/components/ui/` (wrappers Radix): `Button`, `FormSelect`, `Switch`, `Card`, `Tooltip`, `Popover`, `Badge`, `FormInput`. Evitar `<input>`/`<select>` HTML cru em telas novas.
+Preferir componentes de `src/components/ui/` (wrappers Radix): `Button`, `FormSelect`, `Switch`, `Card`, `Tooltip`, `Popover`, `Badge`, `FormInput`, `Calendar`, `DatePicker`, `DateRangePicker`. Evitar `<input>`/`<select>` HTML cru em telas novas.

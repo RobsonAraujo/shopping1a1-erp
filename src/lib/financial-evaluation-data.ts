@@ -2,13 +2,16 @@ import {
   computeFinancialMargin,
   computeMarginAfterAds,
   listingTypeLabelFromId,
+  roundMoney,
   type FinancialMarginBreakdown,
   type MarginBasis,
   type MinSalePriceResult,
 } from "@/lib/financial-margin";
+import { calendarYmdRangeToUtc } from "@/lib/financial-evaluation-period";
 import {
   fetchItemsByIdsBatched,
   fetchOperationalListingIds,
+  fetchPaidOrdersByPeriod,
 } from "@/lib/mercadolibre/api";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { buyerFacingItemPermalink } from "@/lib/mercadolibre/item-permalink";
@@ -27,13 +30,18 @@ import {
   type ItemAdMetrics,
 } from "@/lib/mercadolibre/product-ads-metrics";
 import { fetchSellerShippingCost } from "@/lib/mercadolibre/seller-shipping-cost";
-import type { ItemBody } from "@/lib/mercadolibre/types";
+import type { ItemBody, OrderSearchOrder } from "@/lib/mercadolibre/types";
 import { loadProductsMapBySku } from "@/lib/product-data";
 import {
   normalizeProductSku,
   type ResolvedProductPricing,
 } from "@/lib/product-pricing";
 import { refineMinSalePriceForTargetMargin } from "@/lib/refine-min-sale-price";
+
+export {
+  calendarYmdRangeToUtc,
+  parseFinancialEvaluationYmd,
+} from "@/lib/financial-evaluation-period";
 
 export type FinancialEvaluationRow = {
   mlItemId: string;
@@ -120,6 +128,7 @@ function applyAdsToRow(
   >,
   adMetrics: ItemAdMetrics | undefined,
   adsMetricsAvailable: boolean,
+  adsPeriodDays: number = PRODUCT_ADS_PERIOD_DAYS,
 ): FinancialEvaluationRow {
   const warnings = [...row.warnings];
 
@@ -131,7 +140,7 @@ function applyAdsToRow(
       adsCost: null,
       adsUnitsSold: null,
       adsCostPerUnit: null,
-      adsPeriodDays: PRODUCT_ADS_PERIOD_DAYS,
+      adsPeriodDays,
       marginAfterAdsPercent: null,
       marginAfterAdsValue: null,
       hasActiveAds: false,
@@ -162,7 +171,7 @@ function applyAdsToRow(
       adsCost: 0,
       adsUnitsSold: 0,
       adsCostPerUnit: 0,
-      adsPeriodDays: PRODUCT_ADS_PERIOD_DAYS,
+      adsPeriodDays,
       marginAfterAdsPercent: afterAds?.marginAfterAdsPercent ?? null,
       marginAfterAdsValue: afterAds?.marginAfterAdsValue ?? null,
       hasActiveAds: false,
@@ -209,7 +218,7 @@ function applyAdsToRow(
     adsCost: adMetrics.cost,
     adsUnitsSold: adMetrics.unitsQuantity,
     adsCostPerUnit: afterAds?.adsCostPerUnit ?? null,
-    adsPeriodDays: PRODUCT_ADS_PERIOD_DAYS,
+    adsPeriodDays,
     marginAfterAdsPercent: afterAds?.marginAfterAdsPercent ?? null,
     marginAfterAdsValue: afterAds?.marginAfterAdsValue ?? null,
     hasActiveAds,
@@ -396,6 +405,7 @@ async function loadAdsMetricsByItem(
   accessToken: string,
   siteId: string,
   itemIds?: string[],
+  dateRange?: { dateFrom: string; dateTo: string },
 ): Promise<{ map: Map<string, ItemAdMetrics>; available: boolean }> {
   try {
     const advertiserId = await fetchPadsAdvertiserId(accessToken, siteId);
@@ -403,7 +413,7 @@ async function loadAdsMetricsByItem(
       return { map: new Map(), available: true };
     }
 
-    const { dateFrom, dateTo } = getProductAdsDateRange();
+    const { dateFrom, dateTo } = dateRange ?? getProductAdsDateRange();
     const map = await fetchProductAdsMetricsByItem(accessToken, {
       advertiserId,
       siteId,
@@ -415,6 +425,231 @@ async function loadAdsMetricsByItem(
   } catch {
     return { map: new Map(), available: false };
   }
+}
+
+type PeriodSaleAgg = {
+  itemId: string;
+  quantity: number;
+  revenue: number;
+  saleFeeSum: number;
+  saleFeeKnownQty: number;
+};
+
+function quantityFromOrderLine(line: { quantity?: unknown }): number {
+  const q = line.quantity;
+  if (typeof q === "number" && Number.isFinite(q)) return Math.max(0, q);
+  if (typeof q === "string") {
+    const n = parseInt(q, 10);
+    return Number.isFinite(n) ? Math.max(0, n) : 0;
+  }
+  return 0;
+}
+
+function revenueFromOrderLine(line: {
+  quantity?: unknown;
+  unit_price?: unknown;
+}): number {
+  const qty = quantityFromOrderLine(line);
+  const price = line.unit_price;
+  if (typeof price !== "number" || !Number.isFinite(price) || price < 0) {
+    return 0;
+  }
+  return price * qty;
+}
+
+function saleFeeFromOrderLine(line: { sale_fee?: unknown }): number | null {
+  const fee = line.sale_fee;
+  if (typeof fee === "number" && Number.isFinite(fee) && fee >= 0) {
+    return fee;
+  }
+  return null;
+}
+
+function listingIdFromOrderLine(line: {
+  item?: { id?: string };
+  item_id?: string;
+}): string | undefined {
+  return line.item?.id ?? line.item_id ?? undefined;
+}
+
+function aggregatePeriodSalesByItem(
+  orders: OrderSearchOrder[],
+): Map<string, PeriodSaleAgg> {
+  const byItem = new Map<string, PeriodSaleAgg>();
+
+  for (const order of orders) {
+    if (order.status === "cancelled") continue;
+    for (const line of order.order_items ?? []) {
+      const itemId = listingIdFromOrderLine(line);
+      if (!itemId) continue;
+      const quantity = quantityFromOrderLine(line);
+      const revenue = revenueFromOrderLine(line);
+      if (quantity <= 0 && revenue <= 0) continue;
+
+      const existing = byItem.get(itemId) ?? {
+        itemId,
+        quantity: 0,
+        revenue: 0,
+        saleFeeSum: 0,
+        saleFeeKnownQty: 0,
+      };
+      existing.quantity += quantity;
+      existing.revenue += revenue;
+
+      const saleFee = saleFeeFromOrderLine(line);
+      if (saleFee !== null && quantity > 0) {
+        existing.saleFeeSum += saleFee;
+        existing.saleFeeKnownQty += quantity;
+      }
+
+      byItem.set(itemId, existing);
+    }
+  }
+
+  return byItem;
+}
+
+async function buildRowForPeriodItem(
+  accessToken: string,
+  userId: number,
+  item: ItemBody,
+  pricing: ResolvedProductPricing | null,
+  agg: PeriodSaleAgg,
+): Promise<
+  Omit<
+    FinancialEvaluationRow,
+    | "acosPercent"
+    | "tacosPercent"
+    | "adsCost"
+    | "adsUnitsSold"
+    | "adsCostPerUnit"
+    | "adsPeriodDays"
+    | "marginAfterAdsPercent"
+    | "marginAfterAdsValue"
+    | "hasActiveAds"
+    | "adsStatus"
+    | "adsMetricsAvailable"
+  >
+> {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  const sku = getItemSku(item);
+  const productCost = pricing?.pricingCost ?? null;
+  const extraCosts = pricing?.extraCosts ?? null;
+  const taxRatePercent = pricing?.taxPercent ?? null;
+
+  const salePrice =
+    agg.quantity > 0 ? roundMoney(agg.revenue / agg.quantity) : 0;
+  const currencyId = item.currency_id ?? null;
+
+  warnings.push(
+    `Preço médio de ${agg.quantity} un. vendidas no período (custos/impostos do cadastro atual).`,
+  );
+
+  if (!sku) {
+    warnings.push(
+      "Anúncio sem SKU — cadastre o produto em Meus produtos com o mesmo SKU do ML.",
+    );
+  } else if (!pricing) {
+    warnings.push(
+      `SKU ${sku} sem cadastro completo em Meus produtos — preencha o custo de precificação.`,
+    );
+  }
+
+  let mlFeeAmount: number | null = null;
+  let listingTypeLabel = listingTypeLabelFromId(item.listing_type_id);
+  let usedOrderFee = false;
+
+  if (agg.saleFeeKnownQty > 0) {
+    mlFeeAmount = roundMoney(agg.saleFeeSum / agg.saleFeeKnownQty);
+    usedOrderFee = true;
+    warnings.push("Taxa ML média das vendas do período.");
+  } else if (!item.category_id || !item.listing_type_id) {
+    errors.push("Anúncio sem categoria ou tipo de listagem para calcular taxa.");
+  } else {
+    try {
+      const fee = await fetchListingSaleFee(accessToken, {
+        siteId: siteIdFromItemId(item.id),
+        price: salePrice,
+        categoryId: item.category_id,
+        listingTypeId: item.listing_type_id,
+        currencyId,
+        logisticType: item.shipping?.logistic_type ?? null,
+        shippingMode: item.shipping?.mode ?? null,
+      });
+      mlFeeAmount = fee.feeAmount;
+      listingTypeLabel = fee.listingTypeLabel ?? listingTypeLabel;
+      warnings.push(
+        "Taxa ML estimada no preço médio (pedido sem sale_fee).",
+      );
+    } catch (e) {
+      errors.push(
+        e instanceof Error ? e.message : "Falha ao consultar taxa ML.",
+      );
+    }
+  }
+
+  if (usedOrderFee && item.listing_type_id) {
+    listingTypeLabel = listingTypeLabelFromId(item.listing_type_id);
+  }
+
+  let shippingCost: number | null = null;
+  try {
+    const shipping = await fetchSellerShippingCost(accessToken, {
+      sellerId: userId,
+      item,
+      effectiveSalePrice: salePrice,
+    });
+    shippingCost = shipping.applicable ? shipping.cost : 0;
+    if (!shipping.applicable) {
+      warnings.push("Frete grátis não aplicável ou indisponível (considerado 0).");
+    } else {
+      warnings.push("Frete estimado no preço médio do período.");
+    }
+  } catch (e) {
+    errors.push(
+      e instanceof Error ? e.message : "Falha ao consultar frete do vendedor.",
+    );
+  }
+
+  const breakdown =
+    mlFeeAmount !== null && shippingCost !== null
+      ? computeFinancialMargin({
+          salePrice,
+          mlFeeAmount,
+          mlFeeRebate: 0,
+          shippingCost,
+          productCost,
+          extraCosts: extraCosts ?? 0,
+          taxRatePercent: taxRatePercent ?? 0,
+          listingTypeLabel,
+        })
+      : null;
+
+  return {
+    mlItemId: item.id,
+    title: item.title,
+    sku: getItemSku(item),
+    imageUrl: bestItemImageUrl(item) ?? null,
+    permalink: buyerFacingItemPermalink(item.permalink, item.id),
+    status: item.status,
+    salePrice,
+    regularPrice: null,
+    hasPromotion: false,
+    listingTypeId: item.listing_type_id ?? null,
+    listingTypeLabel,
+    productCost,
+    extraCosts,
+    taxRatePercent,
+    mlFeeAmount,
+    mlFeeRebate: null,
+    mlFeeRebateOrderId: null,
+    shippingCost,
+    breakdown,
+    errors,
+    warnings,
+  };
 }
 
 async function applyMinPriceRefinement(
@@ -584,4 +819,109 @@ export async function loadFinancialEvaluationRows(
     const keyB = (b.sku ?? b.title ?? b.mlItemId).toLowerCase();
     return keyA.localeCompare(keyB, "pt-BR");
   });
+}
+
+export type FinancialEvaluationPeriodResult = {
+  items: FinancialEvaluationRow[];
+  from: string;
+  to: string;
+  salesCount: number;
+  periodDays: number;
+};
+
+export async function loadFinancialEvaluationRowsForPeriod(
+  accessToken: string,
+  userId: number,
+  fromYmd: string,
+  toYmd: string,
+): Promise<FinancialEvaluationPeriodResult> {
+  const range = calendarYmdRangeToUtc(fromYmd, toYmd);
+  if (!range) {
+    throw new Error("Invalid date range");
+  }
+
+  const orders = await fetchPaidOrdersByPeriod(
+    accessToken,
+    userId,
+    range.from,
+    range.to,
+  );
+  const salesByItem = aggregatePeriodSalesByItem(orders);
+  const itemIds = [...salesByItem.keys()];
+
+  if (itemIds.length === 0) {
+    return {
+      items: [],
+      from: range.dateFrom,
+      to: range.dateTo,
+      salesCount: 0,
+      periodDays: range.periodDays,
+    };
+  }
+
+  const siteId = siteIdFromItemId(itemIds[0]!) || "MLB";
+  const [items, adsLoad] = await Promise.all([
+    fetchItemsByIdsBatched(accessToken, itemIds),
+    loadAdsMetricsByItem(accessToken, siteId, itemIds, {
+      dateFrom: range.dateFrom,
+      dateTo: range.dateTo,
+    }),
+  ]);
+
+  const itemById = new Map(items.map((item) => [item.id, item]));
+  const skus = items
+    .map((item) => getItemSku(item))
+    .filter((sku): sku is string => Boolean(sku));
+  const pricingBySku = await loadProductsMapBySku(skus);
+
+  const orderedAggs = itemIds
+    .map((id) => {
+      const agg = salesByItem.get(id);
+      const item = itemById.get(id);
+      if (!agg || !item) return null;
+      return { agg, item };
+    })
+    .filter((row): row is { agg: PeriodSaleAgg; item: ItemBody } => row !== null);
+
+  const baseRows = await mapWithConcurrency(orderedAggs, 5, async ({ agg, item }) => {
+    const sku = getItemSku(item);
+    const pricing = sku
+      ? (pricingBySku.get(normalizeProductSku(sku)) ?? null)
+      : null;
+    return buildRowForPeriodItem(accessToken, userId, item, pricing, agg);
+  });
+
+  const rows = baseRows.map((row) => {
+    const withAds = applyAdsToRow(
+      row,
+      adsLoad.map.get(row.mlItemId),
+      adsLoad.available,
+      range.periodDays,
+    );
+    if (!adsLoad.available) {
+      withAds.warnings.push(
+        "Métricas de Product Ads indisponíveis; margem pós ADS não calculada.",
+      );
+    }
+    return withAds;
+  });
+
+  const sorted = rows.sort((a, b) => {
+    const keyA = (a.sku ?? a.title ?? a.mlItemId).toLowerCase();
+    const keyB = (b.sku ?? b.title ?? b.mlItemId).toLowerCase();
+    return keyA.localeCompare(keyB, "pt-BR");
+  });
+
+  const salesCount = [...salesByItem.values()].reduce(
+    (sum, agg) => sum + agg.quantity,
+    0,
+  );
+
+  return {
+    items: sorted,
+    from: range.dateFrom,
+    to: range.dateTo,
+    salesCount,
+    periodDays: range.periodDays,
+  };
 }

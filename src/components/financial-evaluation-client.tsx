@@ -10,13 +10,21 @@ import {
   useRef,
   useState,
 } from "react";
-import { Calculator, ExternalLink, RefreshCw } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Calculator,
+  ExternalLink,
+  RefreshCw,
+} from "lucide-react";
 import {
   ItemListSearch,
   itemListSearchEmptyMessage,
 } from "@/components/item-list-search";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
   MaskedMoneyField,
   MaskedPercentField,
@@ -46,14 +54,61 @@ import {
 import { WholesaleReductionSettingsCard } from "@/components/wholesale-reduction-settings-card";
 import { cn } from "@/lib/utils";
 
+type EvaluationMode = "current" | "period";
+
 type ApiResponse = {
   items: FinancialEvaluationRow[];
   wholesaleReductions: WholesaleReductionSettings;
+  mode?: EvaluationMode;
+  from?: string;
+  to?: string;
+  salesCount?: number;
+  periodDays?: number;
 };
+
+type SortKey = "product" | "price" | "margin" | "afterAds";
+type SortDir = "asc" | "desc";
 
 const TARGET_MARGIN_STORAGE_KEY = "lucratividade-target-margin";
 const MARGIN_BASIS_STORAGE_KEY = "lucratividade-margin-basis";
 const DEFAULT_TARGET_MARGIN_PERCENT = 6;
+
+function todayYmdLocal(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function ymdFromLocalDate(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/** Inclusive window ending today (7 = today + 6 previous days). */
+function lastDaysYmdRange(days: 7 | 15 | 30): { from: string; to: string } {
+  const to = new Date();
+  const from = new Date(to);
+  from.setDate(from.getDate() - (days - 1));
+  return { from: ymdFromLocalDate(from), to: ymdFromLocalDate(to) };
+}
+
+function compareNullableNumber(
+  a: number | null | undefined,
+  b: number | null | undefined,
+  dir: SortDir,
+): number {
+  const aNull = a === null || a === undefined || !Number.isFinite(a);
+  const bNull = b === null || b === undefined || !Number.isFinite(b);
+  if (aNull && bNull) return 0;
+  if (aNull) return 1;
+  if (bNull) return -1;
+  const diff = (a as number) - (b as number);
+  return dir === "asc" ? diff : -diff;
+}
 
 function readStoredTargetMargin(): number {
   if (typeof window === "undefined") return DEFAULT_TARGET_MARGIN_PERCENT;
@@ -335,6 +390,46 @@ function MinPriceTableCell({
   );
 }
 
+function SortableTh({
+  label,
+  sortKey,
+  activeKey,
+  activeDir,
+  onSort,
+  className,
+  title,
+  align = "left",
+}: {
+  label: string;
+  sortKey: SortKey;
+  activeKey: SortKey;
+  activeDir: SortDir;
+  onSort: (key: SortKey) => void;
+  className?: string;
+  title?: string;
+  align?: "left" | "right";
+}) {
+  const active = activeKey === sortKey;
+  const Icon = !active ? ArrowUpDown : activeDir === "asc" ? ArrowUp : ArrowDown;
+
+  return (
+    <th className={cn(className, "cursor-pointer")} title={title}>
+      <button
+        type="button"
+        className={cn(
+          "inline-flex cursor-pointer items-center gap-1 font-medium hover:text-[var(--foreground)]",
+          align === "right" && "ml-auto flex-row-reverse",
+          active && "text-[var(--foreground)]",
+        )}
+        onClick={() => onSort(sortKey)}
+      >
+        {label}
+        <Icon className="size-3.5 shrink-0 opacity-70" aria-hidden />
+      </button>
+    </th>
+  );
+}
+
 export function FinancialEvaluationClient() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -355,9 +450,25 @@ export function FinancialEvaluationClient() {
   const [appliedMarginBasis, setAppliedMarginBasis] =
     useState<MarginBasis | null>(null);
   const initialMinPriceRefineDone = useRef(false);
+  const [evaluationMode, setEvaluationMode] =
+    useState<EvaluationMode>("current");
+  const [fromDate, setFromDate] = useState(todayYmdLocal);
+  const [toDate, setToDate] = useState(todayYmdLocal);
+  const [rangePreset, setRangePreset] = useState<"custom" | 7 | 15 | 30>(
+    "custom",
+  );
+  const [appliedFrom, setAppliedFrom] = useState<string | null>(null);
+  const [appliedTo, setAppliedTo] = useState<string | null>(null);
+  const [periodSalesCount, setPeriodSalesCount] = useState<number | null>(null);
+  const [periodDays, setPeriodDays] = useState<number | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>("product");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  const isPeriodMode = evaluationMode === "period";
 
   const minPriceStale =
     data !== null &&
+    !isPeriodMode &&
     (appliedTargetMargin !== targetMarginPercent ||
       appliedMarginBasis !== marginBasis);
 
@@ -392,43 +503,120 @@ export function FinancialEvaluationClient() {
     [data, searchQuery],
   );
 
+  const sortedItems = useMemo(() => {
+    const rows = [...filteredItems];
+    rows.sort((a, b) => {
+      if (sortKey === "product") {
+        const keyA = (a.sku ?? a.title ?? a.mlItemId).toLowerCase();
+        const keyB = (b.sku ?? b.title ?? b.mlItemId).toLowerCase();
+        const cmp = keyA.localeCompare(keyB, "pt-BR");
+        return sortDir === "asc" ? cmp : -cmp;
+      }
+      if (sortKey === "price") {
+        return compareNullableNumber(a.salePrice, b.salePrice, sortDir);
+      }
+      if (sortKey === "margin") {
+        const aVal =
+          marginBasis === "afterAds"
+            ? a.marginAfterAdsPercent
+            : a.breakdown?.marginPercent;
+        const bVal =
+          marginBasis === "afterAds"
+            ? b.marginAfterAdsPercent
+            : b.breakdown?.marginPercent;
+        return compareNullableNumber(aVal, bVal, sortDir);
+      }
+      return compareNullableNumber(
+        a.marginAfterAdsPercent,
+        b.marginAfterAdsPercent,
+        sortDir,
+      );
+    });
+    return rows;
+  }, [filteredItems, sortKey, sortDir, marginBasis]);
+
   const selectedRow = useMemo(
     () => data?.find((row) => row.mlItemId === selectedId) ?? null,
     [data, selectedId],
   );
 
-  const loadData = useCallback(async (itemIds?: string[]) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const url = new URL("/api/financial-evaluation", window.location.origin);
-      if (itemIds?.length) {
-        url.searchParams.set("itemIds", itemIds.join(","));
+  const toggleSort = useCallback(
+    (key: SortKey) => {
+      if (key === sortKey) {
+        setSortDir((prevDir) => (prevDir === "asc" ? "desc" : "asc"));
+        return;
       }
-      const res = await fetch(url.toString());
-      const json = (await res.json()) as ApiResponse | { error?: string };
-      if (!res.ok) {
-        setError(
-          (json as { error?: string }).error ??
-            "Falha ao carregar lucratividade.",
-        );
+      setSortKey(key);
+      // Numéricos: maior→menor no 1º clique; Produto: A→Z
+      setSortDir(key === "product" ? "asc" : "desc");
+    },
+    [sortKey],
+  );
+
+  const loadData = useCallback(
+    async (options?: {
+      itemIds?: string[];
+      mode?: EvaluationMode;
+      from?: string;
+      to?: string;
+      clear?: boolean;
+    }) => {
+      const mode = options?.mode ?? "current";
+      const itemIds = options?.itemIds;
+      setLoading(true);
+      setError(null);
+      if (options?.clear || mode === "period") {
+        setData(null);
+      }
+      try {
+        const url = new URL("/api/financial-evaluation", window.location.origin);
+        if (mode === "period" && options?.from && options?.to) {
+          url.searchParams.set("from", options.from);
+          url.searchParams.set("to", options.to);
+        } else if (itemIds?.length) {
+          url.searchParams.set("itemIds", itemIds.join(","));
+        }
+        const res = await fetch(url.toString());
+        const json = (await res.json()) as ApiResponse | { error?: string };
+        if (!res.ok) {
+          setError(
+            (json as { error?: string }).error ??
+              "Falha ao carregar lucratividade.",
+          );
+          return null;
+        }
+        const payload = json as ApiResponse;
+        setData(payload.items);
+        setWholesaleReductions(payload.wholesaleReductions);
+        setEvaluationMode(payload.mode ?? mode);
+        if (payload.mode === "period") {
+          setAppliedFrom(payload.from ?? options?.from ?? null);
+          setAppliedTo(payload.to ?? options?.to ?? null);
+          setPeriodSalesCount(payload.salesCount ?? null);
+          setPeriodDays(payload.periodDays ?? null);
+          setAppliedTargetMargin(null);
+          setAppliedMarginBasis(null);
+          initialMinPriceRefineDone.current = true;
+        } else {
+          setAppliedFrom(null);
+          setAppliedTo(null);
+          setPeriodSalesCount(null);
+          setPeriodDays(null);
+          if (itemIds?.length) {
+            setAppliedTargetMargin(null);
+            setAppliedMarginBasis(null);
+          }
+        }
+        return payload.items;
+      } catch {
+        setError("Falha de rede ao carregar lucratividade.");
         return null;
+      } finally {
+        setLoading(false);
       }
-      const items = (json as ApiResponse).items;
-      setData(items);
-      setWholesaleReductions((json as ApiResponse).wholesaleReductions);
-      if (itemIds?.length) {
-        setAppliedTargetMargin(null);
-        setAppliedMarginBasis(null);
-      }
-      return items;
-    } catch {
-      setError("Falha de rede ao carregar lucratividade.");
-      return null;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    },
+    [],
+  );
 
   const saveWholesaleReductions = useCallback(
     async (values: WholesaleReductionSettings) => {
@@ -509,14 +697,60 @@ export function FinancialEvaluationClient() {
   );
 
   useEffect(() => {
-    void loadData();
+    void loadData({ mode: "current" });
   }, [loadData]);
 
   useEffect(() => {
+    if (isPeriodMode) return;
     if (!data?.length || initialMinPriceRefineDone.current) return;
     initialMinPriceRefineDone.current = true;
     void refineMinPrices(data.map((row) => row.mlItemId));
-  }, [data, refineMinPrices]);
+  }, [data, refineMinPrices, isPeriodMode]);
+
+  const applyPeriod = useCallback(() => {
+    if (!fromDate || !toDate) {
+      setError("Informe as datas De e Até.");
+      return;
+    }
+    if (fromDate > toDate) {
+      setError("A data inicial não pode ser maior que a final.");
+      return;
+    }
+    setRangePreset("custom");
+    initialMinPriceRefineDone.current = true;
+    void loadData({ mode: "period", from: fromDate, to: toDate });
+  }, [fromDate, toDate, loadData]);
+
+  const applyPreset = useCallback(
+    (days: 7 | 15 | 30) => {
+      const { from, to } = lastDaysYmdRange(days);
+      setRangePreset(days);
+      setFromDate(from);
+      setToDate(to);
+      initialMinPriceRefineDone.current = true;
+      void loadData({ mode: "period", from, to });
+    },
+    [loadData],
+  );
+
+  const switchToCurrent = useCallback(() => {
+    initialMinPriceRefineDone.current = false;
+    setRangePreset("custom");
+    void (async () => {
+      const items = await loadData({ mode: "current", clear: true });
+      if (items?.length) {
+        await refineMinPrices(items.map((row) => row.mlItemId));
+      }
+    })();
+  }, [loadData, refineMinPrices]);
+
+  const tacosPeriodLabel = isPeriodMode
+    ? periodDays === 1
+      ? "deste dia"
+      : appliedFrom && appliedTo
+        ? `de ${appliedFrom} a ${appliedTo}`
+        : "deste período"
+    : "dos últimos 7 dias";
 
   return (
     <div className="space-y-6">
@@ -530,10 +764,14 @@ export function FinancialEvaluationClient() {
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0 pb-4">
           <div>
             <CardTitle className="text-lg">
-              Anúncios ativos e pausados
+              {isPeriodMode
+                ? "Margem por vendas no período"
+                : "Anúncios ativos e pausados"}
             </CardTitle>
             <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-              Clique em um anúncio para ver o detalhamento completo.
+              {isPeriodMode
+                ? "Preço médio das vendas no período; custos/impostos do cadastro atual; Pós ADS com TACOS do mesmo período. Só anúncios com venda."
+                : "Clique em um anúncio para ver o detalhamento completo."}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -550,7 +788,15 @@ export function FinancialEvaluationClient() {
               disabled={loading}
               onClick={() => {
                 void (async () => {
-                  const items = await loadData();
+                  if (isPeriodMode && appliedFrom && appliedTo) {
+                    await loadData({
+                      mode: "period",
+                      from: appliedFrom,
+                      to: appliedTo,
+                    });
+                    return;
+                  }
+                  const items = await loadData({ mode: "current" });
                   if (items?.length) {
                     await refineMinPrices(items.map((row) => row.mlItemId));
                   }
@@ -566,6 +812,106 @@ export function FinancialEvaluationClient() {
           </div>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 flex flex-wrap items-end gap-3 rounded-lg border border-[var(--border)] bg-[var(--muted)]/10 px-3 py-2">
+            <div className="flex rounded-lg border border-[var(--border)] bg-[var(--background)] p-0.5">
+              <Button
+                type="button"
+                size="sm"
+                variant={!isPeriodMode ? "default" : "ghost"}
+                className="h-8 rounded-md px-3 text-xs"
+                disabled={loading}
+                onClick={() => {
+                  if (!isPeriodMode) return;
+                  switchToCurrent();
+                }}
+              >
+                Atual
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={isPeriodMode ? "default" : "ghost"}
+                className="h-8 rounded-md px-3 text-xs"
+                disabled={loading}
+                onClick={applyPeriod}
+              >
+                Por data
+              </Button>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-[var(--muted-foreground)]">
+                Período
+              </label>
+              <DateRangePicker
+                fromYmd={fromDate}
+                toYmd={toDate}
+                disabled={loading}
+                onChange={(from, to) => {
+                  setRangePreset("custom");
+                  setFromDate(from);
+                  setToDate(to);
+                }}
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant={
+                  isPeriodMode && rangePreset === 7 ? "default" : "outline"
+                }
+                size="sm"
+                className="h-[38px]"
+                disabled={loading}
+                onClick={() => applyPreset(7)}
+              >
+                Últimos 7 dias
+              </Button>
+              <Button
+                type="button"
+                variant={
+                  isPeriodMode && rangePreset === 15 ? "default" : "outline"
+                }
+                size="sm"
+                className="h-[38px]"
+                disabled={loading}
+                onClick={() => applyPreset(15)}
+              >
+                Últimos 15 dias
+              </Button>
+              <Button
+                type="button"
+                variant={
+                  isPeriodMode && rangePreset === 30 ? "default" : "outline"
+                }
+                size="sm"
+                className="h-[38px]"
+                disabled={loading}
+                onClick={() => applyPreset(30)}
+              >
+                Últimos 30 dias
+              </Button>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              className="h-[38px]"
+              disabled={loading || !fromDate || !toDate}
+              onClick={applyPeriod}
+            >
+              Aplicar período
+            </Button>
+            {isPeriodMode && appliedFrom && appliedTo ? (
+              <p className="text-xs text-[var(--muted-foreground)]">
+                {appliedFrom === appliedTo
+                  ? `Dia ${appliedFrom}`
+                  : `${appliedFrom} → ${appliedTo}`}
+                {periodSalesCount != null
+                  ? ` · ${periodSalesCount} un. vendidas`
+                  : null}
+              </p>
+            ) : null}
+          </div>
+
           {error ? (
             <p className="text-sm text-red-600" role="alert">
               {error}
@@ -578,23 +924,34 @@ export function FinancialEvaluationClient() {
             </p>
           ) : null}
 
-          {data && filteredItems.length === 0 ? (
+          {data && sortedItems.length === 0 ? (
             <p className="text-sm text-[var(--muted-foreground)]">
-              {itemListSearchEmptyMessage(searchQuery)}
+              {isPeriodMode && !searchQuery
+                ? "Nenhuma venda paga neste período."
+                : itemListSearchEmptyMessage(searchQuery)}
             </p>
           ) : null}
 
-          {data && filteredItems.length > 0 ? (
+          {data && sortedItems.length > 0 ? (
             <>
               <div className="mb-4 flex flex-wrap items-end justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--muted)]/15 px-3 py-2">
                 <div className="min-w-0 space-y-1">
                   <p className="text-xs text-[var(--muted-foreground)]">
-                    Sugestão usa meta de{" "}
-                    <span className="font-medium text-[var(--foreground)]">
-                      {formatFinancialPercent(targetMarginPercent)}
-                    </span>{" "}
-                    ({marginBasisLabel(marginBasis)}). Pós ADS: TACOS dos
-                    últimos 7 dias.
+                    {isPeriodMode ? (
+                      <>
+                        Margem com preço médio das vendas; Pós ADS usa TACOS{" "}
+                        {tacosPeriodLabel}. Custos e impostos do cadastro atual.
+                      </>
+                    ) : (
+                      <>
+                        Sugestão usa meta de{" "}
+                        <span className="font-medium text-[var(--foreground)]">
+                          {formatFinancialPercent(targetMarginPercent)}
+                        </span>{" "}
+                        ({marginBasisLabel(marginBasis)}). Pós ADS: TACOS{" "}
+                        {tacosPeriodLabel}.
+                      </>
+                    )}
                   </p>
                   {minPriceStale ? (
                     <p className="text-xs text-amber-700 dark:text-amber-500">
@@ -650,33 +1007,35 @@ export function FinancialEvaluationClient() {
                       </Button>
                     </div>
                   </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={minPriceStale ? "default" : "outline"}
-                    className="h-[42px] gap-2"
-                    disabled={
-                      refiningMinPrices ||
-                      loading ||
-                      !data?.length ||
-                      !minPriceStale
-                    }
-                    onClick={() => {
-                      if (!data?.length) return;
-                      void refineMinPrices(data.map((row) => row.mlItemId));
-                    }}
-                  >
-                    <Calculator
-                      className={cn(
-                        "size-4",
-                        refiningMinPrices && "animate-pulse",
-                      )}
-                      aria-hidden
-                    />
-                    {refiningMinPrices
-                      ? "Consultando ML…"
-                      : "Atualizar P/ meta"}
-                  </Button>
+                  {!isPeriodMode ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={minPriceStale ? "default" : "outline"}
+                      className="h-[42px] gap-2"
+                      disabled={
+                        refiningMinPrices ||
+                        loading ||
+                        !data?.length ||
+                        !minPriceStale
+                      }
+                      onClick={() => {
+                        if (!data?.length) return;
+                        void refineMinPrices(data.map((row) => row.mlItemId));
+                      }}
+                    >
+                      <Calculator
+                        className={cn(
+                          "size-4",
+                          refiningMinPrices && "animate-pulse",
+                        )}
+                        aria-hidden
+                      />
+                      {refiningMinPrices
+                        ? "Consultando ML…"
+                        : "Atualizar P/ meta"}
+                    </Button>
+                  ) : null}
                 </div>
               </div>
 
@@ -702,7 +1061,7 @@ export function FinancialEvaluationClient() {
                         )}
                       >
                         <span className={sectionGroupPill("current")}>
-                          Situação atual
+                          {isPeriodMode ? "No período" : "Situação atual"}
                         </span>
                       </th>
                       <th
@@ -719,35 +1078,57 @@ export function FinancialEvaluationClient() {
                       </th>
                     </tr>
                     <tr className="border-b border-[var(--border)] text-left text-[var(--muted-foreground)]">
-                      <th className={cn(tableHeadPad, "font-medium")}>
-                        Produto
-                      </th>
+                      <SortableTh
+                        label="Produto"
+                        sortKey="product"
+                        activeKey={sortKey}
+                        activeDir={sortDir}
+                        onSort={toggleSort}
+                        className={cn(tableHeadPad)}
+                      />
                       <th className={cn(tableHeadPad, "font-medium")}>Tipo</th>
-                      <th
-                        className={cn(tableHeadPad, "font-medium text-right")}
-                      >
-                        Preço
-                      </th>
-                      <th
+                      <SortableTh
+                        label="Preço"
+                        sortKey="price"
+                        activeKey={sortKey}
+                        activeDir={sortDir}
+                        onSort={toggleSort}
+                        className={cn(tableHeadPad, "text-right")}
+                        align="right"
+                        title={
+                          isPeriodMode
+                            ? "Preço médio ponderado das vendas no período"
+                            : undefined
+                        }
+                      />
+                      <SortableTh
+                        label="Margem"
+                        sortKey="margin"
+                        activeKey={sortKey}
+                        activeDir={sortDir}
+                        onSort={toggleSort}
                         className={cn(
                           currentSectionClass,
                           tableHeadPad,
-                          "font-medium text-right",
+                          "text-right",
                         )}
+                        align="right"
                         title="Margem de contribuição (% em destaque, R$ abaixo)"
-                      >
-                        Margem
-                      </th>
-                      <th
+                      />
+                      <SortableTh
+                        label="Pós ADS"
+                        sortKey="afterAds"
+                        activeKey={sortKey}
+                        activeDir={sortDir}
+                        onSort={toggleSort}
                         className={cn(
                           currentSectionClass,
                           tableHeadPad,
-                          "font-medium text-right",
+                          "text-right",
                         )}
-                        title="Margem de contribuição menos TACOS (últimos 7 dias)"
-                      >
-                        Pós ADS
-                      </th>
+                        align="right"
+                        title={`Margem de contribuição menos TACOS (${tacosPeriodLabel})`}
+                      />
                       <th
                         className={cn(
                           decisionSectionClass,
@@ -761,7 +1142,7 @@ export function FinancialEvaluationClient() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredItems.map((row) => {
+                    {sortedItems.map((row) => {
                       const marginValue = row.breakdown?.marginValue ?? null;
                       const marginPercent =
                         row.breakdown?.marginPercent ?? null;
@@ -838,7 +1219,7 @@ export function FinancialEvaluationClient() {
                               row={row}
                               targetMarginPercent={targetMarginPercent}
                               marginBasis={marginBasis}
-                              refining={refiningMinPrices}
+                              refining={refiningMinPrices && !isPeriodMode}
                               showProportionalWhileStale={minPriceStale}
                             />
                           </td>

@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { ensureCompanySettings } from "@/lib/product-data";
-import { loadFinancialEvaluationRows } from "@/lib/financial-evaluation-data";
+import { calendarYmdRangeToUtc } from "@/lib/financial-evaluation-period";
+import {
+  loadFinancialEvaluationRows,
+  loadFinancialEvaluationRowsForPeriod,
+} from "@/lib/financial-evaluation-data";
 import {
   getValidAccessToken,
   readSession,
@@ -34,7 +38,45 @@ export async function GET(request: NextRequest) {
       ? marginBasisParam
       : undefined;
 
+  const fromParam = request.nextUrl.searchParams.get("from");
+  const toParam = request.nextUrl.searchParams.get("to");
+  const hasPeriod = Boolean(fromParam || toParam);
+
+  if (hasPeriod) {
+    if (!fromParam || !toParam || !calendarYmdRangeToUtc(fromParam, toParam)) {
+      return NextResponse.json(
+        { error: "Parâmetro from/to inválido. Use YYYY-MM-DD." },
+        { status: 400 },
+      );
+    }
+  }
+
   try {
+    const companySettingsPromise = ensureCompanySettings();
+
+    if (hasPeriod && fromParam && toParam) {
+      const [periodResult, companySettings] = await Promise.all([
+        loadFinancialEvaluationRowsForPeriod(token, userId, fromParam, toParam),
+        companySettingsPromise,
+      ]);
+      return NextResponse.json({
+        items: periodResult.items,
+        mode: "period" as const,
+        from: periodResult.from,
+        to: periodResult.to,
+        salesCount: periodResult.salesCount,
+        periodDays: periodResult.periodDays,
+        wholesaleReductions: {
+          level1ReductionPercent: companySettings.level1ReductionPercent,
+          level2ReductionPercent: companySettings.level2ReductionPercent,
+          level3ReductionPercent: companySettings.level3ReductionPercent,
+          level1MinPurchaseUnit: companySettings.level1MinPurchaseUnit,
+          level2MinPurchaseUnit: companySettings.level2MinPurchaseUnit,
+          level3MinPurchaseUnit: companySettings.level3MinPurchaseUnit,
+        },
+      });
+    }
+
     const [items, companySettings] = await Promise.all([
       loadFinancialEvaluationRows(token, userId, {
         itemIds,
@@ -45,10 +87,11 @@ export async function GET(request: NextRequest) {
             : undefined,
         marginBasis,
       }),
-      ensureCompanySettings(),
+      companySettingsPromise,
     ]);
     return NextResponse.json({
       items,
+      mode: "current" as const,
       wholesaleReductions: {
         level1ReductionPercent: companySettings.level1ReductionPercent,
         level2ReductionPercent: companySettings.level2ReductionPercent,

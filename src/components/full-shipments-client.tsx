@@ -6,6 +6,7 @@ import { FullShipmentImportOverlay } from "@/components/full-shipment-import-ove
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { DatePicker } from "@/components/ui/date-picker";
 import { FormSelect } from "@/components/ui/form-select";
 import { readApiError } from "@/lib/api-client-error";
 import {
@@ -757,18 +758,13 @@ function ShipmentModal({
 
         <div className="mt-4 space-y-4">
           <div>
-            <label
-              htmlFor="shipment-date"
-              className="block text-sm font-medium text-[var(--foreground)]"
-            >
-              Data do envio
-            </label>
-            <input
+            <DatePicker
               id="shipment-date"
-              type="date"
-              value={form.shippedAt}
-              onChange={(e) => onChange({ ...form, shippedAt: e.target.value })}
-              className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+              label="Data do envio"
+              labelClassName="text-sm font-medium text-[var(--foreground)]"
+              valueYmd={form.shippedAt}
+              onChange={(ymd) => onChange({ ...form, shippedAt: ymd })}
+              buttonClassName="mt-0 h-10 shadow-sm"
             />
           </div>
 

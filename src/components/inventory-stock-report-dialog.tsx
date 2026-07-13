@@ -13,6 +13,7 @@ import type { InventoryRow } from "@/components/inventory-stock-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { DatePicker } from "@/components/ui/date-picker";
 import { FormInput } from "@/components/ui/form-input";
 import { FormSelect } from "@/components/ui/form-select";
 import { Switch } from "@/components/ui/switch";
@@ -417,11 +418,10 @@ export function InventoryStockReportDialog({
 
         <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
           <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <FormInput
+            <DatePicker
               label="Data do saldo"
-              type="date"
-              value={snapshotDateInput}
-              onChange={(e) => setSnapshotDateInput(e.target.value)}
+              valueYmd={snapshotDateInput}
+              onChange={setSnapshotDateInput}
             />
             <FormInput
               label="Empresa"
