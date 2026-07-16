@@ -91,7 +91,7 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
     items: [
       {
         href: "/dashboard/envios-full",
-        label: "Envios Full",
+        label: "Relatório de Envios",
         description: "Custo de coleta ao Full por unidade enviada",
         icon: Truck,
       },
