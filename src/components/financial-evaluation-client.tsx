@@ -410,7 +410,11 @@ function SortableTh({
   align?: "left" | "right";
 }) {
   const active = activeKey === sortKey;
-  const Icon = !active ? ArrowUpDown : activeDir === "asc" ? ArrowUp : ArrowDown;
+  const Icon = !active
+    ? ArrowUpDown
+    : activeDir === "asc"
+      ? ArrowUp
+      : ArrowDown;
 
   return (
     <th className={cn(className, "cursor-pointer")} title={title}>
@@ -608,7 +612,10 @@ export function FinancialEvaluationClient() {
         setData(null);
       }
       try {
-        const url = new URL("/api/financial-evaluation", window.location.origin);
+        const url = new URL(
+          "/api/financial-evaluation",
+          window.location.origin,
+        );
         if (mode === "period" && options?.from && options?.to) {
           url.searchParams.set("from", options.from);
           url.searchParams.set("to", options.to);
@@ -991,6 +998,11 @@ export function FinancialEvaluationClient() {
                   · média entre {overallAverages.listingCount} anúncio
                   {overallAverages.listingCount === 1 ? "" : "s"}
                 </span>
+              </p>
+              <p className="mt-1 text-[11px] leading-snug text-[var(--muted-foreground)]">
+                {isPeriodMode
+                  ? "Como calculamos: somamos o valor de cada venda do período e dividimos pelas unidades vendidas → preço médio por anúncio; com esse preço calculamos a margem. No topo, média simples entre anúncios (cada um com o mesmo peso)."
+                  : "Como calculamos: média simples das margens dos anúncios listados (mesmo peso cada um, sem ponderar por volume de vendas)."}
               </p>
             </div>
           ) : null}
