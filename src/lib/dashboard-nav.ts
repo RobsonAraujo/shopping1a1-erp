@@ -115,17 +115,24 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
         icon: Lightbulb,
       },
       {
-        href: "/dashboard/catalog-report",
-        label: "Catálogo",
-        description: "Veja mudanças de competição no catálogo",
-        icon: ChartNoAxesColumn,
-      },
-      {
         href: "/dashboard/lucratividade",
         label: "Lucratividade",
         description: "Margem de contribuição por anúncio",
         icon: TrendingUp,
       },
+      {
+        href: "/dashboard/catalog-report",
+        label: "Catálogo",
+        description: "Veja mudanças de competição no catálogo",
+        icon: ChartNoAxesColumn,
+      },
+    ],
+  },
+  {
+    id: "financeiro",
+    label: "Financeiro",
+    kind: "dropdown",
+    items: [
       {
         href: "/dashboard/dre",
         label: "DRE",
