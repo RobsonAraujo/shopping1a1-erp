@@ -41,6 +41,7 @@ function listingUpsertData(item: ItemBody) {
     catalogListing: item.catalog_listing ?? null,
     lastSyncedAt: new Date(),
     activeOnMl,
+    mlStatus: item.status ?? null,
   };
 }
 

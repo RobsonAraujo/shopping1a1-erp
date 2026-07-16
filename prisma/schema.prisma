@@ -18,6 +18,8 @@ model Listing {
   catalogListing Boolean?  @map("catalog_listing")
   lastSyncedAt   DateTime? @map("last_synced_at")
   activeOnMl     Boolean   @default(true) @map("active_on_ml")
+  /// Status ML do anúncio (`active`, `paused`, …); preenchido no poll/sync.
+  mlStatus       String?   @map("ml_status")
   /// Último status de competição confirmado pelo poll (mesmo sem novo snapshot).
   catalogStatus       CatalogCompetitionStatus? @map("catalog_status")
   catalogSellerPrice  Decimal?                  @map("catalog_seller_price") @db.Decimal(18, 2)

@@ -26,6 +26,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
+  ListingStatusBadge,
+  listingRowMutedClass,
+} from "@/components/listing-status-badge";
+import {
+  ShowPausedListingsSwitch,
+  countPausedListings,
+  filterListingsByPausedVisibility,
+} from "@/components/show-paused-listings-switch";
+import {
   MaskedMoneyField,
   MaskedPercentField,
 } from "@/components/financial-cost-input-fields";
@@ -467,6 +476,7 @@ export function FinancialEvaluationClient() {
   const [periodDays, setPeriodDays] = useState<number | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("product");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [showPaused, setShowPaused] = useState(false);
 
   const isPeriodMode = evaluationMode === "period";
 
@@ -495,16 +505,31 @@ export function FinancialEvaluationClient() {
     }
   }, [marginBasis]);
 
-  const filteredItems = useMemo(
+  const statusVisibleItems = useMemo(
     () =>
       data
-        ? filterByItemListSearch(data, searchQuery, (row) => ({
-            sku: row.sku,
-            title: row.title,
-            mlItemId: row.mlItemId,
-          }))
+        ? filterListingsByPausedVisibility(
+            data,
+            showPaused,
+            (row) => row.status,
+          )
         : [],
-    [data, searchQuery],
+    [data, showPaused],
+  );
+
+  const pausedCount = useMemo(
+    () => (data ? countPausedListings(data, (row) => row.status) : 0),
+    [data],
+  );
+
+  const filteredItems = useMemo(
+    () =>
+      filterByItemListSearch(statusVisibleItems, searchQuery, (row) => ({
+        sku: row.sku,
+        title: row.title,
+        mlItemId: row.mlItemId,
+      })),
+    [statusVisibleItems, searchQuery],
   );
 
   const sortedItems = useMemo(() => {
@@ -536,7 +561,7 @@ export function FinancialEvaluationClient() {
   }, [filteredItems, sortKey, sortDir]);
 
   const overallAverages = useMemo(() => {
-    if (!data?.length) {
+    if (!statusVisibleItems.length) {
       return {
         contributionPercent: null as number | null,
         afterAdsPercent: null as number | null,
@@ -549,7 +574,7 @@ export function FinancialEvaluationClient() {
     let afterAdsSum = 0;
     let afterAdsCount = 0;
 
-    for (const row of data) {
+    for (const row of statusVisibleItems) {
       const contribution = row.breakdown?.marginPercent;
       if (contribution !== null && contribution !== undefined) {
         contributionSum += contribution;
@@ -574,9 +599,9 @@ export function FinancialEvaluationClient() {
         afterAdsCount > 0
           ? Math.round((afterAdsSum / afterAdsCount) * 100) / 100
           : null,
-      listingCount: data.length,
+      listingCount: statusVisibleItems.length,
     };
-  }, [data]);
+  }, [statusVisibleItems]);
 
   const selectedRow = useMemo(
     () => data?.find((row) => row.mlItemId === selectedId) ?? null,
@@ -812,15 +837,21 @@ export function FinancialEvaluationClient() {
             <CardTitle className="text-lg">
               {isPeriodMode
                 ? "Margem por vendas no período"
-                : "Anúncios ativos e pausados"}
+                : "Anúncios operacionais"}
             </CardTitle>
             <p className="mt-1 text-xs text-[var(--muted-foreground)]">
               {isPeriodMode
                 ? "Preço médio das vendas no período; custos/impostos do cadastro atual; Pós ADS com TACOS do mesmo período. Só anúncios com venda."
-                : "Clique em um anúncio para ver o detalhamento completo."}
+                : "Clique em um anúncio para ver o detalhamento completo. Pausados ficam ocultos por padrão."}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <ShowPausedListingsSwitch
+              checked={showPaused}
+              onCheckedChange={setShowPaused}
+              pausedCount={pausedCount}
+              disabled={loading || !data?.length}
+            />
             <ItemListSearch
               value={searchQuery}
               onChange={setSearchQuery}
@@ -1252,7 +1283,10 @@ export function FinancialEvaluationClient() {
                       return (
                         <tr
                           key={row.mlItemId}
-                          className="cursor-pointer border-b border-[var(--border)] transition-colors hover:bg-[var(--muted)]/30"
+                          className={cn(
+                            "cursor-pointer border-b border-[var(--border)] transition-colors hover:bg-[var(--muted)]/30",
+                            listingRowMutedClass(row.status, 0, 0),
+                          )}
                           onClick={() => setSelectedId(row.mlItemId)}
                         >
                           <td className={tableCellPad}>
@@ -1269,9 +1303,16 @@ export function FinancialEvaluationClient() {
                                 <div className="size-10 rounded-md bg-[var(--muted)]" />
                               )}
                               <div className="min-w-0">
-                                <p className="truncate font-medium">
-                                  {row.sku ?? row.title}
-                                </p>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="truncate font-medium">
+                                    {row.sku ?? row.title}
+                                  </p>
+                                  <ListingStatusBadge
+                                    status={row.status}
+                                    mlStock={0}
+                                    warehouseStock={0}
+                                  />
+                                </div>
                                 <p className="truncate text-xs text-[var(--muted-foreground)]">
                                   {row.mlItemId}
                                 </p>

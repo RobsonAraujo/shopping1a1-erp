@@ -15,6 +15,11 @@ import {
   ListingStatusBadge,
   listingRowMutedClass,
 } from "@/components/listing-status-badge";
+import {
+  ShowPausedListingsSwitch,
+  countPausedListings,
+  filterListingsByPausedVisibility,
+} from "@/components/show-paused-listings-switch";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -180,16 +185,28 @@ export function InventoryStockTable({
 }: InventoryStockTableProps) {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
+  const [showPaused, setShowPaused] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [settingsId, setSettingsId] = useState<string | null>(null);
+
+  const statusVisibleRows = useMemo(
+    () =>
+      filterListingsByPausedVisibility(rows, showPaused, (row) => row.mlStatus),
+    [rows, showPaused],
+  );
+  const pausedCount = useMemo(
+    () => countPausedListings(rows, (row) => row.mlStatus),
+    [rows],
+  );
+
   const filteredRows = useMemo(
     () =>
-      filterByItemListSearch(rows, searchQuery, (row) => ({
+      filterByItemListSearch(statusVisibleRows, searchQuery, (row) => ({
         sku: row.sku,
         title: row.title,
         mlItemId: row.mlItemId,
       })),
-    [rows, searchQuery],
+    [statusVisibleRows, searchQuery],
   );
   const editing = editId
     ? (rows.find((r) => r.mlItemId === editId) ?? null)
@@ -207,15 +224,21 @@ export function InventoryStockTable({
       <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <InventoryStockReportLauncher
-            rows={rows}
+            rows={statusVisibleRows}
             productsBySku={productsBySku}
+          />
+          <ShowPausedListingsSwitch
+            checked={showPaused}
+            onCheckedChange={setShowPaused}
+            pausedCount={pausedCount}
+            disabled={rows.length === 0}
           />
         </div>
         <ItemListSearch
           value={searchQuery}
           onChange={setSearchQuery}
           filteredCount={filteredRows.length}
-          totalCount={rows.length}
+          totalCount={statusVisibleRows.length}
         />
         <Card className="overflow-hidden p-0 shadow-sm">
           <div className="overflow-x-auto">

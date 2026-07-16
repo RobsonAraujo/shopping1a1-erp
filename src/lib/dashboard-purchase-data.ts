@@ -14,7 +14,6 @@ import {
 } from "@/lib/purchase-analysis";
 import type {
   PurchaseAnalysisItemRow,
-  SupplierSummary,
 } from "@/lib/purchase-analysis-rows";
 import { prisma } from "@/lib/db";
 import {
@@ -28,6 +27,7 @@ export type {
   PurchaseAnalysisItemRow,
   SupplierSummary,
 } from "@/lib/purchase-analysis-rows";
+export { buildSupplierSummaries } from "@/lib/purchase-analysis-rows";
 export {
   filterRowsBySupplier,
   mergeSupplierRevenueIntoRows,
@@ -283,82 +283,5 @@ export async function loadDashboardPurchaseData(
     rows,
     needsPurchase,
   };
-}
-
-export function buildSupplierSummaries(
-  rows: PurchaseAnalysisItemRow[],
-  needsPurchase: (row: PurchaseAnalysisItemRow) => boolean,
-): SupplierSummary[] {
-  const bySupplier = new Map<string, PurchaseAnalysisItemRow[]>();
-  for (const row of rows) {
-    const group = bySupplier.get(row.supplier) ?? [];
-    group.push(row);
-    bySupplier.set(row.supplier, group);
-  }
-
-  type SortableSummary = SupplierSummary & {
-    hasActiveAlert: boolean;
-    urgentForSort: number;
-  };
-
-  const sortable: SortableSummary[] = [...bySupplier.entries()].map(
-    ([supplier, supplierRows]) => {
-      const urgentRows = supplierRows.filter(
-        (r) => needsPurchase(r) && r.analysis.purchaseStatus === "urgente",
-      );
-      const highRotation = supplierRows.filter(
-        (r) => r.analysis.performanceTier === "alta",
-      );
-      const noSales = supplierRows.filter(
-        (r) => r.analysis.performanceTier === "zero",
-      );
-      const suggestedUnitsTotal = supplierRows
-        .filter((r) => r.analysis.recommendation === "comprar")
-        .reduce((sum, r) => sum + r.analysis.suggestedQty, 0);
-
-      return {
-        supplier,
-        totalProducts: supplierRows.length,
-        urgentCount: urgentRows.length,
-        highRotationCount: highRotation.length,
-        noSalesCount: noSales.length,
-        suggestedUnitsTotal,
-        hasActiveAlert: supplierRows.some(needsPurchase),
-        urgentForSort: urgentRows.length,
-      };
-    },
-  );
-
-  sortable.sort((a, b) => {
-    if (a.hasActiveAlert !== b.hasActiveAlert) {
-      return a.hasActiveAlert ? -1 : 1;
-    }
-    if (b.urgentForSort !== a.urgentForSort) {
-      return b.urgentForSort - a.urgentForSort;
-    }
-    return a.supplier.localeCompare(b.supplier, "pt-BR", {
-      sensitivity: "base",
-    });
-  });
-
-  return sortable.map(
-    ({
-      supplier,
-      totalProducts,
-      urgentCount,
-      highRotationCount,
-      noSalesCount,
-      suggestedUnitsTotal,
-      hasActiveAlert,
-    }) => ({
-      supplier,
-      totalProducts,
-      urgentCount,
-      highRotationCount,
-      noSalesCount,
-      suggestedUnitsTotal,
-      hasActiveAlert,
-    }),
-  );
 }
 

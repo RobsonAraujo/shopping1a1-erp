@@ -17,6 +17,7 @@ import {
   computePurchaseAnalysis,
   supplierPathSegment,
 } from "@/lib/purchase-analysis";
+import { buildSupplierSummaries } from "@/lib/purchase-analysis-rows";
 import {
   PurchaseCoverageBufferControl,
   usePurchaseCoverageBufferDays,
@@ -25,6 +26,11 @@ import {
   ItemListSearch,
   itemListSearchEmptyMessage,
 } from "@/components/item-list-search";
+import {
+  ShowPausedListingsSwitch,
+  filterListingsByPausedVisibility,
+  isPausedListingStatus,
+} from "@/components/show-paused-listings-switch";
 import { normalizeItemListSearchQuery } from "@/lib/item-list-search";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -108,11 +114,45 @@ function SupplierMetric({
 }
 
 export function ComprasSupplierGrid({
-  summaries,
+  summaries: _summaries,
   rows,
 }: ComprasSupplierGridProps) {
   const { bufferDays, setBufferDays } = usePurchaseCoverageBufferDays();
   const [searchQuery, setSearchQuery] = useState("");
+  const [showPaused, setShowPaused] = useState(false);
+
+  const visibleRows = useMemo(
+    () =>
+      filterListingsByPausedVisibility(
+        rows,
+        showPaused,
+        (row) => row.item.status,
+      ),
+    [rows, showPaused],
+  );
+  const additionalPausedSupplierCount = useMemo(() => {
+    const suppliersWithActive = new Set<string>();
+    const suppliersWithAny = new Set<string>();
+    for (const row of rows) {
+      suppliersWithAny.add(row.supplier);
+      if (!isPausedListingStatus(row.item.status)) {
+        suppliersWithActive.add(row.supplier);
+      }
+    }
+    let extra = 0;
+    for (const supplier of suppliersWithAny) {
+      if (!suppliersWithActive.has(supplier)) extra += 1;
+    }
+    return extra;
+  }, [rows]);
+  const summaries = useMemo(
+    () =>
+      buildSupplierSummaries(
+        visibleRows,
+        (row) => row.plan.needsPurchaseAttention,
+      ),
+    [visibleRows],
+  );
 
   const filteredSummaries = useMemo(() => {
     const normalized = normalizeItemListSearchQuery(searchQuery);
@@ -125,14 +165,16 @@ export function ComprasSupplierGrid({
   const suggestedBySupplier = useMemo(() => {
     const map = new Map<string, number>();
     for (const summary of summaries) {
-      const supplierRows = rows.filter((r) => r.supplier === summary.supplier);
+      const supplierRows = visibleRows.filter(
+        (r) => r.supplier === summary.supplier,
+      );
       map.set(
         summary.supplier,
         suggestedUnitsForSupplier(supplierRows, bufferDays),
       );
     }
     return map;
-  }, [summaries, rows, bufferDays]);
+  }, [summaries, visibleRows, bufferDays]);
 
   const overview = useMemo(() => {
     let totalProducts = 0;
@@ -161,7 +203,7 @@ export function ComprasSupplierGrid({
     <div className="space-y-8">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <OverviewStat label="Fornecedores" value={summaries.length} />
-        <OverviewStat label="Produtos ativos" value={overview.totalProducts} />
+        <OverviewStat label="Produtos" value={overview.totalProducts} />
         <OverviewStat
           label="Á comprar (urgente)"
           value={overview.totalUrgent}
@@ -175,13 +217,21 @@ export function ComprasSupplierGrid({
       </div>
 
       <section className="space-y-3">
-        <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-            Parâmetros
-          </h2>
-          <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-            Ajuste o buffer de estoque — vale para todos os fornecedores.
-          </p>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+              Parâmetros
+            </h2>
+            <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+              Ajuste o buffer de estoque — vale para todos os fornecedores.
+            </p>
+          </div>
+          <ShowPausedListingsSwitch
+            checked={showPaused}
+            onCheckedChange={setShowPaused}
+            pausedCount={additionalPausedSupplierCount}
+            disabled={rows.length === 0}
+          />
         </div>
         <PurchaseCoverageBufferControl
           bufferDays={bufferDays}

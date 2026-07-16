@@ -21,6 +21,7 @@ export async function GET() {
           titleSnapshot: true,
           skuSnapshot: true,
           imageUrlSnapshot: true,
+          mlStatus: true,
           catalogStatus: true,
           catalogSellerPrice: true,
           catalogPriceToWin: true,
@@ -36,6 +37,7 @@ export async function GET() {
         titleSnapshot: listing.titleSnapshot,
         skuSnapshot: listing.skuSnapshot,
         imageUrlSnapshot: listing.imageUrlSnapshot,
+        mlStatus: listing.mlStatus,
         catalogStatus: listing.catalogStatus,
         catalogSellerPrice: listing.catalogSellerPrice
           ? Number(listing.catalogSellerPrice)

@@ -131,6 +131,7 @@ export async function pollCatalogCompetitionForSeller(
             activeOnMl: item
               ? item.status === "active" || item.status === "paused"
               : true,
+            mlStatus: item?.status ?? null,
             lastSyncedAt: polledAt,
             catalogStatus: status,
             catalogSellerPrice: decimalOrNull(sellerPrice),
@@ -145,6 +146,7 @@ export async function pollCatalogCompetitionForSeller(
             activeOnMl: item
               ? item.status === "active" || item.status === "paused"
               : undefined,
+            mlStatus: item?.status ?? undefined,
             lastSyncedAt: polledAt,
             catalogStatus: status,
             catalogSellerPrice: decimalOrNull(sellerPrice),

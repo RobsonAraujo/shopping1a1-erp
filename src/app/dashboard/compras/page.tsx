@@ -70,8 +70,8 @@ export default async function ComprasPage() {
             Compras
           </h1>
           <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-[var(--muted-foreground)]">
-            Análise por fornecedor e kanban de reposição. Inclui anúncios
-            pausados no ML (ex.: sem estoque).
+            Análise por fornecedor e kanban de reposição. Pausados ficam ocultos
+            por padrão.
           </p>
         </div>
       </header>

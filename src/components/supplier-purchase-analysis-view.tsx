@@ -17,6 +17,11 @@ import {
   ItemListSearch,
   itemListSearchEmptyMessage,
 } from "@/components/item-list-search";
+import {
+  ShowPausedListingsSwitch,
+  countPausedListings,
+  filterListingsByPausedVisibility,
+} from "@/components/show-paused-listings-switch";
 import { SupplierPurchaseAnalysisTable } from "@/components/supplier-purchase-analysis-table";
 import { Card, CardContent } from "@/components/ui/card";
 import { filterByItemListSearch } from "@/lib/item-list-search";
@@ -83,6 +88,7 @@ export function SupplierPurchaseAnalysisView({
 }: SupplierPurchaseAnalysisViewProps) {
   const { bufferDays, setBufferDays } = usePurchaseCoverageBufferDays();
   const [searchQuery, setSearchQuery] = useState("");
+  const [showPaused, setShowPaused] = useState(false);
   const [fetchByKey, setFetchByKey] = useState<
     Map<string, Exclude<RevenueLoadState, { status: "loading" }>>
   >(() => new Map());
@@ -193,27 +199,41 @@ export function SupplierPurchaseAnalysisView({
     [baseRows, bufferDays],
   );
 
+  const statusVisibleRows = useMemo(
+    () =>
+      filterListingsByPausedVisibility(
+        computedRows,
+        showPaused,
+        (row) => row.item.status,
+      ),
+    [computedRows, showPaused],
+  );
+  const pausedCount = useMemo(
+    () => countPausedListings(computedRows, (row) => row.item.status),
+    [computedRows],
+  );
+
   const filteredRows = useMemo(
     () =>
-      filterByItemListSearch(computedRows, searchQuery, (row) => ({
+      filterByItemListSearch(statusVisibleRows, searchQuery, (row) => ({
         sku: row.sku,
         title: row.item.title,
         mlItemId: row.item.id,
         extra: [row.categoryName, row.categoryPath],
       })),
-    [computedRows, searchQuery],
+    [statusVisibleRows, searchQuery],
   );
 
-  const urgentCount = computedRows.filter(
+  const urgentCount = statusVisibleRows.filter(
     (r) => r.analysis.purchaseStatus === "urgente",
   ).length;
-  const highRotationCount = computedRows.filter(
+  const highRotationCount = statusVisibleRows.filter(
     (r) => r.analysis.performanceTier === "alta",
   ).length;
-  const noSalesCount = computedRows.filter(
+  const noSalesCount = statusVisibleRows.filter(
     (r) => r.analysis.performanceTier === "zero",
   ).length;
-  const suggestedUnitsTotal = computedRows
+  const suggestedUnitsTotal = statusVisibleRows
     .filter((r) => r.analysis.recommendation === "comprar")
     .reduce((sum, r) => sum + r.analysis.suggestedQty, 0);
 
@@ -224,10 +244,18 @@ export function SupplierPurchaseAnalysisView({
 
   return (
     <div className="space-y-6">
-      <PurchaseCoverageBufferControl
-        bufferDays={bufferDays}
-        onBufferDaysChange={setBufferDays}
-      />
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <PurchaseCoverageBufferControl
+          bufferDays={bufferDays}
+          onBufferDaysChange={setBufferDays}
+        />
+        <ShowPausedListingsSwitch
+          checked={showPaused}
+          onCheckedChange={setShowPaused}
+          pausedCount={pausedCount}
+          disabled={computedRows.length === 0}
+        />
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
@@ -318,7 +346,7 @@ export function SupplierPurchaseAnalysisView({
         value={searchQuery}
         onChange={setSearchQuery}
         filteredCount={filteredRows.length}
-        totalCount={computedRows.length}
+        totalCount={statusVisibleRows.length}
       />
 
       <SupplierPurchaseAnalysisTable

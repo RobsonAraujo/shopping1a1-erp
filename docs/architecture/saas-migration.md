@@ -261,6 +261,17 @@ Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templ
 - **Webhook:** resolve seller por `user_id`; sem org
 - **Ação futura:** cron por org; webhook → `OrganizationMlSeller`
 
+### Listing `mlStatus` (filtro pausados no catálogo) — 2026-07-16
+
+- **Tabelas novas/alteradas:** `listings.ml_status` (String opcional)
+- **Precisa `organizationId`?** **sim** — mesmo escopo de `listings` (hoje global)
+- **APIs afetadas:** `GET /api/reports/catalog-competition`; poll/webhook/inventory upserts gravam `mlStatus`
+- **Assume singleton?** **sim** — `listings` sem org/seller no DB
+- **Cron/background:** poll de catálogo preenche o campo
+- **Dados globais vs por org:** status ML do anúncio; no SaaS fica por org junto com listing
+- **Código já tenant-ready?** não — falta `organizationId` em `listings`
+- **Ação futura na migração:** filtrar listings por org; não criar singleton
+
 ### Push notifications — baseline
 
 - **Tabelas:** `push_subscriptions`

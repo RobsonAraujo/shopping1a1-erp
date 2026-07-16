@@ -376,12 +376,19 @@ export async function POST(request: NextRequest) {
         mlItemId: itemId,
         titleSnapshot: itemDetails?.title ?? null,
         catalogListing: true,
-        activeOnMl: true,
+        activeOnMl: itemDetails
+          ? itemDetails.status === "active" || itemDetails.status === "paused"
+          : true,
+        mlStatus: itemDetails?.status ?? null,
         lastSyncedAt: new Date(),
       },
       update: {
         titleSnapshot: itemDetails?.title ?? undefined,
         catalogListing: true,
+        activeOnMl: itemDetails
+          ? itemDetails.status === "active" || itemDetails.status === "paused"
+          : undefined,
+        mlStatus: itemDetails?.status ?? undefined,
         lastSyncedAt: new Date(),
       },
     });

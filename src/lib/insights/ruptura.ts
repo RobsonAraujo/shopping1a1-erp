@@ -3,6 +3,7 @@ import type { RupturaRow } from "./types";
 
 export function buildRupturaRows(rows: PurchaseAnalysisItemRow[]): RupturaRow[] {
   return rows
+    .filter((row) => row.item.status === "active")
     .filter((row) => {
       const { coverageDays } = row.analysis;
       if (coverageDays === null) return false;
