@@ -53,13 +53,10 @@ const FULL_STATUS_ORDER: ReplenishmentStatus[] = [
   "completed",
 ];
 
-export const PURCHASE_STATUS_LABELS: Record<
-  ReplenishmentStatus,
-  string
-> = {
+export const PURCHASE_STATUS_LABELS: Record<ReplenishmentStatus, string> = {
   attention: "Entrada",
   analyzing: "Analisando",
-  quoted: "Aguardando orçamento",
+  quoted: "Em Cotação",
   ordered: "Comprado",
   scheduled: "Agendado",
   collected: "Coletado",
@@ -99,8 +96,7 @@ export function nextStatusForKind(
   status: ReplenishmentStatus,
 ): ReplenishmentStatus | null {
   if (status === "completed") return null;
-  const order =
-    kind === "purchase" ? PURCHASE_STATUS_ORDER : FULL_STATUS_ORDER;
+  const order = kind === "purchase" ? PURCHASE_STATUS_ORDER : FULL_STATUS_ORDER;
   const index = order.indexOf(status);
   if (index < 0 || index >= order.length - 1) return null;
   return order[index + 1] ?? null;
@@ -112,10 +108,7 @@ export function replenishmentSnapshotFromCycle(
     "completedMlQty" | "completedWarehouseQty" | "completedLeadTimeDays"
   >,
 ): ReplenishmentSnapshot | null {
-  if (
-    cycle.completedMlQty === null ||
-    cycle.completedWarehouseQty === null
-  ) {
+  if (cycle.completedMlQty === null || cycle.completedWarehouseQty === null) {
     return null;
   }
   return {

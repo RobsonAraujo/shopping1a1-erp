@@ -73,15 +73,22 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
       {
         href: "/dashboard/compras",
         label: "Compras",
-        description: "Analise reposição por fornecedor",
+        description: "Análise por fornecedor e kanban de reposição",
         icon: ShoppingCart,
       },
       {
-        href: "/dashboard/operacoes",
-        label: "Operações",
-        description: "Fluxo de compra, galpão e Full",
-        icon: Kanban,
+        href: "/dashboard/produtos",
+        label: "Meus produtos",
+        description: "Cadastro fiscal e custo por SKU",
+        icon: Boxes,
       },
+    ],
+  },
+  {
+    id: "full",
+    label: "Full",
+    kind: "dropdown",
+    items: [
       {
         href: "/dashboard/envios-full",
         label: "Envios Full",
@@ -89,10 +96,10 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
         icon: Truck,
       },
       {
-        href: "/dashboard/produtos",
-        label: "Meus produtos",
-        description: "Cadastro fiscal e custo por SKU",
-        icon: Boxes,
+        href: "/dashboard/operacoes-full",
+        label: "Operações Full",
+        description: "Kanban de agendamento e coleta Full",
+        icon: Kanban,
       },
     ],
   },

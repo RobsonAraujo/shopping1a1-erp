@@ -358,7 +358,15 @@ export function ItemDetailOperationsSection({
           <span className="font-medium">{labels[cycle.status]}</span>
         </p>
         <Button variant="outline" size="sm" asChild>
-          <Link href="/dashboard/operacoes">Ver no kanban</Link>
+          <Link
+            href={
+              cycle.kind === "full"
+                ? "/dashboard/operacoes-full"
+                : "/dashboard/compras?tab=kanban"
+            }
+          >
+            Ver no kanban
+          </Link>
         </Button>
       </CardContent>
     </Card>

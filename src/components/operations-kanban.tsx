@@ -18,12 +18,12 @@ import { cn } from "@/lib/utils";
 
 type OperationsKanbanProps = {
   initialData: OperationsBoardsData;
+  /** Board único — sem abas internas. */
+  kind: OperationCycleKind;
 };
 
-type OperationsTab = OperationCycleKind;
-
-const TAB_CONFIG: Record<
-  OperationsTab,
+const KIND_CONFIG: Record<
+  OperationCycleKind,
   { label: string; description: string }
 > = {
   purchase: {
@@ -49,16 +49,19 @@ function filterCards(
   }));
 }
 
-export function OperationsKanban({ initialData }: OperationsKanbanProps) {
+export function OperationsKanban({ initialData, kind }: OperationsKanbanProps) {
   const [data, setData] = useState(initialData);
-  const [activeTab, setActiveTab] = useState<OperationsTab>("purchase");
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const activeCards =
-    activeTab === "purchase" ? data.purchase.cards : data.full.cards;
+    kind === "purchase" ? data.purchase.cards : data.full.cards;
+  const activeCount =
+    kind === "purchase"
+      ? data.purchase.summary.totalActive
+      : data.full.summary.totalActive;
 
   const filteredActive = useMemo(
     () => filterCards(activeCards, searchQuery),
@@ -117,56 +120,21 @@ export function OperationsKanban({ initialData }: OperationsKanbanProps) {
     [],
   );
 
-  const tabEntries = (["purchase", "full"] as const).map((tab) => ({
-    id: tab,
-    label: TAB_CONFIG[tab].label,
-    count:
-      tab === "purchase"
-        ? data.purchase.summary.totalActive
-        : data.full.summary.totalActive,
-  }));
+  const config = KIND_CONFIG[kind];
 
   return (
     <div className="space-y-5">
-      <div
-        role="tablist"
-        aria-label="Tipo de operação"
-        className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--muted)]/20 p-1"
-      >
-        {tabEntries.map((tab) => {
-          const selected = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={selected}
-              className={cn(
-                "inline-flex cursor-pointer items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors",
-                selected
-                  ? "bg-[var(--card)] text-[var(--primary)] shadow-sm"
-                  : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
-              )}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              {tab.label}
-              <span
-                className={cn(
-                  "rounded-full px-2 py-0.5 text-xs tabular-nums",
-                  selected
-                    ? "bg-[var(--muted)] text-[var(--foreground)]"
-                    : "bg-[var(--muted)]/60",
-                )}
-              >
-                {tab.count}
-              </span>
-            </button>
-          );
-        })}
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="text-base font-semibold text-[var(--foreground)]">
+          {config.label}
+        </h2>
+        <span className="rounded-full bg-[var(--muted)] px-2 py-0.5 text-xs tabular-nums text-[var(--foreground)]">
+          {activeCount}
+        </span>
       </div>
 
       <p className="max-w-3xl text-sm text-[var(--muted-foreground)]">
-        {TAB_CONFIG[activeTab].description}
+        {config.description}
       </p>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -205,15 +173,13 @@ export function OperationsKanban({ initialData }: OperationsKanbanProps) {
         </p>
       ) : null}
 
-      <div role="tabpanel">
-        <OperationsKanbanBoard
-          kind={activeTab}
-          cards={filteredActive}
-          busyId={busyId}
-          onAdvance={(cycleId) => patchCycle(cycleId, { advance: true })}
-          onMove={(cycleId, status) => patchCycle(cycleId, { status })}
-        />
-      </div>
+      <OperationsKanbanBoard
+        kind={kind}
+        cards={filteredActive}
+        busyId={busyId}
+        onAdvance={(cycleId) => patchCycle(cycleId, { advance: true })}
+        onMove={(cycleId, status) => patchCycle(cycleId, { status })}
+      />
     </div>
   );
 }

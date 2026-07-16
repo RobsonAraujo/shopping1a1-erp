@@ -11,8 +11,8 @@
 | `/dashboard` | Anúncios ativos do ML | ML API (`fetchOperationalListingIds`) |
 | `/dashboard/resumo` | Promoções, alertas rápidos | ML API + DB |
 | `/dashboard/inventory` | Estoque por SKU (valor, unidades) | DB `warehouse_stock` + ML stock |
-| `/dashboard/compras` | Análise de reposição por fornecedor | ML API (itens + unidades vendidas) + DB `replenishment_cycles` |
-| `/dashboard/operacoes` | Fluxo de reposição (compra → Full) | DB `replenishment_cycles` |
+| `/dashboard/compras` | Análise por fornecedor + kanban de reposição de compra | ML API + DB `replenishment_cycles` |
+| `/dashboard/operacoes-full` | Kanban de envio Full | DB `replenishment_cycles` |
 | `/dashboard/envios-full` | Custo de coleta Full por unidade | DB `full_shipments` |
 | `/dashboard/produtos` | Cadastro fiscal e custo por SKU | DB `products` |
 | `/dashboard/lucratividade` | Margem por anúncio (taxa ML, frete, impostos, ads); modo atual ou por data/range | ML API (preço/vendas, taxas, ads) + DB `products` |

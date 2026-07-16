@@ -71,7 +71,7 @@ export function DashboardOperationsSummary({
             </span>
             <div>
               <h2 className="text-lg font-semibold text-[var(--primary)]">
-                Operações de reposição
+                Reposição de compra
               </h2>
               <p className="mt-1 text-sm text-[var(--muted-foreground)]">
                 {summaryText}
@@ -88,12 +88,20 @@ export function DashboardOperationsSummary({
               ) : null}
             </div>
           </div>
-          <Button asChild className="shrink-0 gap-2">
-            <Link href="/dashboard/operacoes">
-              Abrir operações
-              <ArrowRight className="size-4" aria-hidden />
-            </Link>
-          </Button>
+          <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+            <Button asChild className="gap-2">
+              <Link href="/dashboard/compras?tab=kanban">
+                Kanban de compra
+                <ArrowRight className="size-4" aria-hidden />
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="gap-2">
+              <Link href="/dashboard/operacoes-full">
+                Operações Full
+                <ArrowRight className="size-4" aria-hidden />
+              </Link>
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </section>
