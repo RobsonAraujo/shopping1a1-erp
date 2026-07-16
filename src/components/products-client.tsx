@@ -2,6 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import {
+  ItemListSearch,
+  itemListSearchEmptyMessage,
+} from "@/components/item-list-search";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +15,7 @@ import {
   MaskedPercentField,
 } from "@/components/financial-cost-input-fields";
 import { readApiError } from "@/lib/api-client-error";
+import { filterByItemListSearch } from "@/lib/item-list-search";
 import type { ProductView } from "@/lib/product-data";
 import { formatFinancialMoney, formatFinancialPercent } from "@/lib/financial-margin";
 import { cn } from "@/lib/utils";
@@ -430,6 +435,7 @@ export function ProductsClient() {
     | null
   >(null);
   const [importing, setImporting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -463,6 +469,15 @@ export function ProductsClient() {
         a.sku.localeCompare(b.sku, "pt-BR", { sensitivity: "base" }),
       ),
     [products],
+  );
+
+  const filteredProducts = useMemo(
+    () =>
+      filterByItemListSearch(sortedProducts, searchQuery, (product) => ({
+        sku: product.sku,
+        extra: [product.ncm],
+      })),
+    [sortedProducts, searchQuery],
   );
 
   async function savePisCofins() {
@@ -636,6 +651,16 @@ export function ProductsClient() {
         </div>
       </div>
 
+      <ItemListSearch
+        value={searchQuery}
+        onChange={setSearchQuery}
+        filteredCount={filteredProducts.length}
+        totalCount={sortedProducts.length}
+        placeholder="Buscar por SKU ou NCM…"
+        entitySingular="produto"
+        entityPlural="produtos"
+      />
+
       {error ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
           {error}
@@ -680,18 +705,19 @@ export function ProductsClient() {
                     Carregando…
                   </td>
                 </tr>
-              ) : sortedProducts.length === 0 ? (
+              ) : filteredProducts.length === 0 ? (
                 <tr>
                   <td
                     colSpan={7}
                     className="px-4 py-10 text-center text-[var(--muted-foreground)]"
                   >
-                    Nenhum produto cadastrado. Importe SKUs dos anúncios ou crie
-                    um novo.
+                    {sortedProducts.length === 0
+                      ? "Nenhum produto cadastrado. Importe SKUs dos anúncios ou crie um novo."
+                      : itemListSearchEmptyMessage(searchQuery, "produto")}
                   </td>
                 </tr>
               ) : (
-                sortedProducts.map((product) => (
+                filteredProducts.map((product) => (
                   <tr
                     key={product.sku}
                     className="border-t border-[var(--border)] transition-colors hover:bg-[var(--muted)]/25"
