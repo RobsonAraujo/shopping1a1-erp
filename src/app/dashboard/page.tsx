@@ -1,22 +1,22 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { stockPlanningConfig } from "@/config/stock-planning";
+import { CatalogLosingStrip } from "@/components/catalog-losing-strip";
+import { DashboardHomeShortcuts } from "@/components/dashboard-home-shortcuts";
 import { DashboardOperationsSummary } from "@/components/dashboard-operations-summary";
-import { DashboardItemsTable } from "@/components/dashboard-items-table";
-import { CollapsibleDashboardSection } from "@/components/collapsible-dashboard-section";
+import { DashboardSummaryClient } from "@/components/dashboard-summary-client";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  fetchOperationalListings,
-  fetchUnitsSoldForItemsInWindowBatched,
-} from "@/lib/mercadolibre/api";
+import { prisma } from "@/lib/db";
 import {
   getSessionAccessState,
   readSession,
   refreshSessionPath,
 } from "@/lib/mercadolibre/session";
-import { countListingsByStatus } from "@/lib/mercadolibre/listing-status";
-import { loadDashboardItemsEnrichment } from "@/lib/dashboard-items-enrichment";
 import { loadOperationsSummaryFromDb } from "@/lib/replenishment-cycle-data";
+
+const losingWhere = {
+  catalogStatus: "losing" as const,
+  activeOnMl: true,
+};
 
 export default async function DashboardPage() {
   const cookieStore = await cookies();
@@ -31,62 +31,59 @@ export default async function DashboardPage() {
     return null;
   }
 
-  const windowDays = stockPlanningConfig.salesAverageWindowDays;
-  const dateField = stockPlanningConfig.salesWindowDateField;
-
-  let items;
-  let salesByItem: Record<string, number> = {};
   let operationsSummary: Awaited<
     ReturnType<typeof loadOperationsSummaryFromDb>
   > | null = null;
-  let enrichment: Awaited<ReturnType<typeof loadDashboardItemsEnrichment>> = {
-    warehouseById: {},
-    leadTimeById: {},
-    catalogById: {},
-    openCycleById: {},
-  };
+  let losingCount = 0;
+  let sampleTitles: Array<{ mlItemId: string; label: string }> = [];
+  let loadError: string | null = null;
 
   try {
-    const allItems = await fetchOperationalListings(token, userId);
-    const allIds = allItems.map((item) => item.id);
-    const catalogIds = allItems
-      .filter((i) => i.catalog_listing === true)
-      .map((i) => i.id);
-
-    const [allSales, opsSummary, itemsEnrichment] = await Promise.all([
-      fetchUnitsSoldForItemsInWindowBatched(
-        token,
-        userId,
-        allIds,
-        windowDays,
-        dateField,
-      ),
+    const [opsSummary, losingSamples, count] = await Promise.all([
       loadOperationsSummaryFromDb(),
-      loadDashboardItemsEnrichment(allIds, catalogIds),
+      prisma.listing.findMany({
+        where: losingWhere,
+        select: {
+          mlItemId: true,
+          skuSnapshot: true,
+          titleSnapshot: true,
+        },
+        orderBy: { catalogPolledAt: "desc" },
+        take: 3,
+      }),
+      prisma.listing.count({ where: losingWhere }),
     ]);
 
-    items = allItems;
-    salesByItem = allSales;
     operationsSummary = opsSummary;
-    enrichment = itemsEnrichment;
+    losingCount = count;
+    sampleTitles = losingSamples.map((row) => ({
+      mlItemId: row.mlItemId,
+      label: row.skuSnapshot ?? row.titleSnapshot ?? row.mlItemId,
+    }));
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Erro ao carregar anúncios";
+    loadError = e instanceof Error ? e.message : "Erro ao carregar início";
+  }
+
+  if (loadError) {
     return (
       <Card className="border-red-200 bg-red-50/50">
-        <CardContent className="pt-6 text-red-900">{msg}</CardContent>
+        <CardContent className="pt-6 text-red-900">{loadError}</CardContent>
       </Card>
     );
   }
 
-  const total = items.length;
-  const statusCounts = countListingsByStatus(items);
-
-  const catalogItems = items.filter((i) => i.catalog_listing === true);
-  const ownItems = items.filter((i) => i.catalog_listing !== true);
-  const w = stockPlanningConfig.salesAverageWindowDays;
-
   return (
     <div className="space-y-10">
+      <header>
+        <h1 className="text-3xl font-bold tracking-tight text-[var(--primary)]">
+          Início
+        </h1>
+        <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-[var(--muted-foreground)]">
+          Prioridades do dia, atalhos e alertas — sem a lista completa de
+          anúncios.
+        </p>
+      </header>
+
       {operationsSummary ? (
         <DashboardOperationsSummary summary={operationsSummary} />
       ) : (
@@ -98,76 +95,25 @@ export default async function DashboardPage() {
         </Card>
       )}
 
-      <div className="space-y-6">
+      <DashboardHomeShortcuts />
+
+      <CatalogLosingStrip
+        losingCount={losingCount}
+        sampleTitles={sampleTitles}
+      />
+
+      <section className="space-y-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-[var(--primary)]">
-            Anúncios
-          </h1>
-          <p className="mt-2 max-w-3xl text-[15px] leading-relaxed text-[var(--muted-foreground)]">
-            {total} anúncio{total !== 1 ? "s" : ""} no total
-            {statusCounts.paused > 0
-              ? ` (${statusCounts.paused} pausado${statusCounts.paused !== 1 ? "s" : ""} no ML)`
-              : ""}
-            .{" "}
-            {catalogItems.length === 1
-              ? "1 anúncio do catálogo"
-              : `${catalogItems.length} anúncios do catálogo`}
-            {" · "}
-            {ownItems.length === 1
-              ? "1 anúncio próprio"
-              : `${ownItems.length} anúncios próprios`}
-            . Projeções usam vendas dos últimos {w} dias (pedidos exceto
-            cancelados
-            {/* janela por{" "}
-            {stockPlanningConfig.salesWindowDateField === "date_closed"
-              ? "data de fechamento do pedido"
-              : "data de criação do pedido"} */}
-            {/* ; soma de{" "} */}
-            {/* <code className="rounded-md bg-[var(--muted)] px-1.5 py-0.5 font-mono text-[13px] text-[var(--foreground)]">
-              quantity
-            </code>{" "}
-            em{" "}
-            <code className="rounded-md bg-[var(--muted)] px-1.5 py-0.5 font-mono text-[13px] text-[var(--foreground)]">
-              order_items
-            </code>{" "}
-            via{" "} */}
-            {/* <code className="rounded-md bg-[var(--muted)] px-1.5 py-0.5 font-mono text-[13px] text-[var(--foreground)]">
-              orders/search?item=id
-            </code> */}
-            ).
+          <h2 className="text-xl font-semibold tracking-tight text-[var(--primary)]">
+            Promoções
+          </h2>
+          <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+            Anúncios próprios ativos — sem desconto ou com promoção terminando
+            em breve.
           </p>
         </div>
-
-        <CollapsibleDashboardSection
-          title="Anúncios próprios"
-          summary={`${ownItems.length} ${
-            ownItems.length === 1 ? "anúncio próprio" : "anúncios próprios"
-          }`}
-        >
-          <DashboardItemsTable
-            items={ownItems}
-            salesByItem={salesByItem}
-            variant="own"
-            enrichment={enrichment}
-          />
-        </CollapsibleDashboardSection>
-
-        <CollapsibleDashboardSection
-          title="Anúncios do catálogo"
-          summary={`${catalogItems.length} ${
-            catalogItems.length === 1
-              ? "anúncio do catálogo"
-              : "anúncios do catálogo"
-          }`}
-        >
-          <DashboardItemsTable
-            items={catalogItems}
-            salesByItem={salesByItem}
-            variant="catalog"
-            enrichment={enrichment}
-          />
-        </CollapsibleDashboardSection>
-      </div>
+        <DashboardSummaryClient />
+      </section>
     </div>
   );
 }

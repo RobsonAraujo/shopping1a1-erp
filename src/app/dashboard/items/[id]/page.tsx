@@ -68,7 +68,7 @@ export default async function ItemDetailPage({ params }: PageProps) {
         <Button variant="ghost" size="sm" className="-ml-2 h-8 gap-1 px-2" asChild>
           <Link href="/dashboard">
             <ChevronLeft className="size-4" />
-            Anúncios
+            Início
           </Link>
         </Button>
         <span className="text-[var(--border)]">/</span>

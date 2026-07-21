@@ -8,8 +8,8 @@
 
 | Rota | O que exibe | Fonte de dados principal |
 |------|-------------|--------------------------|
-| `/dashboard` | Anúncios ativos do ML | ML API (`fetchOperationalListingIds`) |
-| `/dashboard/resumo` | Promoções, alertas rápidos | ML API + DB |
+| `/dashboard` | Home operacional: reposição, atalhos, catálogo perdendo, promoções | DB (`replenishment_cycles`, `listings`) + API promoções |
+| `/dashboard/resumo` | Redirect → `/dashboard` | — |
 | `/dashboard/inventory` | Estoque por SKU (valor, unidades) | DB `warehouse_stock` + ML stock |
 | `/dashboard/compras` | Análise por fornecedor + kanban de reposição de compra | ML API + DB `replenishment_cycles` |
 | `/dashboard/operacoes-full` | Kanban de envio Full | DB `replenishment_cycles` |

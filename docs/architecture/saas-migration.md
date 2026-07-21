@@ -272,6 +272,17 @@ Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templ
 - **Código já tenant-ready?** não — falta `organizationId` em `listings`
 - **Ação futura na migração:** filtrar listings por org; não criar singleton
 
+### Home operacional (`/dashboard`) — 2026-07-21
+
+- **Tabelas novas/alteradas:** nenhuma (lê `listings`, `replenishment_cycles`)
+- **Precisa `organizationId`?** **sim** — counts de catálogo losing e cycles hoje globais
+- **APIs afetadas:** nenhuma nova; promoções via `GET /api/dashboard/summary/promotions` existente
+- **Assume singleton?** **sim** — listings/cycles sem org
+- **Cron/background:** nenhum
+- **Dados globais vs por org:** home resume dados do seller logado (promo ML) + DB global
+- **Código já tenant-ready?** não — filtrar listings/cycles por org
+- **Ação futura na migração:** escopar `loadOperationsSummaryFromDb` e query losing por `organizationId`
+
 ### Push notifications — baseline
 
 - **Tabelas:** `push_subscriptions`

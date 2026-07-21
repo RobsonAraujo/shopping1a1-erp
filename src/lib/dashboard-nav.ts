@@ -6,7 +6,6 @@ import {
   LayoutGrid,
   Lightbulb,
   LineChart,
-  Package,
   Scale,
   Settings,
   ShoppingCart,
@@ -47,14 +46,8 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
     items: [
       {
         href: "/dashboard",
-        label: "Anúncios",
-        description: "Gerencie os anúncios do Mercado Livre",
-        icon: Package,
-      },
-      {
-        href: "/dashboard/resumo",
-        label: "Resumo",
-        description: "Painéis operacionais e alertas rápidos",
+        label: "Início",
+        description: "Prioridades, atalhos e alertas do dia",
         icon: LayoutGrid,
       },
     ],
