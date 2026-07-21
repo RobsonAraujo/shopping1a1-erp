@@ -1,13 +1,14 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import {
   AlertTriangle,
-  Lightbulb,
   Map,
   PieChart,
   TrendingDown,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import {
   getSessionAccessState,
   readSession,
@@ -77,20 +78,84 @@ export default async function InsightsPage() {
     : { top3Percent: 0, skusFor80Percent: 0 };
   const highConcentration = top3Percent > 60;
 
+  const kpis = [
+    purchaseData && {
+      key: "ruptura",
+      label: "Ruptura iminente",
+      value: rupturaCount,
+      hint: rupturaUrgent > 0 ? `${plural(rupturaUrgent, "crítico", "críticos")}` : "sob controle",
+      tone: rupturaCount === 0 ? "success" : rupturaUrgent > 0 ? "destructive" : "warning",
+      icon: AlertTriangle,
+    },
+    purchaseData && {
+      key: "rotacao",
+      label: "Rotação baixa",
+      value: slowCount,
+      hint: `cobertura > ${DEFAULT_SLOW_MOVER_THRESHOLD_DAYS}d ou parado`,
+      tone: slowCount === 0 ? "success" : "warning",
+      icon: TrendingDown,
+    },
+    taxSnapshot && {
+      key: "difal",
+      label: "DIFAL",
+      value: worstDifalUf ? worstDifalUf.uf : difalRows.length,
+      hint: worstDifalUf ? "margem negativa" : `${plural(difalRows.length, "estado", "estados")}`,
+      tone: worstDifalUf ? "destructive" : "secondary",
+      icon: Map,
+    },
+    taxSnapshot && {
+      key: "pareto",
+      label: "Concentração",
+      value: `${top3Percent.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%`,
+      hint: "receita nos top 3 SKUs",
+      tone: highConcentration ? "warning" : "secondary",
+      icon: PieChart,
+    },
+  ].filter(Boolean) as Array<{
+    key: string;
+    label: string;
+    value: string | number;
+    hint: string;
+    tone: "success" | "warning" | "destructive" | "secondary";
+    icon: typeof AlertTriangle;
+  }>;
+
+  const toneStyles: Record<string, string> = {
+    success: "text-emerald-700 dark:text-emerald-400",
+    warning: "text-amber-700 dark:text-amber-400",
+    destructive: "text-red-700 dark:text-red-400",
+    secondary: "text-[var(--primary)]",
+  };
+
   return (
-    <div className="space-y-6">
-      <header className="flex items-start gap-4">
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-yellow-100 text-yellow-900 shadow-sm">
-          <Lightbulb className="size-6" aria-hidden />
-        </span>
-        <div className="min-w-0">
-          <h1 className="text-3xl font-bold tracking-tight text-[var(--primary)]">
-            Insights
-          </h1>
-          <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-[var(--muted-foreground)]">
-            Clique em qualquer card para ver os detalhes. Itens críticos abrem automaticamente.
-          </p>
-        </div>
+    <div className="space-y-8">
+      <header className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-6 py-7 sm:px-8">
+        <h1 className="text-2xl font-bold tracking-tight text-[var(--primary)] sm:text-3xl">
+          Insights
+        </h1>
+        <p className="mt-1.5 max-w-2xl text-sm text-[var(--muted-foreground)]">
+          Clique em qualquer card para ver os detalhes. Itens críticos abrem automaticamente.
+        </p>
+
+        {kpis.length > 0 && (
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {kpis.map(({ key, label, value, hint, tone, icon: Icon }) => (
+              <div
+                key={key}
+                className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/30 px-4 py-3"
+              >
+                <div className="flex items-center gap-1.5 text-xs font-medium text-[var(--muted-foreground)]">
+                  <Icon className="size-3.5" aria-hidden />
+                  {label}
+                </div>
+                <div className={cn("mt-1 text-2xl font-bold tracking-tight", toneStyles[tone])}>
+                  {value}
+                </div>
+                <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">{hint}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </header>
 
       {!purchaseData && !taxSnapshot && (
@@ -106,17 +171,20 @@ export default async function InsightsPage() {
         <Card className="border-yellow-200 bg-yellow-50/50">
           <CardContent className="pt-6 text-sm text-yellow-900">
             Nenhum relatório tributário encontrado. Gere um em{" "}
-            <a href="/dashboard/relatorio-tributario" className="underline font-medium">
+            <Link href="/dashboard/relatorio-tributario" className="underline font-medium">
               Tributário
-            </a>{" "}
+            </Link>{" "}
             para ver os insights de DIFAL e Pareto.
           </CardContent>
         </Card>
       )}
 
-      <div className="space-y-3">
+      <div className="space-y-8">
         {purchaseData && (
-          <>
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+              Estoque &amp; reposição
+            </h2>
             <InsightExpandableCard
               title="Ruptura iminente"
               subtitle="Produtos que vão acabar antes de chegar a reposição"
@@ -147,13 +215,21 @@ export default async function InsightsPage() {
             >
               <SlowMoversCard allRows={allSlowMoverRows} />
             </InsightExpandableCard>
-          </>
+          </section>
         )}
 
-        <AdsMargemCard />
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+            Publicidade
+          </h2>
+          <AdsMargemCard />
+        </section>
 
         {taxSnapshot && taxPeriod && (
-          <>
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+              Financeiro &amp; tributário
+            </h2>
             <InsightExpandableCard
               title="Margem por estado (DIFAL)"
               subtitle={`Impacto do DIFAL na margem por UF de destino — ${taxPeriod}`}
@@ -185,7 +261,7 @@ export default async function InsightsPage() {
             >
               <ParetoCard rows={paretoRows} />
             </InsightExpandableCard>
-          </>
+          </section>
         )}
       </div>
     </div>

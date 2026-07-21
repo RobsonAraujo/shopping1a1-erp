@@ -35,8 +35,8 @@ export function InsightExpandableCard({
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-sm",
-        "border-l-4",
+        "overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm transition-shadow",
+        "border-l-4 hover:shadow-md",
         accentClassName,
       )}
     >
@@ -48,7 +48,7 @@ export function InsightExpandableCard({
       >
         <span
           className={cn(
-            "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-sm",
             iconClassName,
           )}
         >
