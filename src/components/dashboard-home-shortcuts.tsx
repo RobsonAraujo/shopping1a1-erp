@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  ArrowRight,
   ChartNoAxesColumn,
   Kanban,
   Lightbulb,
@@ -54,25 +55,34 @@ export function DashboardHomeShortcuts() {
       <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
         Atalhos
       </h2>
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {SHORTCUTS.map(({ href, label, description, icon: Icon }) => (
-          <Link key={href} href={href} className="group">
-            <Card className="h-full transition-colors group-hover:border-[var(--primary)]/30 group-hover:bg-[var(--muted)]/30">
-              <CardContent className="flex items-start gap-3 p-4">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--muted)] text-[var(--foreground)]">
+      <Card className="overflow-hidden p-0">
+        <ul className="divide-y divide-[var(--border)]">
+          {SHORTCUTS.map(({ href, label, description, icon: Icon }) => (
+            <li key={href}>
+              <Link
+                href={href}
+                className="group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-[var(--muted)]/40"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--muted)] text-[var(--foreground)] transition-colors group-hover:bg-[var(--primary)]/10 group-hover:text-[var(--primary)]">
                   <Icon className="size-4" aria-hidden />
                 </span>
-                <div className="min-w-0">
-                  <p className="font-medium text-[var(--foreground)]">{label}</p>
-                  <p className="text-xs text-[var(--muted-foreground)]">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-[var(--foreground)]">
+                    {label}
+                  </p>
+                  <p className="truncate text-xs text-[var(--muted-foreground)]">
                     {description}
                   </p>
                 </div>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
-      </div>
+                <ArrowRight
+                  className="size-4 shrink-0 text-[var(--muted-foreground)]/50 transition-transform group-hover:translate-x-0.5 group-hover:text-[var(--primary)]"
+                  aria-hidden
+                />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </Card>
     </section>
   );
 }

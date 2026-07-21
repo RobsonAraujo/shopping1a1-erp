@@ -72,10 +72,28 @@ export default async function DashboardPage() {
     );
   }
 
+  const now = new Date();
+  const hour = Number(
+    now.toLocaleString("pt-BR", {
+      timeZone: "America/Sao_Paulo",
+      hour: "2-digit",
+      hour12: false,
+    }),
+  );
+  const greeting =
+    hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
+
   return (
-    <div className="space-y-10">
-      <header>
-        <h1 className="text-3xl font-bold tracking-tight text-[var(--primary)]">
+    <div className="space-y-8">
+      <header className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-gradient-to-br from-[var(--primary)]/[0.06] via-[var(--card)] to-[var(--card)] px-6 py-7 sm:px-8">
+        <div
+          className="pointer-events-none absolute -right-24 -top-24 size-64 rounded-full bg-[var(--primary)]/[0.06] blur-3xl"
+          aria-hidden
+        />
+        <p className="text-sm font-medium text-[var(--muted-foreground)]">
+          {greeting} 👋
+        </p>
+        <h1 className="mt-1 text-3xl font-bold tracking-tight text-[var(--primary)] sm:text-4xl">
           Início
         </h1>
         <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-[var(--muted-foreground)]">
@@ -84,36 +102,41 @@ export default async function DashboardPage() {
         </p>
       </header>
 
-      {operationsSummary ? (
-        <DashboardOperationsSummary summary={operationsSummary} />
-      ) : (
-        <Card className="border-amber-200 bg-amber-50/50">
-          <CardContent className="pt-6 text-sm text-amber-950">
-            Não foi possível carregar o resumo de operações. Atualize a página
-            ou tente de novo em instantes.
-          </CardContent>
-        </Card>
-      )}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+        <div className="min-w-0 space-y-8">
+          {operationsSummary ? (
+            <DashboardOperationsSummary summary={operationsSummary} />
+          ) : (
+            <Card className="border-amber-200 bg-amber-50/50">
+              <CardContent className="pt-6 text-sm text-amber-950">
+                Não foi possível carregar o resumo de operações. Atualize a
+                página ou tente de novo em instantes.
+              </CardContent>
+            </Card>
+          )}
 
-      <DashboardHomeShortcuts />
-
-      <CatalogLosingStrip
-        losingCount={losingCount}
-        sampleTitles={sampleTitles}
-      />
-
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-xl font-semibold tracking-tight text-[var(--primary)]">
-            Promoções
-          </h2>
-          <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-            Anúncios próprios ativos — sem desconto ou com promoção terminando
-            em breve.
-          </p>
+          <section className="space-y-4">
+            <div>
+              <h2 className="text-xl font-semibold tracking-tight text-[var(--primary)]">
+                Promoções
+              </h2>
+              <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+                Anúncios próprios ativos — sem desconto ou com promoção
+                terminando em breve.
+              </p>
+            </div>
+            <DashboardSummaryClient />
+          </section>
         </div>
-        <DashboardSummaryClient />
-      </section>
+
+        <aside className="space-y-6 lg:sticky lg:top-6">
+          <CatalogLosingStrip
+            losingCount={losingCount}
+            sampleTitles={sampleTitles}
+          />
+          <DashboardHomeShortcuts />
+        </aside>
+      </div>
     </div>
   );
 }
