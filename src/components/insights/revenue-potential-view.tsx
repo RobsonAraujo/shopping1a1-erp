@@ -438,10 +438,14 @@ export function RevenuePotentialView({ rows }: { rows: RevenuePotentialRow[] }) 
                     <div className="flex items-center justify-end gap-1">
                       <FormInput
                         type="number"
-                        step="0.1"
+                        step="any"
                         min="0"
                         disabled={row.isExcluded}
-                        value={row.effectiveDailyAvg.toFixed(1)}
+                        value={
+                          row.isOverridden
+                            ? overrides[row.mlItemId]
+                            : row.effectiveDailyAvg.toFixed(1)
+                        }
                         onChange={(e) => {
                           const value = e.target.valueAsNumber;
                           setOverride(
