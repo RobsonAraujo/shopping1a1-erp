@@ -27,6 +27,7 @@ import {
   filterListingsByPausedVisibility,
 } from "@/components/show-paused-listings-switch";
 import type { RevenuePotentialRow } from "@/lib/insights/types";
+import { WorkingCapitalCard } from "@/components/insights/working-capital-card";
 
 const DAYS_IN_MONTH = 30;
 const STORAGE_KEY = "insights:revenue-potential:v1";
@@ -116,7 +117,10 @@ function sortValue(row: EffectiveRow, key: SortKey): number | string {
   }
 }
 
+type TabKey = "potencial" | "capital";
+
 export function RevenuePotentialView({ rows }: { rows: RevenuePotentialRow[] }) {
+  const [activeTab, setActiveTab] = useState<TabKey>("potencial");
   const [sortKey, setSortKey] = useState<SortKey>("gap");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [searchQuery, setSearchQuery] = useState("");
@@ -220,6 +224,13 @@ export function RevenuePotentialView({ rows }: { rows: RevenuePotentialRow[] }) 
     };
   }, [visibleRows]);
 
+  // Capital de giro considera só ativos + não excluídos da simulação —
+  // independente do filtro de busca/pausados usado na tabela acima.
+  const activeConsideredRows = useMemo(
+    () => effectiveRows.filter((r) => r.status === "active" && !r.isExcluded),
+    [effectiveRows],
+  );
+
   const kpis = [
     {
       key: "potencial",
@@ -268,6 +279,42 @@ export function RevenuePotentialView({ rows }: { rows: RevenuePotentialRow[] }) 
         </div>
       )}
 
+      <div
+        role="tablist"
+        aria-label="Visão de potencial de faturamento"
+        className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--muted)]/20 p-1"
+      >
+        {(
+          [
+            { id: "potencial", label: "Potencial de faturamento" },
+            { id: "capital", label: "Capital de giro necessário" },
+          ] as const
+        ).map((tab) => {
+          const selected = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              className={cn(
+                "inline-flex cursor-pointer items-center rounded-md px-4 py-2 text-sm font-medium transition-colors",
+                selected
+                  ? "bg-[var(--card)] text-[var(--primary)] shadow-sm"
+                  : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
+              )}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {activeTab === "capital" ? (
+        <WorkingCapitalCard rows={activeConsideredRows} />
+      ) : (
+      <>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {kpis.map(({ key, label, value, tone }) => (
           <div
@@ -506,6 +553,8 @@ export function RevenuePotentialView({ rows }: { rows: RevenuePotentialRow[] }) 
             ` · ${totals.excludedCount} não considerado${totals.excludedCount !== 1 ? "s" : ""}`}
         </p>
       </div>
+      </>
+      )}
     </div>
   );
 }

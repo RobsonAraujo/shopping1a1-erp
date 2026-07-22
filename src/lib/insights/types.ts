@@ -88,4 +88,26 @@ export type RevenuePotentialRow = {
   gap: number;
   /** "recent": vendendo normalmente agora. "historical": ancorado em venda passada (pausado ou em ruptura). */
   estimateBasis: "recent" | "historical";
+  /** Custo unitário cadastrado em "Meus produtos" (NF ou compra+ST); null se não cadastrado. */
+  unitCost: number | null;
+  hasIcmsSt: boolean;
+};
+
+// ---------------------------------------------------------------------------
+// Capital de giro — estoque necessário para N dias de vendas (produtos ativos)
+// ---------------------------------------------------------------------------
+
+export type WorkingCapitalRow = {
+  mlItemId: string;
+  sku: string | null;
+  title: string;
+  supplier: string;
+  dailyAvg: number;
+  periodDays: number;
+  unitsNeeded: number;
+  unitCost: number;
+  hasIcmsSt: boolean;
+  grossCapital: number;
+  installments: number;
+  effectiveCapital: number;
 };

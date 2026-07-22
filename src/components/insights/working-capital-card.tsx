@@ -1,0 +1,236 @@
+"use client";
+
+import { useMemo } from "react";
+import Link from "next/link";
+import { RotateCcw } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { FormInput } from "@/components/ui/form-input";
+import { cn } from "@/lib/utils";
+import { usePersistedJson } from "@/hooks/use-persisted-json";
+import { getSkuSupplier } from "@/lib/mercadolibre/item-sku";
+import {
+  buildWorkingCapitalRows,
+  type WorkingCapitalInputRow,
+} from "@/lib/insights/working-capital";
+
+const STORAGE_KEY = "insights:working-capital:v1";
+const PERIOD_PRESETS = [30, 45, 60];
+
+type StoredState = {
+  periodDays: number;
+  installmentsBySupplier: Record<string, number>;
+};
+
+const DEFAULT_STORED_STATE: StoredState = {
+  periodDays: 30,
+  installmentsBySupplier: {},
+};
+
+function fmtBrl(n: number): string {
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function fmtUnits(n: number): string {
+  return n.toLocaleString("pt-BR");
+}
+
+export function WorkingCapitalCard({ rows }: { rows: WorkingCapitalInputRow[] }) {
+  const [stored, setStored] = usePersistedJson<StoredState>(
+    STORAGE_KEY,
+    DEFAULT_STORED_STATE,
+  );
+  const { periodDays, installmentsBySupplier } = stored;
+
+  const suppliers = useMemo(() => {
+    const set = new Set<string>();
+    for (const row of rows) set.add(getSkuSupplier(row.sku));
+    return [...set].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [rows]);
+
+  const { rows: capitalRows, totalCapital, missingCostSkus } = useMemo(
+    () => buildWorkingCapitalRows(rows, periodDays, installmentsBySupplier),
+    [rows, periodDays, installmentsBySupplier],
+  );
+
+  const setPeriodDays = (value: number) => {
+    setStored({ ...stored, periodDays: Math.max(1, Math.round(value)) });
+  };
+
+  const setInstallments = (supplier: string, value: number) => {
+    setStored({
+      ...stored,
+      installmentsBySupplier: {
+        ...installmentsBySupplier,
+        [supplier]: Math.max(1, Math.round(value)),
+      },
+    });
+  };
+
+  const hasCustomSettings =
+    periodDays !== DEFAULT_STORED_STATE.periodDays ||
+    Object.values(installmentsBySupplier).some((v) => v > 1);
+
+  const handleReset = () => setStored(DEFAULT_STORED_STATE);
+
+  return (
+    <div className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-4 shadow-sm sm:px-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-[var(--primary)]">
+            Capital de giro necessário
+          </h2>
+          <p className="mt-0.5 max-w-xl text-xs text-[var(--muted-foreground)]">
+            Estoque necessário (média/dia × dias) × custo unitário cadastrado
+            (NF ou compra + ICMS-ST) ÷ parcelas do fornecedor. Considera só
+            produtos <strong>ativos</strong> e não excluídos da simulação acima.
+          </p>
+        </div>
+        {hasCustomSettings && (
+          <button
+            type="button"
+            onClick={handleReset}
+            className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-[var(--border)] px-2.5 py-1 text-xs font-medium hover:bg-[var(--muted)]"
+          >
+            <RotateCcw className="size-3.5" aria-hidden />
+            Resetar período/parcelas
+          </button>
+        )}
+      </div>
+
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/30 px-4 py-3">
+        <div className="text-xs font-medium text-[var(--muted-foreground)]">
+          Capital necessário para {periodDays} dias
+        </div>
+        <div className="mt-1 text-3xl font-bold tracking-tight text-[var(--primary)]">
+          {fmtBrl(totalCapital)}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium text-[var(--muted-foreground)]">
+          Período:
+        </span>
+        {PERIOD_PRESETS.map((preset) => (
+          <button
+            key={preset}
+            type="button"
+            onClick={() => setPeriodDays(preset)}
+            className={cn(
+              "cursor-pointer rounded-md border px-2.5 py-1 text-xs font-medium",
+              periodDays === preset
+                ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)]"
+                : "border-[var(--border)] hover:bg-[var(--muted)]",
+            )}
+          >
+            {preset}d
+          </button>
+        ))}
+        <FormInput
+          type="number"
+          min="1"
+          step="1"
+          value={periodDays}
+          onChange={(e) => {
+            const value = e.target.valueAsNumber;
+            if (Number.isFinite(value)) setPeriodDays(value);
+          }}
+          className="w-20"
+          inputClassName="h-8 px-2 py-0.5 text-right text-sm tabular-nums"
+        />
+        <span className="text-xs text-[var(--muted-foreground)]">dias</span>
+      </div>
+
+      {suppliers.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-[var(--muted-foreground)]">
+            Parcelamento por fornecedor (boleto) — 1x = à vista
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {suppliers.map((supplier) => (
+              <div
+                key={supplier}
+                className="flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--muted)]/30 px-2 py-1"
+              >
+                <span className="text-xs">{supplier}</span>
+                <FormInput
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={installmentsBySupplier[supplier] ?? 1}
+                  onChange={(e) => {
+                    const value = e.target.valueAsNumber;
+                    if (Number.isFinite(value)) setInstallments(supplier, value);
+                  }}
+                  className="w-14"
+                  inputClassName="h-7 px-1.5 py-0 text-right text-xs tabular-nums"
+                />
+                <span className="text-xs text-[var(--muted-foreground)]">parcelas</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {missingCostSkus.length > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+          {missingCostSkus.length} produto{missingCostSkus.length !== 1 ? "s" : ""} sem
+          custo cadastrado — não {missingCostSkus.length !== 1 ? "entram" : "entra"} neste
+          total (capital pode estar subestimado):{" "}
+          <span className="font-mono">{missingCostSkus.slice(0, 6).join(", ")}</span>
+          {missingCostSkus.length > 6 && ` +${missingCostSkus.length - 6}`}.{" "}
+          <Link href="/dashboard/produtos" className="underline font-medium">
+            Cadastrar custo
+          </Link>
+        </div>
+      )}
+
+      {capitalRows.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-[var(--border)] text-left text-xs text-[var(--muted-foreground)]">
+                <th className="pb-2 pr-3 font-medium">SKU</th>
+                <th className="pb-2 pr-3 font-medium">Fornecedor</th>
+                <th className="pb-2 pr-3 text-right font-medium">Unid. necessárias</th>
+                <th className="pb-2 pr-3 text-right font-medium">Custo unit.</th>
+                <th className="pb-2 pr-3 text-right font-medium">Subtotal</th>
+                <th className="pb-2 pr-3 text-right font-medium">Parcelas</th>
+                <th className="pb-2 text-right font-medium">Capital efetivo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {capitalRows.map((row) => (
+                <tr key={row.mlItemId} className="border-b border-[var(--border)] last:border-0">
+                  <td className="max-w-[10rem] truncate py-2 pr-3 font-mono text-xs">
+                    {row.sku ?? row.mlItemId}
+                  </td>
+                  <td className="py-2 pr-3 text-xs">{row.supplier}</td>
+                  <td className="py-2 pr-3 text-right text-[var(--muted-foreground)]">
+                    {fmtUnits(row.unitsNeeded)}
+                  </td>
+                  <td className="py-2 pr-3 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      {fmtBrl(row.unitCost)}
+                      <Badge variant="muted" className="px-1 py-0 text-[9px]">
+                        {row.hasIcmsSt ? "compra+ST" : "NF"}
+                      </Badge>
+                    </div>
+                  </td>
+                  <td className="py-2 pr-3 text-right text-[var(--muted-foreground)]">
+                    {fmtBrl(row.grossCapital)}
+                  </td>
+                  <td className="py-2 pr-3 text-right text-[var(--muted-foreground)]">
+                    {row.installments}x
+                  </td>
+                  <td className="py-2 text-right font-medium text-[var(--foreground)]">
+                    {fmtBrl(row.effectiveCapital)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}

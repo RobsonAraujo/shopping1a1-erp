@@ -20,6 +20,7 @@ import {
 } from "@/lib/mercadolibre/api";
 import { getItemSku } from "@/lib/mercadolibre/item-sku";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
+import { loadStockReportProductsBySku } from "@/lib/product-data";
 import type { RevenuePotentialRow } from "@/lib/insights/types";
 
 const LOOKBACK_DAYS = 120;
@@ -55,7 +56,16 @@ export async function loadRevenuePotentialData(
 
   const todayKey = dayKey(now);
 
+  const skus = items
+    .map((item) => getItemSku(item))
+    .filter((sku): sku is string => Boolean(sku?.trim()));
+  const productsBySku = await loadStockReportProductsBySku(skus);
+
   const rows: RevenuePotentialRow[] = items.map((item) => {
+    const sku = getItemSku(item);
+    const costInfo = sku ? productsBySku[sku] : undefined;
+    const unitCost = costInfo?.unitCost ?? null;
+    const hasIcmsSt = costInfo?.hasIcmsSt ?? false;
     const byDay = dailyByItem[item.id] ?? {};
     const soldDays = Object.keys(byDay).sort();
 
@@ -63,7 +73,7 @@ export async function loadRevenuePotentialData(
       return {
         mlItemId: item.id,
         title: item.title,
-        sku: getItemSku(item),
+        sku,
         status: item.status,
         imageUrl: bestItemImageUrl(item) ?? null,
         price: item.price,
@@ -72,6 +82,8 @@ export async function loadRevenuePotentialData(
         currentMonthlyRevenue: 0,
         gap: 0,
         estimateBasis: "historical",
+        unitCost,
+        hasIcmsSt,
       };
     }
 
@@ -104,7 +116,7 @@ export async function loadRevenuePotentialData(
     return {
       mlItemId: item.id,
       title: item.title,
-      sku: getItemSku(item),
+      sku,
       status: item.status,
       imageUrl: bestItemImageUrl(item) ?? null,
       price: item.price,
@@ -113,6 +125,8 @@ export async function loadRevenuePotentialData(
       currentMonthlyRevenue,
       gap: potentialMonthlyRevenue - currentMonthlyRevenue,
       estimateBasis: isCurrentlySelling ? "recent" : "historical",
+      unitCost,
+      hasIcmsSt,
     };
   });
 
