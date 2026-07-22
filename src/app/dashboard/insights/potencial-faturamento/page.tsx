@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,6 +9,30 @@ import {
 } from "@/lib/mercadolibre/session";
 import { loadRevenuePotentialData } from "@/lib/insights/revenue-potential";
 import { RevenuePotentialView } from "@/components/insights/revenue-potential-view";
+import { RevenuePotentialSkeleton } from "@/components/insights/revenue-potential-skeleton";
+
+async function RevenuePotentialSection({
+  token,
+  userId,
+}: {
+  token: string;
+  userId: number;
+}) {
+  const data = await loadRevenuePotentialData(token, userId).catch(() => null);
+
+  if (!data) {
+    return (
+      <Card className="border-yellow-200 bg-yellow-50/50">
+        <CardContent className="pt-6 text-sm text-yellow-900">
+          Não foi possível carregar os dados. Verifique sua conexão com o
+          Mercado Livre.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return <RevenuePotentialView rows={data.rows} />;
+}
 
 export default async function PotencialFaturamentoPage() {
   const cookieStore = await cookies();
@@ -19,8 +44,6 @@ export default async function PotencialFaturamentoPage() {
   const { userId } = readSession(cookieStore);
 
   if (!token || userId === undefined) return null;
-
-  const data = await loadRevenuePotentialData(token, userId).catch(() => null);
 
   return (
     <div className="space-y-8">
@@ -39,16 +62,9 @@ export default async function PotencialFaturamentoPage() {
         </p>
       </header>
 
-      {!data && (
-        <Card className="border-yellow-200 bg-yellow-50/50">
-          <CardContent className="pt-6 text-sm text-yellow-900">
-            Não foi possível carregar os dados. Verifique sua conexão com o
-            Mercado Livre.
-          </CardContent>
-        </Card>
-      )}
-
-      {data && <RevenuePotentialView rows={data.rows} />}
+      <Suspense fallback={<RevenuePotentialSkeleton />}>
+        <RevenuePotentialSection token={token} userId={userId} />
+      </Suspense>
     </div>
   );
 }
