@@ -1,8 +1,4 @@
-function Bar({ className }: { className?: string }) {
-  return (
-    <div className={`animate-pulse rounded-md bg-[var(--muted)] ${className ?? ""}`} />
-  );
-}
+import { Skeleton as Bar } from "@/components/ui/skeleton";
 
 export function RevenuePotentialSkeleton() {
   return (

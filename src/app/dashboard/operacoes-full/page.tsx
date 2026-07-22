@@ -1,7 +1,9 @@
+import { Suspense } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Kanban } from "lucide-react";
 import { OperationsKanban } from "@/components/operations-kanban";
+import { OperationsKanbanSkeleton } from "@/components/operations-kanban-skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { loadOperationsBoards } from "@/lib/replenishment-cycle-data";
 import {
@@ -9,6 +11,36 @@ import {
   readSession,
   refreshSessionPath,
 } from "@/lib/mercadolibre/session";
+
+async function OperacoesFullDataSection({
+  token,
+  userId,
+}: {
+  token: string;
+  userId: number;
+}) {
+  let loadError: string | null = null;
+  let boards: Awaited<ReturnType<typeof loadOperationsBoards>> | null = null;
+
+  try {
+    boards = await loadOperationsBoards(token, userId);
+  } catch (e) {
+    loadError =
+      e instanceof Error ? e.message : "Erro ao carregar operações Full";
+  }
+
+  if (loadError || !boards) {
+    return (
+      <Card className="border-red-200 bg-red-50/50">
+        <CardContent className="pt-6 text-red-900">
+          {loadError ?? "Erro ao carregar operações Full"}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return <OperationsKanban initialData={boards} kind="full" />;
+}
 
 export default async function OperacoesFullPage() {
   const cookieStore = await cookies();
@@ -21,24 +53,6 @@ export default async function OperacoesFullPage() {
 
   if (!token || userId === undefined) {
     return null;
-  }
-
-  let loadError: string | null = null;
-  let boards: Awaited<ReturnType<typeof loadOperationsBoards>> | null = null;
-
-  try {
-    boards = await loadOperationsBoards(token, userId);
-  } catch (e) {
-    loadError =
-      e instanceof Error ? e.message : "Erro ao carregar operações Full";
-  }
-
-  if (loadError) {
-    return (
-      <Card className="border-red-200 bg-red-50/50">
-        <CardContent className="pt-6 text-red-900">{loadError}</CardContent>
-      </Card>
-    );
   }
 
   return (
@@ -58,7 +72,9 @@ export default async function OperacoesFullPage() {
         </div>
       </header>
 
-      {boards ? <OperationsKanban initialData={boards} kind="full" /> : null}
+      <Suspense fallback={<OperationsKanbanSkeleton />}>
+        <OperacoesFullDataSection token={token} userId={userId} />
+      </Suspense>
     </div>
   );
 }

@@ -4,10 +4,10 @@ import { Suspense } from "react";
 import {
   buildSupplierSummaries,
   loadDashboardPurchaseData,
-  type PurchaseAnalysisItemRow,
 } from "@/lib/dashboard-purchase-data";
 import { ShoppingCart } from "lucide-react";
 import { ComprasPageClient } from "@/components/compras-page-client";
+import { ComprasPageSkeleton } from "@/components/compras-page-skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { loadOperationsBoards } from "@/lib/replenishment-cycle-data";
 import {
@@ -16,22 +16,16 @@ import {
   refreshSessionPath,
 } from "@/lib/mercadolibre/session";
 
-export default async function ComprasPage() {
-  const cookieStore = await cookies();
-  const session = getSessionAccessState(cookieStore);
-  if (session.needsRefresh) {
-    redirect(refreshSessionPath("/dashboard/compras"));
-  }
-  const token = session.accessToken;
-  const { userId } = readSession(cookieStore);
-
-  if (!token || userId === undefined) {
-    return null;
-  }
-
+async function ComprasDataSection({
+  token,
+  userId,
+}: {
+  token: string;
+  userId: number;
+}) {
   let loadError: string | null = null;
   let summaries: ReturnType<typeof buildSupplierSummaries> = [];
-  let rows: PurchaseAnalysisItemRow[] = [];
+  let rows: Awaited<ReturnType<typeof loadDashboardPurchaseData>>["rows"] = [];
   let boards: Awaited<ReturnType<typeof loadOperationsBoards>> | null = null;
 
   try {
@@ -60,6 +54,24 @@ export default async function ComprasPage() {
   }
 
   return (
+    <ComprasPageClient summaries={summaries} rows={rows} boards={boards} />
+  );
+}
+
+export default async function ComprasPage() {
+  const cookieStore = await cookies();
+  const session = getSessionAccessState(cookieStore);
+  if (session.needsRefresh) {
+    redirect(refreshSessionPath("/dashboard/compras"));
+  }
+  const token = session.accessToken;
+  const { userId } = readSession(cookieStore);
+
+  if (!token || userId === undefined) {
+    return null;
+  }
+
+  return (
     <div className="space-y-8">
       <header className="flex items-start gap-4">
         <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-900 shadow-sm">
@@ -76,16 +88,8 @@ export default async function ComprasPage() {
         </div>
       </header>
 
-      <Suspense
-        fallback={
-          <p className="text-sm text-[var(--muted-foreground)]">Carregando…</p>
-        }
-      >
-        <ComprasPageClient
-          summaries={summaries}
-          rows={rows}
-          boards={boards}
-        />
+      <Suspense fallback={<ComprasPageSkeleton />}>
+        <ComprasDataSection token={token} userId={userId} />
       </Suspense>
     </div>
   );

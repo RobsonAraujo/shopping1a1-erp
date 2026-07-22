@@ -1,7 +1,9 @@
+import { Suspense } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { stockPlanningConfig } from "@/config/stock-planning";
 import { InventoryStockTable, type InventoryRow } from "@/components/inventory-stock-table";
+import { InventoryStockTableSkeleton } from "@/components/inventory-stock-table-skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   enrichItemsWithFulfillmentStock,
@@ -28,20 +30,13 @@ function stockUnits(value: number | null | undefined): number {
   return Math.max(0, Math.floor(value));
 }
 
-export default async function InventoryPage() {
-
-  const cookieStore = await cookies();
-  const session = getSessionAccessState(cookieStore);
-  if (session.needsRefresh) {
-    redirect(refreshSessionPath("/dashboard/inventory"));
-  }
-  const token = session.accessToken;
-  const { userId } = readSession(cookieStore);
-
-  if (!token || userId === undefined) {
-    return null;
-  }
-
+async function InventoryDataSection({
+  token,
+  userId,
+}: {
+  token: string;
+  userId: number;
+}) {
   let total = 0;
   let statusCounts = { active: 0, paused: 0, other: 0 };
   let warehouseLoadFailed = false;
@@ -141,23 +136,7 @@ export default async function InventoryPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-[var(--primary)]">
-          Estoque
-        </h1>
-        <p className="mt-2 max-w-3xl text-[15px] leading-relaxed text-[var(--muted-foreground)]">
-          Anúncios <strong>ativos e pausados</strong> no Mercado Livre (pausados
-          aparecem com aviso). Estoque no <strong>galpão</strong>, no{" "}
-          <strong>Full</strong> (já liberado para venda), <strong>a caminho</strong>{" "}
-          (transferência e processamento interno via API) e total geral. O
-          &quot;a caminho&quot; pode ser menor que no painel do Meli quando há{" "}
-          <strong>entrada pendente</strong> não exposta pela API.{" "}
-          <strong>Editar</strong> ajusta só o galpão;{" "}
-          <strong>Configurações</strong> define o prazo compra → galpão.
-        </p>
-      </div>
-
+    <>
       {warehouseLoadFailed ? (
         <Card className="border-amber-200 bg-amber-50/50">
           <CardContent className="pt-6 text-sm text-amber-950">
@@ -181,6 +160,44 @@ export default async function InventoryPage() {
             : null}
         </CardContent>
       </Card>
+    </>
+  );
+}
+
+export default async function InventoryPage() {
+  const cookieStore = await cookies();
+  const session = getSessionAccessState(cookieStore);
+  if (session.needsRefresh) {
+    redirect(refreshSessionPath("/dashboard/inventory"));
+  }
+  const token = session.accessToken;
+  const { userId } = readSession(cookieStore);
+
+  if (!token || userId === undefined) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight text-[var(--primary)]">
+          Estoque
+        </h1>
+        <p className="mt-2 max-w-3xl text-[15px] leading-relaxed text-[var(--muted-foreground)]">
+          Anúncios <strong>ativos e pausados</strong> no Mercado Livre (pausados
+          aparecem com aviso). Estoque no <strong>galpão</strong>, no{" "}
+          <strong>Full</strong> (já liberado para venda), <strong>a caminho</strong>{" "}
+          (transferência e processamento interno via API) e total geral. O
+          &quot;a caminho&quot; pode ser menor que no painel do Meli quando há{" "}
+          <strong>entrada pendente</strong> não exposta pela API.{" "}
+          <strong>Editar</strong> ajusta só o galpão;{" "}
+          <strong>Configurações</strong> define o prazo compra → galpão.
+        </p>
+      </div>
+
+      <Suspense fallback={<InventoryStockTableSkeleton />}>
+        <InventoryDataSection token={token} userId={userId} />
+      </Suspense>
     </div>
   );
 }

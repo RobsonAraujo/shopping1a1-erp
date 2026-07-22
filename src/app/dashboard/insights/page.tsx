@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -26,6 +27,7 @@ import { RupturaCard } from "@/components/insights/ruptura-card";
 import { AdsMargemCard } from "@/components/insights/ads-margem-card";
 import { DifalMapCard } from "@/components/insights/difal-map-card";
 import { ParetoCard } from "@/components/insights/pareto-card";
+import { InsightsPageSkeleton } from "@/components/insights/insights-page-skeleton";
 
 const MONTH_NAMES = [
   "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
@@ -36,17 +38,13 @@ function plural(n: number, singular: string, plural_: string) {
   return `${n} ${n === 1 ? singular : plural_}`;
 }
 
-export default async function InsightsPage() {
-  const cookieStore = await cookies();
-  const session = getSessionAccessState(cookieStore);
-  if (session.needsRefresh) {
-    redirect(refreshSessionPath("/dashboard/insights"));
-  }
-  const token = session.accessToken;
-  const { userId } = readSession(cookieStore);
-
-  if (!token || userId === undefined) return null;
-
+async function InsightsDataSection({
+  token,
+  userId,
+}: {
+  token: string;
+  userId: number;
+}) {
   const [purchaseData, taxSnapshot] = await Promise.all([
     loadDashboardPurchaseData(token, userId).catch(() => null),
     loadLatestTaxReportSnapshot(userId).catch(() => null),
@@ -128,17 +126,10 @@ export default async function InsightsPage() {
   };
 
   return (
-    <div className="space-y-8">
-      <header className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-6 py-7 sm:px-8">
-        <h1 className="text-2xl font-bold tracking-tight text-[var(--primary)] sm:text-3xl">
-          Insights
-        </h1>
-        <p className="mt-1.5 max-w-2xl text-sm text-[var(--muted-foreground)]">
-          Clique em qualquer card para ver os detalhes. Itens críticos abrem automaticamente.
-        </p>
-
-        {kpis.length > 0 && (
-          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <>
+      {kpis.length > 0 && (
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-6 py-5 sm:px-8">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {kpis.map(({ key, label, value, hint, tone, icon: Icon }) => (
               <div
                 key={key}
@@ -155,8 +146,8 @@ export default async function InsightsPage() {
               </div>
             ))}
           </div>
-        )}
-      </header>
+        </div>
+      )}
 
       {!purchaseData && !taxSnapshot && (
         <Card className="border-yellow-200 bg-yellow-50/50">
@@ -264,6 +255,35 @@ export default async function InsightsPage() {
           </section>
         )}
       </div>
+    </>
+  );
+}
+
+export default async function InsightsPage() {
+  const cookieStore = await cookies();
+  const session = getSessionAccessState(cookieStore);
+  if (session.needsRefresh) {
+    redirect(refreshSessionPath("/dashboard/insights"));
+  }
+  const token = session.accessToken;
+  const { userId } = readSession(cookieStore);
+
+  if (!token || userId === undefined) return null;
+
+  return (
+    <div className="space-y-8">
+      <header className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-6 py-7 sm:px-8">
+        <h1 className="text-2xl font-bold tracking-tight text-[var(--primary)] sm:text-3xl">
+          Insights
+        </h1>
+        <p className="mt-1.5 max-w-2xl text-sm text-[var(--muted-foreground)]">
+          Clique em qualquer card para ver os detalhes. Itens críticos abrem automaticamente.
+        </p>
+      </header>
+
+      <Suspense fallback={<InsightsPageSkeleton />}>
+        <InsightsDataSection token={token} userId={userId} />
+      </Suspense>
     </div>
   );
 }
