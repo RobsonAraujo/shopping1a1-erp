@@ -225,14 +225,11 @@ export function RevenuePotentialView({ rows }: { rows: RevenuePotentialRow[] }) 
   }, [visibleRows]);
 
   // Capital de giro segue o mesmo switch de pausados da tabela acima —
-  // independente da busca por texto, que é específica da tabela.
+  // independente da busca por texto, que é específica da tabela. Os
+  // excluídos continuam vindo (com isExcluded=true) para o card poder
+  // contá-los; quem descarta do cálculo é o buildWorkingCapitalRows.
   const activeConsideredRows = useMemo(
-    () =>
-      filterListingsByPausedVisibility(
-        effectiveRows,
-        showPaused,
-        (r) => r.status,
-      ).filter((r) => !r.isExcluded),
+    () => filterListingsByPausedVisibility(effectiveRows, showPaused, (r) => r.status),
     [effectiveRows, showPaused],
   );
 

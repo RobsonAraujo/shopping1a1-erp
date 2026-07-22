@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,11 @@ import { FormInput } from "@/components/ui/form-input";
 import { cn } from "@/lib/utils";
 import { usePersistedJson } from "@/hooks/use-persisted-json";
 import { getSkuSupplier } from "@/lib/mercadolibre/item-sku";
+import {
+  ItemListSearch,
+  itemListSearchEmptyMessage,
+} from "@/components/item-list-search";
+import { filterByItemListSearch } from "@/lib/item-list-search";
 import {
   buildWorkingCapitalRows,
   type WorkingCapitalInputRow,
@@ -40,16 +45,40 @@ export function WorkingCapitalCard({ rows }: { rows: WorkingCapitalInputRow[] })
     DEFAULT_STORED_STATE,
   );
   const { periodDays, installmentsBySupplier } = stored;
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const excludedCount = useMemo(
+    () => rows.filter((r) => r.isExcluded).length,
+    [rows],
+  );
 
   const suppliers = useMemo(() => {
     const set = new Set<string>();
-    for (const row of rows) set.add(getSkuSupplier(row.sku));
+    for (const row of rows) {
+      if (row.isExcluded) continue;
+      set.add(getSkuSupplier(row.sku));
+    }
     return [...set].sort((a, b) => a.localeCompare(b, "pt-BR"));
   }, [rows]);
 
-  const { rows: capitalRows, totalCapital, missingCostSkus } = useMemo(
+  const { rows: allCapitalRows, missingCostSkus } = useMemo(
     () => buildWorkingCapitalRows(rows, periodDays, installmentsBySupplier),
     [rows, periodDays, installmentsBySupplier],
+  );
+
+  const capitalRows = useMemo(
+    () =>
+      filterByItemListSearch(allCapitalRows, searchQuery, (r) => ({
+        sku: r.sku,
+        title: r.title,
+        mlItemId: r.mlItemId,
+      })),
+    [allCapitalRows, searchQuery],
+  );
+
+  const totalCapital = useMemo(
+    () => capitalRows.reduce((sum, r) => sum + r.effectiveCapital, 0),
+    [capitalRows],
   );
 
   const setPeriodDays = (value: number) => {
@@ -106,6 +135,16 @@ export function WorkingCapitalCard({ rows }: { rows: WorkingCapitalInputRow[] })
           {fmtBrl(totalCapital)}
         </div>
       </div>
+
+      <ItemListSearch
+        value={searchQuery}
+        onChange={setSearchQuery}
+        filteredCount={capitalRows.length}
+        totalCount={allCapitalRows.length}
+        entitySingular="produto"
+        entityPlural="produtos"
+        className="sm:max-w-sm"
+      />
 
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-medium text-[var(--muted-foreground)]">
@@ -185,6 +224,12 @@ export function WorkingCapitalCard({ rows }: { rows: WorkingCapitalInputRow[] })
         </div>
       )}
 
+      {capitalRows.length === 0 && allCapitalRows.length > 0 && (
+        <p className="py-4 text-center text-sm text-[var(--muted-foreground)]">
+          {itemListSearchEmptyMessage(searchQuery, "produto")}
+        </p>
+      )}
+
       {capitalRows.length > 0 && (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -232,6 +277,14 @@ export function WorkingCapitalCard({ rows }: { rows: WorkingCapitalInputRow[] })
           </table>
         </div>
       )}
+
+      <p className="text-right text-xs text-[var(--muted-foreground)]">
+        {rows.length} produto{rows.length !== 1 ? "s" : ""} no total
+        {excludedCount > 0 &&
+          ` · ${excludedCount} não considerado${excludedCount !== 1 ? "s" : ""}`}
+        {missingCostSkus.length > 0 &&
+          ` · ${missingCostSkus.length} sem custo cadastrado`}
+      </p>
     </div>
   );
 }
