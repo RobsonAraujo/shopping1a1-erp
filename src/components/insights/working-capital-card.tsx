@@ -81,8 +81,9 @@ export function WorkingCapitalCard({ rows }: { rows: WorkingCapitalInputRow[] })
           </h2>
           <p className="mt-0.5 max-w-xl text-xs text-[var(--muted-foreground)]">
             Estoque necessário (média/dia × dias) × custo unitário cadastrado
-            (NF ou compra + ICMS-ST) ÷ parcelas do fornecedor. Considera só
-            produtos <strong>ativos</strong> e não excluídos da simulação acima.
+            (NF ou compra + ICMS-ST) ÷ parcelas do fornecedor. Não considera
+            produtos excluídos da simulação acima; pausados seguem o switch
+            &quot;Mostrar pausados&quot;.
           </p>
         </div>
         {hasCustomSettings && (

@@ -1,9 +1,10 @@
 /**
  * Capital de giro necessário: quanto custa comprar estoque suficiente para
- * cobrir N dias de vendas dos produtos ATIVOS (pausados e produtos excluídos
- * da simulação de potencial de faturamento não entram). O custo unitário
- * usado é o já cadastrado em "Meus produtos" — ver `stockReportUnitCostFromProduct`
- * em `src/lib/inventory-stock-report.ts` para a regra NF vs compra+ST.
+ * cobrir N dias de vendas dos produtos considerados (excluídos da simulação
+ * de potencial de faturamento não entram; pausados entram ou não conforme o
+ * switch "Mostrar pausados" da página). O custo unitário usado é o já
+ * cadastrado em "Meus produtos" — ver `stockReportUnitCostFromProduct` em
+ * `src/lib/inventory-stock-report.ts` para a regra NF vs compra+ST.
  */
 import { getSkuSupplier } from "@/lib/mercadolibre/item-sku";
 import type { WorkingCapitalRow } from "@/lib/insights/types";
@@ -12,7 +13,6 @@ export type WorkingCapitalInputRow = {
   mlItemId: string;
   sku: string | null;
   title: string;
-  status: string;
   effectiveDailyAvg: number;
   unitCost: number | null;
   hasIcmsSt: boolean;
@@ -28,9 +28,7 @@ export function buildWorkingCapitalRows(
   totalCapital: number;
   missingCostSkus: string[];
 } {
-  const considered = rows.filter(
-    (r) => r.status === "active" && !r.isExcluded,
-  );
+  const considered = rows.filter((r) => !r.isExcluded);
 
   const missingCostSkus = considered
     .filter((r) => r.unitCost === null)
