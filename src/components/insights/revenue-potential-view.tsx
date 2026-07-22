@@ -438,15 +438,15 @@ export function RevenuePotentialView({ rows }: { rows: RevenuePotentialRow[] }) 
                     <div className="flex items-center justify-end gap-1">
                       <FormInput
                         type="number"
-                        step="1"
+                        step="0.1"
                         min="0"
                         disabled={row.isExcluded}
-                        value={Math.round(row.effectiveDailyAvg)}
+                        value={row.effectiveDailyAvg.toFixed(1)}
                         onChange={(e) => {
                           const value = e.target.valueAsNumber;
                           setOverride(
                             row.mlItemId,
-                            Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0,
+                            Number.isFinite(value) ? Math.max(0, value) : 0,
                           );
                         }}
                         className="w-16"
