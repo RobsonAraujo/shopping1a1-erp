@@ -452,12 +452,13 @@ export async function fetchDailyUnitsSoldByItemInDateRange(
   const { apiBase } = getMercadoLibreConfig();
   const fromStr = from.toISOString();
   const toStr = to.toISOString();
-  const dailyByItem: DailyUnitsSoldByItem = {};
-  let offset = 0;
   const limit = 50;
-  let total = Infinity;
+  // Só a 1ª página é sequencial (pra saber o total); o resto busca em paralelo
+  // — evita centenas de round-trips um-a-um em contas com muitos pedidos.
+  const concurrency = 6;
+  const dailyByItem: DailyUnitsSoldByItem = {};
 
-  while (offset < total) {
+  function buildUrl(offset: number): string {
     const u = new URL(`${apiBase}/orders/search`);
     u.searchParams.set("seller", String(sellerId));
     u.searchParams.set("order.status", "paid");
@@ -466,8 +467,11 @@ export async function fetchDailyUnitsSoldByItemInDateRange(
     u.searchParams.set("limit", String(limit));
     u.searchParams.set("sort", "date_desc");
     u.searchParams.set("display", "complete");
+    return u.toString();
+  }
 
-    const res = await fetch(u.toString(), {
+  async function fetchPage(offset: number): Promise<OrderSearchResponse> {
+    const res = await fetch(buildUrl(offset), {
       headers: { Authorization: `Bearer ${accessToken}` },
       cache: "no-store",
     });
@@ -475,16 +479,11 @@ export async function fetchDailyUnitsSoldByItemInDateRange(
       const t = await res.text();
       throw new Error(`orders/search failed: ${res.status} ${t}`);
     }
+    return (await res.json()) as OrderSearchResponse;
+  }
 
-    const data = (await res.json()) as OrderSearchResponse;
-    const reported = data.paging?.total;
-    total =
-      reported != null && reported >= 0
-        ? reported
-        : ((data.results?.length ?? 0) > 0 ? Infinity : 0);
-
-    const batch = data.results ?? [];
-    for (const order of batch) {
+  function ingest(data: OrderSearchResponse) {
+    for (const order of data.results ?? []) {
       if (order.status === "cancelled") continue;
       const rawDate =
         dateField === "date_closed" ? order.date_closed : order.date_created;
@@ -500,10 +499,35 @@ export async function fetchDailyUnitsSoldByItemInDateRange(
         byDay[dayKey] = (byDay[dayKey] ?? 0) + qty;
       }
     }
+  }
 
-    if (batch.length === 0) break;
-    offset += limit;
-    if (batch.length < limit) break;
+  const first = await fetchPage(0);
+  ingest(first);
+
+  const reportedTotal = first.paging?.total;
+
+  if (reportedTotal == null || reportedTotal < 0) {
+    // Total não confiável — cai para paginação sequencial página a página.
+    let offset = limit;
+    let lastBatchLen = first.results?.length ?? 0;
+    while (lastBatchLen === limit) {
+      const data = await fetchPage(offset);
+      ingest(data);
+      lastBatchLen = data.results?.length ?? 0;
+      offset += limit;
+    }
+    return dailyByItem;
+  }
+
+  const remainingOffsets: number[] = [];
+  for (let offset = limit; offset < reportedTotal; offset += limit) {
+    remainingOffsets.push(offset);
+  }
+
+  for (let i = 0; i < remainingOffsets.length; i += concurrency) {
+    const chunk = remainingOffsets.slice(i, i + concurrency);
+    const pages = await Promise.all(chunk.map((offset) => fetchPage(offset)));
+    for (const page of pages) ingest(page);
   }
 
   return dailyByItem;
