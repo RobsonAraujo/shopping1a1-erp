@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  BarChart3,
   Boxes,
   ChartNoAxesColumn,
   Kanban,
@@ -106,6 +107,12 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
         label: "Insights",
         description: "Rotação baixa, ruptura, ads e concentração de receita",
         icon: Lightbulb,
+      },
+      {
+        href: "/dashboard/insights/potencial-faturamento",
+        label: "Potencial de faturamento",
+        description: "Quanto o catálogo faturaria sem ruptura de estoque",
+        icon: BarChart3,
       },
       {
         href: "/dashboard/lucratividade",

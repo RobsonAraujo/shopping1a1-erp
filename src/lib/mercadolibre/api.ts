@@ -434,6 +434,81 @@ export async function fetchOrderMetricsByItemInDateRange(
   return { revenueByItem, unitsByItem };
 }
 
+/** Unidades vendidas por anúncio, agrupadas por dia (data ISO `YYYY-MM-DD`). */
+export type DailyUnitsSoldByItem = Record<string, Record<string, number>>;
+
+/**
+ * Igual a `fetchOrderMetricsByItemInDateRange`, mas mantém a granularidade
+ * diária em vez de somar tudo — usado para ancorar médias de venda no
+ * período em que o anúncio realmente vendia (não no calendário corrido).
+ */
+export async function fetchDailyUnitsSoldByItemInDateRange(
+  accessToken: string,
+  sellerId: number,
+  from: Date,
+  to: Date,
+  dateField: SalesWindowDateField = stockPlanningConfig.salesWindowDateField,
+): Promise<DailyUnitsSoldByItem> {
+  const { apiBase } = getMercadoLibreConfig();
+  const fromStr = from.toISOString();
+  const toStr = to.toISOString();
+  const dailyByItem: DailyUnitsSoldByItem = {};
+  let offset = 0;
+  const limit = 50;
+  let total = Infinity;
+
+  while (offset < total) {
+    const u = new URL(`${apiBase}/orders/search`);
+    u.searchParams.set("seller", String(sellerId));
+    u.searchParams.set("order.status", "paid");
+    setOrderDateRange(u, dateField, fromStr, toStr);
+    u.searchParams.set("offset", String(offset));
+    u.searchParams.set("limit", String(limit));
+    u.searchParams.set("sort", "date_desc");
+    u.searchParams.set("display", "complete");
+
+    const res = await fetch(u.toString(), {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(`orders/search failed: ${res.status} ${t}`);
+    }
+
+    const data = (await res.json()) as OrderSearchResponse;
+    const reported = data.paging?.total;
+    total =
+      reported != null && reported >= 0
+        ? reported
+        : ((data.results?.length ?? 0) > 0 ? Infinity : 0);
+
+    const batch = data.results ?? [];
+    for (const order of batch) {
+      if (order.status === "cancelled") continue;
+      const rawDate =
+        dateField === "date_closed" ? order.date_closed : order.date_created;
+      const dayKey = rawDate ? rawDate.slice(0, 10) : null;
+      if (!dayKey) continue;
+
+      for (const line of order.order_items ?? []) {
+        const itemId = listingIdFromOrderLine(line);
+        if (!itemId) continue;
+        const qty = quantityFromOrderLine(line);
+        if (qty <= 0) continue;
+        const byDay = (dailyByItem[itemId] ??= {});
+        byDay[dayKey] = (byDay[dayKey] ?? 0) + qty;
+      }
+    }
+
+    if (batch.length === 0) break;
+    offset += limit;
+    if (batch.length < limit) break;
+  }
+
+  return dailyByItem;
+}
+
 /** Faturamento bruto por anúncio na janela. */
 export async function fetchRevenueByItemInDateRange(
   accessToken: string,

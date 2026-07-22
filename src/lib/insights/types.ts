@@ -70,3 +70,22 @@ export type ParetoRow = Pick<
   receitaPercent: number;
   receitaAcumuladaPercent: number;
 };
+
+// ---------------------------------------------------------------------------
+// Potencial de faturamento — estimativa sem ruptura de estoque
+// ---------------------------------------------------------------------------
+
+export type RevenuePotentialRow = {
+  mlItemId: string;
+  title: string;
+  sku: string | null;
+  status: string;
+  imageUrl: string | null;
+  price: number;
+  dailyAvgEstimate: number;
+  potentialMonthlyRevenue: number;
+  currentMonthlyRevenue: number;
+  gap: number;
+  /** "recent": vendendo normalmente agora. "historical": ancorado em venda passada (pausado ou em ruptura). */
+  estimateBasis: "recent" | "historical";
+};
