@@ -224,11 +224,16 @@ export function RevenuePotentialView({ rows }: { rows: RevenuePotentialRow[] }) 
     };
   }, [visibleRows]);
 
-  // Capital de giro considera só ativos + não excluídos da simulação —
-  // independente do filtro de busca/pausados usado na tabela acima.
+  // Capital de giro segue o mesmo switch de pausados da tabela acima —
+  // independente da busca por texto, que é específica da tabela.
   const activeConsideredRows = useMemo(
-    () => effectiveRows.filter((r) => r.status === "active" && !r.isExcluded),
-    [effectiveRows],
+    () =>
+      filterListingsByPausedVisibility(
+        effectiveRows,
+        showPaused,
+        (r) => r.status,
+      ).filter((r) => !r.isExcluded),
+    [effectiveRows, showPaused],
   );
 
   const kpis = [
@@ -279,36 +284,43 @@ export function RevenuePotentialView({ rows }: { rows: RevenuePotentialRow[] }) 
         </div>
       )}
 
-      <div
-        role="tablist"
-        aria-label="Visão de potencial de faturamento"
-        className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--muted)]/20 p-1"
-      >
-        {(
-          [
-            { id: "potencial", label: "Potencial de faturamento" },
-            { id: "capital", label: "Capital de giro necessário" },
-          ] as const
-        ).map((tab) => {
-          const selected = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={selected}
-              className={cn(
-                "inline-flex cursor-pointer items-center rounded-md px-4 py-2 text-sm font-medium transition-colors",
-                selected
-                  ? "bg-[var(--card)] text-[var(--primary)] shadow-sm"
-                  : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
-              )}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div
+          role="tablist"
+          aria-label="Visão de potencial de faturamento"
+          className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--muted)]/20 p-1"
+        >
+          {(
+            [
+              { id: "potencial", label: "Potencial de faturamento" },
+              { id: "capital", label: "Capital de giro necessário" },
+            ] as const
+          ).map((tab) => {
+            const selected = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                className={cn(
+                  "inline-flex cursor-pointer items-center rounded-md px-4 py-2 text-sm font-medium transition-colors",
+                  selected
+                    ? "bg-[var(--card)] text-[var(--primary)] shadow-sm"
+                    : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
+                )}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+        <ShowPausedListingsSwitch
+          checked={showPaused}
+          onCheckedChange={setShowPaused}
+          pausedCount={pausedCount}
+        />
       </div>
 
       {activeTab === "capital" ? (
@@ -331,22 +343,15 @@ export function RevenuePotentialView({ rows }: { rows: RevenuePotentialRow[] }) 
         ))}
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <ItemListSearch
-          value={searchQuery}
-          onChange={setSearchQuery}
-          filteredCount={visibleRows.length}
-          totalCount={effectiveRows.length}
-          entitySingular="produto"
-          entityPlural="produtos"
-          className="sm:max-w-sm"
-        />
-        <ShowPausedListingsSwitch
-          checked={showPaused}
-          onCheckedChange={setShowPaused}
-          pausedCount={pausedCount}
-        />
-      </div>
+      <ItemListSearch
+        value={searchQuery}
+        onChange={setSearchQuery}
+        filteredCount={visibleRows.length}
+        totalCount={effectiveRows.length}
+        entitySingular="produto"
+        entityPlural="produtos"
+        className="sm:max-w-sm"
+      />
 
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-4 shadow-sm sm:px-5">
         <p className="mb-3 text-xs text-[var(--muted-foreground)]">
