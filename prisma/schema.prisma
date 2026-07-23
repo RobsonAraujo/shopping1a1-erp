@@ -272,6 +272,20 @@ model TaxReportMonthSnapshot {
   @@map("tax_report_month_snapshots")
 }
 
+/// Simulação salva de potencial de faturamento / capital de giro (overrides,
+/// exclusões e configurações de capital de giro), por vendedor ML.
+model RevenueSimulation {
+  id        String   @id @default(cuid())
+  sellerId  Int      @map("seller_id")
+  name      String
+  payload   Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([sellerId])
+  @@map("revenue_simulations")
+}
+
 /// Cache de verificação de contribuinte ICMS por CNPJ.
 model TaxpayerVerificationCache {
   cnpj          String   @id

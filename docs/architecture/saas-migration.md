@@ -168,6 +168,17 @@ Detalhes dos modelos: [tenant-data-model.md](tenant-data-model.md).
 
 Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templates/feature-saas-impact.md).
 
+### Simulações salvas — potencial de faturamento / capital de giro — 2026-07-22
+
+- **Tabelas novas/alteradas:** `revenue_simulations` (nova) — `id`, `seller_id`, `name`, `payload` (JSON com overrides/excluídos/período/parcelas), timestamps
+- **Precisa `organizationId`?** sim, no futuro — hoje escopado por `seller_id` (ml_user_id da sessão), seguindo o mesmo padrão de `tax_report_month_snapshots`
+- **APIs afetadas:** novas — `GET/POST /api/insights/revenue-simulations`, `GET/PATCH/DELETE /api/insights/revenue-simulations/[id]`
+- **Assume singleton?** não — cada simulação é uma linha própria por `seller_id`, sem `id: "default"`
+- **Cron/background:** nenhum
+- **Dados globais vs por org:** todas as queries já filtram por `sellerId` (`findMany`/`findFirst where sellerId`)
+- **Código já tenant-ready?** parcial — troca de `sellerId` por `organizationId` é direta (mesmo padrão de coluna e filtro); a lógica de simulação em si (overrides/excluídos/período/parcelas) não depende de tenant
+- **Ação futura na migração:** renomear/adicionar `organizationId` na tabela e nos filtros das rotas quando o login de usuário ERP existir
+
 ### Otimização geração relatório — 2026-06-18
 
 - **Tabelas novas/alteradas:** nenhuma (mesmo schema JSON, formato enxuto)

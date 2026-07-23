@@ -15,7 +15,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { FormInput } from "@/components/ui/form-input";
 import { cn } from "@/lib/utils";
-import { usePersistedJson } from "@/hooks/use-persisted-json";
+import {
+  usePersistedJson,
+  getPersistedJsonValue,
+  setPersistedJsonValue,
+} from "@/hooks/use-persisted-json";
 import {
   ItemListSearch,
   itemListSearchEmptyMessage,
@@ -26,11 +30,22 @@ import {
   countPausedListings,
   filterListingsByPausedVisibility,
 } from "@/components/show-paused-listings-switch";
-import type { RevenuePotentialRow } from "@/lib/insights/types";
-import { WorkingCapitalCard } from "@/components/insights/working-capital-card";
+import type { RevenuePotentialRow, RevenueSimulationPayload } from "@/lib/insights/types";
+import {
+  WorkingCapitalCard,
+  WORKING_CAPITAL_STORAGE_KEY,
+  WORKING_CAPITAL_DEFAULT_STORED_STATE,
+  type WorkingCapitalStoredState,
+} from "@/components/insights/working-capital-card";
+import {
+  SavedSimulationsMenu,
+  type ActiveSimulation,
+} from "@/components/insights/saved-simulations-menu";
 
 const DAYS_IN_MONTH = 30;
 const STORAGE_KEY = "insights:revenue-potential:v1";
+const ACTIVE_SIMULATION_STORAGE_KEY =
+  "insights:revenue-potential:active-simulation:v1";
 
 type StoredState = {
   overrides: Record<string, number>;
@@ -130,6 +145,8 @@ export function RevenuePotentialView({ rows }: { rows: RevenuePotentialRow[] }) 
     STORAGE_KEY,
     EMPTY_STORED_STATE,
   );
+  const [activeSimulation, setActiveSimulation] =
+    usePersistedJson<ActiveSimulation>(ACTIVE_SIMULATION_STORAGE_KEY, null);
   const { overrides, excluded } = stored;
 
   const setOverride = (mlItemId: string, value: number) => {
@@ -153,7 +170,31 @@ export function RevenuePotentialView({ rows }: { rows: RevenuePotentialRow[] }) 
     Object.keys(overrides).length > 0 ||
     Object.keys(excluded).some((k) => excluded[k]);
 
-  const handleReset = () => setStored(EMPTY_STORED_STATE);
+  const handleReset = () => {
+    setStored(EMPTY_STORED_STATE);
+    setActiveSimulation(null);
+  };
+
+  const buildSimulationPayload = (): RevenueSimulationPayload => {
+    const workingCapital = getPersistedJsonValue<WorkingCapitalStoredState>(
+      WORKING_CAPITAL_STORAGE_KEY,
+      WORKING_CAPITAL_DEFAULT_STORED_STATE,
+    );
+    return {
+      overrides: stored.overrides,
+      excluded: stored.excluded,
+      periodDays: workingCapital.periodDays,
+      installmentsBySupplier: workingCapital.installmentsBySupplier,
+    };
+  };
+
+  const handleLoadSimulation = (payload: RevenueSimulationPayload) => {
+    setStored({ overrides: payload.overrides, excluded: payload.excluded });
+    setPersistedJsonValue<WorkingCapitalStoredState>(WORKING_CAPITAL_STORAGE_KEY, {
+      periodDays: payload.periodDays,
+      installmentsBySupplier: payload.installmentsBySupplier,
+    });
+  };
 
   const toggleSort = (key: SortKey) => {
     if (key === sortKey) {
@@ -267,8 +308,9 @@ export function RevenuePotentialView({ rows }: { rows: RevenuePotentialRow[] }) 
       {hasChanges && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/30">
           <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
-            Você está vendo uma simulação: alguns produtos foram editados ou não
-            considerados na análise.
+            {activeSimulation
+              ? `Você está editando a simulação salva "${activeSimulation.name}".`
+              : "Você está vendo uma simulação: alguns produtos foram editados ou não considerados na análise."}
           </p>
           <button
             type="button"
@@ -313,11 +355,19 @@ export function RevenuePotentialView({ rows }: { rows: RevenuePotentialRow[] }) 
             );
           })}
         </div>
-        <ShowPausedListingsSwitch
-          checked={showPaused}
-          onCheckedChange={setShowPaused}
-          pausedCount={pausedCount}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <SavedSimulationsMenu
+            activeSimulation={activeSimulation}
+            onActiveSimulationChange={setActiveSimulation}
+            buildPayload={buildSimulationPayload}
+            onLoad={handleLoadSimulation}
+          />
+          <ShowPausedListingsSwitch
+            checked={showPaused}
+            onCheckedChange={setShowPaused}
+            pausedCount={pausedCount}
+          />
+        </div>
       </div>
 
       {activeTab === "capital" ? (

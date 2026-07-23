@@ -19,6 +19,11 @@ const API_ERROR_MESSAGES: Record<string, string> = {
   products_suggestions_failed: "Não foi possível carregar sugestões de SKU.",
   tax_settings_load_failed: "Não foi possível carregar PIS/COFINS da empresa.",
   tax_settings_update_failed: "Não foi possível salvar PIS/COFINS da empresa.",
+  revenue_simulations_list_failed: "Não foi possível carregar as simulações salvas.",
+  revenue_simulation_create_failed: "Não foi possível salvar a simulação.",
+  revenue_simulation_get_failed: "Não foi possível abrir a simulação.",
+  revenue_simulation_update_failed: "Não foi possível salvar as alterações da simulação.",
+  revenue_simulation_delete_failed: "Não foi possível excluir a simulação.",
   Unauthorized: "Sessão expirada. Entre novamente.",
   "Invalid JSON": "Dados inválidos enviados ao servidor.",
 };

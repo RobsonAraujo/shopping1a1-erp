@@ -18,18 +18,21 @@ import {
   type WorkingCapitalInputRow,
 } from "@/lib/insights/working-capital";
 
-const STORAGE_KEY = "insights:working-capital:v1";
+export const WORKING_CAPITAL_STORAGE_KEY = "insights:working-capital:v1";
+const STORAGE_KEY = WORKING_CAPITAL_STORAGE_KEY;
 const PERIOD_PRESETS = [30, 45, 60];
 
-type StoredState = {
+export type WorkingCapitalStoredState = {
   periodDays: number;
   installmentsBySupplier: Record<string, number>;
 };
+type StoredState = WorkingCapitalStoredState;
 
-const DEFAULT_STORED_STATE: StoredState = {
+export const WORKING_CAPITAL_DEFAULT_STORED_STATE: StoredState = {
   periodDays: 30,
   installmentsBySupplier: {},
 };
+const DEFAULT_STORED_STATE = WORKING_CAPITAL_DEFAULT_STORED_STATE;
 
 function fmtBrl(n: number): string {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });

@@ -111,3 +111,14 @@ export type WorkingCapitalRow = {
   installments: number;
   effectiveCapital: number;
 };
+
+// ---------------------------------------------------------------------------
+// Simulações salvas (potencial de faturamento + capital de giro)
+// ---------------------------------------------------------------------------
+
+export type RevenueSimulationPayload = {
+  overrides: Record<string, number>;
+  excluded: Record<string, boolean>;
+  periodDays: number;
+  installmentsBySupplier: Record<string, number>;
+};

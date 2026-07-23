@@ -19,10 +19,12 @@ function prismaClientHasExpectedModels(client: PrismaClient): boolean {
   const delegate = client as PrismaClient & {
     dreCostItem?: { findMany?: unknown };
     replenishmentCycle?: { findMany?: unknown };
+    revenueSimulation?: { findMany?: unknown };
   };
   return (
     typeof delegate.dreCostItem?.findMany === "function" &&
-    typeof delegate.replenishmentCycle?.findMany === "function"
+    typeof delegate.replenishmentCycle?.findMany === "function" &&
+    typeof delegate.revenueSimulation?.findMany === "function"
   );
 }
 

@@ -98,3 +98,17 @@ export function usePersistedJson<T>(
 
   return [value, setValue] as const;
 }
+
+/**
+ * Lê/escreve um valor persistido fora de um componente React, reaproveitando
+ * a mesma store (cache + notificação de listeners) usada por
+ * `usePersistedJson` para essa `storageKey` — mantém tudo sincronizado com
+ * componentes que já usam o hook nessa chave.
+ */
+export function getPersistedJsonValue<T>(storageKey: string, defaultValue: T): T {
+  return getJsonStore(storageKey, defaultValue).getSnapshot();
+}
+
+export function setPersistedJsonValue<T>(storageKey: string, value: T): void {
+  getJsonStore(storageKey, value).set(value);
+}
