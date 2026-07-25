@@ -13,6 +13,7 @@ import {
   type TaxReportProgressState,
 } from "@/components/tax-report-generation-overlay";
 import { TaxReportHeaderWithTip } from "@/components/tax-report-transaction-table";
+import { TaxReportExtraCostsPanel } from "@/components/tax-report-extra-costs-panel";
 import {
   ItemListSearch,
   itemListSearchEmptyMessage,
@@ -21,8 +22,10 @@ import { readApiError } from "@/lib/api-client-error";
 import {
   formatFinancialMoney,
   formatFinancialPercent,
+  roundMoney,
 } from "@/lib/financial-margin";
 import { filterByItemListSearch } from "@/lib/item-list-search";
+import { usePersistedJson } from "@/hooks/use-persisted-json";
 import { getZonedYearMonth } from "@/lib/mercadolibre/revenue-periods";
 import {
   TAX_REPORT_MONTH_NAMES,
@@ -33,8 +36,20 @@ import {
   skuImpostoOperacionalPercentual,
   margemOperacionalConsolidado,
 } from "@/lib/tax-report/imposto-operacional";
+import {
+  DEFAULT_COFINS_RATE,
+  DEFAULT_PIS_RATE,
+} from "@/lib/tax-report/config";
+import {
+  applyExtraCostsToApuracao,
+  computeExtraCostsCredit,
+  extraCostsStorageKey,
+  type MonthlyExtraCost,
+} from "@/lib/tax-report/extra-costs";
 import type { TaxReportPayload } from "@/lib/tax-report/types";
 import { cn } from "@/lib/utils";
+
+const EMPTY_EXTRA_COSTS: MonthlyExtraCost[] = [];
 
 function SummaryCard({
   label,
@@ -75,6 +90,28 @@ export function MonthlyTaxReportClient() {
     useState<TaxReportProgressState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  const [extraCosts] = usePersistedJson<MonthlyExtraCost[]>(
+    extraCostsStorageKey(year, month),
+    EMPTY_EXTRA_COSTS,
+  );
+
+  const extraCredit = useMemo(() => {
+    const sample = report?.porSku?.[0]?.transacoes?.[0]?.pisCofins;
+    const pisRatePercent = sample?.pisRatePercent ?? DEFAULT_PIS_RATE;
+    const cofinsRatePercent = sample?.cofinsRatePercent ?? DEFAULT_COFINS_RATE;
+    return computeExtraCostsCredit(extraCosts, pisRatePercent, cofinsRatePercent);
+  }, [extraCosts, report]);
+
+  const creditoExtraTotal = roundMoney(
+    extraCredit.pisCredito + extraCredit.cofinsCredito,
+  );
+
+  const apuracaoAjustada = useMemo(() => {
+    const apuracao = report?.consolidado.apuracao;
+    if (!apuracao) return null;
+    return applyExtraCostsToApuracao(apuracao, extraCredit);
+  }, [report, extraCredit]);
 
   const loadReport = useCallback(async () => {
     setLoading(true);
@@ -285,27 +322,30 @@ export function MonthlyTaxReportClient() {
               <SummaryCard
                 label="PIS/COFINS líquido"
                 value={formatFinancialMoney(
-                  report.consolidado.apuracao?.pisCofinsLiquido ??
+                  apuracaoAjustada?.pisCofinsLiquido ??
                     report.consolidado.pisCofinsLiquido,
                 )}
-                tip="Débito sobre a venda menos crédito sobre NF de entrada (não-cumulativo)."
+                tip="Débito sobre a venda menos crédito sobre NF de entrada e custos extras cadastrados (não-cumulativo)."
               />
               <SummaryCard
                 label="Margem operacional"
                 value={formatFinancialMoney(
-                  margemOperacionalConsolidado(report.consolidado),
+                  margemOperacionalConsolidado(report.consolidado) +
+                    creditoExtraTotal,
                 )}
-                tip="Faturamento − CMV − impostos operacionais (PIS/COFINS + ICMS) do mês."
+                tip="Faturamento − CMV − impostos operacionais (PIS/COFINS + ICMS) do mês, já considerando o crédito extra cadastrado."
                 highlight
               />
             </div>
 
-            {report.consolidado.apuracao ? (
+            {apuracaoAjustada ? (
               <TaxReportApuracaoPanel
-                apuracao={report.consolidado.apuracao}
+                apuracao={apuracaoAjustada}
                 faturamento={report.consolidado.faturamento}
               />
             ) : null}
+
+            <TaxReportExtraCostsPanel year={year} month={month} />
 
             <p className="text-xs text-[var(--muted-foreground)]">
               Gerado em {new Date(report.meta.geradoEm).toLocaleString("pt-BR")}{" "}
