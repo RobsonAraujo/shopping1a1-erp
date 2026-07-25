@@ -5,13 +5,15 @@ import type {
   SkuAggregation,
 } from "@/lib/tax-report/types";
 
-/** PIS/COFINS líquido + ICMS — sem IRPJ/CSLL. */
+/** PIS/COFINS líquido + ICMS líquido (débito da venda − crédito de compra) — sem IRPJ/CSLL. */
 export function impostoOperacionalLinha(
   row: DetalhamentoTributario,
 ): number | null {
   if (!row.incluidoNaApuracao) return null;
   return roundMoney(
-    (row.pisCofins?.liquido ?? 0) + (row.icmsDifal?.icmsTotal ?? 0),
+    (row.pisCofins?.liquido ?? 0) +
+      (row.icmsDifal?.icmsTotal ?? 0) -
+      (row.icmsCreditoCompra?.creditoTotal ?? 0),
   );
 }
 
@@ -25,7 +27,8 @@ function sumImpostoOperacionalTransacoes(
         (sum, row) =>
           sum +
           (row.pisCofins?.liquido ?? 0) +
-          (row.icmsDifal?.icmsTotal ?? 0),
+          (row.icmsDifal?.icmsTotal ?? 0) -
+          (row.icmsCreditoCompra?.creditoTotal ?? 0),
         0,
       ),
   );

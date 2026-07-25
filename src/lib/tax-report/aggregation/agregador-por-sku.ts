@@ -14,7 +14,11 @@ import type {
 } from "@/lib/tax-report/types";
 
 function impostoOperacionalLinhaValor(det: DetalhamentoTributario): number {
-  return (det.pisCofins?.liquido ?? 0) + (det.icmsDifal?.icmsTotal ?? 0);
+  return (
+    (det.pisCofins?.liquido ?? 0) +
+    (det.icmsDifal?.icmsTotal ?? 0) -
+    (det.icmsCreditoCompra?.creditoTotal ?? 0)
+  );
 }
 
 function aggregationSkuKey(
@@ -124,7 +128,12 @@ export function consolidarRelatorio(
       0,
     ),
   );
-  const impostosOperacionais = roundMoney(pisCofinsLiquido + icmsDifalTotal);
+  const icmsCreditoCompraTotal = roundMoney(
+    incluidas.reduce((s, t) => s + (t.icmsCreditoCompra?.creditoTotal ?? 0), 0),
+  );
+  const impostosOperacionais = roundMoney(
+    pisCofinsLiquido + icmsDifalTotal - icmsCreditoCompraTotal,
+  );
   const cmvTotal = roundMoney(
     incluidas.reduce(
       (s, t) =>

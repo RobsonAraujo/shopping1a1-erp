@@ -84,6 +84,9 @@ export function TaxReportCalculationPanel({
 
   const liquidoPisCofinsPercent = pis ? percentOfSale(pis.liquido, t.receitaBruta) : null;
 
+  const icmsLiquido = icms ? icms.icmsTotal - (icmsCred?.creditoTotal ?? 0) : null;
+  const icmsLiquidoPercent = icmsLiquido != null ? percentOfSale(icmsLiquido, t.receitaBruta) : null;
+
   return (
     <Card className="border-[var(--primary)]/20 bg-[var(--muted)]/10 p-4">
       <div className="mb-4 flex items-start justify-between gap-3">
@@ -157,7 +160,7 @@ export function TaxReportCalculationPanel({
         </MemoriaSection>
 
         {icms ? (
-          <MemoriaSection title="ICMS / DIFAL">
+          <MemoriaSection title="ICMS na venda (débito)">
             <MemoriaRow
               label="Operação"
               value={
@@ -182,7 +185,7 @@ export function TaxReportCalculationPanel({
                 )}
                 <MemoriaDivider />
                 <MemoriaRow
-                  label="ICMS saída"
+                  label="Débito de ICMS (ICMS devido nesta venda)"
                   value={formatFinancialMoney(icms.icmsTotal)}
                   emphasis
                 />
@@ -214,7 +217,7 @@ export function TaxReportCalculationPanel({
                 )}
                 <MemoriaDivider />
                 <MemoriaRow
-                  label="ICMS total"
+                  label="Débito de ICMS (ICMS devido nesta venda)"
                   value={formatFinancialMoney(icms.icmsTotal)}
                   emphasis
                 />
@@ -224,7 +227,7 @@ export function TaxReportCalculationPanel({
         ) : null}
 
         {icmsCred ? (
-          <MemoriaSection title="Crédito ICMS compra">
+          <MemoriaSection title="ICMS na compra (crédito)">
             {icmsCred.creditoTotal > 0 ? (
               <>
                 <MemoriaRow
@@ -237,14 +240,14 @@ export function TaxReportCalculationPanel({
                 />
                 <MemoriaDivider />
                 <MemoriaRow
-                  label="Crédito"
+                  label="Crédito de ICMS (pago na compra, abate o débito)"
                   value={formatFinancialMoney(icmsCred.creditoTotal)}
                   emphasis
                 />
               </>
             ) : (
               <MemoriaRow
-                label="Crédito"
+                label="Crédito de ICMS"
                 value={
                   t.hasIcmsSt
                     ? "R$ 0,00 (ST na compra)"
@@ -255,6 +258,30 @@ export function TaxReportCalculationPanel({
                 muted
               />
             )}
+          </MemoriaSection>
+        ) : null}
+
+        {icms && icmsCred ? (
+          <MemoriaSection title="ICMS líquido" className="sm:col-span-2">
+            <MemoriaRow
+              label="Débito de ICMS (venda)"
+              value={formatFinancialMoney(icms.icmsTotal)}
+            />
+            <MemoriaRow
+              label="(−) Crédito de ICMS (compra)"
+              value={formatFinancialMoney(icmsCred.creditoTotal)}
+              muted
+            />
+            <MemoriaDivider />
+            <MemoriaRow
+              label="ICMS líquido a recolher nesta venda"
+              value={
+                icmsLiquidoPercent != null
+                  ? `${formatFinancialPercent(icmsLiquidoPercent)} (${formatFinancialMoney(icmsLiquido ?? 0)})`
+                  : formatFinancialMoney(icmsLiquido ?? 0)
+              }
+              emphasis
+            />
           </MemoriaSection>
         ) : null}
 
@@ -322,6 +349,17 @@ export function TaxReportCalculationPanel({
         <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm">
           <span className="text-xs text-[var(--muted-foreground)]">
             Imposto operacional
+            {pis && icms ? (
+              <span className="block text-[10px] normal-case text-[var(--muted-foreground)]/80">
+                PIS/COFINS líquido (
+                {formatFinancialPercent(percentOfSale(pis.liquido, t.receitaBruta))} ·{" "}
+                {formatFinancialMoney(pis.liquido)}) + ICMS líquido (
+                {icmsLiquidoPercent != null
+                  ? formatFinancialPercent(icmsLiquidoPercent)
+                  : "—"}{" "}
+                · {formatFinancialMoney(icmsLiquido ?? 0)})
+              </span>
+            ) : null}
           </span>
           <span className="flex flex-col items-end text-right tabular-nums">
             <span className="font-semibold">

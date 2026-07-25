@@ -72,8 +72,9 @@ export function calcularDetalhamentoTransacao(input: {
   const cmvTotal =
     (transacao.custoAquisicaoUnitario ?? 0) * transacao.quantidade +
     transacao.extraCostsUnitario * transacao.quantidade;
-  const impostosOperacionais =
-    (pisCofins?.liquido ?? 0) + (icmsDifal?.icmsTotal ?? 0);
+  const icmsLiquido =
+    (icmsDifal?.icmsTotal ?? 0) - (icmsCreditoCompra?.creditoTotal ?? 0);
+  const impostosOperacionais = (pisCofins?.liquido ?? 0) + icmsLiquido;
   const cbsIbs = calcularCbsIbsInformativo(
     transacao.receitaBruta,
     year,
