@@ -51,8 +51,11 @@ export type ProductView = ProductRecordForPricing & {
   pricingCost: number | null;
   /** % médio operacional de imposto vindo do relatório tributário (null = sem dados para o SKU). */
   taxPercent: number | null;
-  /** Data (ISO) do snapshot do relatório tributário usado para taxPercent. */
+  /** Data (ISO) em que o snapshot usado para taxPercent foi gerado/recalculado. */
   taxPercentGeneratedAt: string | null;
+  /** Mês/ano do relatório tributário de onde veio taxPercent (pode ser um mês anterior ao mais recente). */
+  taxPercentYear: number | null;
+  taxPercentMonth: number | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -74,6 +77,8 @@ export function buildProductView(
     pricingCost: resolved?.pricingCost ?? null,
     taxPercent: reportTax?.taxPercent ?? null,
     taxPercentGeneratedAt: reportTax?.generatedAt ?? null,
+    taxPercentYear: reportTax?.year ?? null,
+    taxPercentMonth: reportTax?.month ?? null,
     createdAt: product.createdAt.toISOString(),
     updatedAt: product.updatedAt.toISOString(),
   };

@@ -272,3 +272,20 @@ export async function loadLatestTaxReportSnapshot(
   const payload = row.payload as unknown as TaxReportPayload;
   return repairTaxReportPayload(payload);
 }
+
+/** Últimos `limit` snapshots do seller, do mais recente ao mais antigo. */
+export async function loadRecentTaxReportSnapshots(
+  sellerId: number,
+  limit = 12,
+): Promise<TaxReportPayload[]> {
+  const rows = await prisma.taxReportMonthSnapshot.findMany({
+    where: { sellerId },
+    orderBy: [{ year: "desc" }, { month: "desc" }],
+    take: limit,
+  });
+  return Promise.all(
+    rows.map((row) =>
+      repairTaxReportPayload(row.payload as unknown as TaxReportPayload),
+    ),
+  );
+}

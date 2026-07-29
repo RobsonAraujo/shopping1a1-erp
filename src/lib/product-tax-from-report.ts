@@ -2,13 +2,15 @@ import { skuImpostoOperacionalPercentual } from "@/lib/tax-report/imposto-operac
 import { normalizeProductSku } from "@/lib/product-pricing";
 import type { TaxReportPayload } from "@/lib/tax-report/types";
 
-type SnapshotLoader = (sellerId: number) => Promise<TaxReportPayload | null>;
+const RECENT_SNAPSHOTS_LIMIT = 12;
 
-async function defaultLoadSnapshot(sellerId: number) {
-  const { loadLatestTaxReportSnapshot } = await import(
+type SnapshotsLoader = (sellerId: number) => Promise<TaxReportPayload[]>;
+
+async function defaultLoadSnapshots(sellerId: number) {
+  const { loadRecentTaxReportSnapshots } = await import(
     "@/lib/tax-report/service/generate-monthly-report"
   );
-  return loadLatestTaxReportSnapshot(sellerId);
+  return loadRecentTaxReportSnapshots(sellerId, RECENT_SNAPSHOTS_LIMIT);
 }
 
 export type ProductTaxFromReport = {
@@ -16,6 +18,9 @@ export type ProductTaxFromReport = {
   taxPercent: number;
   /** Data (ISO) em que o snapshot usado foi gerado/recalculado. */
   generatedAt: string;
+  /** Mês/ano do relatório tributário de onde veio o valor (ex.: pode ser um mês anterior, por fallback). */
+  year: number;
+  month: number;
 };
 
 export type ProductTaxReportLookup = {
@@ -24,29 +29,41 @@ export type ProductTaxReportLookup = {
 };
 
 /**
- * Carrega o último relatório tributário salvo e monta um mapa sku -> imposto
- * operacional médio (%), para preencher a coluna "Imposto" da tela de produtos.
+ * Carrega os relatórios tributários mais recentes e monta um mapa
+ * sku -> imposto operacional médio (%), para preencher a coluna "Imposto"
+ * da tela de produtos (e demais telas que usam o mesmo custo/imposto).
+ *
+ * Se um SKU não aparecer no snapshot mais recente, cai para o snapshot mais
+ * recente dentre os anteriores que contenha esse SKU — evita deixar produtos
+ * pouco vendidos sem imposto só porque não venderam no último mês apurado.
  */
 export async function loadProductTaxFromLatestReport(
   sellerId: number,
-  loadSnapshot: SnapshotLoader = defaultLoadSnapshot,
+  loadSnapshots: SnapshotsLoader = defaultLoadSnapshots,
 ): Promise<ProductTaxReportLookup> {
-  const payload = await loadSnapshot(sellerId);
-  if (!payload) {
+  const payloads = await loadSnapshots(sellerId);
+  if (payloads.length === 0) {
     return { generatedAt: null, bySku: new Map() };
   }
 
-  const generatedAt = payload.meta.geradoEm;
+  const generatedAt = payloads[0].meta.geradoEm;
   const bySku = new Map<string, ProductTaxFromReport>();
 
-  for (const row of payload.porSku) {
-    const entry: ProductTaxFromReport = {
-      taxPercent: skuImpostoOperacionalPercentual(row),
-      generatedAt,
-    };
-    bySku.set(normalizeProductSku(row.sku), entry);
-    for (const alias of row.skuAliases ?? []) {
-      bySku.set(normalizeProductSku(alias), entry);
+  for (const payload of payloads) {
+    for (const row of payload.porSku) {
+      const entry: ProductTaxFromReport = {
+        taxPercent: skuImpostoOperacionalPercentual(row),
+        generatedAt: payload.meta.geradoEm,
+        year: payload.year,
+        month: payload.month,
+      };
+      const skus = [row.sku, ...(row.skuAliases ?? [])];
+      for (const sku of skus) {
+        const key = normalizeProductSku(sku);
+        if (!bySku.has(key)) {
+          bySku.set(key, entry);
+        }
+      }
     }
   }
 

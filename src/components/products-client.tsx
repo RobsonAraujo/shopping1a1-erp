@@ -20,6 +20,7 @@ import { readApiError } from "@/lib/api-client-error";
 import { filterByItemListSearch } from "@/lib/item-list-search";
 import type { ProductView } from "@/lib/product-data";
 import { formatFinancialMoney, formatFinancialPercent } from "@/lib/financial-margin";
+import { TAX_REPORT_MONTH_NAMES } from "@/lib/tax-report/routes";
 import { cn } from "@/lib/utils";
 
 type ProductsResponse = {
@@ -55,6 +56,10 @@ function formatPricingCostExplainer(product: ProductView): string {
 function daysSince(iso: string): number {
   const diffMs = Date.now() - new Date(iso).getTime();
   return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+}
+
+function taxReportPeriodLabel(year: number, month: number): string {
+  return `${TAX_REPORT_MONTH_NAMES[month - 1] ?? month}/${year}`;
 }
 
 type ProductFormState = {
@@ -792,8 +797,10 @@ export function ProductsClient() {
                         <PlanningInfoTrigger
                           content={
                             product.taxPercent !== null &&
-                            product.taxPercentGeneratedAt
-                              ? `Média % operacional de imposto apurada no relatório tributário, calculada em ${DATE_TIME_FORMATTER.format(new Date(product.taxPercentGeneratedAt))} (${daysSince(product.taxPercentGeneratedAt)} dia(s) atrás). Se houve vendas ou mudanças fiscais recentes, recalcule o relatório tributário para atualizar este valor.`
+                            product.taxPercentGeneratedAt &&
+                            product.taxPercentYear !== null &&
+                            product.taxPercentMonth !== null
+                              ? `Média % operacional de imposto apurada no relatório tributário de ${taxReportPeriodLabel(product.taxPercentYear, product.taxPercentMonth)} (recalculado em ${DATE_TIME_FORMATTER.format(new Date(product.taxPercentGeneratedAt))}, ${daysSince(product.taxPercentGeneratedAt)} dia(s) atrás). Se houve vendas ou mudanças fiscais recentes, recalcule o relatório tributário para atualizar este valor.`
                               : "Este SKU ainda não aparece em nenhum relatório tributário calculado. Gere/recalcule o relatório tributário para obter o imposto médio deste produto."
                           }
                         />
