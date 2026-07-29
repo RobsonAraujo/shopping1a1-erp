@@ -36,6 +36,7 @@ import {
   normalizeProductSku,
   type ResolvedProductPricing,
 } from "@/lib/product-pricing";
+import { loadProductTaxFromLatestReport } from "@/lib/product-tax-from-report";
 import { refineMinSalePriceForTargetMargin } from "@/lib/refine-min-sale-price";
 
 export {
@@ -233,6 +234,7 @@ async function buildRowForItem(
   userId: number,
   item: ItemBody,
   pricing: ResolvedProductPricing | null,
+  taxBySku: Map<string, number>,
 ): Promise<
   Omit<
     FinancialEvaluationRow,
@@ -255,7 +257,9 @@ async function buildRowForItem(
   const sku = getItemSku(item);
   const productCost = pricing?.pricingCost ?? null;
   const extraCosts = pricing?.extraCosts ?? null;
-  const taxRatePercent = pricing?.taxPercent ?? null;
+  const taxRatePercent = sku
+    ? (taxBySku.get(normalizeProductSku(sku)) ?? null)
+    : null;
 
   let salePrice = item.price;
   let regularPrice: number | null = null;
@@ -287,6 +291,10 @@ async function buildRowForItem(
   } else if (!pricing) {
     warnings.push(
       `SKU ${sku} sem cadastro completo em Meus produtos — preencha o custo de precificação.`,
+    );
+  } else if (taxRatePercent === null) {
+    warnings.push(
+      `SKU ${sku} sem dados no relatório tributário — recalcule em Relatório tributário para obter o imposto.`,
     );
   }
 
@@ -515,6 +523,7 @@ async function buildRowForPeriodItem(
   item: ItemBody,
   pricing: ResolvedProductPricing | null,
   agg: PeriodSaleAgg,
+  taxBySku: Map<string, number>,
 ): Promise<
   Omit<
     FinancialEvaluationRow,
@@ -537,7 +546,9 @@ async function buildRowForPeriodItem(
   const sku = getItemSku(item);
   const productCost = pricing?.pricingCost ?? null;
   const extraCosts = pricing?.extraCosts ?? null;
-  const taxRatePercent = pricing?.taxPercent ?? null;
+  const taxRatePercent = sku
+    ? (taxBySku.get(normalizeProductSku(sku)) ?? null)
+    : null;
 
   const salePrice =
     agg.quantity > 0 ? roundMoney(agg.revenue / agg.quantity) : 0;
@@ -554,6 +565,10 @@ async function buildRowForPeriodItem(
   } else if (!pricing) {
     warnings.push(
       `SKU ${sku} sem cadastro completo em Meus produtos — preencha o custo de precificação.`,
+    );
+  } else if (taxRatePercent === null) {
+    warnings.push(
+      `SKU ${sku} sem dados no relatório tributário — recalcule em Relatório tributário para obter o imposto.`,
     );
   }
 
@@ -761,7 +776,13 @@ export async function loadFinancialEvaluationRows(
   const skus = operationalItems
     .map((item) => getItemSku(item))
     .filter((sku): sku is string => Boolean(sku));
-  const pricingBySku = await loadProductsMapBySku(skus);
+  const [pricingBySku, taxFromReport] = await Promise.all([
+    loadProductsMapBySku(skus),
+    loadProductTaxFromLatestReport(userId),
+  ]);
+  const taxBySku = new Map(
+    [...taxFromReport.bySku].map(([sku, entry]) => [sku, entry.taxPercent]),
+  );
 
   const baseRows = await mapWithConcurrency(
     operationalItems,
@@ -771,7 +792,7 @@ export async function loadFinancialEvaluationRows(
       const pricing = sku
         ? (pricingBySku.get(normalizeProductSku(sku)) ?? null)
         : null;
-      return buildRowForItem(accessToken, userId, item, pricing);
+      return buildRowForItem(accessToken, userId, item, pricing, taxBySku);
     },
   );
 
@@ -872,7 +893,13 @@ export async function loadFinancialEvaluationRowsForPeriod(
   const skus = items
     .map((item) => getItemSku(item))
     .filter((sku): sku is string => Boolean(sku));
-  const pricingBySku = await loadProductsMapBySku(skus);
+  const [pricingBySku, taxFromReport] = await Promise.all([
+    loadProductsMapBySku(skus),
+    loadProductTaxFromLatestReport(userId),
+  ]);
+  const taxBySku = new Map(
+    [...taxFromReport.bySku].map(([sku, entry]) => [sku, entry.taxPercent]),
+  );
 
   const orderedAggs = itemIds
     .map((id) => {
@@ -888,7 +915,7 @@ export async function loadFinancialEvaluationRowsForPeriod(
     const pricing = sku
       ? (pricingBySku.get(normalizeProductSku(sku)) ?? null)
       : null;
-    return buildRowForPeriodItem(accessToken, userId, item, pricing, agg);
+    return buildRowForPeriodItem(accessToken, userId, item, pricing, agg, taxBySku);
   });
 
   const rows = baseRows.map((row) => {

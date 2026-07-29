@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import {
   FileDown,
   FileSpreadsheet,
+  Info,
   Loader2,
   PackagePlus,
   SlidersHorizontal,
@@ -417,6 +418,24 @@ export function InventoryStockReportDialog({
         </div>
 
         <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
+          <div className="flex items-start gap-2.5 rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3 text-xs leading-relaxed text-[var(--muted-foreground)]">
+            <Info className="mt-0.5 size-4 shrink-0 text-[var(--primary)]" aria-hidden />
+            <p>
+              O valor do produto usado neste relatório é o mesmo{" "}
+              <strong className="text-[var(--foreground)]">
+                Custo de precificação
+              </strong>{" "}
+              mostrado em{" "}
+              <span className="font-medium text-[var(--foreground)]">
+                Meus produtos
+              </span>
+              : Custo unitário NF (ou o custo de compra com{" "}
+              <strong className="text-[var(--foreground)]">ICMS-ST</strong>,
+              quando o produto tiver essa marcação) somado ao IPI cadastrado.
+              Produtos sem esse custo cadastrado aparecem como valor faltante.
+            </p>
+          </div>
+
           <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <DatePicker
               label="Data do saldo"

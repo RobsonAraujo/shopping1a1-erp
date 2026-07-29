@@ -2,9 +2,9 @@
  * Capital de giro necessário: quanto custa comprar estoque suficiente para
  * cobrir N dias de vendas dos produtos considerados (excluídos da simulação
  * de potencial de faturamento não entram; pausados entram ou não conforme o
- * switch "Mostrar pausados" da página). O custo unitário usado é o já
- * cadastrado em "Meus produtos" — ver `stockReportUnitCostFromProduct` em
- * `src/lib/inventory-stock-report.ts` para a regra NF vs compra+ST.
+ * switch "Mostrar pausados" da página). O custo unitário usado é o mesmo
+ * "Custo de precificação" de "Meus produtos" (NF/compra+ST + IPI) — ver
+ * `stockReportUnitCostFromProduct` em `src/lib/inventory-stock-report.ts`.
  */
 import { getSkuSupplier } from "@/lib/mercadolibre/item-sku";
 import type { WorkingCapitalRow } from "@/lib/insights/types";

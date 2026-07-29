@@ -1,7 +1,10 @@
 import { reportsConfig } from "@/config/reports";
 import { roundMoney } from "@/lib/financial-margin";
 import { getZonedParts, zonedLocalToUtc } from "@/lib/report-timezone";
-import { normalizeProductSku } from "@/lib/product-pricing";
+import {
+  computeEffectivePricingCost,
+  normalizeProductSku,
+} from "@/lib/product-pricing";
 
 const MONTH_NAMES_PT = [
   "Janeiro",
@@ -304,25 +307,26 @@ export function formatStockReportUnits(value: number): string {
   return new Intl.NumberFormat("pt-BR").format(value);
 }
 
+/**
+ * Custo unitário do relatório de estoque: mesmo "Custo de precificação"
+ * exibido em Meus produtos (custo NF/ICMS-ST + IPI).
+ */
 export function stockReportUnitCostFromProduct(product: {
   unitCostNf: number;
+  purchaseIcmsPercent: number;
   hasIcmsSt: boolean;
   purchaseCostWithSt: number | null;
+  ipiPercent: number;
 }): number | null {
-  if (product.hasIcmsSt) {
-    if (
-      product.purchaseCostWithSt === null ||
-      !Number.isFinite(product.purchaseCostWithSt) ||
-      product.purchaseCostWithSt < 0
-    ) {
-      return null;
-    }
-    return product.purchaseCostWithSt;
-  }
-  if (!Number.isFinite(product.unitCostNf) || product.unitCostNf < 0) {
-    return null;
-  }
-  return product.unitCostNf;
+  return computeEffectivePricingCost({
+    unitCostNf: product.unitCostNf,
+    purchaseIcmsPercent: product.purchaseIcmsPercent,
+    hasIcmsSt: product.hasIcmsSt,
+    purchaseCostWithSt: product.purchaseCostWithSt,
+    ipiPercent: product.ipiPercent,
+    isMonophasic: false,
+    pisCofinsPercent: 0,
+  });
 }
 
 function productForSku(

@@ -8,6 +8,7 @@ import {
   type DreMonthSnapshotPayload,
 } from "@/lib/dre-calculations";
 import { loadProductsMapBySku } from "@/lib/product-data";
+import { loadProductTaxFromLatestReport } from "@/lib/product-tax-from-report";
 import { roundMoney } from "@/lib/financial-margin";
 import { getItemSku } from "@/lib/mercadolibre/item-sku";
 import { normalizeProductSku } from "@/lib/product-pricing";
@@ -38,6 +39,7 @@ import { fetchSellerShippingCost } from "@/lib/mercadolibre/seller-shipping-cost
 
 async function computeErpCostsFromOrderLines(
   accessToken: string,
+  sellerId: number,
   orderLines: Array<{ itemId: string; quantity: number; revenue: number }>,
 ): Promise<{
   productCostErp: number;
@@ -53,7 +55,10 @@ async function computeErpCostsFromOrderLines(
     .map((item) => getItemSku(item))
     .filter((sku): sku is string => Boolean(sku))
     .map((sku) => normalizeProductSku(sku));
-  const pricingBySku = await loadProductsMapBySku(skus);
+  const [pricingBySku, taxFromReport] = await Promise.all([
+    loadProductsMapBySku(skus),
+    loadProductTaxFromLatestReport(sellerId),
+  ]);
 
   let productCostErp = 0;
   let taxErp = 0;
@@ -64,14 +69,17 @@ async function computeErpCostsFromOrderLines(
     const sku = skuByItemId.get(line.itemId);
     const normalizedSku = sku ? normalizeProductSku(sku) : "";
     const pricing = normalizedSku ? pricingBySku.get(normalizedSku) : undefined;
+    const taxPercent = normalizedSku
+      ? (taxFromReport.bySku.get(normalizedSku)?.taxPercent ?? null)
+      : null;
 
     if (!pricing) {
       missingItems.add(line.itemId);
     } else {
       productCostErp +=
         line.quantity * (pricing.pricingCost + pricing.extraCosts);
-      if (pricing.taxPercent > 0 && line.revenue > 0) {
-        taxErp += line.revenue * (pricing.taxPercent / 100);
+      if (taxPercent !== null && taxPercent > 0 && line.revenue > 0) {
+        taxErp += line.revenue * (taxPercent / 100);
       }
     }
   }
@@ -264,7 +272,11 @@ export async function buildDreMonthSnapshot(
     }
   }
 
-  const erpCosts = await computeErpCostsFromOrderLines(accessToken, orderLines);
+  const erpCosts = await computeErpCostsFromOrderLines(
+    accessToken,
+    sellerId,
+    orderLines,
+  );
 
   let saleFeeMl = 0;
   let sellerShippingMl = 0;
@@ -383,6 +395,7 @@ export async function buildDreMonthSnapshot(
       );
       const cancelledErpCosts = await computeErpCostsFromOrderLines(
         accessToken,
+        sellerId,
         cancelledLines,
       );
       cancelledIncludeOverlay = {

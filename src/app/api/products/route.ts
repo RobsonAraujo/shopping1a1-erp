@@ -8,6 +8,7 @@ import {
   validateProductInput,
   type ProductWriteInput,
 } from "@/lib/product-data";
+import { loadProductTaxFromLatestReport } from "@/lib/product-tax-from-report";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 import {
   getValidAccessToken,
@@ -61,19 +62,22 @@ function parseProductBody(body: Record<string, unknown>): ProductWriteInput | "i
 }
 
 export async function GET() {
-  if (!(await requireAuth())) {
+  const auth = await requireAuth();
+  if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    const settings = await ensureCompanySettings();
-    const products = await prisma.product.findMany({
-      orderBy: { sku: "asc" },
-    });
+    const [settings, products, taxFromReport] = await Promise.all([
+      ensureCompanySettings(),
+      prisma.product.findMany({ orderBy: { sku: "asc" } }),
+      loadProductTaxFromLatestReport(auth.userId),
+    ]);
     return NextResponse.json({
       pisCofinsPercent: settings.pisCofinsPercent,
+      taxReportGeneratedAt: taxFromReport.generatedAt,
       products: products.map((p) =>
-        buildProductView(p, settings.pisCofinsPercent),
+        buildProductView(p, settings.pisCofinsPercent, taxFromReport),
       ),
     });
   } catch (e) {

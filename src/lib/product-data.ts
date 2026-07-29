@@ -6,6 +6,7 @@ import {
   type ProductRecordForPricing,
   type ResolvedProductPricing,
 } from "@/lib/product-pricing";
+import type { ProductTaxReportLookup } from "@/lib/product-tax-from-report";
 import {
   indexBySkuWithAliases,
   resolveCanonicalSku,
@@ -48,7 +49,10 @@ export type ProductView = ProductRecordForPricing & {
   isImported: boolean;
   importContentPercent: number;
   pricingCost: number | null;
+  /** % médio operacional de imposto vindo do relatório tributário (null = sem dados para o SKU). */
   taxPercent: number | null;
+  /** Data (ISO) do snapshot do relatório tributário usado para taxPercent. */
+  taxPercentGeneratedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -56,9 +60,11 @@ export type ProductView = ProductRecordForPricing & {
 export function buildProductView(
   product: Product,
   pisCofinsPercent: number,
+  taxFromReport?: ProductTaxReportLookup,
 ): ProductView {
   const record = productToPricingRecord(product);
   const resolved = resolveProductPricing(record, pisCofinsPercent);
+  const reportTax = taxFromReport?.bySku.get(normalizeProductSku(product.sku));
   return {
     sku: product.sku,
     ncm: product.ncm,
@@ -66,7 +72,8 @@ export function buildProductView(
     isImported: product.isImported,
     importContentPercent: decimalToNumber(product.importContentPercent) ?? 0,
     pricingCost: resolved?.pricingCost ?? null,
-    taxPercent: resolved?.taxPercent ?? null,
+    taxPercent: reportTax?.taxPercent ?? null,
+    taxPercentGeneratedAt: reportTax?.generatedAt ?? null,
     createdAt: product.createdAt.toISOString(),
     updatedAt: product.updatedAt.toISOString(),
   };
@@ -157,44 +164,6 @@ export async function ensureCompanyTaxSettings(): Promise<number> {
   return settings.pisCofinsPercent;
 }
 
-export async function resolvePricingForSku(
-  sku: string | null | undefined,
-): Promise<{
-  sku: string | null;
-  pricing: ResolvedProductPricing | null;
-  product: ProductView | null;
-}> {
-  const normalized = sku ? normalizeProductSku(sku) : "";
-  if (!normalized) {
-    return { sku: null, pricing: null, product: null };
-  }
-
-  const aliasMap = await loadSkuAliasMap();
-  const canonicalSku = resolveCanonicalSku(normalized, aliasMap);
-  const pisCofins = await getCompanyPisCofinsPercent();
-  const product = await prisma.product.findUnique({
-    where: { sku: canonicalSku },
-  });
-  if (!product) {
-    return { sku: normalized, pricing: null, product: null };
-  }
-
-  const view = buildProductView(product, pisCofins);
-  if (view.pricingCost === null || view.taxPercent === null) {
-    return { sku: normalized, pricing: null, product: view };
-  }
-
-  return {
-    sku: normalized,
-    pricing: {
-      pricingCost: view.pricingCost,
-      taxPercent: view.taxPercent,
-      extraCosts: view.extraCosts,
-    },
-    product: view,
-  };
-}
-
 export async function loadProductsMapBySku(
   skus: string[],
   aliasMap?: SkuAliasMap,
@@ -244,22 +213,28 @@ export async function loadStockReportProductsBySku(
       sku: true,
       ncm: true,
       unitCostNf: true,
+      purchaseIcmsPercent: true,
       hasIcmsSt: true,
       purchaseCostWithSt: true,
+      ipiPercent: true,
     },
   });
 
   const byCanonical = new Map<string, StockReportProductInfo>();
   for (const product of products) {
     const unitCostNf = decimalToNumber(product.unitCostNf) ?? 0;
+    const purchaseIcmsPercent = decimalToNumber(product.purchaseIcmsPercent) ?? 0;
     const purchaseCostWithSt = decimalToNumber(product.purchaseCostWithSt);
+    const ipiPercent = decimalToNumber(product.ipiPercent) ?? 0;
     byCanonical.set(product.sku, {
       ncm: product.ncm,
       hasIcmsSt: product.hasIcmsSt,
       unitCost: stockReportUnitCostFromProduct({
         unitCostNf,
+        purchaseIcmsPercent,
         hasIcmsSt: product.hasIcmsSt,
         purchaseCostWithSt,
+        ipiPercent,
       }),
     });
   }

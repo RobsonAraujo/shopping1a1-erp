@@ -6,10 +6,12 @@ import {
   ItemListSearch,
   itemListSearchEmptyMessage,
 } from "@/components/item-list-search";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import { PlanningInfoTrigger } from "@/components/planning-info-trigger";
 import {
   MaskedMoneyField,
   MaskedPercentField,
@@ -23,7 +25,37 @@ import { cn } from "@/lib/utils";
 type ProductsResponse = {
   products: ProductView[];
   pisCofinsPercent: number;
+  taxReportGeneratedAt: string | null;
 };
+
+const DATE_TIME_FORMATTER = new Intl.DateTimeFormat("pt-BR", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
+
+function formatPricingCostExplainer(product: ProductView): string {
+  const base = product.hasIcmsSt
+    ? product.purchaseCostWithSt ?? 0
+    : product.unitCostNf;
+  const baseLabel = product.hasIcmsSt
+    ? "Custo unitário NF + ICMS-ST"
+    : "Custo unitário NF";
+  const ipiText =
+    product.ipiPercent > 0
+      ? ` + IPI ${formatFinancialPercent(product.ipiPercent)}`
+      : " (IPI 0%)";
+  const resultText =
+    product.pricingCost !== null
+      ? ` = ${formatFinancialMoney(product.pricingCost)}`
+      : "";
+  return `${baseLabel} (${formatFinancialMoney(base)})${ipiText}${resultText}.`;
+}
+
+function daysSince(iso: string): number {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+}
 
 type ProductFormState = {
   sku: string;
@@ -617,6 +649,22 @@ export function ProductsClient() {
         </CardContent>
       </Card>
 
+      {data?.taxReportGeneratedAt ? (
+        <p className="text-xs text-[var(--muted-foreground)]">
+          Coluna Imposto calculada a partir do relatório tributário gerado em{" "}
+          {DATE_TIME_FORMATTER.format(new Date(data.taxReportGeneratedAt))}{" "}
+          ({daysSince(data.taxReportGeneratedAt)} dia(s) atrás). Se houve
+          vendas ou mudanças fiscais recentes,{" "}
+          <Link
+            href="/dashboard/relatorio-tributario"
+            className="font-medium text-[var(--primary)] underline underline-offset-2"
+          >
+            recalcule o relatório tributário
+          </Link>
+          .
+        </p>
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-[var(--muted-foreground)]">
           {sortedProducts.length}{" "}
@@ -727,14 +775,29 @@ export function ProductsClient() {
                       {product.ncm ?? "—"}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">
-                      {product.pricingCost !== null
-                        ? formatFinancialMoney(product.pricingCost)
-                        : "—"}
+                      <div className="flex items-center justify-end gap-1">
+                        {product.pricingCost !== null
+                          ? formatFinancialMoney(product.pricingCost)
+                          : "—"}
+                        <PlanningInfoTrigger
+                          content={formatPricingCostExplainer(product)}
+                        />
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">
-                      {product.taxPercent !== null
-                        ? formatFinancialPercent(product.taxPercent)
-                        : "—"}
+                      <div className="flex items-center justify-end gap-1">
+                        {product.taxPercent !== null
+                          ? formatFinancialPercent(product.taxPercent)
+                          : "—"}
+                        <PlanningInfoTrigger
+                          content={
+                            product.taxPercent !== null &&
+                            product.taxPercentGeneratedAt
+                              ? `Média % operacional de imposto apurada no relatório tributário, calculada em ${DATE_TIME_FORMATTER.format(new Date(product.taxPercentGeneratedAt))} (${daysSince(product.taxPercentGeneratedAt)} dia(s) atrás). Se houve vendas ou mudanças fiscais recentes, recalcule o relatório tributário para atualizar este valor.`
+                              : "Este SKU ainda não aparece em nenhum relatório tributário calculado. Gere/recalcule o relatório tributário para obter o imposto médio deste produto."
+                          }
+                        />
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <Badge

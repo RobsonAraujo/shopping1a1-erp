@@ -35,19 +35,15 @@ export type ProductRecordForPricing = {
   saleIcmsPercent: number;
 };
 
-/** Custo efetivo para precificação (fórmula da planilha). */
+/**
+ * Custo efetivo para precificação: Custo unitário NF (ou custo com ICMS-ST,
+ * quando houver) + IPI cadastrado. Não desconta créditos de ICMS/PIS-COFINS.
+ */
 export function computeEffectivePricingCost(
   input: ProductPricingInput,
 ): number | null {
-  const {
-    unitCostNf,
-    purchaseIcmsPercent,
-    hasIcmsSt,
-    purchaseCostWithSt,
-    ipiPercent,
-    isMonophasic,
-    pisCofinsPercent,
-  } = input;
+  const { unitCostNf, purchaseIcmsPercent, hasIcmsSt, purchaseCostWithSt, ipiPercent } =
+    input;
 
   if (
     !Number.isFinite(unitCostNf) ||
@@ -68,21 +64,10 @@ export function computeEffectivePricingCost(
     }
   }
 
-  const icmsRate = purchaseIcmsPercent / 100;
   const ipiRate = (ipiPercent ?? 0) / 100;
-  const pisRate = (pisCofinsPercent ?? 0) / 100;
+  const base = hasIcmsSt ? purchaseCostWithSt! : unitCostNf;
 
-  const grossBase = hasIcmsSt
-    ? purchaseCostWithSt!
-    : unitCostNf * (1 + ipiRate);
-
-  const icmsCredit = hasIcmsSt ? 0 : unitCostNf * icmsRate;
-
-  const pisCofinsCredit = isMonophasic
-    ? 0
-    : (unitCostNf - unitCostNf * icmsRate) * pisRate;
-
-  return roundMoney(grossBase - icmsCredit - pisCofinsCredit);
+  return roundMoney(base * (1 + ipiRate));
 }
 
 /** ICMS destacado na NF de entrada (crédito na compra). */

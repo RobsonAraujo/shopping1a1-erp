@@ -168,6 +168,17 @@ Detalhes dos modelos: [tenant-data-model.md](tenant-data-model.md).
 
 Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templates/feature-saas-impact.md).
 
+### Custo de precificação + Imposto na tela de produtos vindos do relatório tributário — 2026-07-29
+
+- **Tabelas novas/alteradas:** nenhuma — passou a ler `tax_report_month_snapshots` (já existente) a partir de `GET /api/products`
+- **Precisa `organizationId`?** sim, no futuro — hoje usa `sellerId` (userId da sessão ML), mesmo padrão de `loadLatestTaxReportSnapshot`
+- **APIs afetadas:** `GET /api/products` (agora chama `loadProductTaxFromLatestReport(sellerId)` e retorna `taxReportGeneratedAt`)
+- **Assume singleton?** não — usa o snapshot mais recente por `sellerId` (`findFirst orderBy year/month desc`), sem `id: "default"`
+- **Cron/background:** nenhum
+- **Dados globais vs por org:** `Product` (custo/IPI/ICMS-ST) continua global; o percentual de imposto agora vem por `sellerId`, via `src/lib/product-tax-from-report.ts`
+- **Código já tenant-ready?** parcial — `loadProductTaxFromLatestReport(sellerId, ...)` já recebe o id como parâmetro (fácil trocar por `organizationId`); `Product`/`buildProductView` continuam globais e precisarão de escopo por org na migração
+- **Ação futura na migração:** escopar `Product` por `organizationId` e trocar `sellerId` por `organizationId` em `loadLatestTaxReportSnapshot`/`loadProductTaxFromLatestReport`
+
 ### Simulações salvas — potencial de faturamento / capital de giro — 2026-07-22
 
 - **Tabelas novas/alteradas:** `revenue_simulations` (nova) — `id`, `seller_id`, `name`, `payload` (JSON com overrides/excluídos/período/parcelas), timestamps
