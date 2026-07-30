@@ -248,17 +248,24 @@ describe("computeScenarioForTransacao", () => {
       hasIcmsSt: true,
       purchaseCostWithSt: 65,
     });
+    const withoutSupplier = computeScenarioForTransacao(transacao, {
+      config: { ...CONFIG, originUf: "SC" },
+      icmsRates: RATES,
+      creditoPresumidoPercent: 0,
+    });
     const withSupplier = computeScenarioForTransacao(transacao, {
       config: { ...CONFIG, originUf: "SC" },
       icmsRates: RATES,
       creditoPresumidoPercent: 0,
       supplierUfByFornecedor: new Map([["ACME", "SP"]]),
     });
-    // credito de entrada continua zerado (ST), só pode haver ST recuperável
-    assert.equal(
-      withSupplier.icmsCreditoCompra.creditoTotal,
-      withSupplier.icmsCreditoCompra.stRecuperavelTotal,
-    );
+    // UF de fornecedor é ignorada para ST — resultado idêntico com ou sem ela
+    assert.deepEqual(withSupplier.icmsCreditoCompra, withoutSupplier.icmsCreditoCompra);
+    // venda interestadual + ST recuperável: soma o crédito de entrada normal
+    // (alíquota cadastral 18% sobre unitCostNf 50 = 9) com o ressarcimento da
+    // ST (65 - 50 = 15)
+    assert.equal(withSupplier.icmsCreditoCompra.stRecuperavelTotal, 15);
+    assert.equal(withSupplier.icmsCreditoCompra.creditoTotal, 24);
   });
 
   it("applies creditoPresumidoPercent only to the interstate portion", () => {

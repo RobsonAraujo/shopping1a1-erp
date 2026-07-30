@@ -4,6 +4,8 @@ import {
   computeEffectivePricingCost,
   computePricingTaxPercent,
   normalizeProductSku,
+  purchaseIcmsCreditUnit,
+  purchasePisCofinsCreditBaseUnit,
   resolveProductPricing,
 } from "@/lib/product-pricing";
 
@@ -96,6 +98,102 @@ describe("product-pricing", () => {
     assert.equal(resolved!.pricingCost, 112.27);
     assert.equal(resolved!.taxPercent, 12.25);
     assert.equal(resolved!.extraCosts, 0.5);
+  });
+});
+
+describe("purchaseIcmsCreditUnit", () => {
+  it("without ST: normal credit regardless of interna/interestadual", () => {
+    const credit = purchaseIcmsCreditUnit({
+      unitCostNf: 100,
+      purchaseIcmsPercent: 18,
+      hasIcmsSt: false,
+      isOperacaoInterna: true,
+      considerarStRecuperavel: false,
+    });
+    assert.equal(credit, 18);
+  });
+
+  it("ST + venda interna: crédito zerado", () => {
+    const credit = purchaseIcmsCreditUnit({
+      unitCostNf: 100,
+      purchaseIcmsPercent: 18,
+      hasIcmsSt: true,
+      isOperacaoInterna: true,
+      considerarStRecuperavel: true,
+    });
+    assert.equal(credit, 0);
+  });
+
+  it("ST + interestadual + recuperável desligado: crédito zerado", () => {
+    const credit = purchaseIcmsCreditUnit({
+      unitCostNf: 100,
+      purchaseIcmsPercent: 18,
+      hasIcmsSt: true,
+      isOperacaoInterna: false,
+      considerarStRecuperavel: false,
+    });
+    assert.equal(credit, 0);
+  });
+
+  it("ST + interestadual + recuperável ligado: crédito normal (por simetria)", () => {
+    const credit = purchaseIcmsCreditUnit({
+      unitCostNf: 100,
+      purchaseIcmsPercent: 18,
+      hasIcmsSt: true,
+      isOperacaoInterna: false,
+      considerarStRecuperavel: true,
+    });
+    assert.equal(credit, 18);
+  });
+});
+
+describe("purchasePisCofinsCreditBaseUnit", () => {
+  it("ST + venda interna: usa custo cheio com ST", () => {
+    const base = purchasePisCofinsCreditBaseUnit({
+      unitCostNf: 100,
+      purchaseIcmsPercent: 18,
+      hasIcmsSt: true,
+      purchaseCostWithSt: 112,
+      isOperacaoInterna: true,
+      considerarStRecuperavel: true,
+    });
+    assert.equal(base, 112);
+  });
+
+  it("ST + interestadual + recuperável desligado: usa custo cheio com ST", () => {
+    const base = purchasePisCofinsCreditBaseUnit({
+      unitCostNf: 100,
+      purchaseIcmsPercent: 18,
+      hasIcmsSt: true,
+      purchaseCostWithSt: 112,
+      isOperacaoInterna: false,
+      considerarStRecuperavel: false,
+    });
+    assert.equal(base, 112);
+  });
+
+  it("ST + interestadual + recuperável ligado: mesma fórmula do não-ST (custo NF − ICMS entrada)", () => {
+    const base = purchasePisCofinsCreditBaseUnit({
+      unitCostNf: 100,
+      purchaseIcmsPercent: 18,
+      hasIcmsSt: true,
+      purchaseCostWithSt: 112,
+      isOperacaoInterna: false,
+      considerarStRecuperavel: true,
+    });
+    assert.equal(base, 82);
+  });
+
+  it("sem ST: custo NF − ICMS entrada, independente de interna/interestadual", () => {
+    const base = purchasePisCofinsCreditBaseUnit({
+      unitCostNf: 100,
+      purchaseIcmsPercent: 18,
+      hasIcmsSt: false,
+      purchaseCostWithSt: null,
+      isOperacaoInterna: false,
+      considerarStRecuperavel: true,
+    });
+    assert.equal(base, 82);
   });
 });
 

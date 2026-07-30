@@ -116,4 +116,38 @@ describe("calcularIcmsCreditoCompra", () => {
     assert.equal(result.stRecuperavelTotal, 36);
     assert.equal(result.creditoTotal, 36);
   });
+
+  it("interestadual + ST + recuperável: soma crédito de entrada normal E o ressarcimento da ST", () => {
+    const result = calcularIcmsCreditoCompra(
+      tx({
+        hasIcmsSt: true,
+        purchaseIcmsPercent: 18,
+        unitCostNf: 100,
+        purchaseCostWithSt: 118,
+        quantidade: 2,
+      }),
+      false,
+      true,
+    );
+    // crédito de entrada normal: 100 * 18% * 2 = 36; ST recuperável: (118-100) * 2 = 36
+    assert.equal(result.aliquotaPercent, 18);
+    assert.equal(result.stRecuperavelTotal, 36);
+    assert.equal(result.creditoTotal, 72);
+  });
+
+  it("interna + ST (mesmo com purchaseIcmsPercent > 0): crédito de entrada continua zerado", () => {
+    const result = calcularIcmsCreditoCompra(
+      tx({
+        hasIcmsSt: true,
+        purchaseIcmsPercent: 18,
+        unitCostNf: 100,
+        purchaseCostWithSt: 118,
+        quantidade: 2,
+      }),
+      true,
+      true,
+    );
+    assert.equal(result.aliquotaPercent, 0);
+    assert.equal(result.creditoTotal, 0);
+  });
 });

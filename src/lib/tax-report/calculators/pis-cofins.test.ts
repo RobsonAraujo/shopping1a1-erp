@@ -46,6 +46,7 @@ describe("calcularPisCofins", () => {
       transacao: tx(),
       config,
       icmsDestacado: 12,
+      isOperacaoInterna: true,
     });
     assert.equal(result.baseDebito, 88);
     assert.equal(result.icmsExcluidoDaBase, 12);
@@ -57,6 +58,7 @@ describe("calcularPisCofins", () => {
       transacao: tx({ isMonophasic: true }),
       config,
       icmsDestacado: 0,
+      isOperacaoInterna: true,
     });
     assert.equal(result.liquido, 0);
     assert.equal(result.debitoTotal, 0);
@@ -72,10 +74,56 @@ describe("calcularPisCofins", () => {
       }),
       config,
       icmsDestacado: 0,
+      isOperacaoInterna: true,
     });
     assert.equal(result.baseCredito, 82);
     assert.equal(result.pisCredito, 1.35);
     assert.equal(result.cofinsCredito, 6.23);
     assert.ok(result.creditoTotal > result.baseCredito * 0.09);
+  });
+
+  it("ST + venda interna: base de crédito usa custo cheio com ST", () => {
+    const result = calcularPisCofins({
+      transacao: tx({
+        unitCostNf: 100,
+        purchaseIcmsPercent: 18,
+        hasIcmsSt: true,
+        purchaseCostWithSt: 112,
+      }),
+      config,
+      icmsDestacado: 0,
+      isOperacaoInterna: true,
+    });
+    assert.equal(result.baseCredito, 112);
+  });
+
+  it("ST + venda interestadual + ressarcimento habilitado: base de crédito segue a mesma fórmula do não-ST", () => {
+    const result = calcularPisCofins({
+      transacao: tx({
+        unitCostNf: 100,
+        purchaseIcmsPercent: 18,
+        hasIcmsSt: true,
+        purchaseCostWithSt: 112,
+      }),
+      config,
+      icmsDestacado: 0,
+      isOperacaoInterna: false,
+    });
+    assert.equal(result.baseCredito, 82);
+  });
+
+  it("ST + venda interestadual + ressarcimento desligado: mantém custo cheio com ST", () => {
+    const result = calcularPisCofins({
+      transacao: tx({
+        unitCostNf: 100,
+        purchaseIcmsPercent: 18,
+        hasIcmsSt: true,
+        purchaseCostWithSt: 112,
+      }),
+      config: { ...config, considerIcmsStRecuperavel: false },
+      icmsDestacado: 0,
+      isOperacaoInterna: false,
+    });
+    assert.equal(result.baseCredito, 112);
   });
 });

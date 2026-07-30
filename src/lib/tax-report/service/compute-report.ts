@@ -67,6 +67,7 @@ export function calcularDetalhamentoTransacao(input: {
     transacao,
     config,
     icmsDestacado,
+    isOperacaoInterna: icmsDifal?.isOperacaoInterna ?? true,
   });
   const icmsCreditoCompra = calcularIcmsCreditoCompra(
     transacao,

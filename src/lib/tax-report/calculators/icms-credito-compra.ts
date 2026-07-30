@@ -1,5 +1,8 @@
 import { roundMoney } from "@/lib/financial-margin";
-import { purchaseIcmsCreditUnit } from "@/lib/product-pricing";
+import {
+  isIcmsStRecuperavelAplicavel,
+  purchaseIcmsCreditUnit,
+} from "@/lib/product-pricing";
 import type {
   IcmsCreditoCompraBreakdown,
   TransacaoVenda,
@@ -19,11 +22,7 @@ function icmsStRecuperavelUnit(input: {
   isOperacaoInterna: boolean;
   considerarStRecuperavel: boolean;
 }): number {
-  if (
-    !input.considerarStRecuperavel ||
-    !input.hasIcmsSt ||
-    input.isOperacaoInterna
-  ) {
+  if (!isIcmsStRecuperavelAplicavel(input)) {
     return 0;
   }
   const { purchaseCostWithSt, unitCostNf } = input;
@@ -56,6 +55,8 @@ export function calcularIcmsCreditoCompra(
     unitCostNf,
     purchaseIcmsPercent: transacao.purchaseIcmsPercent,
     hasIcmsSt: transacao.hasIcmsSt,
+    isOperacaoInterna,
+    considerarStRecuperavel,
   });
 
   const stRecuperavelUnitario = icmsStRecuperavelUnit({
@@ -69,9 +70,16 @@ export function calcularIcmsCreditoCompra(
     stRecuperavelUnitario * transacao.quantidade,
   );
 
+  const recuperavelAplicavel = isIcmsStRecuperavelAplicavel({
+    hasIcmsSt: transacao.hasIcmsSt,
+    isOperacaoInterna,
+    considerarStRecuperavel,
+  });
+
   return {
     baseUnitaria: roundMoney(unitCostNf * transacao.quantidade),
-    aliquotaPercent: transacao.hasIcmsSt ? 0 : transacao.purchaseIcmsPercent,
+    aliquotaPercent:
+      transacao.hasIcmsSt && !recuperavelAplicavel ? 0 : transacao.purchaseIcmsPercent,
     creditoTotal: roundMoney(
       creditoUnitario * transacao.quantidade + stRecuperavelTotal,
     ),

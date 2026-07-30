@@ -177,6 +177,7 @@ export function computeScenarioForTransacao(
     transacao: transacaoCompra,
     config,
     icmsDestacado,
+    isOperacaoInterna: icmsDifal?.isOperacaoInterna ?? true,
   });
   const icmsCreditoCompra = calcularIcmsCreditoCompra(
     transacaoCompra,

@@ -382,14 +382,23 @@ function ProductFormModal({
               value={form.unitCostNf}
               onValueChange={(v) => setForm((f) => ({ ...f, unitCostNf: v }))}
             />
-            <MaskedPercentField
-              id="purchase-icms"
-              label="ICMS da compra"
-              value={form.purchaseIcmsPercent}
-              onValueChange={(v) =>
-                setForm((f) => ({ ...f, purchaseIcmsPercent: v }))
-              }
-            />
+            <div>
+              <MaskedPercentField
+                id="purchase-icms"
+                label="ICMS da compra"
+                value={form.purchaseIcmsPercent}
+                onValueChange={(v) =>
+                  setForm((f) => ({ ...f, purchaseIcmsPercent: v }))
+                }
+              />
+              {form.hasIcmsSt ? (
+                <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                  Para produtos com ICMS-ST, esse valor só vira crédito nas
+                  vendas interestaduais em que o ICMS-ST for tratado como
+                  recuperável (config. tributária).
+                </p>
+              ) : null}
+            </div>
             <FormSwitchRow
               id="has-icms-st"
               label="ICMS-ST"

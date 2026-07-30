@@ -70,15 +70,41 @@ export function computeEffectivePricingCost(
   return roundMoney(base * (1 + ipiRate));
 }
 
-/** ICMS destacado na NF de entrada (crédito na compra). */
+/**
+ * Produto com ICMS-ST, vendido para outro estado, com o ressarcimento da ST
+ * habilitado na configuração: o fato gerador presumido (venda interna) não se
+ * confirmou (Tema 201/STF, Convênio ICMS 142/2018), então a operação passa a
+ * gerar débito de ICMS normal na saída — e, por simetria (não-cumulatividade),
+ * também libera o crédito de ICMS próprio da entrada (não só o ressarcimento
+ * da ST em si).
+ */
+export function isIcmsStRecuperavelAplicavel(input: {
+  hasIcmsSt: boolean;
+  isOperacaoInterna: boolean;
+  considerarStRecuperavel: boolean;
+}): boolean {
+  return (
+    input.hasIcmsSt && !input.isOperacaoInterna && input.considerarStRecuperavel
+  );
+}
+
+/**
+ * ICMS destacado na NF de entrada (crédito na compra).
+ * ICMS-ST: zerado, exceto quando a venda é interestadual e o ressarcimento da
+ * ST está habilitado — nesse caso, o crédito nasce igual ao de um produto sem
+ * ST (ver `isIcmsStRecuperavelAplicavel`).
+ */
 export function purchaseIcmsCreditUnit(input: {
   unitCostNf: number;
   purchaseIcmsPercent: number;
   hasIcmsSt: boolean;
+  isOperacaoInterna: boolean;
+  considerarStRecuperavel: boolean;
 }): number {
   const { unitCostNf, purchaseIcmsPercent, hasIcmsSt } = input;
+  const zeradoPorSt = hasIcmsSt && !isIcmsStRecuperavelAplicavel(input);
   if (
-    hasIcmsSt ||
+    zeradoPorSt ||
     !Number.isFinite(unitCostNf) ||
     unitCostNf <= 0 ||
     !Number.isFinite(purchaseIcmsPercent) ||
@@ -90,19 +116,23 @@ export function purchaseIcmsCreditUnit(input: {
 }
 
 /** Base para crédito PIS/COFINS na aquisição.
- * ICMS-ST: usa purchaseCostWithSt (custo total com ST) quando disponível.
- * Sem ST: unitCostNf − ICMS entrada. */
+ * ICMS-ST (venda interna, ou ressarcimento desligado): usa purchaseCostWithSt
+ * (custo total com ST) quando disponível — a ST vira custo definitivo.
+ * Sem ST, ou ST com ressarcimento aplicável (venda interestadual): unitCostNf
+ * − ICMS entrada, igual ao produto sem ST. */
 export function purchasePisCofinsCreditBaseUnit(input: {
   unitCostNf: number;
   purchaseIcmsPercent: number;
   hasIcmsSt: boolean;
   purchaseCostWithSt?: number | null;
+  isOperacaoInterna: boolean;
+  considerarStRecuperavel: boolean;
 }): number {
   const { unitCostNf, purchaseIcmsPercent, hasIcmsSt, purchaseCostWithSt } = input;
   if (!Number.isFinite(unitCostNf) || unitCostNf <= 0) {
     return 0;
   }
-  if (hasIcmsSt) {
+  if (hasIcmsSt && !isIcmsStRecuperavelAplicavel(input)) {
     if (purchaseCostWithSt != null && Number.isFinite(purchaseCostWithSt) && purchaseCostWithSt > 0) {
       return roundMoney(purchaseCostWithSt);
     }
@@ -112,6 +142,8 @@ export function purchasePisCofinsCreditBaseUnit(input: {
     unitCostNf,
     purchaseIcmsPercent,
     hasIcmsSt: false,
+    isOperacaoInterna: true,
+    considerarStRecuperavel: false,
   });
   return roundMoney(Math.max(0, unitCostNf - icmsEntrada));
 }
