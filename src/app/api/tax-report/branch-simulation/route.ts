@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     );
   }
   if (!Number.isFinite(creditoPresumidoPercent) || creditoPresumidoPercent < 0) {
-    return NextResponse.json({ error: "Crédito presumido inválido" }, {
+    return NextResponse.json({ error: "Carga efetiva ICMS inválida" }, {
       status: 400,
     });
   }

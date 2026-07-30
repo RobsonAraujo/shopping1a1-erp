@@ -39,23 +39,142 @@ export function isSupportedBranchSimulationUf(
 }
 
 /**
- * Aplica um crédito presumido (redução %) sobre o ICMS interestadual devido
- * na saída da UF de origem simulada — não afeta o DIFAL (devido ao estado de
- * destino, EC 87/2015) nem operações internas.
+ * Detalhe auditável do incentivo estadual na simulação.
+ *
+ * O campo da UI (`creditoPresumidoPercent`) é a **carga efetiva alvo** de ICMS
+ * próprio da origem sobre a receita (ex.: ~1,4% no TTD/SC) — NÃO um desconto
+ * percentual relativo sobre o ICMS. O DIFAL (EC 87/2015, UF destino) não muda.
+ */
+export type CreditoPresumidoDetalhe = {
+  aplicado: boolean;
+  motivoNaoAplicado: string | null;
+  receitaBase: number;
+  aliquotaInterestadualPercent: number;
+  /** Carga efetiva alvo informada (ex.: 1,4). 0 = incentivo desligado. */
+  cargaEfetivaAlvoPercent: number;
+  /** Alíquota interestadual bruta = carga antes do incentivo. */
+  cargaEfetivaBrutaPercent: number;
+  icmsInterestadualBruto: number;
+  creditoPresumidoValor: number;
+  icmsInterestadualLiquido: number;
+  difal: number;
+  icmsTotalComIncentivo: number;
+};
+
+export function buildCreditoPresumidoMemoria(
+  detalhe: CreditoPresumidoDetalhe,
+): string[] {
+  const lines: string[] = [
+    "Incentivo / crédito presumido (simulação):",
+    `Receita base: R$ ${detalhe.receitaBase.toFixed(2)}`,
+  ];
+
+  if (detalhe.motivoNaoAplicado && !detalhe.aplicado) {
+    lines.push(`Não aplicado: ${detalhe.motivoNaoAplicado}`);
+    return lines;
+  }
+
+  lines.push(
+    `Alíquota interestadual bruta: ${detalhe.aliquotaInterestadualPercent.toFixed(2)}%`,
+    `ICMS interestadual bruto: R$ ${detalhe.icmsInterestadualBruto.toFixed(2)}`,
+    `Carga efetiva alvo (informada): ${detalhe.cargaEfetivaAlvoPercent.toFixed(2)}% sobre a receita`,
+    `ICMS líquido alvo = receita × carga alvo = R$ ${detalhe.icmsInterestadualLiquido.toFixed(2)}`,
+    `(−) Crédito presumido = bruto − líquido alvo = R$ ${detalhe.creditoPresumidoValor.toFixed(2)}`,
+    `ICMS interestadual líquido: R$ ${detalhe.icmsInterestadualLiquido.toFixed(2)}`,
+    `DIFAL (não afetado pelo incentivo): R$ ${detalhe.difal.toFixed(2)}`,
+    `ICMS total cenário = líquido + DIFAL = R$ ${detalhe.icmsTotalComIncentivo.toFixed(2)}`,
+  );
+  return lines;
+}
+
+/**
+ * Aplica incentivo como **carga efetiva alvo** (%) sobre a receita, apenas no
+ * ICMS interestadual próprio da origem. Não reduz DIFAL nem operações internas.
+ * `cargaEfetivaAlvoPercent <= 0` desliga o incentivo (sem crédito).
  */
 export function aplicarCreditoPresumido(
   icms: IcmsDifalBreakdown,
-  creditoPresumidoPercent: number,
-): IcmsDifalBreakdown {
-  if (icms.isOperacaoInterna || creditoPresumidoPercent <= 0) {
-    return icms;
+  cargaEfetivaAlvoPercent: number,
+  receitaBruta: number,
+): { icms: IcmsDifalBreakdown; detalhe: CreditoPresumidoDetalhe } {
+  const alvoClamped = Math.min(100, Math.max(0, cargaEfetivaAlvoPercent));
+  const aliquotaInterestadualPercent = roundMoney(icms.aliquotaInterestadual * 100);
+  const receitaBase = roundMoney(receitaBruta);
+
+  const base = {
+    receitaBase,
+    aliquotaInterestadualPercent,
+    cargaEfetivaAlvoPercent: roundMoney(alvoClamped),
+    cargaEfetivaBrutaPercent: aliquotaInterestadualPercent,
+    icmsInterestadualBruto: icms.icmsInterestadual,
+    difal: icms.difal,
+  };
+
+  if (icms.isOperacaoInterna) {
+    return {
+      icms,
+      detalhe: {
+        ...base,
+        aplicado: false,
+        motivoNaoAplicado:
+          "Operação interna — incentivo interestadual (crédito presumido) não se aplica",
+        creditoPresumidoValor: 0,
+        icmsInterestadualLiquido: icms.icmsInterestadual,
+        icmsTotalComIncentivo: icms.icmsTotal,
+      },
+    };
   }
-  const fator = 1 - Math.min(100, Math.max(0, creditoPresumidoPercent)) / 100;
-  const icmsInterestadual = roundMoney(icms.icmsInterestadual * fator);
-  return {
+
+  if (alvoClamped <= 0) {
+    return {
+      icms,
+      detalhe: {
+        ...base,
+        aplicado: false,
+        motivoNaoAplicado:
+          "Carga efetiva alvo = 0% — incentivo desligado (informe a carga efetiva do regime, ex. 1,4 para SC/TTD)",
+        creditoPresumidoValor: 0,
+        icmsInterestadualLiquido: icms.icmsInterestadual,
+        icmsTotalComIncentivo: icms.icmsTotal,
+      },
+    };
+  }
+
+  const liquidoAlvo = roundMoney(receitaBruta * (alvoClamped / 100));
+  const bruto = icms.icmsInterestadual;
+
+  if (liquidoAlvo >= bruto) {
+    return {
+      icms,
+      detalhe: {
+        ...base,
+        aplicado: false,
+        motivoNaoAplicado: `Carga alvo (${roundMoney(alvoClamped)}%) ≥ alíquota interestadual (${aliquotaInterestadualPercent}%) — nenhum crédito presumido`,
+        creditoPresumidoValor: 0,
+        icmsInterestadualLiquido: bruto,
+        icmsTotalComIncentivo: icms.icmsTotal,
+      },
+    };
+  }
+
+  const creditoPresumidoValor = roundMoney(bruto - liquidoAlvo);
+  const icmsInterestadualLiquido = roundMoney(bruto - creditoPresumidoValor);
+  const novoIcms: IcmsDifalBreakdown = {
     ...icms,
-    icmsInterestadual,
-    icmsTotal: roundMoney(icmsInterestadual + icms.difal),
+    icmsInterestadual: icmsInterestadualLiquido,
+    icmsTotal: roundMoney(icmsInterestadualLiquido + icms.difal),
+  };
+
+  return {
+    icms: novoIcms,
+    detalhe: {
+      ...base,
+      aplicado: true,
+      motivoNaoAplicado: null,
+      creditoPresumidoValor,
+      icmsInterestadualLiquido,
+      icmsTotalComIncentivo: novoIcms.icmsTotal,
+    },
   };
 }
 
@@ -93,6 +212,10 @@ export function estimarIcmsEntradaPercent(input: {
 export type BranchScenarioParams = {
   config: TaxCompanyConfig;
   icmsRates: Map<string, IcmsRateRow>;
+  /**
+   * Carga efetiva alvo de ICMS próprio da origem (% sobre a receita),
+   * ex.: 1,4 para SC/TTD. 0 desliga o incentivo. Nome histórico da API.
+   */
   creditoPresumidoPercent: number;
   /** Fornecedor (ver `getSkuSupplier`) -> UF, pra refinar o ICMS de entrada no cenário. */
   supplierUfByFornecedor?: Map<string, string>;
@@ -103,6 +226,7 @@ export type BranchScenarioLine = {
   icmsCreditoCompra: IcmsCreditoCompraBreakdown;
   pisCofins: PisCofinsBreakdown;
   impostoOperacional: number;
+  creditoPresumido: CreditoPresumidoDetalhe | null;
 };
 
 /** Info da UF do fornecedor pra exibição na memória de cálculo (mesma lógica de `applySupplierUf`). */
@@ -167,9 +291,18 @@ export function computeScenarioForTransacao(
     ufOrigem: config.originUf,
     rates: icmsRates,
   });
-  const icmsDifal = icmsDifalBase
-    ? aplicarCreditoPresumido(icmsDifalBase, creditoPresumidoPercent)
-    : null;
+
+  let icmsDifal: IcmsDifalBreakdown | null = null;
+  let creditoPresumido: CreditoPresumidoDetalhe | null = null;
+  if (icmsDifalBase) {
+    const aplicado = aplicarCreditoPresumido(
+      icmsDifalBase,
+      creditoPresumidoPercent,
+      transacao.receitaBruta,
+    );
+    icmsDifal = aplicado.icms;
+    creditoPresumido = aplicado.detalhe;
+  }
 
   const transacaoCompra = applySupplierUf(transacao, params);
   const icmsDestacado = icmsDestacadoParaBase(icmsDifal);
@@ -190,12 +323,35 @@ export function computeScenarioForTransacao(
       (icmsCreditoCompra?.creditoTotal ?? 0),
   );
 
-  return { icmsDifal, icmsCreditoCompra, pisCofins, impostoOperacional };
+  return {
+    icmsDifal,
+    icmsCreditoCompra,
+    pisCofins,
+    impostoOperacional,
+    creditoPresumido,
+  };
 }
 
 export type BranchSimulationComponent = {
   atual: number;
   cenario: number;
+};
+
+/** Agregado do incentivo no cenário — para memória de cálculo / auditoria. */
+export type IncentivoCenarioAgg = {
+  /** Carga efetiva alvo usada neste cenário (%). */
+  cargaEfetivaAlvoPercent: number;
+  /** Receita das vendas interestaduais (onde o incentivo pode incidir). */
+  receitaInterestadual: number;
+  icmsInterestadualBruto: number;
+  creditoPresumidoValor: number;
+  icmsInterestadualLiquido: number;
+  difal: number;
+  /** ICMS total cenário (líquido + DIFAL) só das linhas interestaduais. */
+  icmsTotalInterestadual: number;
+  linhasComIncentivo: number;
+  linhasInterestaduaisSemIncentivo: number;
+  linhasInternas: number;
 };
 
 export type BranchSimulationRow = {
@@ -213,6 +369,8 @@ export type BranchSimulationRow = {
   icmsCreditoEntrada: BranchSimulationComponent;
   icmsStRecuperavel: BranchSimulationComponent;
   pisCofinsLiquido: BranchSimulationComponent;
+  /** Detalhamento do incentivo estadual no cenário. */
+  incentivoCenario: IncentivoCenarioAgg;
   /** Info da UF do fornecedor usada no cenário (só presente na linha por SKU). */
   entradaInfo?: EntradaInfo | null;
 };
@@ -230,11 +388,21 @@ export type BranchSimulationSkuUfRow = BranchSimulationRow & {
 
 export type BranchSimulationResult = {
   transacoesConsideradas: number;
+  /** Texto fixo da regra de incentivo, para auditoria na UI. */
+  incentivoInterpretacao: string;
+  cargaEfetivaAlvoPercent: number;
   totais: BranchSimulationRow;
   porSku: BranchSimulationRow[];
   porUf: BranchSimulationRow[];
   porSkuUf: BranchSimulationSkuUfRow[];
 };
+
+export const INCENTIVO_INTERPRETACAO =
+  "O % informado é a carga efetiva alvo de ICMS próprio da origem sobre a receita " +
+  "(ex.: 1,4% no TTD/SC), não um desconto relativo sobre o ICMS. " +
+  "Fórmula: crédito presumido = ICMS interestadual bruto − (receita × carga alvo). " +
+  "O DIFAL (UF destino, EC 87/2015) não é reduzido. Operações internas não recebem o incentivo. " +
+  "0% desliga a simulação do incentivo.";
 
 type Accumulator = {
   receita: number;
@@ -248,6 +416,15 @@ type Accumulator = {
   icmsStRecuperavelCenario: number;
   pisCofinsLiquidoAtual: number;
   pisCofinsLiquidoCenario: number;
+  receitaInterestadual: number;
+  icmsInterestadualBruto: number;
+  creditoPresumidoValor: number;
+  icmsInterestadualLiquido: number;
+  difalCenario: number;
+  icmsTotalInterestadual: number;
+  linhasComIncentivo: number;
+  linhasInterestaduaisSemIncentivo: number;
+  linhasInternas: number;
 };
 
 function emptyAccumulator(): Accumulator {
@@ -263,6 +440,15 @@ function emptyAccumulator(): Accumulator {
     icmsStRecuperavelCenario: 0,
     pisCofinsLiquidoAtual: 0,
     pisCofinsLiquidoCenario: 0,
+    receitaInterestadual: 0,
+    icmsInterestadualBruto: 0,
+    creditoPresumidoValor: 0,
+    icmsInterestadualLiquido: 0,
+    difalCenario: 0,
+    icmsTotalInterestadual: 0,
+    linhasComIncentivo: 0,
+    linhasInterestaduaisSemIncentivo: 0,
+    linhasInternas: 0,
   };
 }
 
@@ -293,9 +479,29 @@ function addLine(
   acc.icmsStRecuperavelCenario += stRecuperavelCenario;
   acc.pisCofinsLiquidoAtual += det.pisCofins?.liquido ?? 0;
   acc.pisCofinsLiquidoCenario += scenario.pisCofins.liquido;
+
+  const cp = scenario.creditoPresumido;
+  if (cp) {
+    if (scenario.icmsDifal?.isOperacaoInterna) {
+      acc.linhasInternas += 1;
+    } else {
+      acc.receitaInterestadual += cp.receitaBase;
+      acc.icmsInterestadualBruto += cp.icmsInterestadualBruto;
+      acc.creditoPresumidoValor += cp.creditoPresumidoValor;
+      acc.icmsInterestadualLiquido += cp.icmsInterestadualLiquido;
+      acc.difalCenario += cp.difal;
+      acc.icmsTotalInterestadual += cp.icmsTotalComIncentivo;
+      if (cp.aplicado) acc.linhasComIncentivo += 1;
+      else acc.linhasInterestaduaisSemIncentivo += 1;
+    }
+  }
 }
 
-function toRow(key: string, acc: Accumulator): BranchSimulationRow {
+function toRow(
+  key: string,
+  acc: Accumulator,
+  cargaEfetivaAlvoPercent: number,
+): BranchSimulationRow {
   const { receita, atual, cenario } = acc;
   const economia = roundMoney(atual - cenario);
   const component = (a: number, c: number): BranchSimulationComponent => ({
@@ -324,6 +530,18 @@ function toRow(key: string, acc: Accumulator): BranchSimulationRow {
       acc.pisCofinsLiquidoAtual,
       acc.pisCofinsLiquidoCenario,
     ),
+    incentivoCenario: {
+      cargaEfetivaAlvoPercent: roundMoney(cargaEfetivaAlvoPercent),
+      receitaInterestadual: roundMoney(acc.receitaInterestadual),
+      icmsInterestadualBruto: roundMoney(acc.icmsInterestadualBruto),
+      creditoPresumidoValor: roundMoney(acc.creditoPresumidoValor),
+      icmsInterestadualLiquido: roundMoney(acc.icmsInterestadualLiquido),
+      difal: roundMoney(acc.difalCenario),
+      icmsTotalInterestadual: roundMoney(acc.icmsTotalInterestadual),
+      linhasComIncentivo: acc.linhasComIncentivo,
+      linhasInterestaduaisSemIncentivo: acc.linhasInterestaduaisSemIncentivo,
+      linhasInternas: acc.linhasInternas,
+    },
   };
 }
 
@@ -381,15 +599,17 @@ export function buildBranchSimulationResult(
     skuUfMeta.set(skuUfKey, meta);
   }
 
+  const cargaAlvo = params.creditoPresumidoPercent;
+
   const porSku = [...bySku.entries()]
     .map(([sku, acc]) => ({
-      ...toRow(sku, acc),
+      ...toRow(sku, acc, cargaAlvo),
       entradaInfo: entradaInfoBySku.get(sku) ?? null,
     }))
     .sort((a, b) => b.atual - a.atual);
 
   const porUf = [...byUf.entries()]
-    .map(([uf, acc]) => toRow(uf, acc))
+    .map(([uf, acc]) => toRow(uf, acc, cargaAlvo))
     .sort((a, b) => b.atual - a.atual);
 
   const porSkuUf = [...bySkuUf.entries()]
@@ -399,7 +619,7 @@ export function buildBranchSimulationResult(
       const uf = skuUfKey.slice(separatorIndex + SKU_UF_SEPARATOR.length);
       const meta = skuUfMeta.get(skuUfKey)!;
       return {
-        ...toRow(skuUfKey, acc),
+        ...toRow(skuUfKey, acc, cargaAlvo),
         sku,
         uf,
         aliquotaInterestadual: roundMoney(meta.aliquotaInterestadual * 100),
@@ -412,7 +632,9 @@ export function buildBranchSimulationResult(
 
   return {
     transacoesConsideradas: incluidos.length,
-    totais: toRow("total", total),
+    incentivoInterpretacao: INCENTIVO_INTERPRETACAO,
+    cargaEfetivaAlvoPercent: roundMoney(cargaAlvo),
+    totais: toRow("total", total, cargaAlvo),
     porSku,
     porUf,
     porSkuUf,

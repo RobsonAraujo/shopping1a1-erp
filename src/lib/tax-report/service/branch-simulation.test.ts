@@ -90,29 +90,47 @@ describe("isSupportedBranchSimulationUf", () => {
 });
 
 describe("aplicarCreditoPresumido", () => {
-  it("reduces only icmsInterestadual, keeps difal, recomputes icmsTotal", () => {
-    const result = aplicarCreditoPresumido(icmsBreakdown(), 50);
-    assert.equal(result.icmsInterestadual, 12);
-    assert.equal(result.difal, 20);
-    assert.equal(result.icmsTotal, 32);
+  it("trata o % como carga efetiva alvo sobre a receita (não desconto relativo)", () => {
+    // receita 200, interestadual 12% = 24; alvo 1,4% → líquido 2,80; crédito 21,20
+    const result = aplicarCreditoPresumido(icmsBreakdown(), 1.4, 200);
+    assert.equal(result.detalhe.aplicado, true);
+    assert.equal(result.icms.icmsInterestadual, 2.8);
+    assert.equal(result.icms.difal, 20);
+    assert.equal(result.icms.icmsTotal, 22.8);
+    assert.equal(result.detalhe.creditoPresumidoValor, 21.2);
+    assert.equal(result.detalhe.icmsInterestadualBruto, 24);
+    assert.equal(result.detalhe.cargaEfetivaAlvoPercent, 1.4);
   });
 
   it("does nothing for internal operations", () => {
     const interna = icmsBreakdown({ isOperacaoInterna: true, difal: 0 });
-    const result = aplicarCreditoPresumido(interna, 90);
-    assert.deepEqual(result, interna);
+    const result = aplicarCreditoPresumido(interna, 1.4, 200);
+    assert.equal(result.detalhe.aplicado, false);
+    assert.deepEqual(result.icms, interna);
   });
 
-  it("does nothing when creditoPresumidoPercent is zero", () => {
-    const result = aplicarCreditoPresumido(icmsBreakdown(), 0);
-    assert.equal(result.icmsInterestadual, 24);
+  it("does nothing when carga efetiva alvo is zero", () => {
+    const result = aplicarCreditoPresumido(icmsBreakdown(), 0, 200);
+    assert.equal(result.detalhe.aplicado, false);
+    assert.equal(result.icms.icmsInterestadual, 24);
   });
 
-  it("still reduces icmsInterestadual for contribuinte buyers (difal=0)", () => {
-    const contribuinte = icmsBreakdown({ isContribuinte: true, difal: 0, icmsTotal: 24 });
-    const result = aplicarCreditoPresumido(contribuinte, 50);
-    assert.equal(result.icmsInterestadual, 12);
-    assert.equal(result.icmsTotal, 12);
+  it("still applies for contribuinte buyers (difal=0)", () => {
+    const contribuinte = icmsBreakdown({
+      isContribuinte: true,
+      difal: 0,
+      icmsTotal: 24,
+    });
+    const result = aplicarCreditoPresumido(contribuinte, 1.4, 200);
+    assert.equal(result.detalhe.aplicado, true);
+    assert.equal(result.icms.icmsInterestadual, 2.8);
+    assert.equal(result.icms.icmsTotal, 2.8);
+  });
+
+  it("does not increase tax when alvo >= alíquota interestadual", () => {
+    const result = aplicarCreditoPresumido(icmsBreakdown(), 12, 200);
+    assert.equal(result.detalhe.aplicado, false);
+    assert.equal(result.icms.icmsInterestadual, 24);
   });
 });
 
@@ -261,8 +279,8 @@ describe("computeScenarioForTransacao", () => {
     );
   });
 
-  it("applies creditoPresumidoPercent only to the interstate portion", () => {
-    const transacao = tx({ ufDestino: "RJ" });
+  it("applies carga efetiva alvo only to the interstate portion", () => {
+    const transacao = tx({ ufDestino: "RJ", receitaBruta: 100 });
     const withoutIncentive = computeScenarioForTransacao(transacao, {
       config: { ...CONFIG, originUf: "SC" },
       icmsRates: RATES,
@@ -271,11 +289,19 @@ describe("computeScenarioForTransacao", () => {
     const withIncentive = computeScenarioForTransacao(transacao, {
       config: { ...CONFIG, originUf: "SC" },
       icmsRates: RATES,
-      creditoPresumidoPercent: 50,
+      creditoPresumidoPercent: 1.4,
     });
     assert.ok(
       (withIncentive.icmsDifal?.icmsTotal ?? 0) <
         (withoutIncentive.icmsDifal?.icmsTotal ?? 0),
+    );
+    // interestadual 12% de 100 = 12; alvo 1,4 → líquido 1,40
+    assert.equal(withIncentive.icmsDifal?.icmsInterestadual, 1.4);
+    assert.equal(withIncentive.creditoPresumido?.creditoPresumidoValor, 10.6);
+    // DIFAL intacto
+    assert.equal(
+      withIncentive.icmsDifal?.difal,
+      withoutIncentive.icmsDifal?.difal,
     );
   });
 });

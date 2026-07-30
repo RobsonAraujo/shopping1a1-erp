@@ -34,6 +34,19 @@ type EntradaInfo = {
   purchaseIcmsPercentEstimado: number;
 };
 
+type IncentivoCenarioAgg = {
+  cargaEfetivaAlvoPercent: number;
+  receitaInterestadual: number;
+  icmsInterestadualBruto: number;
+  creditoPresumidoValor: number;
+  icmsInterestadualLiquido: number;
+  difal: number;
+  icmsTotalInterestadual: number;
+  linhasComIncentivo: number;
+  linhasInterestaduaisSemIncentivo: number;
+  linhasInternas: number;
+};
+
 type SimulationRow = {
   key: string;
   receitaTotal: number;
@@ -47,6 +60,7 @@ type SimulationRow = {
   icmsCreditoEntrada: SimulationComponent;
   icmsStRecuperavel: SimulationComponent;
   pisCofinsLiquido: SimulationComponent;
+  incentivoCenario: IncentivoCenarioAgg;
   entradaInfo?: EntradaInfo | null;
 };
 
@@ -61,6 +75,8 @@ type SkuUfRow = SimulationRow & {
 
 type SimulationResult = {
   transacoesConsideradas: number;
+  incentivoInterpretacao: string;
+  cargaEfetivaAlvoPercent: number;
   totais: SimulationRow;
   porSku: SimulationRow[];
   porUf: SimulationRow[];
@@ -96,12 +112,12 @@ type SavedScenario = {
 const SCENARIOS_STORAGE_KEY = "branch-simulation-scenarios";
 
 const INCENTIVE_REFERENCE_TEXT =
-  "Valores usuais de mercado (carga efetiva de ICMS em vendas interestaduais, e-commerce) — confirme o percentual real com sua contabilidade antes de decidir. " +
-  "SC (TTD 409/410/411): ~1,4%. " +
-  "ES (COMPETE E-commerce): ~1,1%. " +
-  "PR (Paraná Competitivo): crédito presumido de ~0,4% sobre a base (exige investimento/faturamento mínimos). " +
-  "RS (crédito presumido): ICMS mínimo efetivo ~1,5%. " +
-  "MG (TTS E-commerce): efetivo entre ~2% e ~21%, varia muito por produto.";
+  "Informe a carga efetiva de ICMS próprio da origem sobre a receita (não um % de desconto sobre o ICMS). " +
+  "Ex.: SC/TTD ~1,4% significa que, nas vendas interestaduais, o ICMS da origem cai para ~1,4% da receita; " +
+  "o crédito presumido = ICMS interestadual bruto − (receita × 1,4%). O DIFAL (UF destino) não é reduzido. " +
+  "0% desliga o incentivo. Confirme o percentual real com sua contabilidade. " +
+  "Referências de mercado: SC (TTD 409/410/411) ~1,4%; ES (COMPETE) ~1,1%; " +
+  "PR (Paraná Competitivo) ~0,4%; RS ~1,5%; MG/RJ/SP sem default (0%).";
 
 const PERIODS_INFO_TEXT =
   "Os meses marcados são somados num único cálculo — não é uma média por mês, é o total de vendas incluídas na apuração desses meses combinados. " +
@@ -288,16 +304,97 @@ function MemoriaComponentRow({
 function MemoriaCalculoPanel({
   row,
   skuUfRows,
+  incentivoInterpretacao,
 }: {
   row: SimulationRow;
   skuUfRows: SkuUfRow[];
+  incentivoInterpretacao?: string;
 }) {
+  const inc = row.incentivoCenario;
+  const cargaEfetivaLiquidaPercent =
+    inc.receitaInterestadual > 0
+      ? roundMoney((inc.icmsInterestadualLiquido / inc.receitaInterestadual) * 100)
+      : 0;
+  const cargaEfetivaBrutaPercent =
+    inc.receitaInterestadual > 0
+      ? roundMoney((inc.icmsInterestadualBruto / inc.receitaInterestadual) * 100)
+      : 0;
+
   return (
     <tr className="border-t border-[var(--border)] bg-[var(--muted)]/10">
       <td colSpan={6} className="px-4 py-3">
         <p className="mb-2 text-xs font-semibold text-[var(--foreground)]">
           Memória de cálculo — {row.key}
         </p>
+
+        <div className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2.5 text-xs">
+          <p className="mb-1 font-semibold text-[var(--foreground)]">
+            Incentivo / crédito presumido (cenário)
+          </p>
+          {incentivoInterpretacao ? (
+            <p className="mb-2 text-[var(--muted-foreground)]">{incentivoInterpretacao}</p>
+          ) : null}
+          {inc.cargaEfetivaAlvoPercent <= 0 ? (
+            <p className="text-[var(--muted-foreground)]">
+              Carga efetiva alvo = 0% — incentivo desligado neste cenário. O ICMS
+              interestadual do cenário fica na alíquota cheia (12%/7%/4%).
+            </p>
+          ) : inc.receitaInterestadual <= 0 ? (
+            <p className="text-[var(--muted-foreground)]">
+              Sem vendas interestaduais neste agrupamento — o incentivo não
+              incide (só operações internas ou sem ICMS).
+            </p>
+          ) : (
+            <div className="space-y-1 text-[var(--muted-foreground)]">
+              <p>
+                Carga efetiva alvo informada:{" "}
+                <strong>{inc.cargaEfetivaAlvoPercent.toFixed(2)}%</strong> sobre
+                a receita interestadual.
+              </p>
+              <p>
+                Receita interestadual:{" "}
+                <strong>{formatFinancialMoney(inc.receitaInterestadual)}</strong>
+                {" · "}
+                {inc.linhasComIncentivo} venda(s) com incentivo aplicado
+                {inc.linhasInterestaduaisSemIncentivo > 0
+                  ? ` · ${inc.linhasInterestaduaisSemIncentivo} interestadual(is) sem crédito`
+                  : ""}
+                {inc.linhasInternas > 0
+                  ? ` · ${inc.linhasInternas} interna(s) (sem incentivo)`
+                  : ""}
+              </p>
+              <p>
+                ICMS interestadual bruto (
+                {cargaEfetivaBrutaPercent.toFixed(2)}% efetivo):{" "}
+                <strong>{formatFinancialMoney(inc.icmsInterestadualBruto)}</strong>
+              </p>
+              <p>
+                (−) Crédito presumido = bruto − (receita ×{" "}
+                {inc.cargaEfetivaAlvoPercent.toFixed(2)}%):{" "}
+                <strong className="text-emerald-700 dark:text-emerald-400">
+                  {formatFinancialMoney(inc.creditoPresumidoValor)}
+                </strong>
+              </p>
+              <p>
+                ICMS interestadual líquido (
+                {cargaEfetivaLiquidaPercent.toFixed(2)}% efetivo):{" "}
+                <strong>
+                  {formatFinancialMoney(inc.icmsInterestadualLiquido)}
+                </strong>
+              </p>
+              <p>
+                DIFAL (UF destino — <em>não</em> reduzido pelo incentivo):{" "}
+                <strong>{formatFinancialMoney(inc.difal)}</strong>
+              </p>
+              <p>
+                ICMS total interestadual no cenário (líquido + DIFAL):{" "}
+                <strong>
+                  {formatFinancialMoney(inc.icmsTotalInterestadual)}
+                </strong>
+              </p>
+            </div>
+          )}
+        </div>
 
         <div className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2.5 text-xs">
           <p className="mb-1 font-semibold text-[var(--foreground)]">Compra</p>
@@ -333,6 +430,7 @@ function MemoriaCalculoPanel({
                   <th className="px-3 py-2">Operação</th>
                   <th className="px-3 py-2 text-right">Alíq. interest.</th>
                   <th className="px-3 py-2 text-right">Alíq. interna dest.</th>
+                  <th className="px-3 py-2 text-right">Crédito presumido</th>
                   <th className="px-3 py-2 text-right">Débito atual</th>
                   <th className="px-3 py-2 text-right">Débito cenário</th>
                 </tr>
@@ -359,6 +457,14 @@ function MemoriaCalculoPanel({
                     </td>
                     <td className="px-3 py-2 text-right text-xs tabular-nums">
                       {r.aliquotaInternaDestino.toFixed(2)}%
+                    </td>
+                    <td className="px-3 py-2 text-right text-xs tabular-nums">
+                      {r.isOperacaoInterna ||
+                      r.incentivoCenario.creditoPresumidoValor <= 0
+                        ? "—"
+                        : formatFinancialMoney(
+                            r.incentivoCenario.creditoPresumidoValor,
+                          )}
                     </td>
                     <td className="px-3 py-2 text-right text-xs tabular-nums">
                       {formatFinancialMoney(r.icmsDebito.atual)}
@@ -454,6 +560,7 @@ function ResultTable({
   expandedKey: controlledExpandedKey,
   onToggleExpand,
   skuUfRows,
+  incentivoInterpretacao,
 }: {
   title: string;
   infoText?: string;
@@ -464,6 +571,7 @@ function ResultTable({
   expandedKey?: string | null;
   onToggleExpand?: (key: string) => void;
   skuUfRows?: SkuUfRow[];
+  incentivoInterpretacao?: string;
 }) {
   const [query, setQuery] = useState("");
   const [internalExpandedKey, setInternalExpandedKey] = useState<string | null>(null);
@@ -598,6 +706,7 @@ function ResultTable({
                         key={`${row.key}-memoria`}
                         row={row}
                         skuUfRows={(skuUfRows ?? []).filter((r) => r.sku === row.key)}
+                        incentivoInterpretacao={incentivoInterpretacao}
                       />,
                     ]
                   : [mainRow];
@@ -996,7 +1105,7 @@ export function BranchSimulationClient() {
     <div className="space-y-5">
       <Card className="border-amber-200 bg-amber-50/60 p-4 text-xs leading-relaxed text-amber-900 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
         Estimativa sobre as vendas já apuradas nos relatórios tributários
-        selecionados. O % de crédito presumido deve ser validado com sua
+        selecionados. O % de carga efetiva ICMS origem deve ser validado com sua
         contabilidade e a legislação do estado escolhido. Não considera custo
         de transferência de estoque entre filiais nem obrigações acessórias
         da nova filial (inscrição estadual, folha, aluguel etc). O "% médio"
@@ -1068,7 +1177,7 @@ export function BranchSimulationClient() {
               <div className="flex-1">
                 <MaskedPercentField
                   id="branch-sim-incentivo"
-                  label="Crédito presumido estimado (%)"
+                  label="Carga efetiva ICMS origem (%)"
                   value={creditoPresumidoPercent}
                   onValueChange={(value) => updateCreditoForUf(targetUf, value)}
                 />
@@ -1158,7 +1267,7 @@ export function BranchSimulationClient() {
       <Card className="p-4">
         <div className="mb-1 flex items-center gap-1.5">
           <h3 className="text-sm font-semibold">Comparar estados</h3>
-          <PlanningInfoTrigger content="Roda a simulação pra várias UFs candidatas de uma vez, usando os mesmos meses selecionados acima, e mostra qual economiza mais. Cada UF tem seu próprio % de crédito presumido editável (pré-preenchido com a referência de mercado)." />
+          <PlanningInfoTrigger content="Roda a simulação pra várias UFs candidatas de uma vez, usando os mesmos meses selecionados acima, e mostra qual economiza mais. Cada UF tem sua própria carga efetiva de ICMS origem editável (pré-preenchida com a referência de mercado — ex. SC 1,4%)." />
         </div>
         <div className="mb-3 flex flex-wrap gap-3">
           {supportedUfs.map((uf) => {
@@ -1228,7 +1337,7 @@ export function BranchSimulationClient() {
                         </span>
                       ) : null}
                       <span className="ml-1 text-[10px] text-[var(--muted-foreground)]">
-                        ({entry.creditoPresumidoPercent}% incentivo)
+                        ({entry.creditoPresumidoPercent}% carga efetiva)
                       </span>
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">
@@ -1296,6 +1405,21 @@ export function BranchSimulationClient() {
                   cenarioPercent={result.totais.cenarioPercent}
                 />
               </p>
+              {result.totais.incentivoCenario.creditoPresumidoValor > 0 ? (
+                <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
+                  Crédito presumido simulado:{" "}
+                  {formatFinancialMoney(
+                    result.totais.incentivoCenario.creditoPresumidoValor,
+                  )}{" "}
+                  (carga efetiva alvo{" "}
+                  {result.cargaEfetivaAlvoPercent.toFixed(2)}%)
+                </p>
+              ) : result.cargaEfetivaAlvoPercent > 0 ? (
+                <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                  Carga efetiva alvo {result.cargaEfetivaAlvoPercent.toFixed(2)}%
+                  — sem crédito neste mix (só internas ou alvo ≥ alíquota)
+                </p>
+              ) : null}
             </Card>
             <Card className="p-4">
               <p className="text-xs text-[var(--muted-foreground)]">Economia estimada</p>
@@ -1348,6 +1472,7 @@ export function BranchSimulationClient() {
                 setExpandedSku((current) => (current === key ? null : key))
               }
               skuUfRows={result.porSkuUf}
+              incentivoInterpretacao={result.incentivoInterpretacao}
             />
           </div>
           <ResultTable
