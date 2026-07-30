@@ -141,6 +141,11 @@ function saveScenarios(scenarios: SavedScenario[]) {
 }
 
 const SUPPLIER_UF_STORAGE_KEY = "branch-simulation-supplier-ufs";
+const CREDITO_PRESUMIDO_BY_UF_STORAGE_KEY =
+  "branch-simulation-credito-presumido-by-uf";
+/** Formato antigo (número único) — migrado para o mapa por UF. */
+const CREDITO_PRESUMIDO_LEGACY_STORAGE_KEY =
+  "branch-simulation-credito-presumido";
 
 function loadSupplierUfMap(): Record<string, string> {
   if (typeof window === "undefined") return {};
@@ -157,6 +162,60 @@ function loadSupplierUfMap(): Record<string, string> {
 function saveSupplierUfMap(map: Record<string, string>) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(SUPPLIER_UF_STORAGE_KEY, JSON.stringify(map));
+}
+
+function sanitizeCreditoByUf(raw: unknown): Record<string, number> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, number> = {};
+  for (const [uf, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+      out[uf] = value;
+    }
+  }
+  return out;
+}
+
+function loadCreditoPresumidoByUf(): Record<string, number> {
+  const base = { ...INCENTIVE_UF_DEFAULTS };
+  if (typeof window === "undefined") return base;
+  try {
+    const raw = window.localStorage.getItem(CREDITO_PRESUMIDO_BY_UF_STORAGE_KEY);
+    if (raw !== null) {
+      return { ...base, ...sanitizeCreditoByUf(JSON.parse(raw)) };
+    }
+    // Migra valor único antigo para SC (UF alvo padrão).
+    const legacy = window.localStorage.getItem(CREDITO_PRESUMIDO_LEGACY_STORAGE_KEY);
+    if (legacy !== null) {
+      const parsed = JSON.parse(legacy) as unknown;
+      if (typeof parsed === "number" && Number.isFinite(parsed) && parsed >= 0) {
+        const migrated = { ...base, SC: parsed };
+        window.localStorage.setItem(
+          CREDITO_PRESUMIDO_BY_UF_STORAGE_KEY,
+          JSON.stringify(migrated),
+        );
+        window.localStorage.removeItem(CREDITO_PRESUMIDO_LEGACY_STORAGE_KEY);
+        return migrated;
+      }
+    }
+    return base;
+  } catch {
+    return base;
+  }
+}
+
+function saveCreditoPresumidoByUf(map: Record<string, number>) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(
+    CREDITO_PRESUMIDO_BY_UF_STORAGE_KEY,
+    JSON.stringify(map),
+  );
+}
+
+function creditoForUf(
+  map: Record<string, number>,
+  uf: string,
+): number {
+  return map[uf] ?? INCENTIVE_UF_DEFAULTS[uf] ?? 0;
 }
 
 /** Diferença em pontos percentuais entre o % médio do cenário e o atual. */
@@ -656,9 +715,13 @@ export function BranchSimulationClient() {
   const [supportedUfs, setSupportedUfs] = useState<string[]>([]);
   const [selectedPeriods, setSelectedPeriods] = useState<Set<string>>(new Set());
   const [targetUf, setTargetUf] = useState("SC");
-  const [creditoPresumidoPercent, setCreditoPresumidoPercent] = useState<
-    number | null
-  >(0);
+  const [creditoPresumidoByUf, setCreditoPresumidoByUf] = useState<
+    Record<string, number>
+  >(() => ({ ...INCENTIVE_UF_DEFAULTS }));
+  const creditoPresumidoPercent: number | null = creditoForUf(
+    creditoPresumidoByUf,
+    targetUf,
+  );
   const [loadingPeriods, setLoadingPeriods] = useState(true);
   const [simulating, setSimulating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -671,9 +734,6 @@ export function BranchSimulationClient() {
   const [loadingFornecedores, setLoadingFornecedores] = useState(false);
   const [expandedSku, setExpandedSku] = useState<string | null>(null);
   const [compareSelection, setCompareSelection] = useState<Set<string>>(new Set());
-  const [compareCreditoByUf, setCompareCreditoByUf] = useState<Record<string, number>>(
-    { ...INCENTIVE_UF_DEFAULTS },
-  );
   const [comparing, setComparing] = useState(false);
   const [comparisonResult, setComparisonResult] = useState<ComparisonEntry[] | null>(
     null,
@@ -682,6 +742,16 @@ export function BranchSimulationClient() {
   useEffect(() => {
     setScenarios(loadScenarios());
     setSupplierUfMap(loadSupplierUfMap());
+    setCreditoPresumidoByUf(loadCreditoPresumidoByUf());
+  }, []);
+
+  const updateCreditoForUf = useCallback((uf: string, value: number | null) => {
+    const percent = value == null || !Number.isFinite(value) || value < 0 ? 0 : value;
+    setCreditoPresumidoByUf((current) => {
+      const next = { ...current, [uf]: percent };
+      saveCreditoPresumidoByUf(next);
+      return next;
+    });
   }, []);
 
   useEffect(() => {
@@ -792,7 +862,7 @@ export function BranchSimulationClient() {
     try {
       const compareUfs = [...compareSelection].map((uf) => ({
         uf,
-        creditoPresumidoPercent: compareCreditoByUf[uf] ?? INCENTIVE_UF_DEFAULTS[uf] ?? 0,
+        creditoPresumidoPercent: creditoForUf(creditoPresumidoByUf, uf),
       }));
       const res = await fetch("/api/tax-report/branch-simulation", {
         method: "POST",
@@ -824,7 +894,7 @@ export function BranchSimulationClient() {
     periods,
     selectedPeriods,
     compareSelection,
-    compareCreditoByUf,
+    creditoPresumidoByUf,
     targetUf,
     creditoPresumidoPercent,
     supplierUfMap,
@@ -832,7 +902,7 @@ export function BranchSimulationClient() {
 
   const handleUseComparisonUf = async (entry: ComparisonEntry) => {
     setTargetUf(entry.uf);
-    setCreditoPresumidoPercent(entry.creditoPresumidoPercent);
+    updateCreditoForUf(entry.uf, entry.creditoPresumidoPercent);
     await runSimulation(undefined, entry.uf, entry.creditoPresumidoPercent);
     skuTableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
@@ -891,7 +961,7 @@ export function BranchSimulationClient() {
   const handleLoadScenario = (scenario: SavedScenario) => {
     setSelectedPeriods(new Set(scenario.periods.map(periodKey)));
     setTargetUf(scenario.targetUf);
-    setCreditoPresumidoPercent(scenario.creditoPresumidoPercent);
+    updateCreditoForUf(scenario.targetUf, scenario.creditoPresumidoPercent);
     void runSimulation(scenario.periods, scenario.targetUf, scenario.creditoPresumidoPercent);
   };
 
@@ -1000,7 +1070,7 @@ export function BranchSimulationClient() {
                   id="branch-sim-incentivo"
                   label="Crédito presumido estimado (%)"
                   value={creditoPresumidoPercent}
-                  onValueChange={setCreditoPresumidoPercent}
+                  onValueChange={(value) => updateCreditoForUf(targetUf, value)}
                 />
               </div>
               <PlanningInfoTrigger content={INCENTIVE_REFERENCE_TEXT} className="mb-1" />
@@ -1115,12 +1185,9 @@ export function BranchSimulationClient() {
                   step="0.1"
                   min="0"
                   disabled={!checked}
-                  value={compareCreditoByUf[uf] ?? INCENTIVE_UF_DEFAULTS[uf] ?? 0}
+                  value={creditoForUf(creditoPresumidoByUf, uf)}
                   onChange={(e) =>
-                    setCompareCreditoByUf((current) => ({
-                      ...current,
-                      [uf]: Number(e.target.value),
-                    }))
+                    updateCreditoForUf(uf, Number(e.target.value))
                   }
                   className="w-14 rounded border border-[var(--border)] bg-[var(--background)] px-1 py-0.5 text-xs tabular-nums disabled:opacity-50"
                 />
