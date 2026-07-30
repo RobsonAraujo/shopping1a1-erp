@@ -224,6 +224,7 @@ model CompanyTaxSettings {
   pisRatePercent                Decimal  @default(1.65) @map("pis_rate_percent") @db.Decimal(8, 4)
   cofinsRatePercent             Decimal  @default(7.6) @map("cofins_rate_percent") @db.Decimal(8, 4)
   excludeIcmsFromPisCofinsBase  Boolean  @default(true) @map("exclude_icms_from_pis_cofins_base")
+  considerIcmsStRecuperavel    Boolean  @default(true) @map("consider_icms_st_recuperavel")
   irpjAdditionalThreshold       Decimal  @default(20000) @map("irpj_additional_threshold") @db.Decimal(18, 2)
   wholesaleLevel1ReductionPercent Decimal @default(10) @map("wholesale_level1_reduction_percent") @db.Decimal(8, 4)
   wholesaleLevel2ReductionPercent Decimal @default(15) @map("wholesale_level2_reduction_percent") @db.Decimal(8, 4)

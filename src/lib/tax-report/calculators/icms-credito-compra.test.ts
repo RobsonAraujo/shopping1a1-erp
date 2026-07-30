@@ -84,4 +84,36 @@ describe("calcularIcmsCreditoCompra", () => {
     assert.equal(result.stRecuperavelTotal, 0);
     assert.equal(result.creditoTotal, 36);
   });
+
+  it("does not recover ICMS-ST when considerarStRecuperavel is disabled", () => {
+    const result = calcularIcmsCreditoCompra(
+      tx({
+        hasIcmsSt: true,
+        purchaseIcmsPercent: 0,
+        unitCostNf: 100,
+        purchaseCostWithSt: 118,
+        quantidade: 2,
+      }),
+      false,
+      false,
+    );
+    assert.equal(result.stRecuperavelTotal, 0);
+    assert.equal(result.creditoTotal, 0);
+  });
+
+  it("recovers ICMS-ST when considerarStRecuperavel is enabled (default)", () => {
+    const result = calcularIcmsCreditoCompra(
+      tx({
+        hasIcmsSt: true,
+        purchaseIcmsPercent: 0,
+        unitCostNf: 100,
+        purchaseCostWithSt: 118,
+        quantidade: 2,
+      }),
+      false,
+      true,
+    );
+    assert.equal(result.stRecuperavelTotal, 36);
+    assert.equal(result.creditoTotal, 36);
+  });
 });

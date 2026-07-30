@@ -185,6 +185,7 @@ describe("repairTaxReportPayload alias cost", () => {
         pisRatePercent: 1.65,
         cofinsRatePercent: 7.6,
         excludeIcmsFromPisCofinsBase: true,
+        considerIcmsStRecuperavel: true,
       },
       icmsRates: new Map([
         ["SP", { uf: "SP", aliquotaBase: 18, fcp: 0 }],

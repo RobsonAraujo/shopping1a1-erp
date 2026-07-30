@@ -17,8 +17,15 @@ function icmsStRecuperavelUnit(input: {
   purchaseCostWithSt: number | null | undefined;
   hasIcmsSt: boolean;
   isOperacaoInterna: boolean;
+  considerarStRecuperavel: boolean;
 }): number {
-  if (!input.hasIcmsSt || input.isOperacaoInterna) return 0;
+  if (
+    !input.considerarStRecuperavel ||
+    !input.hasIcmsSt ||
+    input.isOperacaoInterna
+  ) {
+    return 0;
+  }
   const { purchaseCostWithSt, unitCostNf } = input;
   if (
     purchaseCostWithSt == null ||
@@ -33,6 +40,7 @@ function icmsStRecuperavelUnit(input: {
 export function calcularIcmsCreditoCompra(
   transacao: TransacaoVenda,
   isOperacaoInterna = true,
+  considerarStRecuperavel = true,
 ): IcmsCreditoCompraBreakdown {
   const unitCostNf = transacao.unitCostNf;
   if (unitCostNf == null || unitCostNf <= 0) {
@@ -55,6 +63,7 @@ export function calcularIcmsCreditoCompra(
     purchaseCostWithSt: transacao.purchaseCostWithSt,
     hasIcmsSt: transacao.hasIcmsSt,
     isOperacaoInterna,
+    considerarStRecuperavel,
   });
   const stRecuperavelTotal = roundMoney(
     stRecuperavelUnitario * transacao.quantidade,

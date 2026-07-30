@@ -206,6 +206,8 @@ export type TaxCompanyConfig = {
   pisRatePercent: number;
   cofinsRatePercent: number;
   excludeIcmsFromPisCofinsBase: boolean;
+  /** Credita ICMS-ST recuperável (venda interestadual de produto com ST) na apuração. */
+  considerIcmsStRecuperavel: boolean;
 };
 
 export type IcmsRateRow = {

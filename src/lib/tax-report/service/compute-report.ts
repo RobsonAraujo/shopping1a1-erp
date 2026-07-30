@@ -71,6 +71,7 @@ export function calcularDetalhamentoTransacao(input: {
   const icmsCreditoCompra = calcularIcmsCreditoCompra(
     transacao,
     icmsDifal?.isOperacaoInterna ?? true,
+    config.considerIcmsStRecuperavel,
   );
   const cmvTotal =
     (transacao.custoAquisicaoUnitario ?? 0) * transacao.quantidade +

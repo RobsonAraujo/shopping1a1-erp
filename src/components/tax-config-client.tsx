@@ -23,6 +23,7 @@ type CompanyDraft = {
   pisRate: string;
   cofinsRate: string;
   excludeIcms: boolean;
+  considerIcmsStRecuperavel: boolean;
 };
 
 function companyToDraft(company: TaxCompanyConfig): CompanyDraft {
@@ -31,6 +32,7 @@ function companyToDraft(company: TaxCompanyConfig): CompanyDraft {
     pisRate: String(company.pisRatePercent),
     cofinsRate: String(company.cofinsRatePercent),
     excludeIcms: company.excludeIcmsFromPisCofinsBase,
+    considerIcmsStRecuperavel: company.considerIcmsStRecuperavel,
   };
 }
 
@@ -63,6 +65,7 @@ export function TaxConfigClient() {
     pisRate: "1.65",
     cofinsRate: "7.6",
     excludeIcms: true,
+    considerIcmsStRecuperavel: true,
   });
 
   const load = useCallback(async () => {
@@ -110,6 +113,7 @@ export function TaxConfigClient() {
             pisRatePercent: Number(draft.pisRate.replace(",", ".")),
             cofinsRatePercent: Number(draft.cofinsRate.replace(",", ".")),
             excludeIcmsFromPisCofinsBase: draft.excludeIcms,
+            considerIcmsStRecuperavel: draft.considerIcmsStRecuperavel,
           },
         }),
       });
@@ -257,6 +261,28 @@ export function TaxConfigClient() {
                     />
                   </div>
                 </div>
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-[var(--muted-foreground)]">
+                        ICMS-ST recuperável (venda interestadual)
+                      </p>
+                      <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted-foreground)]">
+                        Tema 201/STF, Convênio ICMS 142/2018
+                      </p>
+                    </div>
+                    <Switch
+                      checked={draft.considerIcmsStRecuperavel}
+                      onCheckedChange={(checked) =>
+                        setDraft((current) => ({
+                          ...current,
+                          considerIcmsStRecuperavel: checked,
+                        }))
+                      }
+                      aria-label="Considerar crédito de ICMS-ST recuperável em vendas interestaduais"
+                    />
+                  </div>
+                </div>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -290,6 +316,10 @@ export function TaxConfigClient() {
               <CompanySettingView
                 label="Excluir ICMS da base PIS/COFINS"
                 value={company.excludeIcmsFromPisCofinsBase ? "Sim" : "Não"}
+              />
+              <CompanySettingView
+                label="ICMS-ST recuperável (interestadual)"
+                value={company.considerIcmsStRecuperavel ? "Sim" : "Não"}
               />
             </div>
           ) : null}
