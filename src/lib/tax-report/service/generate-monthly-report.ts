@@ -261,6 +261,28 @@ export async function loadTaxReportSnapshot(
   return repairTaxReportPayload(payload);
 }
 
+export type TaxReportSnapshotPeriod = {
+  year: number;
+  month: number;
+  generatedAt: string;
+};
+
+/** Lista os períodos já apurados (sem carregar o payload completo). */
+export async function listTaxReportSnapshotPeriods(
+  sellerId: number,
+): Promise<TaxReportSnapshotPeriod[]> {
+  const rows = await prisma.taxReportMonthSnapshot.findMany({
+    where: { sellerId },
+    orderBy: [{ year: "desc" }, { month: "desc" }],
+    select: { year: true, month: true, generatedAt: true },
+  });
+  return rows.map((row) => ({
+    year: row.year,
+    month: row.month,
+    generatedAt: row.generatedAt.toISOString(),
+  }));
+}
+
 export async function loadLatestTaxReportSnapshot(
   sellerId: number,
 ): Promise<TaxReportPayload | null> {

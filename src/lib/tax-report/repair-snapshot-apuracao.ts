@@ -17,7 +17,7 @@ import type {
 } from "@/lib/tax-report/types";
 import { repairTaxReportPayloadSync } from "@/lib/tax-report/repair-snapshot-uf";
 
-function collectDetalhes(payload: TaxReportPayload): DetalhamentoTributario[] {
+export function collectDetalhes(payload: TaxReportPayload): DetalhamentoTributario[] {
   const fromPorSku = payload.porSku.flatMap((sku) => sku.transacoes);
   if (fromPorSku.length > 0) return fromPorSku;
   return payload.transacoes ?? [];
