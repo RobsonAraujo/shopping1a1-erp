@@ -4,10 +4,12 @@ import type { ReactNode } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { formatFinancialMoney, formatFinancialPercent, percentOfSale } from "@/lib/financial-margin";
 import {
-  margemOperacionalEstimadaLinha,
-} from "@/lib/tax-report/imposto-operacional";
+  formatFinancialMoney,
+  formatFinancialPercent,
+  percentOfSale,
+} from "@/lib/financial-margin";
+import { margemOperacionalEstimadaLinha } from "@/lib/tax-report/imposto-operacional";
 import type { DetalhamentoTributario } from "@/lib/tax-report/types";
 import { cn } from "@/lib/utils";
 
@@ -21,7 +23,12 @@ function MemoriaSection({
   className?: string;
 }) {
   return (
-    <section className={cn("rounded-lg border border-[var(--border)] bg-[var(--background)]", className)}>
+    <section
+      className={cn(
+        "rounded-lg border border-[var(--border)] bg-[var(--background)]",
+        className,
+      )}
+    >
       <h3 className="border-b border-[var(--border)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
         {title}
       </h3>
@@ -52,7 +59,9 @@ function MemoriaRow({
       <span
         className={cn(
           "shrink-0 tabular-nums",
-          emphasis ? "font-semibold text-[var(--foreground)]" : "text-[var(--foreground)]",
+          emphasis
+            ? "font-semibold text-[var(--foreground)]"
+            : "text-[var(--foreground)]",
         )}
       >
         {value}
@@ -82,10 +91,15 @@ export function TaxReportCalculationPanel({
   const margemOperacional = margemOperacionalEstimadaLinha(row);
   const margemPercent = percentOfSale(margemOperacional, t.receitaBruta);
 
-  const liquidoPisCofinsPercent = pis ? percentOfSale(pis.liquido, t.receitaBruta) : null;
+  const liquidoPisCofinsPercent = pis
+    ? percentOfSale(pis.liquido, t.receitaBruta)
+    : null;
 
-  const icmsLiquido = icms ? icms.icmsTotal - (icmsCred?.creditoTotal ?? 0) : null;
-  const icmsLiquidoPercent = icmsLiquido != null ? percentOfSale(icmsLiquido, t.receitaBruta) : null;
+  const icmsLiquido = icms
+    ? icms.icmsTotal - (icmsCred?.creditoTotal ?? 0)
+    : null;
+  const icmsLiquidoPercent =
+    icmsLiquido != null ? percentOfSale(icmsLiquido, t.receitaBruta) : null;
 
   return (
     <Card className="border-[var(--primary)]/20 bg-[var(--muted)]/10 p-4">
@@ -129,7 +143,9 @@ export function TaxReportCalculationPanel({
       <MemoriaSection title="Dados de entrada" className="mb-3">
         <MemoriaRow
           label="Custo NF"
-          value={t.unitCostNf ? formatFinancialMoney(t.unitCostNf) : "não cadastrado"}
+          value={
+            t.unitCostNf ? formatFinancialMoney(t.unitCostNf) : "não cadastrado"
+          }
           muted={!t.unitCostNf}
         />
         <MemoriaRow
@@ -148,173 +164,146 @@ export function TaxReportCalculationPanel({
         ) : (
           <MemoriaRow label="ICMS-ST" value="Não" muted />
         )}
+        <MemoriaDivider />
+        <MemoriaRow
+          label="Receita bruta"
+          value={formatFinancialMoney(t.receitaBruta)}
+          emphasis
+        />
       </MemoriaSection>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <MemoriaSection title="Receita">
-          <MemoriaRow
-            label="Receita bruta"
-            value={formatFinancialMoney(t.receitaBruta)}
-            emphasis
-          />
-        </MemoriaSection>
-
-        {icms ? (
-          <MemoriaSection title="ICMS na venda (débito)">
-            <MemoriaRow
-              label="Operação"
-              value={
-                icms.isOperacaoInterna
-                  ? `Interna ${icms.ufOrigem} → ${icms.ufDestino}`
-                  : `Interestadual ${icms.ufOrigem} → ${icms.ufDestino}`
-              }
-            />
-            {icms.isOperacaoInterna ? (
+        {icms || icmsCred ? (
+          <MemoriaSection title="ICMS">
+            {icms ? (
               <>
-                {icms.icmsStNaCompra ? (
-                  <MemoriaRow
-                    label="Regime"
-                    value="ICMS-ST na compra — ICMS saída 0%"
-                    muted
-                  />
-                ) : (
-                  <MemoriaRow
-                    label="Alíquota interna (tabela)"
-                    value={`${(icms.aliquotaInternaTotal * 100).toFixed(2)}%`}
-                  />
-                )}
-                <MemoriaDivider />
+                <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+                  Débito (venda)
+                </p>
                 <MemoriaRow
-                  label="Débito de ICMS (ICMS devido nesta venda)"
-                  value={formatFinancialMoney(icms.icmsTotal)}
-                  emphasis
+                  label="Operação"
+                  value={
+                    icms.isOperacaoInterna
+                      ? `Interna ${icms.ufOrigem} → ${icms.ufDestino}`
+                      : `Interestadual ${icms.ufOrigem} → ${icms.ufDestino}`
+                  }
                 />
-              </>
-            ) : (
-              <>
-                <MemoriaRow
-                  label="ICMS interestadual"
-                  value={`${(icms.aliquotaInterestadual * 100).toFixed(2)}% → ${formatFinancialMoney(icms.icmsInterestadual)}`}
-                />
-                {icms.isContribuinte ? (
-                  <MemoriaRow
-                    label="DIFAL"
-                    value="Não (comprador contribuinte)"
-                    muted
-                  />
+                {icms.isOperacaoInterna ? (
+                  icms.icmsStNaCompra ? (
+                    <MemoriaRow
+                      label="Regime"
+                      value="ICMS-ST na compra — ICMS saída 0%"
+                      muted
+                    />
+                  ) : (
+                    <MemoriaRow
+                      label="Alíquota interna (tabela)"
+                      value={`${(icms.aliquotaInternaTotal * 100).toFixed(2)}%`}
+                    />
+                  )
                 ) : (
                   <>
                     <MemoriaRow
-                      label="Alíquota interna destino"
-                      value={`${(icms.aliquotaInternaTotal * 100).toFixed(2)}%`}
-                      muted
+                      label="ICMS interestadual"
+                      value={`${(icms.aliquotaInterestadual * 100).toFixed(2)}% → ${formatFinancialMoney(icms.icmsInterestadual)}`}
                     />
-                    <MemoriaRow
-                      label="DIFAL"
-                      value={formatFinancialMoney(icms.difal)}
-                    />
+                    {icms.isContribuinte ? (
+                      <MemoriaRow
+                        label="DIFAL"
+                        value="Não (comprador contribuinte)"
+                        muted
+                      />
+                    ) : (
+                      <>
+                        <MemoriaRow
+                          label="Alíquota interna destino"
+                          value={`${(icms.aliquotaInternaTotal * 100).toFixed(2)}%`}
+                          muted
+                        />
+                        <MemoriaRow
+                          label="DIFAL"
+                          value={formatFinancialMoney(icms.difal)}
+                        />
+                      </>
+                    )}
                   </>
                 )}
                 <MemoriaDivider />
                 <MemoriaRow
-                  label="Débito de ICMS (ICMS devido nesta venda)"
+                  label="Débito de ICMS (devido nesta venda)"
                   value={formatFinancialMoney(icms.icmsTotal)}
                   emphasis
                 />
+                <MemoriaDivider />
               </>
-            )}
-          </MemoriaSection>
-        ) : null}
+            ) : null}
 
-        {icmsCred ? (
-          <MemoriaSection title="ICMS na compra (crédito)">
-            {(() => {
-              const stRecuperavel = icmsCred.stRecuperavelTotal ?? 0;
-              const creditoEntrada = icmsCred.creditoTotal - stRecuperavel;
-              return (
-                <>
-                  {creditoEntrada > 0 ? (
+            {icmsCred
+              ? (() => {
+                  const stRecuperavel = icmsCred.stRecuperavelTotal ?? 0;
+                  const creditoEntrada = icmsCred.creditoTotal - stRecuperavel;
+                  return (
                     <>
-                      <MemoriaRow
-                        label="Base NF entrada"
-                        value={formatFinancialMoney(icmsCred.baseUnitaria)}
-                      />
-                      <MemoriaRow
-                        label="Alíquota entrada"
-                        value={`${icmsCred.aliquotaPercent.toFixed(2)}%`}
-                      />
+                      <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+                        Crédito (compra)
+                      </p>
+                      {creditoEntrada > 0 ? (
+                        <>
+                          <MemoriaRow
+                            label="Base NF entrada"
+                            value={formatFinancialMoney(icmsCred.baseUnitaria)}
+                          />
+                          <MemoriaRow
+                            label="Alíquota entrada"
+                            value={`${icmsCred.aliquotaPercent.toFixed(2)}%`}
+                          />
+                        </>
+                      ) : (
+                        <MemoriaRow
+                          label="Crédito de ICMS entrada"
+                          value={
+                            t.hasIcmsSt
+                              ? "R$ 0,00 (ST na compra)"
+                              : t.unitCostNf
+                                ? "R$ 0,00"
+                                : "R$ 0,00 (sem custo NF)"
+                          }
+                          muted
+                        />
+                      )}
+                      {stRecuperavel > 0 ? (
+                        <>
+                          <MemoriaRow
+                            label={`Custo com ICMS-ST (× ${t.quantidade})`}
+                            value={formatFinancialMoney(
+                              (t.purchaseCostWithSt ?? 0) * t.quantidade,
+                            )}
+                            muted
+                          />
+                          <MemoriaRow
+                            label={`(−) Custo NF sem ST (× ${t.quantidade})`}
+                            value={formatFinancialMoney(
+                              (t.unitCostNf ?? 0) * t.quantidade,
+                            )}
+                            muted
+                          />
+                          <MemoriaRow
+                            label="ICMS-ST recuperável (venda interestadual — Tema 201/STF)"
+                            value={formatFinancialMoney(stRecuperavel)}
+                            muted
+                          />
+                        </>
+                      ) : null}
                       <MemoriaDivider />
                       <MemoriaRow
-                        label="Crédito de ICMS entrada (pago na compra, abate o débito)"
-                        value={formatFinancialMoney(creditoEntrada)}
+                        label="Crédito de ICMS (abate o débito)"
+                        value={formatFinancialMoney(icmsCred.creditoTotal)}
                         emphasis
                       />
                     </>
-                  ) : (
-                    <MemoriaRow
-                      label="Crédito de ICMS entrada"
-                      value={
-                        t.hasIcmsSt
-                          ? "R$ 0,00 (ST na compra)"
-                          : t.unitCostNf
-                            ? "R$ 0,00"
-                            : "R$ 0,00 (sem custo NF)"
-                      }
-                      muted
-                    />
-                  )}
-                  {stRecuperavel > 0 ? (
-                    <>
-                      {creditoEntrada > 0 ? <MemoriaDivider /> : null}
-                      <MemoriaRow
-                        label={`Custo com ICMS-ST (× ${t.quantidade})`}
-                        value={formatFinancialMoney(
-                          (t.purchaseCostWithSt ?? 0) * t.quantidade,
-                        )}
-                        muted
-                      />
-                      <MemoriaRow
-                        label={`(−) Custo NF sem ST (× ${t.quantidade})`}
-                        value={formatFinancialMoney(
-                          (t.unitCostNf ?? 0) * t.quantidade,
-                        )}
-                        muted
-                      />
-                      <MemoriaDivider />
-                      <MemoriaRow
-                        label="ICMS-ST recuperável (venda interestadual — Tema 201/STF)"
-                        value={formatFinancialMoney(stRecuperavel)}
-                        emphasis
-                      />
-                    </>
-                  ) : null}
-                </>
-              );
-            })()}
-          </MemoriaSection>
-        ) : null}
-
-        {icms && icmsCred ? (
-          <MemoriaSection title="ICMS líquido" className="sm:col-span-2">
-            <MemoriaRow
-              label="Débito de ICMS (venda)"
-              value={formatFinancialMoney(icms.icmsTotal)}
-            />
-            <MemoriaRow
-              label="(−) Crédito de ICMS (compra)"
-              value={formatFinancialMoney(icmsCred.creditoTotal)}
-              muted
-            />
-            <MemoriaDivider />
-            <MemoriaRow
-              label="ICMS líquido a recolher nesta venda"
-              value={
-                icmsLiquidoPercent != null
-                  ? `${formatFinancialPercent(icmsLiquidoPercent)} (${formatFinancialMoney(icmsLiquido ?? 0)})`
-                  : formatFinancialMoney(icmsLiquido ?? 0)
-              }
-              emphasis
-            />
+                  );
+                })()
+              : null}
           </MemoriaSection>
         ) : null}
 
@@ -351,7 +340,11 @@ export function TaxReportCalculationPanel({
                   Crédito
                 </p>
                 <MemoriaRow
-                  label={t.hasIcmsSt ? "Base (custo c/ ST)" : "Base (NF − ICMS entrada)"}
+                  label={
+                    t.hasIcmsSt
+                      ? "Base (custo c/ ST)"
+                      : "Base (NF − ICMS entrada)"
+                  }
                   value={formatFinancialMoney(pis.baseCredito)}
                 />
                 <MemoriaRow
@@ -376,6 +369,38 @@ export function TaxReportCalculationPanel({
             )}
           </MemoriaSection>
         ) : null}
+
+        {icms && icmsCred ? (
+          <MemoriaSection title="ICMS líquido" className="sm:col-span-2">
+            <MemoriaRow
+              label="Débito de ICMS (venda)"
+              value={formatFinancialMoney(icms.icmsTotal)}
+            />
+            <MemoriaRow
+              label="(−) Crédito de ICMS (compra)"
+              value={formatFinancialMoney(icmsCred.creditoTotal)}
+              muted
+            />
+            <MemoriaDivider />
+            <MemoriaRow
+              label="ICMS líquido a recolher nesta venda"
+              value={
+                icmsLiquidoPercent != null
+                  ? `${formatFinancialPercent(icmsLiquidoPercent)} (${formatFinancialMoney(icmsLiquido ?? 0)})`
+                  : formatFinancialMoney(icmsLiquido ?? 0)
+              }
+              emphasis
+            />
+            {(icmsCred.stRecuperavelTotal ?? 0) > 0 ? (
+              <p className="mt-2 rounded-md border border-amber-200 bg-amber-50/80 px-2.5 py-2 text-[11px] leading-relaxed text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                Este líquido já desconta{" "}
+                {formatFinancialMoney(icmsCred.stRecuperavelTotal ?? 0)} de
+                ICMS-ST recuperável — um crédito estimado que depende do
+                processo de ressarcimento junto ao estado de origem.
+              </p>
+            ) : null}
+          </MemoriaSection>
+        ) : null}
       </div>
 
       {row.incluidoNaApuracao ? (
@@ -385,8 +410,10 @@ export function TaxReportCalculationPanel({
             {pis && icms ? (
               <span className="block text-[10px] normal-case text-[var(--muted-foreground)]/80">
                 PIS/COFINS líquido (
-                {formatFinancialPercent(percentOfSale(pis.liquido, t.receitaBruta))} ·{" "}
-                {formatFinancialMoney(pis.liquido)}) + ICMS líquido (
+                {formatFinancialPercent(
+                  percentOfSale(pis.liquido, t.receitaBruta),
+                )}{" "}
+                · {formatFinancialMoney(pis.liquido)}) + ICMS líquido (
                 {icmsLiquidoPercent != null
                   ? formatFinancialPercent(icmsLiquidoPercent)
                   : "—"}{" "}
