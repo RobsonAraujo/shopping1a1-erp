@@ -49,6 +49,7 @@ type PostBody = {
   targetUf?: string;
   creditoPresumidoPercent?: number;
   supplierUfByFornecedor?: Record<string, string>;
+  compareUfs?: { uf: string; creditoPresumidoPercent: number }[];
 };
 
 export async function POST(request: NextRequest) {
@@ -115,7 +116,21 @@ export async function POST(request: NextRequest) {
       supplierUfByFornecedor,
     });
 
-    return NextResponse.json({ result });
+    const comparison = (body.compareUfs ?? [])
+      .filter((c) => isSupportedBranchSimulationUf((c.uf ?? "").toUpperCase()))
+      .map((c) => {
+        const uf = c.uf.toUpperCase();
+        const percent = Number(c.creditoPresumidoPercent ?? 0);
+        const totais = buildBranchSimulationResult(detalhes, {
+          config: { ...config, originUf: uf },
+          icmsRates,
+          creditoPresumidoPercent: Number.isFinite(percent) ? percent : 0,
+          supplierUfByFornecedor,
+        }).totais;
+        return { uf, creditoPresumidoPercent: percent, totais };
+      });
+
+    return NextResponse.json({ result, comparison });
   } catch (e) {
     logServerError("api/tax-report/branch-simulation POST", e);
     return NextResponse.json(apiErrorPayload(e, "branch_simulation_failed"), {

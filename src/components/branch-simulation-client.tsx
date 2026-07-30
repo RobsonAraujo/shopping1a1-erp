@@ -49,6 +49,23 @@ type SimulationResult = {
   porUf: SimulationRow[];
 };
 
+type ComparisonEntry = {
+  uf: string;
+  creditoPresumidoPercent: number;
+  totais: SimulationRow;
+};
+
+/** Referência de mercado (pesquisada) usada só como default editável — nunca fixo no cálculo. */
+const INCENTIVE_UF_DEFAULTS: Record<string, number> = {
+  SC: 1.4,
+  ES: 1.1,
+  PR: 0.4,
+  RS: 1.5,
+  MG: 0,
+  RJ: 0,
+  SP: 0,
+};
+
 type SavedScenario = {
   id: string;
   name: string;
@@ -276,6 +293,8 @@ function ResultTable({
   keyLabel,
   searchable,
   expandable,
+  expandedKey: controlledExpandedKey,
+  onToggleExpand,
 }: {
   title: string;
   infoText?: string;
@@ -283,9 +302,17 @@ function ResultTable({
   keyLabel: string;
   searchable?: boolean;
   expandable?: boolean;
+  expandedKey?: string | null;
+  onToggleExpand?: (key: string) => void;
 }) {
   const [query, setQuery] = useState("");
-  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [internalExpandedKey, setInternalExpandedKey] = useState<string | null>(null);
+  const expandedKey =
+    controlledExpandedKey !== undefined ? controlledExpandedKey : internalExpandedKey;
+  const toggleExpand =
+    onToggleExpand ??
+    ((key: string) =>
+      setInternalExpandedKey((current) => (current === key ? null : key)));
   const filtered = useMemo(
     () =>
       searchable
@@ -357,14 +384,7 @@ function ResultTable({
                       "border-t border-[var(--border)] hover:bg-[var(--muted)]/20",
                       expandable && "cursor-pointer",
                     )}
-                    onClick={
-                      expandable
-                        ? () =>
-                            setExpandedKey((current) =>
-                              current === row.key ? null : row.key,
-                            )
-                        : undefined
-                    }
+                    onClick={expandable ? () => toggleExpand(row.key) : undefined}
                   >
                     <td className="px-4 py-2.5 font-medium">
                       <span className="inline-flex items-center gap-1">
@@ -419,6 +439,48 @@ function ResultTable({
           </tbody>
         </table>
       </div>
+    </Card>
+  );
+}
+
+function TopMoversCard({
+  title,
+  rows,
+  positive,
+  onSelect,
+}: {
+  title: string;
+  rows: SimulationRow[];
+  positive?: boolean;
+  onSelect: (key: string) => void;
+}) {
+  return (
+    <Card className="p-4">
+      <h3 className="mb-2 text-sm font-semibold">{title}</h3>
+      <ul className="space-y-1.5">
+        {rows.map((row) => (
+          <li key={row.key}>
+            <button
+              type="button"
+              onClick={() => onSelect(row.key)}
+              className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-md px-1.5 py-1 text-left text-xs hover:bg-[var(--muted)]/30"
+            >
+              <span className="truncate">{row.key}</span>
+              <span
+                className={cn(
+                  "shrink-0 tabular-nums font-medium",
+                  positive
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-red-600 dark:text-red-400",
+                )}
+              >
+                {formatFinancialMoney(row.economia)} (
+                {formatFinancialPercent(row.economiaPercent)})
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
     </Card>
   );
 }
@@ -498,6 +560,15 @@ export function BranchSimulationClient() {
   const [fornecedores, setFornecedores] = useState<string[]>([]);
   const [showSupplierConfig, setShowSupplierConfig] = useState(false);
   const [loadingFornecedores, setLoadingFornecedores] = useState(false);
+  const [expandedSku, setExpandedSku] = useState<string | null>(null);
+  const [compareSelection, setCompareSelection] = useState<Set<string>>(new Set());
+  const [compareCreditoByUf, setCompareCreditoByUf] = useState<Record<string, number>>(
+    { ...INCENTIVE_UF_DEFAULTS },
+  );
+  const [comparing, setComparing] = useState(false);
+  const [comparisonResult, setComparisonResult] = useState<ComparisonEntry[] | null>(
+    null,
+  );
 
   useEffect(() => {
     setScenarios(loadScenarios());
@@ -574,6 +645,7 @@ export function BranchSimulationClient() {
         if (!res.ok) throw new Error(await readApiError(res, "simulation_failed"));
         const json = (await res.json()) as { result: SimulationResult };
         setResult(json.result);
+        setExpandedSku(null);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Erro ao simular");
       } finally {
@@ -582,6 +654,78 @@ export function BranchSimulationClient() {
     },
     [periods, selectedPeriods, targetUf, creditoPresumidoPercent, supplierUfMap],
   );
+
+  const toggleCompareUf = (uf: string) => {
+    setCompareSelection((current) => {
+      const next = new Set(current);
+      if (next.has(uf)) next.delete(uf);
+      else next.add(uf);
+      return next;
+    });
+  };
+
+  const handleCompare = useCallback(async () => {
+    const chosenPeriods = periods
+      .filter((p) => selectedPeriods.has(periodKey(p)))
+      .map((p) => ({ year: p.year, month: p.month }));
+
+    if (chosenPeriods.length === 0) {
+      setError("Selecione ao menos um período.");
+      return;
+    }
+    if (compareSelection.size === 0) {
+      setError("Selecione ao menos uma UF pra comparar.");
+      return;
+    }
+
+    setComparing(true);
+    setError(null);
+    try {
+      const compareUfs = [...compareSelection].map((uf) => ({
+        uf,
+        creditoPresumidoPercent: compareCreditoByUf[uf] ?? INCENTIVE_UF_DEFAULTS[uf] ?? 0,
+      }));
+      const res = await fetch("/api/tax-report/branch-simulation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          periods: chosenPeriods,
+          targetUf,
+          creditoPresumidoPercent: creditoPresumidoPercent ?? 0,
+          supplierUfByFornecedor: supplierUfMap,
+          compareUfs,
+        }),
+      });
+      if (!res.ok) throw new Error(await readApiError(res, "compare_failed"));
+      const json = (await res.json()) as {
+        result: SimulationResult;
+        comparison: ComparisonEntry[];
+      };
+      setResult(json.result);
+      setExpandedSku(null);
+      setComparisonResult(
+        [...json.comparison].sort((a, b) => b.totais.economia - a.totais.economia),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao comparar estados");
+    } finally {
+      setComparing(false);
+    }
+  }, [
+    periods,
+    selectedPeriods,
+    compareSelection,
+    compareCreditoByUf,
+    targetUf,
+    creditoPresumidoPercent,
+    supplierUfMap,
+  ]);
+
+  const handleUseComparisonUf = (entry: ComparisonEntry) => {
+    setTargetUf(entry.uf);
+    setCreditoPresumidoPercent(entry.creditoPresumidoPercent);
+    void runSimulation(undefined, entry.uf, entry.creditoPresumidoPercent);
+  };
 
   const handleToggleSupplierConfig = useCallback(async () => {
     setShowSupplierConfig((current) => !current);
@@ -651,6 +795,22 @@ export function BranchSimulationClient() {
     value: uf,
     label: uf,
   }));
+
+  const topGains = useMemo(() => {
+    if (!result) return [];
+    return [...result.porSku]
+      .filter((row) => row.economia > 0)
+      .sort((a, b) => b.economia - a.economia)
+      .slice(0, 5);
+  }, [result]);
+
+  const topLosses = useMemo(() => {
+    if (!result) return [];
+    return [...result.porSku]
+      .filter((row) => row.economia < 0)
+      .sort((a, b) => a.economia - b.economia)
+      .slice(0, 5);
+  }, [result]);
 
   return (
     <div className="space-y-5">
@@ -815,6 +975,122 @@ export function BranchSimulationClient() {
         onChangeUf={handleChangeSupplierUf}
       />
 
+      <Card className="p-4">
+        <div className="mb-1 flex items-center gap-1.5">
+          <h3 className="text-sm font-semibold">Comparar estados</h3>
+          <PlanningInfoTrigger content="Roda a simulação pra várias UFs candidatas de uma vez, usando os mesmos meses selecionados acima, e mostra qual economiza mais. Cada UF tem seu próprio % de crédito presumido editável (pré-preenchido com a referência de mercado)." />
+        </div>
+        <div className="mb-3 flex flex-wrap gap-3">
+          {supportedUfs.map((uf) => {
+            const checked = compareSelection.has(uf);
+            return (
+              <label
+                key={uf}
+                className={cn(
+                  "flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-xs",
+                  checked
+                    ? "border-[var(--primary)] bg-[var(--primary)]/5"
+                    : "border-[var(--border)]",
+                )}
+              >
+                <input
+                  type="checkbox"
+                  className="cursor-pointer"
+                  checked={checked}
+                  onChange={() => toggleCompareUf(uf)}
+                />
+                <span className="font-medium">{uf}</span>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  disabled={!checked}
+                  value={compareCreditoByUf[uf] ?? INCENTIVE_UF_DEFAULTS[uf] ?? 0}
+                  onChange={(e) =>
+                    setCompareCreditoByUf((current) => ({
+                      ...current,
+                      [uf]: Number(e.target.value),
+                    }))
+                  }
+                  className="w-14 rounded border border-[var(--border)] bg-[var(--background)] px-1 py-0.5 text-xs tabular-nums disabled:opacity-50"
+                />
+                <span className="text-[var(--muted-foreground)]">%</span>
+              </label>
+            );
+          })}
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={comparing || compareSelection.size === 0}
+          onClick={() => void handleCompare()}
+        >
+          {comparing ? "Comparando…" : "Comparar"}
+        </Button>
+
+        {comparisonResult && comparisonResult.length > 0 ? (
+          <div className="mt-4 overflow-x-auto rounded-lg border border-[var(--border)]">
+            <table className="w-full min-w-[32rem] text-sm">
+              <thead>
+                <tr className="bg-[var(--muted)]/30 text-left text-xs text-[var(--muted-foreground)]">
+                  <th className="px-3 py-2">UF</th>
+                  <th className="px-3 py-2 text-right">Imposto atual</th>
+                  <th className="px-3 py-2 text-right">Imposto cenário</th>
+                  <th className="px-3 py-2 text-right">Economia</th>
+                  <th className="px-3 py-2 text-right">Ação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {comparisonResult.map((entry, index) => (
+                  <tr key={entry.uf} className="border-t border-[var(--border)]">
+                    <td className="px-3 py-2 font-medium">
+                      {entry.uf}
+                      {index === 0 ? (
+                        <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+                          Melhor opção
+                        </span>
+                      ) : null}
+                      <span className="ml-1 text-[10px] text-[var(--muted-foreground)]">
+                        ({entry.creditoPresumidoPercent}% incentivo)
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {formatFinancialMoney(entry.totais.atual)}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {formatFinancialMoney(entry.totais.cenario)}
+                    </td>
+                    <td
+                      className={cn(
+                        "px-3 py-2 text-right tabular-nums font-medium",
+                        entry.totais.economia > 0
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : entry.totais.economia < 0
+                            ? "text-red-600 dark:text-red-400"
+                            : undefined,
+                      )}
+                    >
+                      {formatFinancialMoney(entry.totais.economia)} (
+                      {formatFinancialPercent(entry.totais.economiaPercent)})
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleUseComparisonUf(entry)}
+                      >
+                        Ver detalhes
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </Card>
+
       {result ? (
         <>
           <div className="grid gap-3 sm:grid-cols-3">
@@ -862,6 +1138,26 @@ export function BranchSimulationClient() {
             </Card>
           </div>
 
+          {topGains.length > 0 || topLosses.length > 0 ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {topGains.length > 0 ? (
+                <TopMoversCard
+                  title="Top 5 economia"
+                  rows={topGains}
+                  positive
+                  onSelect={setExpandedSku}
+                />
+              ) : null}
+              {topLosses.length > 0 ? (
+                <TopMoversCard
+                  title="Top 5 piora"
+                  rows={topLosses}
+                  onSelect={setExpandedSku}
+                />
+              ) : null}
+            </div>
+          ) : null}
+
           <ResultTable
             title="Por produto (SKU)"
             infoText={SKU_TABLE_INFO_TEXT}
@@ -869,6 +1165,10 @@ export function BranchSimulationClient() {
             keyLabel="SKU"
             searchable
             expandable
+            expandedKey={expandedSku}
+            onToggleExpand={(key) =>
+              setExpandedSku((current) => (current === key ? null : key))
+            }
           />
           <ResultTable
             title="Por UF de destino"
