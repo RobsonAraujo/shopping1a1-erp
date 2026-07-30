@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   aplicarCreditoPresumido,
   buildBranchSimulationResult,
+  buildEntradaInfo,
   computeScenarioForTransacao,
   estimarIcmsEntradaPercent,
   isSupportedBranchSimulationUf,
@@ -147,6 +148,55 @@ describe("estimarIcmsEntradaPercent", () => {
       icmsRates: RATES,
     });
     assert.equal(percent, 0);
+  });
+});
+
+describe("buildEntradaInfo", () => {
+  it("returns null when there is no supplierUfByFornecedor", () => {
+    const transacao = tx({ sku: "ACME 001" });
+    const info = buildEntradaInfo(transacao, {
+      config: { ...CONFIG, originUf: "SC" },
+      icmsRates: RATES,
+      creditoPresumidoPercent: 0,
+    });
+    assert.equal(info, null);
+  });
+
+  it("returns null for ST products", () => {
+    const transacao = tx({ sku: "ACME 001", hasIcmsSt: true });
+    const info = buildEntradaInfo(transacao, {
+      config: { ...CONFIG, originUf: "SC" },
+      icmsRates: RATES,
+      creditoPresumidoPercent: 0,
+      supplierUfByFornecedor: new Map([["ACME", "SC"]]),
+    });
+    assert.equal(info, null);
+  });
+
+  it("flags an internal purchase when fornecedor and filial share the UF", () => {
+    const transacao = tx({ sku: "ACME 001" });
+    const info = buildEntradaInfo(transacao, {
+      config: { ...CONFIG, originUf: "SC" },
+      icmsRates: RATES,
+      creditoPresumidoPercent: 0,
+      supplierUfByFornecedor: new Map([["ACME", "SC"]]),
+    });
+    assert.ok(info);
+    assert.equal(info!.isOperacaoInterna, true);
+    assert.equal(info!.purchaseIcmsPercentEstimado, 17);
+  });
+
+  it("flags an interstate purchase when fornecedor and filial differ", () => {
+    const transacao = tx({ sku: "ACME 001" });
+    const info = buildEntradaInfo(transacao, {
+      config: { ...CONFIG, originUf: "SC" },
+      icmsRates: RATES,
+      creditoPresumidoPercent: 0,
+      supplierUfByFornecedor: new Map([["ACME", "SP"]]),
+    });
+    assert.ok(info);
+    assert.equal(info!.isOperacaoInterna, false);
+    assert.equal(info!.purchaseIcmsPercentEstimado, 12);
   });
 });
 
@@ -304,5 +354,43 @@ describe("buildBranchSimulationResult", () => {
     });
     assert.equal(result.transacoesConsideradas, 0);
     assert.equal(result.totais.atual, 0);
+  });
+
+  it("builds porSkuUf with one row per (sku, uf) combination and rate metadata", () => {
+    const detSp = detalhe(tx({ sku: "SKU-A", ufDestino: "SP" }));
+    const detRj = detalhe(
+      tx({ sku: "SKU-A", ufDestino: "RJ", transactionKey: "2-SKU" }),
+      {
+        icmsDifal: icmsBreakdown({ isOperacaoInterna: false, icmsTotal: 44 }),
+      },
+    );
+
+    const result = buildBranchSimulationResult([detSp, detRj], {
+      config: { ...CONFIG, originUf: "SC" },
+      icmsRates: RATES,
+      creditoPresumidoPercent: 0,
+    });
+
+    assert.equal(result.porSkuUf.length, 2);
+    const sp = result.porSkuUf.find((r) => r.uf === "SP")!;
+    const rj = result.porSkuUf.find((r) => r.uf === "RJ")!;
+    assert.equal(sp.sku, "SKU-A");
+    assert.equal(sp.isOperacaoInterna, false); // SC -> SP é interestadual
+    assert.equal(rj.isOperacaoInterna, false); // SC -> RJ é interestadual
+    assert.equal(sp.contribuinteMisto, false);
+  });
+
+  it("exposes entradaInfo on the porSku row when a fornecedor UF is known", () => {
+    const det = detalhe(tx({ sku: "ACME 001" }));
+    const result = buildBranchSimulationResult([det], {
+      config: { ...CONFIG, originUf: "SC" },
+      icmsRates: RATES,
+      creditoPresumidoPercent: 0,
+      supplierUfByFornecedor: new Map([["ACME", "SC"]]),
+    });
+
+    const row = result.porSku.find((r) => r.key === "ACME 001")!;
+    assert.ok(row.entradaInfo);
+    assert.equal(row.entradaInfo!.isOperacaoInterna, true);
   });
 });

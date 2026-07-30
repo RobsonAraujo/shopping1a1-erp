@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, Save, Trash2, Truck } from "lucide-react";
 import {
   ItemListSearch,
@@ -27,6 +27,13 @@ type Period = { year: number; month: number; generatedAt: string };
 
 type SimulationComponent = { atual: number; cenario: number };
 
+type EntradaInfo = {
+  fornecedor: string;
+  ufFornecedor: string;
+  isOperacaoInterna: boolean;
+  purchaseIcmsPercentEstimado: number;
+};
+
 type SimulationRow = {
   key: string;
   receitaTotal: number;
@@ -40,6 +47,16 @@ type SimulationRow = {
   icmsCreditoEntrada: SimulationComponent;
   icmsStRecuperavel: SimulationComponent;
   pisCofinsLiquido: SimulationComponent;
+  entradaInfo?: EntradaInfo | null;
+};
+
+type SkuUfRow = SimulationRow & {
+  sku: string;
+  uf: string;
+  aliquotaInterestadual: number;
+  aliquotaInternaDestino: number;
+  isOperacaoInterna: boolean;
+  contribuinteMisto: boolean;
 };
 
 type SimulationResult = {
@@ -47,6 +64,7 @@ type SimulationResult = {
   totais: SimulationRow;
   porSku: SimulationRow[];
   porUf: SimulationRow[];
+  porSkuUf: SkuUfRow[];
 };
 
 type ComparisonEntry = {
@@ -208,13 +226,94 @@ function MemoriaComponentRow({
 }
 
 /** Memória de cálculo agregada: explica de onde vem a mudança do imposto entre atual e cenário. */
-function MemoriaCalculoPanel({ row }: { row: SimulationRow }) {
+function MemoriaCalculoPanel({
+  row,
+  skuUfRows,
+}: {
+  row: SimulationRow;
+  skuUfRows: SkuUfRow[];
+}) {
   return (
     <tr className="border-t border-[var(--border)] bg-[var(--muted)]/10">
       <td colSpan={6} className="px-4 py-3">
         <p className="mb-2 text-xs font-semibold text-[var(--foreground)]">
           Memória de cálculo — {row.key}
         </p>
+
+        <div className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2.5 text-xs">
+          <p className="mb-1 font-semibold text-[var(--foreground)]">Compra</p>
+          {row.entradaInfo ? (
+            <p className="text-[var(--muted-foreground)]">
+              Fornecedor <strong>{row.entradaInfo.fornecedor}</strong> (UF{" "}
+              {row.entradaInfo.ufFornecedor}) → filial: operação{" "}
+              <strong>
+                {row.entradaInfo.isOperacaoInterna ? "interna" : "interestadual"}
+              </strong>
+              , alíquota de entrada estimada{" "}
+              <strong>{row.entradaInfo.purchaseIcmsPercentEstimado.toFixed(2)}%</strong>{" "}
+              no cenário. Nenhum DIFAL incide sobre compra de mercadoria para
+              revenda — o que muda aqui é só a alíquota do crédito de entrada.
+            </p>
+          ) : (
+            <p className="text-[var(--muted-foreground)]">
+              SKU sem UF de fornecedor informada — o cenário usa o mesmo ICMS
+              de compra cadastrado hoje (não recalculado).
+            </p>
+          )}
+        </div>
+
+        {skuUfRows.length > 0 ? (
+          <div className="mb-3 overflow-x-auto rounded-lg border border-[var(--border)]">
+            <p className="border-b border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+              Venda por UF de destino
+            </p>
+            <table className="w-full min-w-[36rem] text-sm">
+              <thead>
+                <tr className="bg-[var(--muted)]/30 text-left text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
+                  <th className="px-3 py-2">UF</th>
+                  <th className="px-3 py-2">Operação</th>
+                  <th className="px-3 py-2 text-right">Alíq. interest.</th>
+                  <th className="px-3 py-2 text-right">Alíq. interna dest.</th>
+                  <th className="px-3 py-2 text-right">Débito atual</th>
+                  <th className="px-3 py-2 text-right">Débito cenário</th>
+                </tr>
+              </thead>
+              <tbody>
+                {skuUfRows.map((r) => (
+                  <tr key={r.uf} className="border-t border-[var(--border)]">
+                    <td className="px-3 py-2 text-xs font-medium">
+                      {r.uf}
+                      {r.contribuinteMisto ? (
+                        <span
+                          className="ml-1 text-[10px] text-amber-600 dark:text-amber-400"
+                          title="Mistura vendas a comprador contribuinte e não-contribuinte — DIFAL não é uniforme nessas vendas."
+                        >
+                          ★
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-[var(--muted-foreground)]">
+                      {r.isOperacaoInterna ? "Interna" : "Interestadual"}
+                    </td>
+                    <td className="px-3 py-2 text-right text-xs tabular-nums">
+                      {r.isOperacaoInterna ? "—" : `${r.aliquotaInterestadual.toFixed(2)}%`}
+                    </td>
+                    <td className="px-3 py-2 text-right text-xs tabular-nums">
+                      {r.aliquotaInternaDestino.toFixed(2)}%
+                    </td>
+                    <td className="px-3 py-2 text-right text-xs tabular-nums">
+                      {formatFinancialMoney(r.icmsDebito.atual)}
+                    </td>
+                    <td className="px-3 py-2 text-right text-xs tabular-nums font-medium">
+                      {formatFinancialMoney(r.icmsDebito.cenario)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+
         <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
           <table className="w-full min-w-[32rem] text-sm">
             <thead>
@@ -295,6 +394,7 @@ function ResultTable({
   expandable,
   expandedKey: controlledExpandedKey,
   onToggleExpand,
+  skuUfRows,
 }: {
   title: string;
   infoText?: string;
@@ -304,6 +404,7 @@ function ResultTable({
   expandable?: boolean;
   expandedKey?: string | null;
   onToggleExpand?: (key: string) => void;
+  skuUfRows?: SkuUfRow[];
 }) {
   const [query, setQuery] = useState("");
   const [internalExpandedKey, setInternalExpandedKey] = useState<string | null>(null);
@@ -432,7 +533,14 @@ function ResultTable({
                   </tr>
                 );
                 return isExpanded
-                  ? [mainRow, <MemoriaCalculoPanel key={`${row.key}-memoria`} row={row} />]
+                  ? [
+                      mainRow,
+                      <MemoriaCalculoPanel
+                        key={`${row.key}-memoria`}
+                        row={row}
+                        skuUfRows={(skuUfRows ?? []).filter((r) => r.sku === row.key)}
+                      />,
+                    ]
                   : [mainRow];
               })
             )}
@@ -543,6 +651,7 @@ function SupplierUfConfig({
 }
 
 export function BranchSimulationClient() {
+  const skuTableRef = useRef<HTMLDivElement>(null);
   const [periods, setPeriods] = useState<Period[]>([]);
   const [supportedUfs, setSupportedUfs] = useState<string[]>([]);
   const [selectedPeriods, setSelectedPeriods] = useState<Set<string>>(new Set());
@@ -721,10 +830,11 @@ export function BranchSimulationClient() {
     supplierUfMap,
   ]);
 
-  const handleUseComparisonUf = (entry: ComparisonEntry) => {
+  const handleUseComparisonUf = async (entry: ComparisonEntry) => {
     setTargetUf(entry.uf);
     setCreditoPresumidoPercent(entry.creditoPresumidoPercent);
-    void runSimulation(undefined, entry.uf, entry.creditoPresumidoPercent);
+    await runSimulation(undefined, entry.uf, entry.creditoPresumidoPercent);
+    skuTableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const handleToggleSupplierConfig = useCallback(async () => {
@@ -1078,7 +1188,7 @@ export function BranchSimulationClient() {
                         type="button"
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleUseComparisonUf(entry)}
+                        onClick={() => void handleUseComparisonUf(entry)}
                       >
                         Ver detalhes
                       </Button>
@@ -1158,18 +1268,21 @@ export function BranchSimulationClient() {
             </div>
           ) : null}
 
-          <ResultTable
-            title="Por produto (SKU)"
-            infoText={SKU_TABLE_INFO_TEXT}
-            rows={result.porSku}
-            keyLabel="SKU"
-            searchable
-            expandable
-            expandedKey={expandedSku}
-            onToggleExpand={(key) =>
-              setExpandedSku((current) => (current === key ? null : key))
-            }
-          />
+          <div ref={skuTableRef}>
+            <ResultTable
+              title="Por produto (SKU)"
+              infoText={SKU_TABLE_INFO_TEXT}
+              rows={result.porSku}
+              keyLabel="SKU"
+              searchable
+              expandable
+              expandedKey={expandedSku}
+              onToggleExpand={(key) =>
+                setExpandedSku((current) => (current === key ? null : key))
+              }
+              skuUfRows={result.porSkuUf}
+            />
+          </div>
           <ResultTable
             title="Por UF de destino"
             infoText={UF_TABLE_INFO_TEXT}

@@ -105,6 +105,41 @@ export type BranchScenarioLine = {
   impostoOperacional: number;
 };
 
+/** Info da UF do fornecedor pra exibição na memória de cálculo (mesma lógica de `applySupplierUf`). */
+export type EntradaInfo = {
+  fornecedor: string;
+  ufFornecedor: string;
+  isOperacaoInterna: boolean;
+  purchaseIcmsPercentEstimado: number;
+};
+
+export function buildEntradaInfo(
+  transacao: TransacaoVenda,
+  params: BranchScenarioParams,
+): EntradaInfo | null {
+  if (transacao.hasIcmsSt || !params.supplierUfByFornecedor) return null;
+
+  const fornecedor = getSkuSupplier(transacao.sku);
+  const ufFornecedor = params.supplierUfByFornecedor.get(fornecedor);
+  if (!ufFornecedor) return null;
+
+  const destino = normalizeUf(params.config.originUf);
+  const origem = normalizeUf(ufFornecedor);
+
+  return {
+    fornecedor,
+    ufFornecedor,
+    isOperacaoInterna: !!origem && !!destino && origem === destino,
+    purchaseIcmsPercentEstimado: estimarIcmsEntradaPercent({
+      ufFornecedor,
+      ufDestino: params.config.originUf,
+      mercadoriaImportada: transacao.mercadoriaImportada,
+      conteudoImportacaoPercentual: transacao.conteudoImportacaoPercentual,
+      icmsRates: params.icmsRates,
+    }),
+  };
+}
+
 /**
  * Ajusta `purchaseIcmsPercent` da transação quando sabemos a UF do fornecedor
  * daquele SKU — só se aplica a produtos sem ICMS-ST (é o único caso em que
@@ -115,21 +150,9 @@ function applySupplierUf(
   transacao: TransacaoVenda,
   params: BranchScenarioParams,
 ): TransacaoVenda {
-  if (transacao.hasIcmsSt || !params.supplierUfByFornecedor) return transacao;
-
-  const fornecedor = getSkuSupplier(transacao.sku);
-  const ufFornecedor = params.supplierUfByFornecedor.get(fornecedor);
-  if (!ufFornecedor) return transacao;
-
-  const purchaseIcmsPercent = estimarIcmsEntradaPercent({
-    ufFornecedor,
-    ufDestino: params.config.originUf,
-    mercadoriaImportada: transacao.mercadoriaImportada,
-    conteudoImportacaoPercentual: transacao.conteudoImportacaoPercentual,
-    icmsRates: params.icmsRates,
-  });
-
-  return { ...transacao, purchaseIcmsPercent };
+  const entradaInfo = buildEntradaInfo(transacao, params);
+  if (!entradaInfo) return transacao;
+  return { ...transacao, purchaseIcmsPercent: entradaInfo.purchaseIcmsPercentEstimado };
 }
 
 /** Recalcula o imposto operacional de uma venda com uma UF de origem alternativa. */
@@ -190,6 +213,19 @@ export type BranchSimulationRow = {
   icmsCreditoEntrada: BranchSimulationComponent;
   icmsStRecuperavel: BranchSimulationComponent;
   pisCofinsLiquido: BranchSimulationComponent;
+  /** Info da UF do fornecedor usada no cenário (só presente na linha por SKU). */
+  entradaInfo?: EntradaInfo | null;
+};
+
+export type BranchSimulationSkuUfRow = BranchSimulationRow & {
+  sku: string;
+  uf: string;
+  /** Alíquotas do cenário (determinísticas por par de UF + import) — vêm da 1ª transação do grupo. */
+  aliquotaInterestadual: number;
+  aliquotaInternaDestino: number;
+  isOperacaoInterna: boolean;
+  /** true quando o grupo mistura vendas a comprador contribuinte e não-contribuinte (DIFAL não é uniforme). */
+  contribuinteMisto: boolean;
 };
 
 export type BranchSimulationResult = {
@@ -197,6 +233,7 @@ export type BranchSimulationResult = {
   totais: BranchSimulationRow;
   porSku: BranchSimulationRow[];
   porUf: BranchSimulationRow[];
+  porSkuUf: BranchSimulationSkuUfRow[];
 };
 
 type Accumulator = {
@@ -290,6 +327,8 @@ function toRow(key: string, acc: Accumulator): BranchSimulationRow {
   };
 }
 
+const SKU_UF_SEPARATOR = " ";
+
 export function buildBranchSimulationResult(
   detalhes: DetalhamentoTributario[],
   params: BranchScenarioParams,
@@ -299,6 +338,12 @@ export function buildBranchSimulationResult(
   const total: Accumulator = emptyAccumulator();
   const bySku = new Map<string, Accumulator>();
   const byUf = new Map<string, Accumulator>();
+  const bySkuUf = new Map<string, Accumulator>();
+  const skuUfMeta = new Map<
+    string,
+    { aliquotaInterestadual: number; aliquotaInternaDestino: number; isOperacaoInterna: boolean; contribuintes: Set<boolean> }
+  >();
+  const entradaInfoBySku = new Map<string, EntradaInfo | null>();
 
   for (const det of incluidos) {
     const receita = det.transacao.receitaBruta;
@@ -312,19 +357,57 @@ export function buildBranchSimulationResult(
     const skuAgg = bySku.get(skuKey) ?? emptyAccumulator();
     addLine(skuAgg, line);
     bySku.set(skuKey, skuAgg);
+    if (!entradaInfoBySku.has(skuKey)) {
+      entradaInfoBySku.set(skuKey, buildEntradaInfo(det.transacao, params));
+    }
 
     const ufKey = det.transacao.ufDestino || "Sem UF";
     const ufAgg = byUf.get(ufKey) ?? emptyAccumulator();
     addLine(ufAgg, line);
     byUf.set(ufKey, ufAgg);
+
+    const skuUfKey = `${skuKey}${SKU_UF_SEPARATOR}${ufKey}`;
+    const skuUfAgg = bySkuUf.get(skuUfKey) ?? emptyAccumulator();
+    addLine(skuUfAgg, line);
+    bySkuUf.set(skuUfKey, skuUfAgg);
+
+    const meta = skuUfMeta.get(skuUfKey) ?? {
+      aliquotaInterestadual: scenario.icmsDifal?.aliquotaInterestadual ?? 0,
+      aliquotaInternaDestino: scenario.icmsDifal?.aliquotaInternaTotal ?? 0,
+      isOperacaoInterna: scenario.icmsDifal?.isOperacaoInterna ?? false,
+      contribuintes: new Set<boolean>(),
+    };
+    meta.contribuintes.add(scenario.icmsDifal?.isContribuinte ?? false);
+    skuUfMeta.set(skuUfKey, meta);
   }
 
   const porSku = [...bySku.entries()]
-    .map(([sku, acc]) => toRow(sku, acc))
+    .map(([sku, acc]) => ({
+      ...toRow(sku, acc),
+      entradaInfo: entradaInfoBySku.get(sku) ?? null,
+    }))
     .sort((a, b) => b.atual - a.atual);
 
   const porUf = [...byUf.entries()]
     .map(([uf, acc]) => toRow(uf, acc))
+    .sort((a, b) => b.atual - a.atual);
+
+  const porSkuUf = [...bySkuUf.entries()]
+    .map(([skuUfKey, acc]) => {
+      const separatorIndex = skuUfKey.indexOf(SKU_UF_SEPARATOR);
+      const sku = skuUfKey.slice(0, separatorIndex);
+      const uf = skuUfKey.slice(separatorIndex + SKU_UF_SEPARATOR.length);
+      const meta = skuUfMeta.get(skuUfKey)!;
+      return {
+        ...toRow(skuUfKey, acc),
+        sku,
+        uf,
+        aliquotaInterestadual: roundMoney(meta.aliquotaInterestadual * 100),
+        aliquotaInternaDestino: roundMoney(meta.aliquotaInternaDestino * 100),
+        isOperacaoInterna: meta.isOperacaoInterna,
+        contribuinteMisto: meta.contribuintes.size > 1,
+      };
+    })
     .sort((a, b) => b.atual - a.atual);
 
   return {
@@ -332,5 +415,6 @@ export function buildBranchSimulationResult(
     totais: toRow("total", total),
     porSku,
     porUf,
+    porSkuUf,
   };
 }
