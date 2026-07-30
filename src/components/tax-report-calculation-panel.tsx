@@ -221,8 +221,8 @@ export function TaxReportCalculationPanel({
                           muted
                         />
                         <MemoriaRow
-                          label="DIFAL"
-                          value={formatFinancialMoney(icms.difal)}
+                          label={`DIFAL (${(icms.aliquotaInternaTotal * 100).toFixed(2)}% − ${(icms.aliquotaInterestadual * 100).toFixed(2)}%)`}
+                          value={`${Math.max(0, (icms.aliquotaInternaTotal - icms.aliquotaInterestadual) * 100).toFixed(2)}% → ${formatFinancialMoney(icms.difal)}`}
                         />
                       </>
                     )}
