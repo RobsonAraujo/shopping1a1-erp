@@ -73,7 +73,7 @@ export function TaxReportApuracaoPanel({
       credito: apuracao.icms.credito,
       liquido: Math.max(0, apuracao.icms.icmsSemDifalDebito - apuracao.icms.credito),
       aRecolher: apuracao.icmsARecolherSpEstimado,
-      tip: "ICMS interno ou interestadual (UF origem), menos crédito estimado de compra. Corresponde ao DARE-SP.",
+      tip: "ICMS interno ou interestadual (UF origem), menos crédito estimado de compra (inclui ICMS-ST recuperável em vendas interestaduais). Corresponde ao DARE-SP.",
     },
     {
       imposto: "DIFAL",
@@ -198,6 +198,24 @@ export function TaxReportApuracaoPanel({
               </tbody>
             </table>
           ) : null}
+        </Card>
+      ) : null}
+
+      {apuracao.icmsStRecuperavelEstimado &&
+      apuracao.icmsStRecuperavelEstimado > 0 ? (
+        <Card className="border-emerald-200 bg-emerald-50/50 p-4 text-sm dark:border-emerald-900 dark:bg-emerald-950/20">
+          <p className="font-medium text-emerald-900 dark:text-emerald-200">
+            ICMS-ST recuperável estimado:{" "}
+            {formatFinancialMoney(apuracao.icmsStRecuperavelEstimado)}
+          </p>
+          <p className="mt-1 text-xs text-emerald-800 dark:text-emerald-300">
+            Produtos comprados com ICMS-ST e vendidos para outro estado —
+            nesses casos o fato gerador presumido (venda dentro da UF de
+            origem) não se confirma, e o ICMS-ST pago na entrada é, em tese,
+            recuperável (Tema 201/STF, Convênio ICMS 142/2018). Este valor já
+            está incluído no crédito de ICMS acima; a recuperação efetiva
+            depende do processo de ressarcimento específico de cada estado.
+          </p>
         </Card>
       ) : null}
 

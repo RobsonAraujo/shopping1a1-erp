@@ -86,6 +86,21 @@ describe("consolidarApuracao", () => {
     assert.equal(apuracao.diagnostico.linhasSemCustoCadastrado, 0);
   });
 
+  it("sums stRecuperavelTotal into icmsStRecuperavelEstimado", () => {
+    const comRecuperacao = detalhe({
+      transacao: { ...detalhe().transacao, hasIcmsSt: true },
+      icmsCreditoCompra: {
+        baseUnitaria: 0,
+        aliquotaPercent: 0,
+        creditoTotal: 15,
+        stRecuperavelTotal: 15,
+      },
+    });
+    const apuracao = consolidarApuracao([detalhe(), comRecuperacao]);
+    assert.equal(apuracao.icmsStRecuperavelEstimado, 15);
+    assert.equal(apuracao.icms.credito, 25.8);
+  });
+
   it("flags lines without unitCostNf", () => {
     const semCusto = detalhe({
       transacao: {

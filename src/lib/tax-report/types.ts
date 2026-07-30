@@ -60,7 +60,15 @@ export type PisCofinsBreakdown = {
 export type IcmsCreditoCompraBreakdown = {
   baseUnitaria: number;
   aliquotaPercent: number;
+  /** Soma do crédito de ICMS na entrada (sem ST) + ICMS-ST recuperável (venda interestadual). */
   creditoTotal: number;
+  /**
+   * ICMS-ST recuperável estimado: quando um produto comprado com ST é vendido
+   * para outro estado, o fato gerador presumido (venda dentro da UF de origem)
+   * não se confirma — o ICMS-ST pago na entrada é, em tese, recuperável
+   * (Tema 201/STF, Convênio ICMS 142/2018). Ausente em snapshots antigos.
+   */
+  stRecuperavelTotal?: number;
 };
 
 export type IcmsDifalBreakdown = {
@@ -146,6 +154,8 @@ export type ApuracaoConsolidada = {
   icmsARecolherSpEstimado: number;
   difalARecolherEstimado: number;
   difalPorUf: Record<string, number>;
+  /** ICMS-ST recuperável estimado (venda interestadual de produto com ST). Ausente em snapshots antigos. */
+  icmsStRecuperavelEstimado?: number;
   diagnostico: ApuracaoDiagnostico;
 };
 

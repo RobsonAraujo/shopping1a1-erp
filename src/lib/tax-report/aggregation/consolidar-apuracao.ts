@@ -53,6 +53,12 @@ export function consolidarApuracao(
     (s, t) => s + (t.icmsCreditoCompra?.creditoTotal ?? 0),
     0,
   );
+  const icmsStRecuperavelEstimado = roundMoney(
+    incluidas.reduce(
+      (s, t) => s + (t.icmsCreditoCompra?.stRecuperavelTotal ?? 0),
+      0,
+    ),
+  );
 
   const pis = apuracaoLinha(pisDebito, pisCredito);
   const cofins = apuracaoLinha(cofinsDebito, cofinsCredito);
@@ -111,6 +117,7 @@ export function consolidarApuracao(
     icmsARecolherSpEstimado: icmsSemDifalLiquido.liquido,
     difalARecolherEstimado: roundMoney(difalDebito),
     difalPorUf,
+    icmsStRecuperavelEstimado,
     diagnostico: {
       receitaSemCustoCadastrado,
       linhasSemCustoCadastrado: semCusto.length,

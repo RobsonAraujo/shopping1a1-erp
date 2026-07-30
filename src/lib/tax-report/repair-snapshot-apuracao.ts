@@ -138,6 +138,7 @@ function needsApuracaoRepair(
       d.irpjCsll != null ||
       d.margemOperacionalEstimada == null ||
       d.icmsCreditoCompra == null ||
+      d.icmsCreditoCompra.stRecuperavelTotal === undefined ||
       d.pisCofins?.baseCredito === undefined ||
       (d.transacao as TransacaoVenda & { saleIcmsPercent?: number })
         .saleIcmsPercent === undefined ||

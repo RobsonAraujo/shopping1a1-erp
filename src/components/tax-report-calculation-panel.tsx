@@ -228,36 +228,69 @@ export function TaxReportCalculationPanel({
 
         {icmsCred ? (
           <MemoriaSection title="ICMS na compra (crédito)">
-            {icmsCred.creditoTotal > 0 ? (
-              <>
-                <MemoriaRow
-                  label="Base NF entrada"
-                  value={formatFinancialMoney(icmsCred.baseUnitaria)}
-                />
-                <MemoriaRow
-                  label="Alíquota entrada"
-                  value={`${icmsCred.aliquotaPercent.toFixed(2)}%`}
-                />
-                <MemoriaDivider />
-                <MemoriaRow
-                  label="Crédito de ICMS (pago na compra, abate o débito)"
-                  value={formatFinancialMoney(icmsCred.creditoTotal)}
-                  emphasis
-                />
-              </>
-            ) : (
-              <MemoriaRow
-                label="Crédito de ICMS"
-                value={
-                  t.hasIcmsSt
-                    ? "R$ 0,00 (ST na compra)"
-                    : t.unitCostNf
-                      ? "R$ 0,00"
-                      : "R$ 0,00 (sem custo NF)"
-                }
-                muted
-              />
-            )}
+            {(() => {
+              const stRecuperavel = icmsCred.stRecuperavelTotal ?? 0;
+              const creditoEntrada = icmsCred.creditoTotal - stRecuperavel;
+              return (
+                <>
+                  {creditoEntrada > 0 ? (
+                    <>
+                      <MemoriaRow
+                        label="Base NF entrada"
+                        value={formatFinancialMoney(icmsCred.baseUnitaria)}
+                      />
+                      <MemoriaRow
+                        label="Alíquota entrada"
+                        value={`${icmsCred.aliquotaPercent.toFixed(2)}%`}
+                      />
+                      <MemoriaDivider />
+                      <MemoriaRow
+                        label="Crédito de ICMS entrada (pago na compra, abate o débito)"
+                        value={formatFinancialMoney(creditoEntrada)}
+                        emphasis
+                      />
+                    </>
+                  ) : (
+                    <MemoriaRow
+                      label="Crédito de ICMS entrada"
+                      value={
+                        t.hasIcmsSt
+                          ? "R$ 0,00 (ST na compra)"
+                          : t.unitCostNf
+                            ? "R$ 0,00"
+                            : "R$ 0,00 (sem custo NF)"
+                      }
+                      muted
+                    />
+                  )}
+                  {stRecuperavel > 0 ? (
+                    <>
+                      {creditoEntrada > 0 ? <MemoriaDivider /> : null}
+                      <MemoriaRow
+                        label={`Custo com ICMS-ST (× ${t.quantidade})`}
+                        value={formatFinancialMoney(
+                          (t.purchaseCostWithSt ?? 0) * t.quantidade,
+                        )}
+                        muted
+                      />
+                      <MemoriaRow
+                        label={`(−) Custo NF sem ST (× ${t.quantidade})`}
+                        value={formatFinancialMoney(
+                          (t.unitCostNf ?? 0) * t.quantidade,
+                        )}
+                        muted
+                      />
+                      <MemoriaDivider />
+                      <MemoriaRow
+                        label="ICMS-ST recuperável (venda interestadual — Tema 201/STF)"
+                        value={formatFinancialMoney(stRecuperavel)}
+                        emphasis
+                      />
+                    </>
+                  ) : null}
+                </>
+              );
+            })()}
           </MemoriaSection>
         ) : null}
 

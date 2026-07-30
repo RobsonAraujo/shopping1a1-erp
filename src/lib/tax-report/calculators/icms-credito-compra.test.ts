@@ -39,15 +39,49 @@ describe("calcularIcmsCreditoCompra", () => {
     assert.equal(result.creditoTotal, 36);
   });
 
-  it("returns zero for ST products", () => {
+  it("returns zero for ST products sold within the origin UF", () => {
     const result = calcularIcmsCreditoCompra(
       tx({ hasIcmsSt: true, purchaseIcmsPercent: 18 }),
+      true,
     );
     assert.equal(result.creditoTotal, 0);
+    assert.equal(result.stRecuperavelTotal, 0);
   });
 
   it("returns zero without unitCostNf", () => {
     const result = calcularIcmsCreditoCompra(tx({ unitCostNf: null }));
     assert.equal(result.creditoTotal, 0);
+  });
+
+  it("recovers ICMS-ST when an ST product is sold to another state", () => {
+    const result = calcularIcmsCreditoCompra(
+      tx({
+        hasIcmsSt: true,
+        purchaseIcmsPercent: 0,
+        unitCostNf: 100,
+        purchaseCostWithSt: 118,
+        quantidade: 2,
+      }),
+      false,
+    );
+    assert.equal(result.stRecuperavelTotal, 36);
+    assert.equal(result.creditoTotal, 36);
+  });
+
+  it("does not recover ICMS-ST for interstate sale without purchaseCostWithSt", () => {
+    const result = calcularIcmsCreditoCompra(
+      tx({ hasIcmsSt: true, purchaseCostWithSt: null }),
+      false,
+    );
+    assert.equal(result.stRecuperavelTotal, 0);
+  });
+
+  it("does not recover ICMS-ST for non-ST products even when interstate", () => {
+    const result = calcularIcmsCreditoCompra(
+      tx({ hasIcmsSt: false, purchaseIcmsPercent: 18 }),
+      false,
+    );
+    assert.equal(result.stRecuperavelTotal, 0);
+    assert.equal(result.creditoTotal, 36);
   });
 });
