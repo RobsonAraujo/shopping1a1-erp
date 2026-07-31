@@ -149,16 +149,16 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
         icon: Scale,
       },
       {
-        href: "/dashboard/configuracoes-tributarias",
-        label: "Config. tributária",
-        description: "Regime, PIS/COFINS e alíquotas ICMS",
-        icon: Settings,
-      },
-      {
         href: "/dashboard/simulacao-filial",
         label: "Simulação de filial",
         description: "Compare o ICMS atual com o de uma filial em outro estado",
         icon: Building2,
+      },
+      {
+        href: "/dashboard/configuracoes-tributarias",
+        label: "Config. tributária",
+        description: "Regime, PIS/COFINS e alíquotas ICMS",
+        icon: Settings,
       },
     ],
   },
