@@ -41,10 +41,14 @@ async function computeErpCostsFromOrderLines(
   accessToken: string,
   sellerId: number,
   orderLines: Array<{ itemId: string; quantity: number; revenue: number }>,
+  year: number,
+  month: number,
 ): Promise<{
   productCostErp: number;
   taxErp: number;
   incompleteProductCostCount: number;
+  missingTaxCount: number;
+  taxFromDifferentPeriodCount: number;
 }> {
   const itemIds = [...new Set(orderLines.map((line) => line.itemId))];
   const items = await fetchItemsByIdsBatched(accessToken, itemIds);
@@ -57,21 +61,24 @@ async function computeErpCostsFromOrderLines(
     .map((sku) => normalizeProductSku(sku));
   const [pricingBySku, taxFromReport] = await Promise.all([
     loadProductsMapBySku(skus),
-    loadProductTaxFromLatestReport(sellerId),
+    loadProductTaxFromLatestReport(sellerId, undefined, { year, month }),
   ]);
 
   let productCostErp = 0;
   let taxErp = 0;
   let incompleteProductCostCount = 0;
   const missingItems = new Set<string>();
+  const missingTaxItems = new Set<string>();
+  const differentPeriodTaxItems = new Set<string>();
 
   for (const line of orderLines) {
     const sku = skuByItemId.get(line.itemId);
     const normalizedSku = sku ? normalizeProductSku(sku) : "";
     const pricing = normalizedSku ? pricingBySku.get(normalizedSku) : undefined;
-    const taxPercent = normalizedSku
-      ? (taxFromReport.bySku.get(normalizedSku)?.taxPercent ?? null)
+    const taxEntry = normalizedSku
+      ? (taxFromReport.bySku.get(normalizedSku) ?? null)
       : null;
+    const taxPercent = taxEntry?.taxPercent ?? null;
 
     if (!pricing) {
       missingItems.add(line.itemId);
@@ -80,6 +87,11 @@ async function computeErpCostsFromOrderLines(
         line.quantity * (pricing.pricingCost + pricing.extraCosts);
       if (taxPercent !== null && taxPercent > 0 && line.revenue > 0) {
         taxErp += line.revenue * (taxPercent / 100);
+      }
+      if (taxEntry === null) {
+        missingTaxItems.add(line.itemId);
+      } else if (taxEntry.year !== year || taxEntry.month !== month) {
+        differentPeriodTaxItems.add(line.itemId);
       }
     }
   }
@@ -90,6 +102,8 @@ async function computeErpCostsFromOrderLines(
     productCostErp: roundMoney(-Math.max(0, productCostErp)),
     taxErp: roundMoney(-Math.max(0, taxErp)),
     incompleteProductCostCount,
+    missingTaxCount: missingTaxItems.size,
+    taxFromDifferentPeriodCount: differentPeriodTaxItems.size,
   };
 }
 
@@ -276,6 +290,8 @@ export async function buildDreMonthSnapshot(
     accessToken,
     sellerId,
     orderLines,
+    year,
+    month,
   );
 
   let saleFeeMl = 0;
@@ -379,6 +395,16 @@ export async function buildDreMonthSnapshot(
       `${erpCosts.incompleteProductCostCount} anúncio(s) sem preço de compra no estoque.`,
     );
   }
+  if (erpCosts.missingTaxCount > 0) {
+    syncWarnings.push(
+      `${erpCosts.missingTaxCount} anúncio(s) sem relatório tributário apurado até ${String(month).padStart(2, "0")}/${year} — linha de Imposto ficou subestimada para eles.`,
+    );
+  }
+  if (erpCosts.taxFromDifferentPeriodCount > 0) {
+    syncWarnings.push(
+      `${erpCosts.taxFromDifferentPeriodCount} anúncio(s) usaram % de imposto de um mês diferente (sem apuração tributária própria em ${String(month).padStart(2, "0")}/${year}).`,
+    );
+  }
 
   let cancelledIncludeOverlay: DreCancelledIncludeOverlay | undefined;
   try {
@@ -397,6 +423,8 @@ export async function buildDreMonthSnapshot(
         accessToken,
         sellerId,
         cancelledLines,
+        year,
+        month,
       );
       cancelledIncludeOverlay = {
         revenueGross,

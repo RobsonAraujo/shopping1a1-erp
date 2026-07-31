@@ -118,4 +118,17 @@ describe("loadProductTaxFromLatestReport", () => {
     assert.equal(entry!.generatedAt, "2026-07-20T12:00:00.000Z");
     assert.equal(entry!.month, 7);
   });
+
+  it("ignores the anchor when an explicit loadSnapshots is provided (test/DRE injection contract)", async () => {
+    const payload = samplePayload([sampleSku({ sku: "SKU-A" })], undefined, 2026, 9);
+    // anchor aponta pra um mês anterior ao snapshot devolvido pelo loader
+    // explícito — como o loader é explícito, o anchor não deve filtrar nada
+    // aqui (quem decide o que devolver é o loader injetado, não o anchor).
+    const result = await loadProductTaxFromLatestReport(
+      1,
+      async () => [payload],
+      { year: 2026, month: 1 },
+    );
+    assert.ok(result.bySku.get("SKU-A"));
+  });
 });

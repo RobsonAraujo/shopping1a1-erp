@@ -311,3 +311,31 @@ export async function loadRecentTaxReportSnapshots(
     ),
   );
 }
+
+/**
+ * Últimos `limit` snapshots do seller com período <= (year, month), do mais
+ * recente ao mais antigo. Diferente de `loadRecentTaxReportSnapshots`, que
+ * ancora em "agora" — esta ancora num mês de referência específico (ex.: o
+ * mês de um DRE sendo montado), pra não aplicar retroativamente a % de um
+ * relatório tributário mais recente a um período passado.
+ */
+export async function loadRecentTaxReportSnapshotsUpTo(
+  sellerId: number,
+  year: number,
+  month: number,
+  limit = 12,
+): Promise<TaxReportPayload[]> {
+  const rows = await prisma.taxReportMonthSnapshot.findMany({
+    where: {
+      sellerId,
+      OR: [{ year: { lt: year } }, { year, month: { lte: month } }],
+    },
+    orderBy: [{ year: "desc" }, { month: "desc" }],
+    take: limit,
+  });
+  return Promise.all(
+    rows.map((row) =>
+      repairTaxReportPayload(row.payload as unknown as TaxReportPayload),
+    ),
+  );
+}

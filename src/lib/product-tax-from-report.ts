@@ -13,6 +13,20 @@ async function defaultLoadSnapshots(sellerId: number) {
   return loadRecentTaxReportSnapshots(sellerId, RECENT_SNAPSHOTS_LIMIT);
 }
 
+function anchoredLoadSnapshots(anchor: { year: number; month: number }) {
+  return async (sellerId: number) => {
+    const { loadRecentTaxReportSnapshotsUpTo } = await import(
+      "@/lib/tax-report/service/generate-monthly-report"
+    );
+    return loadRecentTaxReportSnapshotsUpTo(
+      sellerId,
+      anchor.year,
+      anchor.month,
+      RECENT_SNAPSHOTS_LIMIT,
+    );
+  };
+}
+
 export type ProductTaxFromReport = {
   /** % médio operacional de imposto apurado por venda, vindo do relatório tributário. */
   taxPercent: number;
@@ -36,12 +50,22 @@ export type ProductTaxReportLookup = {
  * Se um SKU não aparecer no snapshot mais recente, cai para o snapshot mais
  * recente dentre os anteriores que contenha esse SKU — evita deixar produtos
  * pouco vendidos sem imposto só porque não venderam no último mês apurado.
+ *
+ * `anchor`, quando informado (ex.: pelo DRE, ao montar um mês específico),
+ * ancora a busca de "mais recente" nesse mês — nunca usa a % de um relatório
+ * tributário gerado depois do período sendo calculado. Sem `anchor` (uso em
+ * telas "ao vivo" como Produtos/Lucratividade), a busca continua ancorada em
+ * agora. Ignorado quando `loadSnapshots` é passado explicitamente (testes).
  */
 export async function loadProductTaxFromLatestReport(
   sellerId: number,
-  loadSnapshots: SnapshotsLoader = defaultLoadSnapshots,
+  loadSnapshots?: SnapshotsLoader,
+  anchor?: { year: number; month: number },
 ): Promise<ProductTaxReportLookup> {
-  const payloads = await loadSnapshots(sellerId);
+  const resolvedLoadSnapshots =
+    loadSnapshots ??
+    (anchor ? anchoredLoadSnapshots(anchor) : defaultLoadSnapshots);
+  const payloads = await resolvedLoadSnapshots(sellerId);
   if (payloads.length === 0) {
     return { generatedAt: null, bySku: new Map() };
   }
