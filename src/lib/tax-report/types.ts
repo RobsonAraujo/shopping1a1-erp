@@ -33,6 +33,10 @@ export type TransacaoVenda = {
   mercadoriaImportada: boolean;
   conteudoImportacaoPercentual: number;
   isMonophasic: boolean;
+  /** Tarifa de venda cobrada pelo Mercado Livre (sale_fee do item na venda) — base para crédito de 9,25%. */
+  saleFee: number;
+  /** % de IPI cadastrado no produto — apenas exibição, não entra no cálculo tributário. */
+  ipiPercent: number;
 };
 
 export type ManualFiscalOverride = {
@@ -87,6 +91,22 @@ export type IcmsDifalBreakdown = {
   icmsStNaCompra?: boolean;
 };
 
+export type CreditoOutrasDespesasBreakdown = {
+  meliFee: {
+    base: number;
+    aliquotaPercent: number;
+    credito: number;
+  };
+  ads: {
+    base: number;
+    aliquotaPercent: number;
+    credito: number;
+    gastoAdsMesItem: number;
+    receitaMesItem: number;
+  };
+  creditoTotal: number;
+};
+
 export type CbsIbsInformativo = {
   year: number;
   cbs: number | null;
@@ -102,6 +122,7 @@ export type DetalhamentoTributario = {
   pisCofins: PisCofinsBreakdown | null;
   icmsDifal: IcmsDifalBreakdown | null;
   icmsCreditoCompra: IcmsCreditoCompraBreakdown | null;
+  creditoOutrasDespesas: CreditoOutrasDespesasBreakdown | null;
   cbsIbs: CbsIbsInformativo | null;
   /** PIS/COFINS líquido + ICMS total (imposto operacional). */
   impostoTotal: number;
@@ -167,6 +188,8 @@ export type RelatorioConsolidado = {
   icmsSemDifalTotal?: number;
   /** DIFAL (UF destino, EC 87/2015). Ausente em snapshots antigos. */
   difalTotal?: number;
+  /** Crédito 9,25% sobre tarifa Meli + ADS. Ausente em snapshots antigos. */
+  creditoOutrasDespesasTotal?: number;
   icmsDifalTotal: number;
   cbsIbsInformativoTotal: number;
   margemOperacional: number;

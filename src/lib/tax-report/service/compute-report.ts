@@ -5,6 +5,10 @@ import {
 } from "@/lib/tax-report/aggregation/agregador-por-sku";
 import { calcularCbsIbsInformativo } from "@/lib/tax-report/calculators/cbs-ibs";
 import {
+  buildCreditoOutrasDespesasMemoria,
+  calcularCreditoOutrasDespesas,
+} from "@/lib/tax-report/calculators/credito-outras-despesas";
+import {
   buildIcmsCreditoMemoria,
   calcularIcmsCreditoCompra,
 } from "@/lib/tax-report/calculators/icms-credito-compra";
@@ -18,6 +22,7 @@ import {
   calcularPisCofins,
 } from "@/lib/tax-report/calculators/pis-cofins";
 import type { CbsIbsVigenciaRow } from "@/lib/tax-report/calculators/cbs-ibs";
+import type { ItemAdMetrics } from "@/lib/mercadolibre/product-ads-metrics";
 import type { SkuAliasMap } from "@/lib/product-sku-alias";
 import type {
   DetalhamentoTributario,
@@ -35,6 +40,8 @@ export function calcularDetalhamentoTransacao(input: {
   cbsIbsVigencia: CbsIbsVigenciaRow | null;
   year: number;
   incluirNaApuracao: boolean;
+  adsMetricsByItem?: Map<string, ItemAdMetrics>;
+  receitaTotalByItem?: Map<string, number>;
 }): DetalhamentoTributario {
   const { transacao, config, icmsRates, cbsIbsVigencia, year, incluirNaApuracao } =
     input;
@@ -45,6 +52,7 @@ export function calcularDetalhamentoTransacao(input: {
       pisCofins: null,
       icmsDifal: null,
       icmsCreditoCompra: null,
+      creditoOutrasDespesas: null,
       cbsIbs: null,
       impostoTotal: 0,
       margemOperacionalEstimada: 0,
@@ -74,12 +82,20 @@ export function calcularDetalhamentoTransacao(input: {
     icmsDifal?.isOperacaoInterna ?? true,
     config.considerIcmsStRecuperavel,
   );
+  const creditoOutrasDespesas = calcularCreditoOutrasDespesas({
+    saleFee: transacao.saleFee,
+    receitaBrutaVenda: transacao.receitaBruta,
+    receitaTotalItemMes: input.receitaTotalByItem?.get(transacao.itemId) ?? 0,
+    gastoAdsTotalItemMes:
+      input.adsMetricsByItem?.get(transacao.itemId)?.cost ?? 0,
+  });
   const cmvTotal =
     (transacao.custoAquisicaoUnitario ?? 0) * transacao.quantidade +
     transacao.extraCostsUnitario * transacao.quantidade;
   const icmsLiquido =
     (icmsDifal?.icmsTotal ?? 0) - (icmsCreditoCompra?.creditoTotal ?? 0);
-  const impostosOperacionais = (pisCofins?.liquido ?? 0) + icmsLiquido;
+  const impostosOperacionais =
+    (pisCofins?.liquido ?? 0) + icmsLiquido - creditoOutrasDespesas.creditoTotal;
   const cbsIbs = calcularCbsIbsInformativo(
     transacao.receitaBruta,
     year,
@@ -96,6 +112,7 @@ export function calcularDetalhamentoTransacao(input: {
     ...(icmsDifal ? buildIcmsMemoria(icmsDifal) : []),
     ...buildIcmsCreditoMemoria(icmsCreditoCompra),
     ...(pisCofins ? buildPisCofinsMemoria(pisCofins, config) : []),
+    ...buildCreditoOutrasDespesasMemoria(creditoOutrasDespesas),
     `Margem operacional: R$ ${margemOperacionalEstimada.toFixed(2)}`,
   ];
 
@@ -104,6 +121,7 @@ export function calcularDetalhamentoTransacao(input: {
     pisCofins,
     icmsDifal,
     icmsCreditoCompra,
+    creditoOutrasDespesas,
     cbsIbs,
     impostoTotal,
     margemOperacionalEstimada,
@@ -123,6 +141,8 @@ export function calcularRelatorioFromTransacoes(input: {
   meta: TaxReportPayload["meta"];
   onComputeProgress?: (current: number, total: number) => void;
   aliasMap?: SkuAliasMap;
+  adsMetricsByItem?: Map<string, ItemAdMetrics>;
+  receitaTotalByItem?: Map<string, number>;
 }): TaxReportPayload {
   const total = input.transacoes.length;
   const detalhes = input.transacoes.map((transacao, index) => {
@@ -144,6 +164,8 @@ export function calcularRelatorioFromTransacoes(input: {
       cbsIbsVigencia: input.cbsIbsVigencia,
       year: input.year,
       incluirNaApuracao: incluir,
+      adsMetricsByItem: input.adsMetricsByItem,
+      receitaTotalByItem: input.receitaTotalByItem,
     });
   });
 

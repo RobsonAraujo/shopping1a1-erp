@@ -39,6 +39,8 @@ function parseProductBody(body: Record<string, unknown>): ProductWriteInput | "i
   const ipiPercent = Number(body.ipiPercent ?? 0);
   const extraCosts = Number(body.extraCosts ?? 0);
   const isMonophasic = body.isMonophasic === true;
+  const isImported = body.isImported === true;
+  const importContentPercent = Number(body.importContentPercent ?? 0);
   const saleIcmsPercent = Number(body.saleIcmsPercent);
 
   if (
@@ -60,6 +62,10 @@ function parseProductBody(body: Record<string, unknown>): ProductWriteInput | "i
     ipiPercent: Number.isFinite(ipiPercent) ? ipiPercent : 0,
     extraCosts: Number.isFinite(extraCosts) ? extraCosts : 0,
     isMonophasic,
+    isImported,
+    importContentPercent: Number.isFinite(importContentPercent)
+      ? importContentPercent
+      : 0,
     saleIcmsPercent,
   };
 }
@@ -131,6 +137,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         ipiPercent: data.ipiPercent,
         extraCosts: data.extraCosts,
         isMonophasic: data.isMonophasic,
+        isImported: data.isImported,
+        importContentPercent: data.importContentPercent,
         saleIcmsPercent: data.saleIcmsPercent,
       },
     });

@@ -100,6 +100,11 @@ export function buildTransacoesFromOrder(input: {
       mercadoriaImportada: custo?.isImported ?? false,
       conteudoImportacaoPercentual: custo?.importContentPercent ?? 0,
       isMonophasic: custo?.isMonophasic ?? false,
+      saleFee:
+        typeof line.sale_fee === "number" && Number.isFinite(line.sale_fee)
+          ? line.sale_fee
+          : 0,
+      ipiPercent: custo?.ipiPercent ?? 0,
     });
   }
 

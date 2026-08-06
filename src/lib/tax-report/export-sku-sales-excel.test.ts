@@ -32,6 +32,8 @@ function baseTransacao(
     mercadoriaImportada: false,
     conteudoImportacaoPercentual: 0,
     isMonophasic: false,
+    saleFee: 0,
+    ipiPercent: 0,
     ...overrides,
   };
 }
@@ -72,6 +74,7 @@ function includedRow(
       aliquotaPercent: 18,
       creditoTotal: 9,
     },
+    creditoOutrasDespesas: null,
     cbsIbs: null,
     impostoTotal: 41.1,
     margemOperacionalEstimada: 78.9,

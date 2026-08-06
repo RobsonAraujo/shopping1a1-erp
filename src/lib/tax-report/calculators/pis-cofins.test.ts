@@ -36,6 +36,8 @@ function tx(overrides: Partial<TransacaoVenda> = {}): TransacaoVenda {
     mercadoriaImportada: false,
     conteudoImportacaoPercentual: 0,
     isMonophasic: false,
+    saleFee: 0,
+    ipiPercent: 0,
     ...overrides,
   };
 }
@@ -64,7 +66,7 @@ describe("calcularPisCofins", () => {
     assert.equal(result.debitoTotal, 0);
   });
 
-  it("credits on unitCostNf minus purchase ICMS, not pricingCost", () => {
+  it("credits on unitCostNf total, not pricingCost", () => {
     const result = calcularPisCofins({
       transacao: tx({
         unitCostNf: 100,
@@ -76,9 +78,9 @@ describe("calcularPisCofins", () => {
       icmsDestacado: 0,
       isOperacaoInterna: true,
     });
-    assert.equal(result.baseCredito, 82);
-    assert.equal(result.pisCredito, 1.35);
-    assert.equal(result.cofinsCredito, 6.23);
+    assert.equal(result.baseCredito, 100);
+    assert.equal(result.pisCredito, 1.65);
+    assert.equal(result.cofinsCredito, 7.6);
     assert.ok(result.creditoTotal > result.baseCredito * 0.09);
   });
 
@@ -97,7 +99,7 @@ describe("calcularPisCofins", () => {
     assert.equal(result.baseCredito, 112);
   });
 
-  it("ST + venda interestadual + ressarcimento habilitado: base de crédito segue a mesma fórmula do não-ST", () => {
+  it("ST + venda interestadual + ressarcimento habilitado: base de crédito usa custo NF cheio", () => {
     const result = calcularPisCofins({
       transacao: tx({
         unitCostNf: 100,
@@ -109,7 +111,7 @@ describe("calcularPisCofins", () => {
       icmsDestacado: 0,
       isOperacaoInterna: false,
     });
-    assert.equal(result.baseCredito, 82);
+    assert.equal(result.baseCredito, 100);
   });
 
   it("ST + venda interestadual + ressarcimento desligado: mantém custo cheio com ST", () => {

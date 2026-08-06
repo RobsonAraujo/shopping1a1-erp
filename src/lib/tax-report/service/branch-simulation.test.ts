@@ -41,6 +41,8 @@ function tx(overrides: Partial<TransacaoVenda> = {}): TransacaoVenda {
     mercadoriaImportada: false,
     conteudoImportacaoPercentual: 0,
     isMonophasic: false,
+    saleFee: 0,
+    ipiPercent: 0,
     ...overrides,
   };
 }
@@ -310,6 +312,7 @@ function detalhe(
     },
     icmsDifal: icmsBreakdown({ isOperacaoInterna: true, icmsTotal: 18, difal: 0, icmsInterestadual: 0 }),
     icmsCreditoCompra: { baseUnitaria: 50, aliquotaPercent: 18, creditoTotal: 9, stRecuperavelTotal: 0 },
+    creditoOutrasDespesas: null,
     cbsIbs: null,
     impostoTotal: 12.78,
     margemOperacionalEstimada: 30,

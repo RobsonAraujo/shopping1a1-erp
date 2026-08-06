@@ -172,7 +172,7 @@ describe("purchasePisCofinsCreditBaseUnit", () => {
     assert.equal(base, 112);
   });
 
-  it("ST + interestadual + recuperável ligado: mesma fórmula do não-ST (custo NF − ICMS entrada)", () => {
+  it("ST + interestadual + recuperável ligado: custo NF cheio, sem subtrair ICMS", () => {
     const base = purchasePisCofinsCreditBaseUnit({
       unitCostNf: 100,
       purchaseIcmsPercent: 18,
@@ -181,10 +181,10 @@ describe("purchasePisCofinsCreditBaseUnit", () => {
       isOperacaoInterna: false,
       considerarStRecuperavel: true,
     });
-    assert.equal(base, 82);
+    assert.equal(base, 100);
   });
 
-  it("sem ST: custo NF − ICMS entrada, independente de interna/interestadual", () => {
+  it("sem ST: custo NF cheio, sem subtrair ICMS, independente de interna/interestadual", () => {
     const base = purchasePisCofinsCreditBaseUnit({
       unitCostNf: 100,
       purchaseIcmsPercent: 18,
@@ -193,7 +193,7 @@ describe("purchasePisCofinsCreditBaseUnit", () => {
       isOperacaoInterna: false,
       considerarStRecuperavel: true,
     });
-    assert.equal(base, 82);
+    assert.equal(base, 100);
   });
 });
 

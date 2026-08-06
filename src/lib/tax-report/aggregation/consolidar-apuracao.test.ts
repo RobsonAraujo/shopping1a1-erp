@@ -30,6 +30,8 @@ function detalhe(
       mercadoriaImportada: false,
       conteudoImportacaoPercentual: 0,
       isMonophasic: false,
+      saleFee: 0,
+      ipiPercent: 0,
     },
     pisCofins: {
       baseDebito: 88,
@@ -62,6 +64,7 @@ function detalhe(
       aliquotaPercent: 18,
       creditoTotal: 10.8,
     },
+    creditoOutrasDespesas: null,
     cbsIbs: null,
     impostoTotal: 23.59,
     margemOperacionalEstimada: 26.41,

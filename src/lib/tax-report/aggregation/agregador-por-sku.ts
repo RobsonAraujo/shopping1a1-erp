@@ -17,7 +17,8 @@ function impostoOperacionalLinhaValor(det: DetalhamentoTributario): number {
   return (
     (det.pisCofins?.liquido ?? 0) +
     (det.icmsDifal?.icmsTotal ?? 0) -
-    (det.icmsCreditoCompra?.creditoTotal ?? 0)
+    (det.icmsCreditoCompra?.creditoTotal ?? 0) -
+    (det.creditoOutrasDespesas?.creditoTotal ?? 0)
   );
 }
 
@@ -131,8 +132,17 @@ export function consolidarRelatorio(
   const icmsCreditoCompraTotal = roundMoney(
     incluidas.reduce((s, t) => s + (t.icmsCreditoCompra?.creditoTotal ?? 0), 0),
   );
+  const creditoOutrasDespesasTotal = roundMoney(
+    incluidas.reduce(
+      (s, t) => s + (t.creditoOutrasDespesas?.creditoTotal ?? 0),
+      0,
+    ),
+  );
   const impostosOperacionais = roundMoney(
-    pisCofinsLiquido + icmsDifalTotal - icmsCreditoCompraTotal,
+    pisCofinsLiquido +
+      icmsDifalTotal -
+      icmsCreditoCompraTotal -
+      creditoOutrasDespesasTotal,
   );
   const cmvTotal = roundMoney(
     incluidas.reduce(
@@ -154,6 +164,7 @@ export function consolidarRelatorio(
     apuracao: consolidarApuracao(transacoes),
     icmsSemDifalTotal,
     difalTotal,
+    creditoOutrasDespesasTotal,
     icmsDifalTotal,
     cbsIbsInformativoTotal,
     margemOperacional,

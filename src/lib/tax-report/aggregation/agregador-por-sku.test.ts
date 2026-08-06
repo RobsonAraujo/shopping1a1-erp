@@ -32,6 +32,8 @@ function detalhe(sku: string, receita: number): DetalhamentoTributario {
       mercadoriaImportada: false,
       conteudoImportacaoPercentual: 0,
       isMonophasic: false,
+      saleFee: 0,
+      ipiPercent: 0,
     },
     pisCofins: {
       baseDebito: receita,
@@ -60,6 +62,7 @@ function detalhe(sku: string, receita: number): DetalhamentoTributario {
       isOperacaoInterna: true,
     },
     icmsCreditoCompra: null,
+    creditoOutrasDespesas: null,
     cbsIbs: null,
     impostoTotal: 6.5,
     margemOperacionalEstimada: receita - 10 - 6.5,

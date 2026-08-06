@@ -27,6 +27,8 @@ function tx(overrides: Partial<TransacaoVenda> = {}): TransacaoVenda {
     mercadoriaImportada: false,
     conteudoImportacaoPercentual: 0,
     isMonophasic: false,
+    saleFee: 0,
+    ipiPercent: 0,
     ...overrides,
   };
 }

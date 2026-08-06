@@ -168,6 +168,17 @@ Detalhes dos modelos: [tenant-data-model.md](tenant-data-model.md).
 
 Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templates/feature-saas-impact.md).
 
+### Novas regras de crédito PIS/COFINS + créditos Meli/ADS + produto importado — 2026-08-06
+
+- **Tabelas novas/alteradas:** nenhuma nova tabela; `Product.isImported`/`Product.importContentPercent` já existiam no schema (só ganharam caminho de escrita via `/api/products`); `tax_report_month_snapshots.payload` (JSON) ganha novos campos (`saleFee`, `ipiPercent` em `TransacaoVenda`, `creditoOutrasDespesas` em `DetalhamentoTributario`) — schema Prisma inalterado
+- **Precisa `organizationId`?** sim, no futuro — hoje tudo continua escopado por `sellerId`/`accessToken` da sessão ML, mesmo padrão do restante do relatório tributário e do cadastro de produtos
+- **APIs afetadas:** `POST /api/products` e `PATCH /api/products/[sku]` passam a aceitar `isImported`/`importContentPercent`; geração do relatório mensal (`generateMonthlyTaxReport`) passa a chamar `fetchPadsAdvertiserId`/`fetchProductAdsMetricsByItem` (API de Ads do Mercado Livre) a cada geração, sem cache — aumenta o número de chamadas externas por relatório
+- **Assume singleton?** não
+- **Cron/background:** nenhum novo — a busca de métricas de Ads é síncrona dentro da geração do relatório (decisão consciente: dado "ao vivo" a cada geração, sem cache)
+- **Dados globais vs por org:** `Product.isImported`/`importContentPercent`/`ipiPercent` continuam globais (mesmo padrão de `unitCostNf`/`purchaseIcmsPercent`); o crédito de Ads depende do `accessToken`/seller autenticado no momento da geração do relatório
+- **Código já tenant-ready?** parcial — as funções novas (`calcularCreditoMeliFee`, `calcularCreditoAds`, `calcularCreditoOutrasDespesas`) recebem todos os dados via parâmetros explícitos, sem singleton nem sessão/DB lidos diretamente; seguem o mesmo nível de tenant-readiness do restante do módulo `tax-report` (escopado por `sellerId`, ainda não por `organizationId`)
+- **Ação futura na migração:** ao introduzir `organizationId`, trocar `accessToken`/`sellerId` avulsos por contexto de organização já resolvido, igual ao restante do módulo tributário e do cadastro de produtos
+
 ### Custo de precificação + Imposto na tela de produtos vindos do relatório tributário — 2026-07-29
 
 - **Tabelas novas/alteradas:** nenhuma — passou a ler `tax_report_month_snapshots` (já existente) a partir de `GET /api/products`

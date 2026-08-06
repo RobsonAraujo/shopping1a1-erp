@@ -2,6 +2,12 @@ import { prisma } from "@/lib/db";
 import { fetchItemsByIdsBatched, fetchPaidOrdersByPeriod } from "@/lib/mercadolibre/api";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import type { OrderSearchOrder } from "@/lib/mercadolibre/types";
+import {
+  fetchPadsAdvertiserId,
+  fetchProductAdsMetricsByItem,
+  getProductAdsDateRangeForMonth,
+  type ItemAdMetrics,
+} from "@/lib/mercadolibre/product-ads-metrics";
 import { getCalendarMonthRange } from "@/lib/mercadolibre/revenue-periods";
 import { getTaxReportBillingConcurrency } from "@/lib/tax-report/config";
 import { buildTransacoesFromOrder } from "@/lib/tax-report/enrichment/build-transacao-venda";
@@ -179,6 +185,46 @@ export async function generateMonthlyTaxReport(input: {
     );
   }
 
+  const receitaTotalByItem = new Map<string, number>();
+  for (const t of transacoes) {
+    receitaTotalByItem.set(
+      t.itemId,
+      (receitaTotalByItem.get(t.itemId) ?? 0) + t.receitaBruta,
+    );
+  }
+
+  input.onProgress?.({
+    phase: "compute",
+    message: "Buscando métricas de Ads do mês…",
+  });
+
+  let adsMetricsByItem = new Map<string, ItemAdMetrics>();
+  try {
+    const advertiserId = await fetchPadsAdvertiserId(input.accessToken);
+    if (advertiserId !== null) {
+      const { dateFrom, dateTo } = getProductAdsDateRangeForMonth(
+        input.year,
+        input.month,
+      );
+      const itemIdsWithSales = [...receitaTotalByItem.keys()].filter(Boolean);
+      adsMetricsByItem = await fetchProductAdsMetricsByItem(input.accessToken, {
+        advertiserId,
+        siteId: "MLB",
+        dateFrom,
+        dateTo,
+        itemIds: itemIdsWithSales.length > 0 && itemIdsWithSales.length <= 150
+          ? itemIdsWithSales
+          : undefined,
+      });
+    }
+  } catch (err) {
+    console.error(
+      "[tax-report] Falha ao buscar métricas de Ads — crédito de Ads será 0.",
+      err,
+    );
+    adsMetricsByItem = new Map();
+  }
+
   input.onProgress?.({
     phase: "compute",
     message: "Calculando impostos por venda…",
@@ -194,6 +240,8 @@ export async function generateMonthlyTaxReport(input: {
     year: input.year,
     month: input.month,
     overrides,
+    adsMetricsByItem,
+    receitaTotalByItem,
     meta: {
       geradoEm: new Date().toISOString(),
       pedidosProcessados: orders.length,

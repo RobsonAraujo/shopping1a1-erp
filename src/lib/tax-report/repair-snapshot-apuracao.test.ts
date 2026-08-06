@@ -24,6 +24,7 @@ const canonicalCusto: CustoProduto = {
   saleIcmsPercent: 18,
   extraCosts: 0,
   isMonophasic: false,
+  ipiPercent: 0,
   isImported: false,
   importContentPercent: 0,
 };
@@ -76,6 +77,8 @@ function aliasLineWithoutCost(): DetalhamentoTributario {
       mercadoriaImportada: false,
       conteudoImportacaoPercentual: 0,
       isMonophasic: false,
+      saleFee: 0,
+      ipiPercent: 0,
     },
     pisCofins: {
       baseDebito: 82,
@@ -104,6 +107,7 @@ function aliasLineWithoutCost(): DetalhamentoTributario {
       isOperacaoInterna: true,
     },
     icmsCreditoCompra: null,
+    creditoOutrasDespesas: null,
     cbsIbs: null,
     impostoTotal: 25.58,
     margemOperacionalEstimada: 74.42,

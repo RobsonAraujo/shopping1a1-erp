@@ -72,6 +72,8 @@ type ProductFormState = {
   ipiPercent: number | null;
   extraCosts: number | null;
   isMonophasic: boolean;
+  isImported: boolean;
+  importContentPercent: number | null;
   saleIcmsPercent: number | null;
 };
 
@@ -86,6 +88,8 @@ function emptyForm(sku = ""): ProductFormState {
     ipiPercent: 0,
     extraCosts: 0,
     isMonophasic: false,
+    isImported: false,
+    importContentPercent: 0,
     saleIcmsPercent: null,
   };
 }
@@ -101,6 +105,8 @@ function formFromProduct(product: ProductView): ProductFormState {
     ipiPercent: product.ipiPercent,
     extraCosts: product.extraCosts,
     isMonophasic: product.isMonophasic,
+    isImported: product.isImported,
+    importContentPercent: product.importContentPercent,
     saleIcmsPercent: product.saleIcmsPercent,
   };
 }
@@ -441,6 +447,26 @@ function ProductFormModal({
               }
               className="sm:col-span-2"
             />
+            <FormSwitchRow
+              id="is-imported"
+              label="Produto importado"
+              description="Em vendas interestaduais, usa alíquota de ICMS interestadual de 4% (Resolução do Senado 13/2012)."
+              checked={form.isImported}
+              onCheckedChange={(checked) =>
+                setForm((f) => ({ ...f, isImported: checked }))
+              }
+              className="sm:col-span-2"
+            />
+            {form.isImported ? (
+              <MaskedPercentField
+                id="import-content-percent"
+                label="Conteúdo de importação (%)"
+                value={form.importContentPercent}
+                onValueChange={(v) =>
+                  setForm((f) => ({ ...f, importContentPercent: v }))
+                }
+              />
+            ) : null}
             <MaskedPercentField
               id="sale-icms"
               label="Imposto venda ICMS"
@@ -752,6 +778,9 @@ export function ProductsClient() {
                 <th className="px-4 py-3 text-center font-semibold uppercase tracking-wide">
                   Mono
                 </th>
+                <th className="px-4 py-3 text-center font-semibold uppercase tracking-wide">
+                  Import.
+                </th>
                 <th className="px-4 py-3 text-right font-semibold uppercase tracking-wide">
                   Ações
                 </th>
@@ -761,7 +790,7 @@ export function ProductsClient() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-4 py-10 text-center text-[var(--muted-foreground)]"
                   >
                     Carregando…
@@ -770,7 +799,7 @@ export function ProductsClient() {
               ) : filteredProducts.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-4 py-10 text-center text-[var(--muted-foreground)]"
                   >
                     {sortedProducts.length === 0
@@ -829,6 +858,14 @@ export function ProductsClient() {
                         className="min-w-[2.5rem]"
                       >
                         {product.isMonophasic ? "Sim" : "Não"}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <Badge
+                        variant={product.isImported ? "secondary" : "muted"}
+                        className="min-w-[2.5rem]"
+                      >
+                        {product.isImported ? "Sim" : "Não"}
                       </Badge>
                     </td>
                     <td className="px-4 py-3">

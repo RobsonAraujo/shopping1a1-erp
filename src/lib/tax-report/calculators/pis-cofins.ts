@@ -92,7 +92,7 @@ export function buildPisCofinsMemoria(
   lines.push(
     `PIS ${config.pisRatePercent}% = R$ ${result.pisDebito.toFixed(2)} | COFINS ${config.cofinsRatePercent}% = R$ ${result.cofinsDebito.toFixed(2)}`,
   );
-  lines.push(`(=) Base crédito (NF entrada − ICMS): R$ ${result.baseCredito.toFixed(2)}`);
+  lines.push(`(=) Base crédito (custo NF total): R$ ${result.baseCredito.toFixed(2)}`);
   lines.push(
     `(−) Crédito PIS ${config.pisRatePercent}% = R$ ${result.pisCredito.toFixed(2)} | COFINS ${config.cofinsRatePercent}% = R$ ${result.cofinsCredito.toFixed(2)}`,
   );

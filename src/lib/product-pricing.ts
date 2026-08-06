@@ -116,10 +116,9 @@ export function purchaseIcmsCreditUnit(input: {
 }
 
 /** Base para crédito PIS/COFINS na aquisição.
- * ICMS-ST (venda interna, ou ressarcimento desligado): usa purchaseCostWithSt
- * (custo total com ST) quando disponível — a ST vira custo definitivo.
- * Sem ST, ou ST com ressarcimento aplicável (venda interestadual): unitCostNf
- * − ICMS entrada, igual ao produto sem ST. */
+ * Sempre o custo unitário cheio, sem subtrair o ICMS de entrada — com ICMS-ST
+ * (venda interna, ou ressarcimento desligado), usa purchaseCostWithSt (custo
+ * total com ST) quando disponível; caso contrário, unitCostNf. */
 export function purchasePisCofinsCreditBaseUnit(input: {
   unitCostNf: number;
   purchaseIcmsPercent: number;
@@ -128,7 +127,7 @@ export function purchasePisCofinsCreditBaseUnit(input: {
   isOperacaoInterna: boolean;
   considerarStRecuperavel: boolean;
 }): number {
-  const { unitCostNf, purchaseIcmsPercent, hasIcmsSt, purchaseCostWithSt } = input;
+  const { unitCostNf, hasIcmsSt, purchaseCostWithSt } = input;
   if (!Number.isFinite(unitCostNf) || unitCostNf <= 0) {
     return 0;
   }
@@ -136,16 +135,8 @@ export function purchasePisCofinsCreditBaseUnit(input: {
     if (purchaseCostWithSt != null && Number.isFinite(purchaseCostWithSt) && purchaseCostWithSt > 0) {
       return roundMoney(purchaseCostWithSt);
     }
-    return roundMoney(unitCostNf);
   }
-  const icmsEntrada = purchaseIcmsCreditUnit({
-    unitCostNf,
-    purchaseIcmsPercent,
-    hasIcmsSt: false,
-    isOperacaoInterna: true,
-    considerarStRecuperavel: false,
-  });
-  return roundMoney(Math.max(0, unitCostNf - icmsEntrada));
+  return roundMoney(unitCostNf);
 }
 
 /** Imposto total % para precificação (venda). */

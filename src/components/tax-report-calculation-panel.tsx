@@ -85,6 +85,7 @@ export function TaxReportCalculationPanel({
   const icms = row.icmsDifal;
   const pis = row.pisCofins;
   const icmsCred = row.icmsCreditoCompra;
+  const outrasDespesas = row.creditoOutrasDespesas;
 
   const impostoOperacional = row.impostoTotal;
   const impostoPercent = percentOfSale(impostoOperacional, t.receitaBruta);
@@ -142,14 +143,14 @@ export function TaxReportCalculationPanel({
 
       <MemoriaSection title="Dados de entrada" className="mb-3">
         <MemoriaRow
-          label="Custo NF"
+          label="Custo unitário (NF)"
           value={
             t.unitCostNf ? formatFinancialMoney(t.unitCostNf) : "não cadastrado"
           }
           muted={!t.unitCostNf}
         />
         <MemoriaRow
-          label="ICMS compra"
+          label="ICMS"
           value={`${t.purchaseIcmsPercent.toFixed(2)}%`}
         />
         {t.hasIcmsSt ? (
@@ -164,9 +165,14 @@ export function TaxReportCalculationPanel({
         ) : (
           <MemoriaRow label="ICMS-ST" value="Não" muted />
         )}
+        <MemoriaRow
+          label="IPI"
+          value={t.ipiPercent > 0 ? `${t.ipiPercent.toFixed(2)}%` : "0%"}
+          muted={t.ipiPercent <= 0}
+        />
         <MemoriaDivider />
         <MemoriaRow
-          label="Receita bruta"
+          label="Valor da Venda"
           value={formatFinancialMoney(t.receitaBruta)}
           emphasis
         />
@@ -304,6 +310,42 @@ export function TaxReportCalculationPanel({
                   );
                 })()
               : null}
+
+            {icms && icmsCred ? (
+              <>
+                <MemoriaDivider />
+                <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+                  Líquido
+                </p>
+                <MemoriaRow
+                  label="Débito de ICMS (venda)"
+                  value={formatFinancialMoney(icms.icmsTotal)}
+                />
+                <MemoriaRow
+                  label="(−) Crédito de ICMS (compra)"
+                  value={formatFinancialMoney(icmsCred.creditoTotal)}
+                  muted
+                />
+                <MemoriaDivider />
+                <MemoriaRow
+                  label="ICMS líquido a recolher nesta venda"
+                  value={
+                    icmsLiquidoPercent != null
+                      ? `${formatFinancialPercent(icmsLiquidoPercent)} (${formatFinancialMoney(icmsLiquido ?? 0)})`
+                      : formatFinancialMoney(icmsLiquido ?? 0)
+                  }
+                  emphasis
+                />
+                {(icmsCred.stRecuperavelTotal ?? 0) > 0 ? (
+                  <p className="mt-2 rounded-md border border-amber-200 bg-amber-50/80 px-2.5 py-2 text-[11px] leading-relaxed text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                    Este líquido já desconta{" "}
+                    {formatFinancialMoney(icmsCred.stRecuperavelTotal ?? 0)} de
+                    ICMS-ST recuperável — um crédito estimado que depende do
+                    processo de ressarcimento junto ao estado de origem.
+                  </p>
+                ) : null}
+              </>
+            ) : null}
           </MemoriaSection>
         ) : null}
 
@@ -340,11 +382,7 @@ export function TaxReportCalculationPanel({
                   Crédito
                 </p>
                 <MemoriaRow
-                  label={
-                    t.hasIcmsSt
-                      ? "Base (custo c/ ST)"
-                      : "Base (NF − ICMS entrada)"
-                  }
+                  label="Base (custo NF total)"
                   value={formatFinancialMoney(pis.baseCredito)}
                 />
                 <MemoriaRow
@@ -370,35 +408,29 @@ export function TaxReportCalculationPanel({
           </MemoriaSection>
         ) : null}
 
-        {icms && icmsCred ? (
-          <MemoriaSection title="ICMS líquido" className="sm:col-span-2">
-            <MemoriaRow
-              label="Débito de ICMS (venda)"
-              value={formatFinancialMoney(icms.icmsTotal)}
-            />
-            <MemoriaRow
-              label="(−) Crédito de ICMS (compra)"
-              value={formatFinancialMoney(icmsCred.creditoTotal)}
-              muted
-            />
+        {outrasDespesas && outrasDespesas.creditoTotal > 0 ? (
+          <MemoriaSection
+            title="Créditos adicionais (Meli/ADS)"
+            className="sm:col-span-2"
+          >
+            {outrasDespesas.meliFee.base > 0 ? (
+              <MemoriaRow
+                label={`Tarifa Meli × ${outrasDespesas.meliFee.aliquotaPercent.toFixed(2)}%`}
+                value={`${formatFinancialMoney(outrasDespesas.meliFee.base)} → ${formatFinancialMoney(outrasDespesas.meliFee.credito)}`}
+              />
+            ) : null}
+            {outrasDespesas.ads.receitaMesItem > 0 ? (
+              <MemoriaRow
+                label={`ADS rateado (${formatFinancialMoney(outrasDespesas.ads.gastoAdsMesItem)} no mês do anúncio) × ${outrasDespesas.ads.aliquotaPercent.toFixed(2)}%`}
+                value={`${formatFinancialMoney(outrasDespesas.ads.base)} → ${formatFinancialMoney(outrasDespesas.ads.credito)}`}
+              />
+            ) : null}
             <MemoriaDivider />
             <MemoriaRow
-              label="ICMS líquido a recolher nesta venda"
-              value={
-                icmsLiquidoPercent != null
-                  ? `${formatFinancialPercent(icmsLiquidoPercent)} (${formatFinancialMoney(icmsLiquido ?? 0)})`
-                  : formatFinancialMoney(icmsLiquido ?? 0)
-              }
+              label="Crédito total (abate o imposto operacional)"
+              value={formatFinancialMoney(outrasDespesas.creditoTotal)}
               emphasis
             />
-            {(icmsCred.stRecuperavelTotal ?? 0) > 0 ? (
-              <p className="mt-2 rounded-md border border-amber-200 bg-amber-50/80 px-2.5 py-2 text-[11px] leading-relaxed text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-                Este líquido já desconta{" "}
-                {formatFinancialMoney(icmsCred.stRecuperavelTotal ?? 0)} de
-                ICMS-ST recuperável — um crédito estimado que depende do
-                processo de ressarcimento junto ao estado de origem.
-              </p>
-            ) : null}
           </MemoriaSection>
         ) : null}
       </div>
@@ -418,15 +450,18 @@ export function TaxReportCalculationPanel({
                   ? formatFinancialPercent(icmsLiquidoPercent)
                   : "—"}{" "}
                 · {formatFinancialMoney(icmsLiquido ?? 0)})
+                {outrasDespesas && outrasDespesas.creditoTotal > 0
+                  ? ` − Créditos Meli/ADS (${formatFinancialMoney(outrasDespesas.creditoTotal)})`
+                  : ""}
               </span>
             ) : null}
           </span>
           <span className="flex flex-col items-end text-right tabular-nums">
-            <span className="font-semibold">
-              {formatFinancialMoney(impostoOperacional)}
+            <span className="text-lg font-semibold">
+              {formatFinancialPercent(impostoPercent)}
             </span>
             <span className="text-xs text-[var(--muted-foreground)]">
-              {formatFinancialPercent(impostoPercent)} da receita
+              {formatFinancialMoney(impostoOperacional)} da receita
             </span>
           </span>
           <span className="flex w-full flex-col items-end text-right tabular-nums sm:ml-auto sm:w-auto">

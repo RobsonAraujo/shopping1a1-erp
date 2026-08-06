@@ -258,6 +258,8 @@ export type ProductWriteInput = {
   ipiPercent: number;
   extraCosts: number;
   isMonophasic: boolean;
+  isImported: boolean;
+  importContentPercent: number;
   saleIcmsPercent: number;
 };
 
@@ -293,6 +295,13 @@ export function validateProductInput(
     return "Custos extras inválidos";
   }
   if (
+    !Number.isFinite(input.importContentPercent) ||
+    input.importContentPercent < 0 ||
+    input.importContentPercent > 100
+  ) {
+    return "Conteúdo de importação inválido";
+  }
+  if (
     !Number.isFinite(input.saleIcmsPercent) ||
     input.saleIcmsPercent < 0 ||
     input.saleIcmsPercent > 100
@@ -314,6 +323,8 @@ export function productWriteToPrismaData(input: ProductWriteInput) {
     ipiPercent: input.ipiPercent,
     extraCosts: input.extraCosts,
     isMonophasic: input.isMonophasic,
+    isImported: input.isImported,
+    importContentPercent: input.isImported ? input.importContentPercent : 0,
     saleIcmsPercent: input.saleIcmsPercent,
   };
 }
