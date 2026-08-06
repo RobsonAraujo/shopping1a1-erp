@@ -1,9 +1,16 @@
 "use client";
 
-import type { ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import {
   formatFinancialMoney,
   formatFinancialPercent,
@@ -12,6 +19,48 @@ import {
 import { margemOperacionalEstimadaLinha } from "@/lib/tax-report/imposto-operacional";
 import type { DetalhamentoTributario } from "@/lib/tax-report/types";
 import { cn } from "@/lib/utils";
+
+const SHOW_DETAILS_STORAGE_KEY = "tax-report-calc-panel:show-details";
+const SHOW_DETAILS_CHANGE_EVENT = "tax-report-calc-panel-show-details-change";
+
+function readStoredShowDetails(): boolean {
+  try {
+    const raw = localStorage.getItem(SHOW_DETAILS_STORAGE_KEY);
+    return raw === null ? true : raw === "1";
+  } catch {
+    return true;
+  }
+}
+
+function subscribeToShowDetailsStore(onStoreChange: () => void) {
+  window.addEventListener(SHOW_DETAILS_CHANGE_EVENT, onStoreChange);
+  window.addEventListener("storage", onStoreChange);
+  return () => {
+    window.removeEventListener(SHOW_DETAILS_CHANGE_EVENT, onStoreChange);
+    window.removeEventListener("storage", onStoreChange);
+  };
+}
+
+function useShowCalculationDetails() {
+  const showDetails = useSyncExternalStore(
+    subscribeToShowDetailsStore,
+    readStoredShowDetails,
+    () => true,
+  );
+
+  const setShowDetails = useCallback((value: boolean) => {
+    try {
+      localStorage.setItem(SHOW_DETAILS_STORAGE_KEY, value ? "1" : "0");
+    } catch {
+      // ignore quota / private mode
+    }
+    window.dispatchEvent(new Event(SHOW_DETAILS_CHANGE_EVENT));
+  }, []);
+
+  return { showDetails, setShowDetails };
+}
+
+const ShowDetailsContext = createContext(true);
 
 function MemoriaSection({
   title,
@@ -40,38 +89,57 @@ function MemoriaSection({
 function MemoriaRow({
   label,
   value,
+  conta,
   emphasis,
   muted,
 }: {
   label: string;
   value: string;
+  /** Conta explícita que originou o valor, ex.: "R$ 100,00 × 18% = R$ 18,00". */
+  conta?: string;
   emphasis?: boolean;
   muted?: boolean;
 }) {
+  const showDetails = useContext(ShowDetailsContext);
   return (
     <div
       className={cn(
-        "flex items-baseline justify-between gap-4",
+        "flex flex-col gap-0.5",
         muted && "text-[var(--muted-foreground)]",
       )}
     >
-      <span className="text-xs">{label}</span>
-      <span
-        className={cn(
-          "shrink-0 tabular-nums",
-          emphasis
-            ? "font-semibold text-[var(--foreground)]"
-            : "text-[var(--foreground)]",
-        )}
-      >
-        {value}
-      </span>
+      <div className="flex items-baseline justify-between gap-4">
+        <span className="text-xs">{label}</span>
+        <span
+          className={cn(
+            "shrink-0 tabular-nums",
+            emphasis
+              ? "font-semibold text-[var(--foreground)]"
+              : "text-[var(--foreground)]",
+          )}
+        >
+          {value}
+        </span>
+      </div>
+      {conta && showDetails ? (
+        <span className="self-end font-mono text-[10px] tabular-nums text-[var(--muted-foreground)]/80">
+          {conta}
+        </span>
+      ) : null}
     </div>
   );
 }
 
 function MemoriaDivider() {
   return <div className="my-1 border-t border-dashed border-[var(--border)]" />;
+}
+
+function pct(value: number): string {
+  return `${value.toFixed(2)}%`;
+}
+
+function money(value: number): string {
+  return formatFinancialMoney(value);
 }
 
 export function TaxReportCalculationPanel({
@@ -102,6 +170,12 @@ export function TaxReportCalculationPanel({
   const icmsLiquidoPercent =
     icmsLiquido != null ? percentOfSale(icmsLiquido, t.receitaBruta) : null;
 
+  const cmvTotal =
+    (t.custoAquisicaoUnitario ?? 0) * t.quantidade +
+    t.extraCostsUnitario * t.quantidade;
+
+  const { showDetails, setShowDetails } = useShowCalculationDetails();
+
   return (
     <Card className="border-[var(--primary)]/20 bg-[var(--muted)]/10 p-4">
       <div className="mb-4 flex items-start justify-between gap-3">
@@ -115,17 +189,29 @@ export function TaxReportCalculationPanel({
             {t.hasIcmsSt ? " · ICMS-ST na compra" : ""}
           </p>
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-8 px-2"
-          onClick={onClose}
-          aria-label="Fechar memória de cálculo"
-        >
-          <X className="size-4" />
-        </Button>
+        <div className="flex shrink-0 items-center gap-3">
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-[var(--muted-foreground)]">
+            <span>Mostrar detalhes das contas</span>
+            <Switch
+              checked={showDetails}
+              onCheckedChange={setShowDetails}
+              aria-label="Mostrar detalhes das contas"
+            />
+          </label>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 px-2"
+            onClick={onClose}
+            aria-label="Fechar memória de cálculo"
+          >
+            <X className="size-4" />
+          </Button>
+        </div>
       </div>
+
+      <ShowDetailsContext.Provider value={showDetails}>
 
       {t.dadosFiscaisIndisponiveis ? (
         <p className="mb-3 rounded-md border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs font-medium text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
@@ -142,6 +228,12 @@ export function TaxReportCalculationPanel({
       ) : null}
 
       <MemoriaSection title="Dados de entrada" className="mb-3">
+        {showDetails ? (
+          <p className="mb-1 text-[11px] text-[var(--muted-foreground)]">
+            Estes são os dados usados nas contas abaixo — nenhum deles é
+            calculado, vêm direto do cadastro do produto e da venda.
+          </p>
+        ) : null}
         <MemoriaRow
           label="Custo unitário (NF)"
           value={
@@ -199,47 +291,47 @@ export function TaxReportCalculationPanel({
                     <MemoriaRow
                       label="Regime"
                       value="ICMS-ST na compra — ICMS saída 0%"
+                      conta="O imposto desta venda já foi recolhido antecipadamente na compra (substituição tributária), por isso não há novo débito agora."
                       muted
                     />
                   ) : (
                     <MemoriaRow
-                      label="Alíquota interna (tabela)"
-                      value={`${(icms.aliquotaInternaTotal * 100).toFixed(2)}%`}
+                      label="Débito de ICMS"
+                      value={money(icms.icmsTotal)}
+                      conta={`${money(t.receitaBruta)} × ${pct(icms.aliquotaInternaTotal * 100)} = ${money(icms.icmsTotal)}`}
+                      emphasis
                     />
                   )
                 ) : (
                   <>
                     <MemoriaRow
                       label="ICMS interestadual"
-                      value={`${(icms.aliquotaInterestadual * 100).toFixed(2)}% → ${formatFinancialMoney(icms.icmsInterestadual)}`}
+                      value={money(icms.icmsInterestadual)}
+                      conta={`${money(t.receitaBruta)} × ${pct(icms.aliquotaInterestadual * 100)} = ${money(icms.icmsInterestadual)}`}
                     />
                     {icms.isContribuinte ? (
                       <MemoriaRow
                         label="DIFAL"
                         value="Não (comprador contribuinte)"
+                        conta="Quando quem compra também recolhe ICMS (CNPJ contribuinte), a diferença de alíquota (DIFAL) não é cobrada nesta venda."
                         muted
                       />
                     ) : (
-                      <>
-                        <MemoriaRow
-                          label="Alíquota interna destino"
-                          value={`${(icms.aliquotaInternaTotal * 100).toFixed(2)}%`}
-                          muted
-                        />
-                        <MemoriaRow
-                          label={`DIFAL (${(icms.aliquotaInternaTotal * 100).toFixed(2)}% − ${(icms.aliquotaInterestadual * 100).toFixed(2)}%)`}
-                          value={`${Math.max(0, (icms.aliquotaInternaTotal - icms.aliquotaInterestadual) * 100).toFixed(2)}% → ${formatFinancialMoney(icms.difal)}`}
-                        />
-                      </>
+                      <MemoriaRow
+                        label="DIFAL (diferença de alíquota)"
+                        value={money(icms.difal)}
+                        conta={`${money(t.receitaBruta)} × (${pct(icms.aliquotaInternaTotal * 100)} alíquota do estado do comprador − ${pct(icms.aliquotaInterestadual * 100)} já cobrada acima) = ${money(icms.difal)}`}
+                      />
                     )}
+                    <MemoriaDivider />
+                    <MemoriaRow
+                      label="Débito de ICMS (devido nesta venda)"
+                      value={money(icms.icmsTotal)}
+                      conta={`ICMS interestadual (${money(icms.icmsInterestadual)}) + DIFAL (${money(icms.difal)}) = ${money(icms.icmsTotal)}`}
+                      emphasis
+                    />
                   </>
                 )}
-                <MemoriaDivider />
-                <MemoriaRow
-                  label="Débito de ICMS (devido nesta venda)"
-                  value={formatFinancialMoney(icms.icmsTotal)}
-                  emphasis
-                />
                 <MemoriaDivider />
               </>
             ) : null}
@@ -254,56 +346,42 @@ export function TaxReportCalculationPanel({
                         Crédito (compra)
                       </p>
                       {creditoEntrada > 0 ? (
-                        <>
-                          <MemoriaRow
-                            label="Base NF entrada"
-                            value={formatFinancialMoney(icmsCred.baseUnitaria)}
-                          />
-                          <MemoriaRow
-                            label="Alíquota entrada"
-                            value={`${icmsCred.aliquotaPercent.toFixed(2)}%`}
-                          />
-                        </>
+                        <MemoriaRow
+                          label="Crédito de ICMS entrada"
+                          value={money(creditoEntrada)}
+                          conta={`Base NF entrada (${money(icmsCred.baseUnitaria)}) × ${pct(icmsCred.aliquotaPercent)} = ${money(creditoEntrada)}`}
+                        />
                       ) : (
                         <MemoriaRow
                           label="Crédito de ICMS entrada"
-                          value={
+                          value="R$ 0,00"
+                          conta={
                             t.hasIcmsSt
-                              ? "R$ 0,00 (ST na compra)"
+                              ? "Zerado porque o ICMS já foi pago por substituição tributária (ST) na compra."
                               : t.unitCostNf
-                                ? "R$ 0,00"
-                                : "R$ 0,00 (sem custo NF)"
+                                ? "Zerado — este produto não teve ICMS de entrada informado."
+                                : "Zerado — SKU sem custo de NF cadastrado."
                           }
                           muted
                         />
                       )}
                       {stRecuperavel > 0 ? (
-                        <>
-                          <MemoriaRow
-                            label={`Custo com ICMS-ST (× ${t.quantidade})`}
-                            value={formatFinancialMoney(
-                              (t.purchaseCostWithSt ?? 0) * t.quantidade,
-                            )}
-                            muted
-                          />
-                          <MemoriaRow
-                            label={`(−) Custo NF sem ST (× ${t.quantidade})`}
-                            value={formatFinancialMoney(
-                              (t.unitCostNf ?? 0) * t.quantidade,
-                            )}
-                            muted
-                          />
-                          <MemoriaRow
-                            label="ICMS-ST recuperável (venda interestadual — Tema 201/STF)"
-                            value={formatFinancialMoney(stRecuperavel)}
-                            muted
-                          />
-                        </>
+                        <MemoriaRow
+                          label="ICMS-ST recuperável"
+                          value={money(stRecuperavel)}
+                          conta={`Custo pago com ICMS-ST (${money((t.purchaseCostWithSt ?? 0) * t.quantidade)}) − Custo sem ST (${money((t.unitCostNf ?? 0) * t.quantidade)}) = ${money(stRecuperavel)} — venda interestadual, o ICMS-ST pago a mais na compra pode ser recuperado (Tema 201/STF)`}
+                          muted
+                        />
                       ) : null}
                       <MemoriaDivider />
                       <MemoriaRow
                         label="Crédito de ICMS (abate o débito)"
-                        value={formatFinancialMoney(icmsCred.creditoTotal)}
+                        value={money(icmsCred.creditoTotal)}
+                        conta={
+                          stRecuperavel > 0
+                            ? `Crédito de entrada (${money(creditoEntrada)}) + ICMS-ST recuperável (${money(stRecuperavel)}) = ${money(icmsCred.creditoTotal)}`
+                            : undefined
+                        }
                         emphasis
                       />
                     </>
@@ -315,25 +393,16 @@ export function TaxReportCalculationPanel({
               <>
                 <MemoriaDivider />
                 <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
-                  Líquido
+                  Líquido — o que você deve, menos o que já pagou na compra
                 </p>
-                <MemoriaRow
-                  label="Débito de ICMS (venda)"
-                  value={formatFinancialMoney(icms.icmsTotal)}
-                />
-                <MemoriaRow
-                  label="(−) Crédito de ICMS (compra)"
-                  value={formatFinancialMoney(icmsCred.creditoTotal)}
-                  muted
-                />
-                <MemoriaDivider />
                 <MemoriaRow
                   label="ICMS líquido a recolher nesta venda"
                   value={
                     icmsLiquidoPercent != null
-                      ? `${formatFinancialPercent(icmsLiquidoPercent)} (${formatFinancialMoney(icmsLiquido ?? 0)})`
-                      : formatFinancialMoney(icmsLiquido ?? 0)
+                      ? `${formatFinancialPercent(icmsLiquidoPercent)} (${money(icmsLiquido ?? 0)})`
+                      : money(icmsLiquido ?? 0)
                   }
+                  conta={`Débito (${money(icms.icmsTotal)}) − Crédito (${money(icmsCred.creditoTotal)}) = ${money(icmsLiquido ?? 0)}`}
                   emphasis
                 />
                 {(icmsCred.stRecuperavelTotal ?? 0) > 0 ? (
@@ -356,51 +425,61 @@ export function TaxReportCalculationPanel({
             ) : (
               <>
                 <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
-                  Débito
+                  Débito — imposto sobre o valor da venda
                 </p>
-                <MemoriaRow
-                  label="Base"
-                  value={formatFinancialMoney(pis.baseDebito)}
-                />
                 {pis.icmsExcluidoDaBase > 0 ? (
                   <MemoriaRow
-                    label="(−) ICMS excluído (RE 574.706)"
-                    value={formatFinancialMoney(pis.icmsExcluidoDaBase)}
+                    label="Base de cálculo"
+                    value={money(pis.baseDebito)}
+                    conta={`Valor da venda (${money(t.receitaBruta)}) − ICMS excluído (${money(pis.icmsExcluidoDaBase)}) = ${money(pis.baseDebito)} (por decisão do STF, RE 574.706, o ICMS não entra na base de PIS/COFINS)`}
+                  />
+                ) : (
+                  <MemoriaRow
+                    label="Base de cálculo"
+                    value={money(pis.baseDebito)}
+                    conta="É o próprio valor da venda"
                     muted
                   />
-                ) : null}
+                )}
                 <MemoriaRow
-                  label={`PIS débito (${pis.pisRatePercent}%)`}
-                  value={formatFinancialMoney(pis.pisDebito)}
+                  label={`PIS débito`}
+                  value={money(pis.pisDebito)}
+                  conta={`${money(pis.baseDebito)} × ${pct(pis.pisRatePercent)} = ${money(pis.pisDebito)}`}
                 />
                 <MemoriaRow
-                  label={`COFINS débito (${pis.cofinsRatePercent}%)`}
-                  value={formatFinancialMoney(pis.cofinsDebito)}
+                  label={`COFINS débito`}
+                  value={money(pis.cofinsDebito)}
+                  conta={`${money(pis.baseDebito)} × ${pct(pis.cofinsRatePercent)} = ${money(pis.cofinsDebito)}`}
                 />
                 <MemoriaDivider />
                 <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
-                  Crédito
+                  Crédito — abate por já ter pago PIS/COFINS na compra
                 </p>
                 <MemoriaRow
-                  label="Base (custo NF total)"
-                  value={formatFinancialMoney(pis.baseCredito)}
+                  label="Base de cálculo"
+                  value={money(pis.baseCredito)}
+                  conta="Custo unitário (NF) total pago na compra, sem descontar o ICMS"
+                  muted
                 />
                 <MemoriaRow
-                  label={`PIS crédito (${pis.pisRatePercent}%)`}
-                  value={formatFinancialMoney(pis.pisCredito)}
+                  label={`PIS crédito`}
+                  value={money(pis.pisCredito)}
+                  conta={`${money(pis.baseCredito)} × ${pct(pis.pisRatePercent)} = ${money(pis.pisCredito)}`}
                 />
                 <MemoriaRow
-                  label={`COFINS crédito (${pis.cofinsRatePercent}%)`}
-                  value={formatFinancialMoney(pis.cofinsCredito)}
+                  label={`COFINS crédito`}
+                  value={money(pis.cofinsCredito)}
+                  conta={`${money(pis.baseCredito)} × ${pct(pis.cofinsRatePercent)} = ${money(pis.cofinsCredito)}`}
                 />
                 <MemoriaDivider />
                 <MemoriaRow
                   label="PIS/COFINS líquido"
                   value={
                     liquidoPisCofinsPercent != null
-                      ? `${formatFinancialPercent(liquidoPisCofinsPercent)} (${formatFinancialMoney(pis.liquido)})`
-                      : formatFinancialMoney(pis.liquido)
+                      ? `${formatFinancialPercent(liquidoPisCofinsPercent)} (${money(pis.liquido)})`
+                      : money(pis.liquido)
                   }
+                  conta={`Débito (${money(pis.pisDebito + pis.cofinsDebito)}) − Crédito (${money(pis.pisCredito + pis.cofinsCredito)}) = ${money(pis.liquido)}`}
                   emphasis
                 />
               </>
@@ -413,22 +492,44 @@ export function TaxReportCalculationPanel({
             title="Créditos adicionais (Meli/ADS)"
             className="sm:col-span-2"
           >
+            {showDetails ? (
+              <p className="mb-1 text-[11px] text-[var(--muted-foreground)]">
+                Também dá direito a crédito o que você paga de tarifa ao
+                Mercado Livre e o que gasta em anúncios patrocinados (ADS).
+              </p>
+            ) : null}
             {outrasDespesas.meliFee.base > 0 ? (
               <MemoriaRow
-                label={`Tarifa Meli × ${outrasDespesas.meliFee.aliquotaPercent.toFixed(2)}%`}
-                value={`${formatFinancialMoney(outrasDespesas.meliFee.base)} → ${formatFinancialMoney(outrasDespesas.meliFee.credito)}`}
+                label="Crédito sobre tarifa do Mercado Livre"
+                value={money(outrasDespesas.meliFee.credito)}
+                conta={`Tarifa paga nesta venda (${money(outrasDespesas.meliFee.base)}) × ${pct(outrasDespesas.meliFee.aliquotaPercent)} = ${money(outrasDespesas.meliFee.credito)}`}
               />
             ) : null}
             {outrasDespesas.ads.receitaMesItem > 0 ? (
-              <MemoriaRow
-                label={`ADS rateado (${formatFinancialMoney(outrasDespesas.ads.gastoAdsMesItem)} no mês do anúncio) × ${outrasDespesas.ads.aliquotaPercent.toFixed(2)}%`}
-                value={`${formatFinancialMoney(outrasDespesas.ads.base)} → ${formatFinancialMoney(outrasDespesas.ads.credito)}`}
-              />
+              <>
+                <MemoriaRow
+                  label="Parte do gasto em ADS atribuída a esta venda"
+                  value={money(outrasDespesas.ads.base)}
+                  conta={`Gasto do anúncio no mês (${money(outrasDespesas.ads.gastoAdsMesItem)}) ÷ Receita do anúncio no mês (${money(outrasDespesas.ads.receitaMesItem)}) × Valor desta venda (${money(t.receitaBruta)}) = ${money(outrasDespesas.ads.base)}`}
+                  muted
+                />
+                <MemoriaRow
+                  label="Crédito sobre o gasto em ADS"
+                  value={money(outrasDespesas.ads.credito)}
+                  conta={`${money(outrasDespesas.ads.base)} × ${pct(outrasDespesas.ads.aliquotaPercent)} = ${money(outrasDespesas.ads.credito)}`}
+                />
+              </>
             ) : null}
             <MemoriaDivider />
             <MemoriaRow
               label="Crédito total (abate o imposto operacional)"
-              value={formatFinancialMoney(outrasDespesas.creditoTotal)}
+              value={money(outrasDespesas.creditoTotal)}
+              conta={
+                outrasDespesas.meliFee.credito > 0 &&
+                outrasDespesas.ads.credito > 0
+                  ? `Crédito Meli (${money(outrasDespesas.meliFee.credito)}) + Crédito ADS (${money(outrasDespesas.ads.credito)}) = ${money(outrasDespesas.creditoTotal)}`
+                  : undefined
+              }
               emphasis
             />
           </MemoriaSection>
@@ -436,47 +537,84 @@ export function TaxReportCalculationPanel({
       </div>
 
       {row.incluidoNaApuracao ? (
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm">
-          <span className="text-xs text-[var(--muted-foreground)]">
-            Imposto operacional
-            {pis && icms ? (
-              <span className="block text-[10px] normal-case text-[var(--muted-foreground)]/80">
-                PIS/COFINS líquido (
-                {formatFinancialPercent(
-                  percentOfSale(pis.liquido, t.receitaBruta),
-                )}{" "}
-                · {formatFinancialMoney(pis.liquido)}) + ICMS líquido (
-                {icmsLiquidoPercent != null
-                  ? formatFinancialPercent(icmsLiquidoPercent)
-                  : "—"}{" "}
-                · {formatFinancialMoney(icmsLiquido ?? 0)})
-                {outrasDespesas && outrasDespesas.creditoTotal > 0
-                  ? ` − Créditos Meli/ADS (${formatFinancialMoney(outrasDespesas.creditoTotal)})`
-                  : ""}
+        <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2.5 text-sm">
+          <div className="mb-2 flex items-baseline justify-between gap-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+              Imposto operacional — soma de tudo que foi calculado acima
+            </p>
+            <span className="flex shrink-0 flex-col items-end text-right tabular-nums">
+              <span className="text-lg font-semibold">
+                {formatFinancialPercent(impostoPercent)}
               </span>
+              <span className="text-[10px] text-[var(--muted-foreground)]">
+                {money(impostoOperacional)} da venda
+              </span>
+            </span>
+          </div>
+
+          {pis && icms && showDetails ? (
+            <div className="space-y-1 border-t border-dashed border-[var(--border)] pt-2 font-mono text-[11px] text-[var(--muted-foreground)]">
+              <div className="flex justify-between gap-3">
+                <span>PIS/COFINS líquido</span>
+                <span className="tabular-nums">{money(pis.liquido)}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span>+ ICMS líquido</span>
+                <span className="tabular-nums">{money(icmsLiquido ?? 0)}</span>
+              </div>
+              {outrasDespesas && outrasDespesas.creditoTotal > 0 ? (
+                <div className="flex justify-between gap-3">
+                  <span>− Créditos Meli/ADS</span>
+                  <span className="tabular-nums">
+                    {money(outrasDespesas.creditoTotal)}
+                  </span>
+                </div>
+              ) : null}
+              <div className="flex justify-between gap-3 border-t border-[var(--border)] pt-1 font-semibold text-[var(--foreground)]">
+                <span>= Imposto operacional</span>
+                <span className="tabular-nums">{money(impostoOperacional)}</span>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="mt-3 border-t border-dashed border-[var(--border)] pt-2">
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                Margem operacional — o que sobra depois de tudo
+              </p>
+              <span className="shrink-0 tabular-nums font-medium">
+                {money(margemOperacional)} (
+                {formatFinancialPercent(margemPercent)})
+              </span>
+            </div>
+            {showDetails ? (
+              <div className="mt-1 space-y-1 font-mono text-[11px] text-[var(--muted-foreground)]">
+                <div className="flex justify-between gap-3">
+                  <span>Valor da venda</span>
+                  <span className="tabular-nums">{money(t.receitaBruta)}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span>− Custo do produto</span>
+                  <span className="tabular-nums">{money(cmvTotal)}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span>− Imposto operacional</span>
+                  <span className="tabular-nums">
+                    {money(impostoOperacional)}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-3 border-t border-[var(--border)] pt-1 font-semibold text-[var(--foreground)]">
+                  <span>= Margem operacional</span>
+                  <span className="tabular-nums">
+                    {money(margemOperacional)}
+                  </span>
+                </div>
+              </div>
             ) : null}
-          </span>
-          <span className="flex flex-col items-end text-right tabular-nums">
-            <span className="text-lg font-semibold">
-              {formatFinancialPercent(impostoPercent)}
-            </span>
-            <span className="text-xs text-[var(--muted-foreground)]">
-              {formatFinancialMoney(impostoOperacional)} da receita
-            </span>
-          </span>
-          <span className="flex w-full flex-col items-end text-right tabular-nums sm:ml-auto sm:w-auto">
-            <span className="text-xs text-[var(--muted-foreground)]">
-              Margem operacional
-            </span>
-            <span className="font-medium">
-              {formatFinancialMoney(margemOperacional)}
-            </span>
-            <span className="text-xs text-[var(--muted-foreground)]">
-              {formatFinancialPercent(margemPercent)} da receita
-            </span>
-          </span>
+          </div>
         </div>
       ) : null}
+      </ShowDetailsContext.Provider>
     </Card>
   );
 }
