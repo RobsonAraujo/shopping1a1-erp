@@ -164,6 +164,13 @@ export function TaxReportCalculationPanel({
     ? percentOfSale(pis.liquido, t.receitaBruta)
     : null;
 
+  const pisCofinsLiquidoFinal = pis
+    ? pis.liquido - (outrasDespesas?.creditoTotal ?? 0)
+    : 0;
+  const pisCofinsLiquidoFinalPercent = pis
+    ? percentOfSale(pisCofinsLiquidoFinal, t.receitaBruta)
+    : null;
+
   const icmsLiquido = icms
     ? icms.icmsTotal - (icmsCred?.creditoTotal ?? 0)
     : null;
@@ -473,65 +480,70 @@ export function TaxReportCalculationPanel({
                 />
                 <MemoriaDivider />
                 <MemoriaRow
-                  label="PIS/COFINS líquido"
+                  label={
+                    outrasDespesas && outrasDespesas.creditoTotal > 0
+                      ? "PIS/COFINS líquido (antes dos créditos Meli/ADS)"
+                      : "PIS/COFINS líquido"
+                  }
                   value={
                     liquidoPisCofinsPercent != null
                       ? `${formatFinancialPercent(liquidoPisCofinsPercent)} (${money(pis.liquido)})`
                       : money(pis.liquido)
                   }
                   conta={`Débito (${money(pis.pisDebito + pis.cofinsDebito)}) − Crédito (${money(pis.pisCredito + pis.cofinsCredito)}) = ${money(pis.liquido)}`}
-                  emphasis
+                  emphasis={!(outrasDespesas && outrasDespesas.creditoTotal > 0)}
                 />
+
+                {outrasDespesas && outrasDespesas.creditoTotal > 0 ? (
+                  <>
+                    <MemoriaDivider />
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+                      (−) Créditos sobre tarifa Meli e ADS
+                    </p>
+                    {showDetails ? (
+                      <p className="mb-1 text-[11px] text-[var(--muted-foreground)]">
+                        Também dá direito a crédito de PIS/COFINS o que você
+                        paga de tarifa ao Mercado Livre e o que gasta em
+                        anúncios patrocinados (ADS).
+                      </p>
+                    ) : null}
+                    {outrasDespesas.meliFee.base > 0 ? (
+                      <MemoriaRow
+                        label="Crédito sobre tarifa do Mercado Livre"
+                        value={money(outrasDespesas.meliFee.credito)}
+                        conta={`Tarifa paga nesta venda (${money(outrasDespesas.meliFee.base)}) × ${pct(outrasDespesas.meliFee.aliquotaPercent)} = ${money(outrasDespesas.meliFee.credito)}`}
+                      />
+                    ) : null}
+                    {outrasDespesas.ads.receitaMesItem > 0 ? (
+                      <>
+                        <MemoriaRow
+                          label="Parte do gasto em ADS atribuída a esta venda"
+                          value={money(outrasDespesas.ads.base)}
+                          conta={`Gasto do anúncio no mês (${money(outrasDespesas.ads.gastoAdsMesItem)}) ÷ Receita do anúncio no mês (${money(outrasDespesas.ads.receitaMesItem)}) × Valor desta venda (${money(t.receitaBruta)}) = ${money(outrasDespesas.ads.base)}`}
+                          muted
+                        />
+                        <MemoriaRow
+                          label="Crédito sobre o gasto em ADS"
+                          value={money(outrasDespesas.ads.credito)}
+                          conta={`${money(outrasDespesas.ads.base)} × ${pct(outrasDespesas.ads.aliquotaPercent)} = ${money(outrasDespesas.ads.credito)}`}
+                        />
+                      </>
+                    ) : null}
+                    <MemoriaDivider />
+                    <MemoriaRow
+                      label="PIS/COFINS líquido final"
+                      value={
+                        pisCofinsLiquidoFinalPercent != null
+                          ? `${formatFinancialPercent(pisCofinsLiquidoFinalPercent)} (${money(pisCofinsLiquidoFinal)})`
+                          : money(pisCofinsLiquidoFinal)
+                      }
+                      conta={`PIS/COFINS líquido (${money(pis.liquido)}) − Créditos Meli/ADS (${money(outrasDespesas.creditoTotal)}) = ${money(pisCofinsLiquidoFinal)}`}
+                      emphasis
+                    />
+                  </>
+                ) : null}
               </>
             )}
-          </MemoriaSection>
-        ) : null}
-
-        {outrasDespesas && outrasDespesas.creditoTotal > 0 ? (
-          <MemoriaSection
-            title="Créditos adicionais (Meli/ADS)"
-            className="sm:col-span-2"
-          >
-            {showDetails ? (
-              <p className="mb-1 text-[11px] text-[var(--muted-foreground)]">
-                Também dá direito a crédito o que você paga de tarifa ao
-                Mercado Livre e o que gasta em anúncios patrocinados (ADS).
-              </p>
-            ) : null}
-            {outrasDespesas.meliFee.base > 0 ? (
-              <MemoriaRow
-                label="Crédito sobre tarifa do Mercado Livre"
-                value={money(outrasDespesas.meliFee.credito)}
-                conta={`Tarifa paga nesta venda (${money(outrasDespesas.meliFee.base)}) × ${pct(outrasDespesas.meliFee.aliquotaPercent)} = ${money(outrasDespesas.meliFee.credito)}`}
-              />
-            ) : null}
-            {outrasDespesas.ads.receitaMesItem > 0 ? (
-              <>
-                <MemoriaRow
-                  label="Parte do gasto em ADS atribuída a esta venda"
-                  value={money(outrasDespesas.ads.base)}
-                  conta={`Gasto do anúncio no mês (${money(outrasDespesas.ads.gastoAdsMesItem)}) ÷ Receita do anúncio no mês (${money(outrasDespesas.ads.receitaMesItem)}) × Valor desta venda (${money(t.receitaBruta)}) = ${money(outrasDespesas.ads.base)}`}
-                  muted
-                />
-                <MemoriaRow
-                  label="Crédito sobre o gasto em ADS"
-                  value={money(outrasDespesas.ads.credito)}
-                  conta={`${money(outrasDespesas.ads.base)} × ${pct(outrasDespesas.ads.aliquotaPercent)} = ${money(outrasDespesas.ads.credito)}`}
-                />
-              </>
-            ) : null}
-            <MemoriaDivider />
-            <MemoriaRow
-              label="Crédito total (abate o imposto operacional)"
-              value={money(outrasDespesas.creditoTotal)}
-              conta={
-                outrasDespesas.meliFee.credito > 0 &&
-                outrasDespesas.ads.credito > 0
-                  ? `Crédito Meli (${money(outrasDespesas.meliFee.credito)}) + Crédito ADS (${money(outrasDespesas.ads.credito)}) = ${money(outrasDespesas.creditoTotal)}`
-                  : undefined
-              }
-              emphasis
-            />
           </MemoriaSection>
         ) : null}
       </div>
@@ -555,21 +567,20 @@ export function TaxReportCalculationPanel({
           {pis && icms && showDetails ? (
             <div className="space-y-1 border-t border-dashed border-[var(--border)] pt-2 font-mono text-[11px] text-[var(--muted-foreground)]">
               <div className="flex justify-between gap-3">
-                <span>PIS/COFINS líquido</span>
-                <span className="tabular-nums">{money(pis.liquido)}</span>
+                <span>
+                  PIS/COFINS líquido
+                  {outrasDespesas && outrasDespesas.creditoTotal > 0
+                    ? " (já com créditos Meli/ADS)"
+                    : ""}
+                </span>
+                <span className="tabular-nums">
+                  {money(pisCofinsLiquidoFinal)}
+                </span>
               </div>
               <div className="flex justify-between gap-3">
                 <span>+ ICMS líquido</span>
                 <span className="tabular-nums">{money(icmsLiquido ?? 0)}</span>
               </div>
-              {outrasDespesas && outrasDespesas.creditoTotal > 0 ? (
-                <div className="flex justify-between gap-3">
-                  <span>− Créditos Meli/ADS</span>
-                  <span className="tabular-nums">
-                    {money(outrasDespesas.creditoTotal)}
-                  </span>
-                </div>
-              ) : null}
               <div className="flex justify-between gap-3 border-t border-[var(--border)] pt-1 font-semibold text-[var(--foreground)]">
                 <span>= Imposto operacional</span>
                 <span className="tabular-nums">{money(impostoOperacional)}</span>
