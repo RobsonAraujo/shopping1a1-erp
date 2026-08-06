@@ -222,6 +222,7 @@ With `VAPID_*` configured, the dashboard bell enables OS-level alerts in the bro
 | `npm run db:migrate` | Dev migrations (`prisma migrate dev`) |
 | `npm run db:generate` | Regenerate Prisma client after `schema.prisma` changes |
 | `npm run seed:catalog-demo` | Seed timeline snapshots + mock sales for local catalog report UI |
+| `npm run seed:sql` | Run SQL from `prisma/seeds/seed.sql` (optional `-- --conflict=<pk>`) |
 
 ### Local catalog report demo
 
