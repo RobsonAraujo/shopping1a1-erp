@@ -92,7 +92,7 @@ const EMPTY_ADJUSTMENT: StockReportListingAdjustment = {
 
 const SALES_SNAPSHOT_SOURCE: StockReportListingSnapshotSource = { kind: "sales" };
 
-function stockUnits(value: number | null | undefined): number {
+export function stockUnits(value: number | null | undefined): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return 0;
   return Math.max(0, Math.floor(value));
 }
@@ -150,6 +150,51 @@ export function listingTotalUnits(
   state: StockReportListingState,
 ): number {
   return listingUnitsAtSnapshot(row, state.adjustment, state.snapshotSource);
+}
+
+/** Detalhamento auditável de como o total de um anúncio foi calculado — cada
+ * parcela que entra na soma, para exibição transparente na UI. */
+export type ListingAuditBreakdown = {
+  warehouseStock: number;
+  mlStockOnTheWay: number;
+  /** Estoque ML de hoje (sempre calculado, mesmo quando não é a fonte usada). */
+  mlStockToday: number;
+  mlStockSource: "today" | "catalog_snapshot";
+  /** Estoque ML no snapshot de catálogo, quando essa é a fonte usada. */
+  mlStockAtSnapshot: number | null;
+  snapshotAt: string | null;
+  salesAfterSnapshot: number;
+  nfEmitidaNaoEntregue: number;
+  ajusteManual: number;
+  total: number;
+};
+
+export function listingAuditBreakdown(
+  row: StockReportListingInput,
+  state: StockReportListingState,
+): ListingAuditBreakdown {
+  const snapshotSource = state.snapshotSource;
+  const usesCatalogSnapshot = snapshotSource.kind === "catalog_snapshot";
+  return {
+    warehouseStock: stockUnits(row.warehouseStock),
+    mlStockOnTheWay: stockUnits(row.mlStockOnTheWay),
+    mlStockToday: stockUnits(row.mlStock),
+    mlStockSource: usesCatalogSnapshot ? "catalog_snapshot" : "today",
+    mlStockAtSnapshot:
+      snapshotSource.kind === "catalog_snapshot"
+        ? stockUnits(snapshotSource.mlStockAtSnapshot)
+        : null,
+    snapshotAt:
+      snapshotSource.kind === "catalog_snapshot"
+        ? snapshotSource.snapshotAt
+        : null,
+    salesAfterSnapshot: usesCatalogSnapshot
+      ? 0
+      : stockUnits(state.adjustment.salesAfterSnapshot),
+    nfEmitidaNaoEntregue: stockUnits(state.adjustment.nfEmitidaNaoEntregue),
+    ajusteManual: manualUnits(state.adjustment.ajusteManual),
+    total: listingUnitsAtSnapshot(row, state.adjustment, state.snapshotSource),
+  };
 }
 
 export function skuKeyFromListing(sku: string | null, mlItemId: string): string {

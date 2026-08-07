@@ -10,7 +10,7 @@ export type PisCofinsInput = {
 };
 
 export function calcularPisCofins(input: PisCofinsInput): PisCofinsBreakdown {
-  const { transacao, config, icmsDestacado, isOperacaoInterna } = input;
+  const { transacao, config, icmsDestacado } = input;
 
   if (transacao.isMonophasic) {
     return {
@@ -44,14 +44,7 @@ export function calcularPisCofins(input: PisCofinsInput): PisCofinsBreakdown {
   const unitCostNf = transacao.unitCostNf;
   const baseCreditoUnit =
     unitCostNf != null && unitCostNf > 0
-      ? purchasePisCofinsCreditBaseUnit({
-          unitCostNf,
-          purchaseIcmsPercent: transacao.purchaseIcmsPercent,
-          hasIcmsSt: transacao.hasIcmsSt,
-          purchaseCostWithSt: transacao.purchaseCostWithSt,
-          isOperacaoInterna,
-          considerarStRecuperavel: config.considerIcmsStRecuperavel,
-        })
+      ? purchasePisCofinsCreditBaseUnit({ unitCostNf })
       : 0;
   const baseCredito = roundMoney(baseCreditoUnit * transacao.quantidade);
 

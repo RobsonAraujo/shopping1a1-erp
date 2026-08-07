@@ -73,7 +73,6 @@ type ProductFormState = {
   extraCosts: number | null;
   isMonophasic: boolean;
   isImported: boolean;
-  importContentPercent: number | null;
   saleIcmsPercent: number | null;
 };
 
@@ -89,7 +88,6 @@ function emptyForm(sku = ""): ProductFormState {
     extraCosts: 0,
     isMonophasic: false,
     isImported: false,
-    importContentPercent: 0,
     saleIcmsPercent: null,
   };
 }
@@ -106,7 +104,6 @@ function formFromProduct(product: ProductView): ProductFormState {
     extraCosts: product.extraCosts,
     isMonophasic: product.isMonophasic,
     isImported: product.isImported,
-    importContentPercent: product.importContentPercent,
     saleIcmsPercent: product.saleIcmsPercent,
   };
 }
@@ -457,16 +454,6 @@ function ProductFormModal({
               }
               className="sm:col-span-2"
             />
-            {form.isImported ? (
-              <MaskedPercentField
-                id="import-content-percent"
-                label="Conteúdo de importação (%)"
-                value={form.importContentPercent}
-                onValueChange={(v) =>
-                  setForm((f) => ({ ...f, importContentPercent: v }))
-                }
-              />
-            ) : null}
             <MaskedPercentField
               id="sale-icms"
               label="Imposto venda ICMS"

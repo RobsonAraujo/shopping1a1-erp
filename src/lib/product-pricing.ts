@@ -90,9 +90,11 @@ export function isIcmsStRecuperavelAplicavel(input: {
 
 /**
  * ICMS destacado na NF de entrada (crédito na compra).
- * ICMS-ST: zerado, exceto quando a venda é interestadual e o ressarcimento da
- * ST está habilitado — nesse caso, o crédito nasce igual ao de um produto sem
- * ST (ver `isIcmsStRecuperavelAplicavel`).
+ * ICMS-ST: zerado apenas em operação interna (o ICMS já foi retido por ST na
+ * origem, sem destaque de ICMS próprio na entrada). Em venda interestadual de
+ * produto com ICMS-ST, o crédito de entrada sempre existe — independente do
+ * switch de ICMS-ST recuperável, que rege apenas o ressarcimento adicional
+ * (ver `isIcmsStRecuperavelAplicavel`).
  */
 export function purchaseIcmsCreditUnit(input: {
   unitCostNf: number;
@@ -101,8 +103,8 @@ export function purchaseIcmsCreditUnit(input: {
   isOperacaoInterna: boolean;
   considerarStRecuperavel: boolean;
 }): number {
-  const { unitCostNf, purchaseIcmsPercent, hasIcmsSt } = input;
-  const zeradoPorSt = hasIcmsSt && !isIcmsStRecuperavelAplicavel(input);
+  const { unitCostNf, purchaseIcmsPercent, hasIcmsSt, isOperacaoInterna } = input;
+  const zeradoPorSt = hasIcmsSt && isOperacaoInterna;
   if (
     zeradoPorSt ||
     !Number.isFinite(unitCostNf) ||
@@ -115,26 +117,14 @@ export function purchaseIcmsCreditUnit(input: {
   return roundMoney(unitCostNf * (purchaseIcmsPercent / 100));
 }
 
-/** Base para crédito PIS/COFINS na aquisição.
- * Sempre o custo unitário cheio, sem subtrair o ICMS de entrada — com ICMS-ST
- * (venda interna, ou ressarcimento desligado), usa purchaseCostWithSt (custo
- * total com ST) quando disponível; caso contrário, unitCostNf. */
+/** Base para crédito PIS/COFINS na aquisição: sempre o Custo Unitário
+ * (unitCostNf), com ou sem ICMS-ST. */
 export function purchasePisCofinsCreditBaseUnit(input: {
   unitCostNf: number;
-  purchaseIcmsPercent: number;
-  hasIcmsSt: boolean;
-  purchaseCostWithSt?: number | null;
-  isOperacaoInterna: boolean;
-  considerarStRecuperavel: boolean;
 }): number {
-  const { unitCostNf, hasIcmsSt, purchaseCostWithSt } = input;
+  const { unitCostNf } = input;
   if (!Number.isFinite(unitCostNf) || unitCostNf <= 0) {
     return 0;
-  }
-  if (hasIcmsSt && !isIcmsStRecuperavelAplicavel(input)) {
-    if (purchaseCostWithSt != null && Number.isFinite(purchaseCostWithSt) && purchaseCostWithSt > 0) {
-      return roundMoney(purchaseCostWithSt);
-    }
   }
   return roundMoney(unitCostNf);
 }

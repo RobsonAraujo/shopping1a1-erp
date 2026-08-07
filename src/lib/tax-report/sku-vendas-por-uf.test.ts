@@ -33,7 +33,6 @@ function detalhe(
       saleIcmsPercent: 0,
       extraCostsUnitario: 0,
       mercadoriaImportada: false,
-      conteudoImportacaoPercentual: 0,
       isMonophasic: false,
       saleFee: 0,
       ipiPercent: 0,

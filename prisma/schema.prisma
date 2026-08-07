@@ -194,7 +194,6 @@ model Product {
   isMonophasic        Boolean  @default(false) @map("is_monophasic")
   saleIcmsPercent     Decimal  @map("sale_icms_percent") @db.Decimal(8, 4)
   isImported          Boolean  @default(false) @map("is_imported")
-  importContentPercent Decimal @default(0) @map("import_content_percent") @db.Decimal(8, 4)
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 

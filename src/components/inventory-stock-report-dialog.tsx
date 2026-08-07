@@ -1,7 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+} from "react";
+import {
+  ChevronDown,
+  ChevronRight,
   FileDown,
   FileSpreadsheet,
   Info,
@@ -40,12 +49,15 @@ import {
   formatStockReportSubtitle,
   formatStockReportUnits,
   inventoryBaseUnits,
+  listingAuditBreakdown,
   listingStateFor,
-  listingTotalUnits,
   parseStockReportSnapshotDateInput,
+  skuKeyFromListing,
+  type StockReportListingInput,
   type StockReportListingState,
   type StockReportMergeGroup,
   type StockReportProductInfo,
+  type StockReportRow,
 } from "@/lib/inventory-stock-report";
 import { cn } from "@/lib/utils";
 
@@ -120,6 +132,230 @@ function formatSnapshotBadgeTime(iso: string): string {
   });
 }
 
+function formatPeriodDate(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+function countPeriodDays(fromIso: string, toIso: string): number {
+  const from = new Date(fromIso).getTime();
+  const to = new Date(toIso).getTime();
+  if (Number.isNaN(from) || Number.isNaN(to) || to < from) return 0;
+  return Math.max(1, Math.ceil((to - from) / (24 * 60 * 60 * 1000)));
+}
+
+function MemoriaLinha({
+  label,
+  value,
+  nota,
+  destaque,
+  fraca,
+}: {
+  label: string;
+  value: string;
+  nota?: string;
+  destaque?: boolean;
+  fraca?: boolean;
+}) {
+  return (
+    <div className={cn("flex flex-col gap-0.5", fraca && "opacity-70")}>
+      <div className="flex items-baseline justify-between gap-4">
+        <span className="text-xs text-[var(--muted-foreground)]">{label}</span>
+        <span
+          className={cn(
+            "shrink-0 tabular-nums",
+            destaque
+              ? "font-semibold text-[var(--foreground)]"
+              : "text-[var(--foreground)]",
+          )}
+        >
+          {value}
+        </span>
+      </div>
+      {nota ? (
+        <span className="self-end text-[10px] text-[var(--muted-foreground)]/80">
+          {nota}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function MemoriaDivider() {
+  return <div className="my-1.5 border-t border-dashed border-[var(--border)]" />;
+}
+
+function SkuCalculationMemory({
+  row,
+  memberListings,
+  listingStatesByMlItemId,
+  salesPeriod,
+  snapshotDateInput,
+}: {
+  row: StockReportRow;
+  memberListings: StockReportListingInput[];
+  listingStatesByMlItemId: Record<string, StockReportListingState>;
+  salesPeriod: { from: string; to: string } | null;
+  snapshotDateInput: string;
+}) {
+  const snapshotDateLabel = snapshotDateInput.split("-").reverse().join("/");
+  const periodDays = salesPeriod
+    ? countPeriodDays(salesPeriod.from, salesPeriod.to)
+    : 0;
+
+  return (
+    <div className="max-w-2xl rounded-lg border border-[var(--border)] bg-[var(--background)] px-4 py-3">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+        Memória de cálculo — {row.label}
+      </p>
+
+      {memberListings.length === 0 ? (
+        <p className="text-xs text-[var(--muted-foreground)]">
+          Nenhum anúncio ativo encontrado para este produto na listagem atual.
+        </p>
+      ) : (
+        memberListings.map((listing, index) => {
+          const state = listingStateFor(
+            listingStatesByMlItemId,
+            listing.mlItemId,
+          );
+          const audit = listingAuditBreakdown(listing, state);
+          const usesCatalogSnapshot = audit.mlStockSource === "catalog_snapshot";
+
+          return (
+            <div
+              key={listing.mlItemId}
+              className={cn(index > 0 && "mt-3 border-t border-[var(--border)] pt-3")}
+            >
+              {memberListings.length > 1 ? (
+                <p className="mb-1.5 text-xs font-medium text-[var(--foreground)]">
+                  Anúncio: {listing.sku ?? "Sem SKU"}{" "}
+                  <span className="font-normal text-[var(--muted-foreground)]">
+                    — {listing.title}
+                  </span>
+                </p>
+              ) : null}
+
+              <MemoriaLinha
+                label="Estoque no galpão"
+                value={String(audit.warehouseStock)}
+                nota="dado atual, direto do cadastro de estoque"
+              />
+              <MemoriaLinha
+                label={
+                  usesCatalogSnapshot
+                    ? "Estoque no Mercado Livre (na data)"
+                    : "Estoque no Mercado Livre (hoje)"
+                }
+                value={String(
+                  usesCatalogSnapshot ? audit.mlStockAtSnapshot : audit.mlStockToday,
+                )}
+                nota={
+                  usesCatalogSnapshot && audit.snapshotAt
+                    ? `snapshot de catálogo de ${formatSnapshotBadgeTime(audit.snapshotAt)} (hoje seria ${audit.mlStockToday})`
+                    : "dado atual do Mercado Livre"
+                }
+              />
+              <MemoriaLinha
+                label="Estoque a caminho (Full)"
+                value={String(audit.mlStockOnTheWay)}
+                nota="dado atual"
+              />
+
+              {usesCatalogSnapshot ? (
+                <MemoriaLinha
+                  label="Vendas no período"
+                  value="não se aplica"
+                  nota="este anúncio usa o estoque ML real do dia (snapshot) em vez de descontar vendas"
+                  fraca
+                />
+              ) : (
+                <MemoriaLinha
+                  label="+ Vendas feitas depois da data escolhida"
+                  value={`+${audit.salesAfterSnapshot}`}
+                  nota={
+                    salesPeriod
+                      ? `pedidos pagos entre ${formatPeriodDate(salesPeriod.from)} e ${formatPeriodDate(salesPeriod.to)} (${periodDays} dia${periodDays !== 1 ? "s" : ""}) — já saíram do estoque, por isso somamos de volta`
+                      : "sem período de vendas a somar (data escolhida é hoje ou no futuro)"
+                  }
+                />
+              )}
+              <MemoriaLinha
+                label="+ NF emitida não entregue"
+                value={`+${audit.nfEmitidaNaoEntregue}`}
+                nota={
+                  audit.nfEmitidaNaoEntregue === 0
+                    ? "não informado"
+                    : "informado manualmente em Ajustes por anúncio"
+                }
+                fraca={audit.nfEmitidaNaoEntregue === 0}
+              />
+              <MemoriaLinha
+                label={audit.ajusteManual >= 0 ? "+ Ajuste manual" : "− Ajuste manual"}
+                value={`${audit.ajusteManual >= 0 ? "+" : ""}${audit.ajusteManual}`}
+                nota={
+                  audit.ajusteManual === 0
+                    ? "não informado"
+                    : "informado manualmente em Ajustes por anúncio"
+                }
+                fraca={audit.ajusteManual === 0}
+              />
+              <MemoriaDivider />
+              <MemoriaLinha
+                label={`Estoque deste anúncio em ${snapshotDateLabel}`}
+                value={String(audit.total)}
+                destaque
+              />
+            </div>
+          );
+        })
+      )}
+
+      <MemoriaDivider />
+
+      {memberListings.length > 1 ? (
+        <MemoriaLinha
+          label={`Soma de ${memberListings.length} anúncios`}
+          value={formatStockReportUnits(row.units)}
+          destaque
+        />
+      ) : (
+        <MemoriaLinha
+          label="Unidades no relatório"
+          value={formatStockReportUnits(row.units)}
+          destaque
+        />
+      )}
+
+      <MemoriaDivider />
+      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+        Valorização
+      </p>
+      {row.unitCost != null ? (
+        <MemoriaLinha
+          label="Unidades × Custo unitário"
+          value={formatStockReportCurrency(row.stockValue ?? 0)}
+          nota={`${formatStockReportUnits(row.units)} × ${formatStockReportCurrency(row.unitCost)}`}
+          destaque
+        />
+      ) : (
+        <MemoriaLinha
+          label="Valor em estoque"
+          value="—"
+          nota="produto sem custo cadastrado — não entra no valor total do relatório"
+          fraca
+        />
+      )}
+    </div>
+  );
+}
+
 export function InventoryStockReportDialog({
   rows,
   productsBySku,
@@ -141,6 +377,9 @@ export function InventoryStockReportDialog({
   const [catalogSnapshotByMlItemId, setCatalogSnapshotByMlItemId] = useState<
     SalesAdjustmentResponse["catalogSnapshotByMlItemId"]
   >({});
+  const [salesPeriod, setSalesPeriod] = useState<
+    SalesAdjustmentResponse["period"]
+  >(null);
   const [salesLoading, setSalesLoading] = useState(false);
   const [salesError, setSalesError] = useState<string | null>(null);
   const [mergeGroups, setMergeGroups] = useState<StockReportMergeGroup[]>([]);
@@ -151,6 +390,9 @@ export function InventoryStockReportDialog({
   const [listingSearch, setListingSearch] = useState("");
   const [showExtras, setShowExtras] = useState(false);
   const [includeCancelledSales, setIncludeCancelledSales] = useState(false);
+  const [expandedSkuRowKey, setExpandedSkuRowKey] = useState<string | null>(
+    null,
+  );
 
   const snapshotDate = useMemo(
     () => parseStockReportSnapshotDateInput(snapshotDateInput),
@@ -170,6 +412,17 @@ export function InventoryStockReportDialog({
       })),
     [rows],
   );
+
+  const listingsBySkuKey = useMemo(() => {
+    const map = new Map<string, (typeof listings)[number][]>();
+    for (const listing of listings) {
+      const key = skuKeyFromListing(listing.sku, listing.mlItemId);
+      const arr = map.get(key);
+      if (arr) arr.push(listing);
+      else map.set(key, [listing]);
+    }
+    return map;
+  }, [listings]);
 
   const listingStatesByMlItemId = useMemo(() => {
     const map: Record<string, StockReportListingState> = {};
@@ -266,10 +519,12 @@ export function InventoryStockReportDialog({
       const data = (await res.json()) as SalesAdjustmentResponse;
       setSalesByMlItemId(data.salesByMlItemId ?? {});
       setCatalogSnapshotByMlItemId(data.catalogSnapshotByMlItemId ?? {});
+      setSalesPeriod(data.period ?? null);
     } catch (e) {
       setSalesError(e instanceof Error ? e.message : "Erro ao buscar vendas");
       setSalesByMlItemId({});
       setCatalogSnapshotByMlItemId({});
+      setSalesPeriod(null);
     } finally {
       setSalesLoading(false);
     }
@@ -532,8 +787,30 @@ export function InventoryStockReportDialog({
                   Estimativa: estoque de hoje + vendas ML depois da data escolhida.
                   Não inclui entradas Full/galpão automáticas — use Ajuste manual.
                   Para catálogo com snapshot, galpão e a caminho usam o estoque
-                  atual.
+                  atual. A memória de cálculo completa por produto está na
+                  prévia do relatório, mais abaixo.
                 </p>
+                {salesPeriod ? (
+                  <p className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 text-xs text-[var(--muted-foreground)]">
+                    Período de vendas somado de volta ao estoque:{" "}
+                    <strong className="text-[var(--foreground)]">
+                      {formatPeriodDate(salesPeriod.from)} até{" "}
+                      {formatPeriodDate(salesPeriod.to)}
+                    </strong>{" "}
+                    (
+                    {countPeriodDays(salesPeriod.from, salesPeriod.to)} dia
+                    {countPeriodDays(salesPeriod.from, salesPeriod.to) !== 1
+                      ? "s"
+                      : ""}
+                    ) — pedidos pagos nesse intervalo são somados de volta ao
+                    estoque de hoje para estimar o estoque na data escolhida.
+                  </p>
+                ) : (
+                  <p className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 text-xs text-[var(--muted-foreground)]">
+                    A data escolhida é hoje ou no futuro — nenhuma venda é
+                    somada de volta, o estoque na data é o estoque atual.
+                  </p>
+                )}
                 <ItemListSearch
                   value={listingSearch}
                   onChange={setListingSearch}
@@ -546,7 +823,7 @@ export function InventoryStockReportDialog({
                       <tr>
                         <th className="px-3 py-2.5">Anúncio</th>
                         <th className="px-3 py-2.5">Estoque hoje</th>
-                        <th className="px-3 py-2.5">Vendas após data (+)</th>
+                        <th className="px-3 py-2.5">Vendas no período (+)</th>
                         <th className="px-3 py-2.5">NF não entregue</th>
                         <th className="px-3 py-2.5">Ajuste manual (+/−)</th>
                         <th className="px-3 py-2.5">Estoque na data</th>
@@ -572,11 +849,11 @@ export function InventoryStockReportDialog({
                             manualByMlItemId,
                             listing.mlItemId,
                           );
+                          const audit = listingAuditBreakdown(listing, state);
                           const currentUnits = inventoryBaseUnits(listing);
-                          const total = listingTotalUnits(listing, state);
-                          const included = total > 0;
+                          const included = audit.total > 0;
                           const usesCatalogSnapshot =
-                            state.snapshotSource.kind === "catalog_snapshot";
+                            audit.mlStockSource === "catalog_snapshot";
                           const zeroBase =
                             currentUnits === 0 && !hasManualAdjustments(manual);
 
@@ -598,27 +875,13 @@ export function InventoryStockReportDialog({
                                       {listing.title}
                                     </p>
                                   </div>
-                                  {usesCatalogSnapshot &&
-                                  state.snapshotSource.kind ===
-                                    "catalog_snapshot" ? (
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Badge
-                                          variant="outline"
-                                          className="text-[10px]"
-                                        >
-                                          ML via snapshot
-                                        </Badge>
-                                      </TooltipTrigger>
-                                      <TooltipContent className="max-w-xs">
-                                        Estoque ML de{" "}
-                                        {formatSnapshotBadgeTime(
-                                          state.snapshotSource.snapshotAt,
-                                        )}{" "}
-                                        (SP). Galpão e a caminho = estoque
-                                        atual.
-                                      </TooltipContent>
-                                    </Tooltip>
+                                  {usesCatalogSnapshot ? (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px]"
+                                    >
+                                      ML via snapshot
+                                    </Badge>
                                   ) : (
                                     <Badge
                                       variant="secondary"
@@ -653,7 +916,7 @@ export function InventoryStockReportDialog({
                                     —
                                   </span>
                                 ) : (
-                                  state.adjustment.salesAfterSnapshot
+                                  audit.salesAfterSnapshot
                                 )}
                               </td>
                               <td className="px-3 py-2">
@@ -694,7 +957,7 @@ export function InventoryStockReportDialog({
                                 />
                               </td>
                               <td className="px-3 py-2 tabular-nums font-medium">
-                                {total}
+                                {audit.total}
                               </td>
                             </tr>
                           );
@@ -807,6 +1070,7 @@ export function InventoryStockReportDialog({
               <table className="w-full min-w-[52rem] text-left text-sm">
                 <thead className="border-b border-[var(--border)] bg-[var(--muted)]/80 text-xs uppercase tracking-wide text-[var(--muted-foreground)]">
                   <tr>
+                    <th className="w-8 px-2 py-2.5" />
                     <th className="w-10 px-3 py-2.5" />
                     <th className="px-3 py-2.5">Produto (SKU)</th>
                     <th className="px-3 py-2.5">NCM</th>
@@ -820,7 +1084,7 @@ export function InventoryStockReportDialog({
                   {report.rows.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={7}
+                        colSpan={8}
                         className="px-3 py-8 text-center text-[var(--muted-foreground)]"
                       >
                         Nenhum produto com estoque para o relatório. Abra os
@@ -838,64 +1102,114 @@ export function InventoryStockReportDialog({
                         skuPreview.some(
                           (skuRow) => skuRow.rowKey === row.rowKey,
                         );
+                      const isExpanded = expandedSkuRowKey === row.rowKey;
+                      const memberSkuKeys =
+                        row.skus.length > 0 ? row.skus : [row.rowKey];
+                      const memberListings = memberSkuKeys.flatMap(
+                        (skuKey) => listingsBySkuKey.get(skuKey) ?? [],
+                      );
+
                       return (
-                        <tr
-                          key={row.rowKey}
-                          className={cn(
-                            "border-b border-[var(--border)] last:border-0",
-                            row.missingCost && "bg-amber-50/40",
-                          )}
-                        >
-                          <td className="px-3 py-2">
-                            {canSelect ? (
-                              <input
-                                type="checkbox"
-                                checked={selectedSkuKeys.has(row.rowKey)}
-                                onChange={() => toggleSkuSelection(row.rowKey)}
-                                aria-label={`Selecionar ${row.label}`}
-                              />
-                            ) : null}
-                          </td>
-                          <td className="px-3 py-2 font-medium">{row.label}</td>
-                          <td className="px-3 py-2 tabular-nums">
-                            {row.ncm ?? "—"}
-                          </td>
-                          <td className="px-3 py-2 tabular-nums">
-                            {row.unitCost != null
-                              ? formatStockReportCurrency(row.unitCost)
-                              : "—"}
-                          </td>
-                          <td className="px-3 py-2 tabular-nums">
-                            {formatStockReportUnits(row.units)}
-                          </td>
-                          <td className="px-3 py-2 tabular-nums">
-                            {row.stockValue != null
-                              ? formatStockReportCurrency(row.stockValue)
-                              : "—"}
-                          </td>
-                          <td className="px-3 py-2">
-                            {isMerged && mergeGroup ? (
-                              <div className="flex flex-wrap gap-1">
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => openMergeDraft(mergeGroup)}
-                                >
-                                  Editar
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => undoMerge(row.rowKey)}
-                                >
-                                  Desfazer
-                                </Button>
-                              </div>
-                            ) : null}
-                          </td>
-                        </tr>
+                        <Fragment key={row.rowKey}>
+                          <tr
+                            className={cn(
+                              "border-b border-[var(--border)] last:border-0",
+                              row.missingCost && "bg-amber-50/40",
+                              isExpanded && "bg-[var(--primary)]/5",
+                            )}
+                          >
+                            <td className="px-2 py-2 text-[var(--muted-foreground)]">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExpandedSkuRowKey((prev) =>
+                                    prev === row.rowKey ? null : row.rowKey,
+                                  )
+                                }
+                                className="flex size-6 items-center justify-center rounded hover:bg-[var(--muted)]"
+                                aria-expanded={isExpanded}
+                                aria-label={
+                                  isExpanded
+                                    ? "Ocultar memória de cálculo"
+                                    : "Ver memória de cálculo"
+                                }
+                              >
+                                {isExpanded ? (
+                                  <ChevronDown className="size-4" />
+                                ) : (
+                                  <ChevronRight className="size-4" />
+                                )}
+                              </button>
+                            </td>
+                            <td className="px-3 py-2">
+                              {canSelect ? (
+                                <input
+                                  type="checkbox"
+                                  checked={selectedSkuKeys.has(row.rowKey)}
+                                  onChange={() =>
+                                    toggleSkuSelection(row.rowKey)
+                                  }
+                                  aria-label={`Selecionar ${row.label}`}
+                                />
+                              ) : null}
+                            </td>
+                            <td className="px-3 py-2 font-medium">{row.label}</td>
+                            <td className="px-3 py-2 tabular-nums">
+                              {row.ncm ?? "—"}
+                            </td>
+                            <td className="px-3 py-2 tabular-nums">
+                              {row.unitCost != null
+                                ? formatStockReportCurrency(row.unitCost)
+                                : "—"}
+                            </td>
+                            <td className="px-3 py-2 tabular-nums">
+                              {formatStockReportUnits(row.units)}
+                            </td>
+                            <td className="px-3 py-2 tabular-nums">
+                              {row.stockValue != null
+                                ? formatStockReportCurrency(row.stockValue)
+                                : "—"}
+                            </td>
+                            <td className="px-3 py-2">
+                              {isMerged && mergeGroup ? (
+                                <div className="flex flex-wrap gap-1">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => openMergeDraft(mergeGroup)}
+                                  >
+                                    Editar
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => undoMerge(row.rowKey)}
+                                  >
+                                    Desfazer
+                                  </Button>
+                                </div>
+                              ) : null}
+                            </td>
+                          </tr>
+                          {isExpanded ? (
+                            <tr className="border-b border-[var(--border)] bg-[var(--muted)]/20 last:border-0">
+                              <td />
+                              <td colSpan={7} className="px-3 py-3">
+                                <SkuCalculationMemory
+                                  row={row}
+                                  memberListings={memberListings}
+                                  listingStatesByMlItemId={
+                                    listingStatesByMlItemId
+                                  }
+                                  salesPeriod={salesPeriod}
+                                  snapshotDateInput={snapshotDateInput}
+                                />
+                              </td>
+                            </tr>
+                          ) : null}
+                        </Fragment>
                       );
                     })
                   )}

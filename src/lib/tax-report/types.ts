@@ -25,13 +25,12 @@ export type TransacaoVenda = {
   unitCostNf: number | null;
   purchaseIcmsPercent: number;
   hasIcmsSt: boolean;
-  /** Custo total de aquisição incluindo ICMS-ST repassado — base de crédito PIS/COFINS quando hasIcmsSt=true. */
+  /** Custo total de aquisição incluindo ICMS-ST repassado. */
   purchaseCostWithSt?: number | null;
   /** % ICMS na venda (cadastro) — usado apenas em precificação, não no cálculo tributário. */
   saleIcmsPercent: number;
   extraCostsUnitario: number;
   mercadoriaImportada: boolean;
-  conteudoImportacaoPercentual: number;
   isMonophasic: boolean;
   /** Tarifa de venda cobrada pelo Mercado Livre (sale_fee do item na venda) — base para crédito de 9,25%. */
   saleFee: number;

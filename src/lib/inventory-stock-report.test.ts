@@ -5,6 +5,7 @@ import {
   applyStockReportMergeGroups,
   buildStockReportRows,
   inventoryBaseUnits,
+  listingAuditBreakdown,
   listingUnitsAtSnapshot,
   stockReportSalesAdjustmentRange,
 } from "./inventory-stock-report";
@@ -391,5 +392,71 @@ describe("inventory-stock-report", () => {
       "2026-07-01",
     );
     assert.equal(range.to.getTime(), asOf.getTime());
+  });
+
+  it("listingAuditBreakdown exposes every component used to reach the total (sales source)", () => {
+    const audit = listingAuditBreakdown(
+      {
+        mlItemId: "MLB1",
+        sku: "SKU A",
+        title: "Produto",
+        warehouseStock: 4,
+        mlStock: 10,
+        mlStockOnTheWay: 2,
+        catalogListing: false,
+      },
+      {
+        adjustment: {
+          salesAfterSnapshot: 6,
+          nfEmitidaNaoEntregue: 1,
+          ajusteManual: -2,
+        },
+        snapshotSource: { kind: "sales" },
+      },
+    );
+    assert.deepEqual(audit, {
+      warehouseStock: 4,
+      mlStockOnTheWay: 2,
+      mlStockToday: 10,
+      mlStockSource: "today",
+      mlStockAtSnapshot: null,
+      snapshotAt: null,
+      salesAfterSnapshot: 6,
+      nfEmitidaNaoEntregue: 1,
+      ajusteManual: -2,
+      total: 21,
+    });
+  });
+
+  it("listingAuditBreakdown zeroes sales and reports the snapshot value (catalog source)", () => {
+    const audit = listingAuditBreakdown(
+      {
+        mlItemId: "MLB1",
+        sku: "SKU A",
+        title: "Produto",
+        warehouseStock: 3,
+        mlStock: 999,
+        mlStockOnTheWay: 1,
+        catalogListing: true,
+      },
+      {
+        adjustment: {
+          salesAfterSnapshot: 50,
+          nfEmitidaNaoEntregue: 0,
+          ajusteManual: 0,
+        },
+        snapshotSource: {
+          kind: "catalog_snapshot",
+          mlStockAtSnapshot: 8,
+          snapshotAt: "2026-07-31T23:00:00.000Z",
+        },
+      },
+    );
+    assert.equal(audit.mlStockSource, "catalog_snapshot");
+    assert.equal(audit.mlStockAtSnapshot, 8);
+    assert.equal(audit.mlStockToday, 999);
+    assert.equal(audit.salesAfterSnapshot, 0);
+    assert.equal(audit.snapshotAt, "2026-07-31T23:00:00.000Z");
+    assert.equal(audit.total, 3 + 8 + 1);
   });
 });

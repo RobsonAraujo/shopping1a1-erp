@@ -47,7 +47,6 @@ export type ProductView = ProductRecordForPricing & {
   sku: string;
   ncm: string | null;
   isImported: boolean;
-  importContentPercent: number;
   pricingCost: number | null;
   /** % médio operacional de imposto vindo do relatório tributário (null = sem dados para o SKU). */
   taxPercent: number | null;
@@ -73,7 +72,6 @@ export function buildProductView(
     ncm: product.ncm,
     ...record,
     isImported: product.isImported,
-    importContentPercent: decimalToNumber(product.importContentPercent) ?? 0,
     pricingCost: resolved?.pricingCost ?? null,
     taxPercent: reportTax?.taxPercent ?? null,
     taxPercentGeneratedAt: reportTax?.generatedAt ?? null,
@@ -259,7 +257,6 @@ export type ProductWriteInput = {
   extraCosts: number;
   isMonophasic: boolean;
   isImported: boolean;
-  importContentPercent: number;
   saleIcmsPercent: number;
 };
 
@@ -295,13 +292,6 @@ export function validateProductInput(
     return "Custos extras inválidos";
   }
   if (
-    !Number.isFinite(input.importContentPercent) ||
-    input.importContentPercent < 0 ||
-    input.importContentPercent > 100
-  ) {
-    return "Conteúdo de importação inválido";
-  }
-  if (
     !Number.isFinite(input.saleIcmsPercent) ||
     input.saleIcmsPercent < 0 ||
     input.saleIcmsPercent > 100
@@ -324,7 +314,6 @@ export function productWriteToPrismaData(input: ProductWriteInput) {
     extraCosts: input.extraCosts,
     isMonophasic: input.isMonophasic,
     isImported: input.isImported,
-    importContentPercent: input.isImported ? input.importContentPercent : 0,
     saleIcmsPercent: input.saleIcmsPercent,
   };
 }

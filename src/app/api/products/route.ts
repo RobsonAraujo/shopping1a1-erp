@@ -37,7 +37,6 @@ function parseProductBody(body: Record<string, unknown>): ProductWriteInput | "i
   const extraCosts = Number(body.extraCosts ?? 0);
   const isMonophasic = body.isMonophasic === true;
   const isImported = body.isImported === true;
-  const importContentPercent = Number(body.importContentPercent ?? 0);
   const saleIcmsPercent = Number(body.saleIcmsPercent);
 
   if (
@@ -60,9 +59,6 @@ function parseProductBody(body: Record<string, unknown>): ProductWriteInput | "i
     extraCosts: Number.isFinite(extraCosts) ? extraCosts : 0,
     isMonophasic,
     isImported,
-    importContentPercent: Number.isFinite(importContentPercent)
-      ? importContentPercent
-      : 0,
     saleIcmsPercent,
   };
 }

@@ -11,7 +11,6 @@ export type CustoProduto = {
   extraCosts: number;
   isMonophasic: boolean;
   isImported: boolean;
-  importContentPercent: number;
   ipiPercent: number;
 };
 
@@ -37,7 +36,6 @@ export function custoProdutoFromView(view: ProductView): CustoProduto {
     extraCosts: view.extraCosts,
     isMonophasic: view.isMonophasic,
     isImported: view.isImported,
-    importContentPercent: view.importContentPercent,
     ipiPercent: view.ipiPercent ?? 0,
   };
 }

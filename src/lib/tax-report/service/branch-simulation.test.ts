@@ -39,7 +39,6 @@ function tx(overrides: Partial<TransacaoVenda> = {}): TransacaoVenda {
     saleIcmsPercent: 18,
     extraCostsUnitario: 0,
     mercadoriaImportada: false,
-    conteudoImportacaoPercentual: 0,
     isMonophasic: false,
     saleFee: 0,
     ipiPercent: 0,
@@ -124,7 +123,6 @@ describe("estimarIcmsEntradaPercent", () => {
       ufFornecedor: "SC",
       ufDestino: "SC",
       mercadoriaImportada: false,
-      conteudoImportacaoPercentual: 0,
       icmsRates: RATES,
     });
     assert.equal(percent, 17);
@@ -135,7 +133,6 @@ describe("estimarIcmsEntradaPercent", () => {
       ufFornecedor: "SP",
       ufDestino: "SC",
       mercadoriaImportada: false,
-      conteudoImportacaoPercentual: 0,
       icmsRates: RATES,
     });
     assert.equal(percent, 12);
@@ -146,7 +143,6 @@ describe("estimarIcmsEntradaPercent", () => {
       ufFornecedor: "",
       ufDestino: "SC",
       mercadoriaImportada: false,
-      conteudoImportacaoPercentual: 0,
       icmsRates: RATES,
     });
     assert.equal(percent, 0);

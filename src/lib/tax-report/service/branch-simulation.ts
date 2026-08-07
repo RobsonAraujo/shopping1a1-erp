@@ -69,7 +69,6 @@ export function estimarIcmsEntradaPercent(input: {
   ufFornecedor: string;
   ufDestino: string;
   mercadoriaImportada: boolean;
-  conteudoImportacaoPercentual: number;
   icmsRates: Map<string, IcmsRateRow>;
 }): number {
   const origem = normalizeUf(input.ufFornecedor);
@@ -85,7 +84,6 @@ export function estimarIcmsEntradaPercent(input: {
       ufOrigem: origem,
       ufDestino: destino,
       mercadoriaImportada: input.mercadoriaImportada,
-      conteudoImportacaoPercentual: input.conteudoImportacaoPercentual,
     }) * 100,
   );
 }
@@ -134,7 +132,6 @@ export function buildEntradaInfo(
       ufFornecedor,
       ufDestino: params.config.originUf,
       mercadoriaImportada: transacao.mercadoriaImportada,
-      conteudoImportacaoPercentual: transacao.conteudoImportacaoPercentual,
       icmsRates: params.icmsRates,
     }),
   };

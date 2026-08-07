@@ -70,16 +70,10 @@ export function calcularIcmsCreditoCompra(
     stRecuperavelUnitario * transacao.quantidade,
   );
 
-  const recuperavelAplicavel = isIcmsStRecuperavelAplicavel({
-    hasIcmsSt: transacao.hasIcmsSt,
-    isOperacaoInterna,
-    considerarStRecuperavel,
-  });
-
   return {
     baseUnitaria: roundMoney(unitCostNf * transacao.quantidade),
     aliquotaPercent:
-      transacao.hasIcmsSt && !recuperavelAplicavel ? 0 : transacao.purchaseIcmsPercent,
+      transacao.hasIcmsSt && isOperacaoInterna ? 0 : transacao.purchaseIcmsPercent,
     creditoTotal: roundMoney(
       creditoUnitario * transacao.quantidade + stRecuperavelTotal,
     ),

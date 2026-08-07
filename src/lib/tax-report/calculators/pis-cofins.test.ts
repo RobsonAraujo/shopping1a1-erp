@@ -34,7 +34,6 @@ function tx(overrides: Partial<TransacaoVenda> = {}): TransacaoVenda {
     saleIcmsPercent: 18,
     extraCostsUnitario: 0,
     mercadoriaImportada: false,
-    conteudoImportacaoPercentual: 0,
     isMonophasic: false,
     saleFee: 0,
     ipiPercent: 0,
@@ -84,7 +83,7 @@ describe("calcularPisCofins", () => {
     assert.ok(result.creditoTotal > result.baseCredito * 0.09);
   });
 
-  it("ST + venda interna: base de crédito usa custo cheio com ST", () => {
+  it("ST + venda interna: base de crédito usa Custo Unitário (não o custo com ST)", () => {
     const result = calcularPisCofins({
       transacao: tx({
         unitCostNf: 100,
@@ -96,10 +95,10 @@ describe("calcularPisCofins", () => {
       icmsDestacado: 0,
       isOperacaoInterna: true,
     });
-    assert.equal(result.baseCredito, 112);
+    assert.equal(result.baseCredito, 100);
   });
 
-  it("ST + venda interestadual + ressarcimento habilitado: base de crédito usa custo NF cheio", () => {
+  it("ST + venda interestadual: base de crédito usa Custo Unitário", () => {
     const result = calcularPisCofins({
       transacao: tx({
         unitCostNf: 100,
@@ -114,7 +113,7 @@ describe("calcularPisCofins", () => {
     assert.equal(result.baseCredito, 100);
   });
 
-  it("ST + venda interestadual + ressarcimento desligado: mantém custo cheio com ST", () => {
+  it("ST + venda interestadual + ressarcimento desligado: base de crédito ainda usa Custo Unitário", () => {
     const result = calcularPisCofins({
       transacao: tx({
         unitCostNf: 100,
@@ -126,6 +125,6 @@ describe("calcularPisCofins", () => {
       icmsDestacado: 0,
       isOperacaoInterna: false,
     });
-    assert.equal(result.baseCredito, 112);
+    assert.equal(result.baseCredito, 100);
   });
 });

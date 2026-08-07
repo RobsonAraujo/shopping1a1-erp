@@ -26,7 +26,6 @@ const canonicalCusto: CustoProduto = {
   isMonophasic: false,
   ipiPercent: 0,
   isImported: false,
-  importContentPercent: 0,
 };
 
 function apuracaoStub(): ApuracaoConsolidada {
@@ -75,7 +74,6 @@ function aliasLineWithoutCost(): DetalhamentoTributario {
       saleIcmsPercent: 18,
       extraCostsUnitario: 0,
       mercadoriaImportada: false,
-      conteudoImportacaoPercentual: 0,
       isMonophasic: false,
       saleFee: 0,
       ipiPercent: 0,

@@ -1,6 +1,5 @@
 import { roundMoney } from "@/lib/financial-margin";
 import {
-  IMPORT_CONTENT_THRESHOLD_PERCENT,
   SUDESTE_SUL_INTERESTADUAL_UFS,
   normalizeUf,
 } from "@/lib/tax-report/config";
@@ -14,7 +13,6 @@ export function obterAliquotaInterestadual(input: {
   ufDestino: string;
   ufOrigem: string;
   mercadoriaImportada: boolean;
-  conteudoImportacaoPercentual: number;
 }): number {
   const destino = normalizeUf(input.ufDestino);
   const origem = normalizeUf(input.ufOrigem);
@@ -24,10 +22,7 @@ export function obterAliquotaInterestadual(input: {
     return 0;
   }
 
-  if (
-    input.mercadoriaImportada &&
-    input.conteudoImportacaoPercentual > IMPORT_CONTENT_THRESHOLD_PERCENT
-  ) {
+  if (input.mercadoriaImportada) {
     return 0.04;
   }
 
@@ -111,7 +106,6 @@ export function calcularIcmsDifal(input: IcmsDifalInput): IcmsDifalBreakdown | n
     ufDestino,
     ufOrigem: origem,
     mercadoriaImportada: transacao.mercadoriaImportada,
-    conteudoImportacaoPercentual: transacao.conteudoImportacaoPercentual,
   });
 
   const contribuinte = isContribuinteIcms(transacao);

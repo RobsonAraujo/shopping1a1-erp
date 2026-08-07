@@ -48,7 +48,6 @@ export function enrichTransacao(
     extraCostsUnitario: custo.extraCosts,
     isMonophasic: custo.isMonophasic,
     mercadoriaImportada: custo.isImported,
-    conteudoImportacaoPercentual: custo.importContentPercent,
     ipiPercent: custo.ipiPercent,
     saleFee: transacao.saleFee ?? 0,
   };

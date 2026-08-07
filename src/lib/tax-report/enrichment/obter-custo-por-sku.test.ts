@@ -16,7 +16,6 @@ function sampleView(overrides: Partial<ProductView> = {}): ProductView {
     isMonophasic: false,
     saleIcmsPercent: 18,
     isImported: true,
-    importContentPercent: 30,
     pricingCost: 95,
     taxPercent: 9.25,
     taxPercentGeneratedAt: "2026-01-01T00:00:00.000Z",
@@ -41,7 +40,6 @@ describe("custoProdutoFromView", () => {
     assert.equal(custo.extraCosts, 2);
     assert.equal(custo.isMonophasic, false);
     assert.equal(custo.isImported, true);
-    assert.equal(custo.importContentPercent, 30);
   });
 
   it("handles null pricing cost", () => {

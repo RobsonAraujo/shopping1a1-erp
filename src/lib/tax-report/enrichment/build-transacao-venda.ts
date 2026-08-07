@@ -98,7 +98,6 @@ export function buildTransacoesFromOrder(input: {
       saleIcmsPercent: custo?.saleIcmsPercent ?? 0,
       extraCostsUnitario: custo?.extraCosts ?? 0,
       mercadoriaImportada: custo?.isImported ?? false,
-      conteudoImportacaoPercentual: custo?.importContentPercent ?? 0,
       isMonophasic: custo?.isMonophasic ?? false,
       saleFee:
         typeof line.sale_fee === "number" && Number.isFinite(line.sale_fee)

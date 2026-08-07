@@ -33,7 +33,6 @@ function baseTransacao(
     saleIcmsPercent: 18,
     extraCostsUnitario: 0,
     mercadoriaImportada: false,
-    conteudoImportacaoPercentual: 0,
     isMonophasic: false,
     saleFee: 0,
     ipiPercent: 0,
@@ -54,7 +53,6 @@ describe("obterAliquotaInterestadual", () => {
         ufDestino: "RJ",
         ufOrigem: "SP",
         mercadoriaImportada: false,
-        conteudoImportacaoPercentual: 0,
       }),
       0.12,
     );
@@ -66,19 +64,17 @@ describe("obterAliquotaInterestadual", () => {
         ufDestino: "PA",
         ufOrigem: "SP",
         mercadoriaImportada: false,
-        conteudoImportacaoPercentual: 0,
       }),
       0.07,
     );
   });
 
-  it("imported >40% = 4% any destination", () => {
+  it("imported = 4% any destination", () => {
     assert.equal(
       obterAliquotaInterestadual({
         ufDestino: "RJ",
         ufOrigem: "SP",
         mercadoriaImportada: true,
-        conteudoImportacaoPercentual: 45,
       }),
       0.04,
     );
@@ -193,12 +189,11 @@ describe("calcularIcmsDifal", () => {
     assert.equal(result.aliquotaSaidaEfetiva, 0.18);
   });
 
-  it("imported 45% non-contributor: interstate 4%, DIFAL = internal - 4%", () => {
+  it("imported non-contributor: interstate 4%, DIFAL = internal - 4%", () => {
     const result = calcularIcmsDifal({
       transacao: baseTransacao({
         ufDestino: "RJ",
         mercadoriaImportada: true,
-        conteudoImportacaoPercentual: 45,
       }),
       ufOrigem: "SP",
       rates,

@@ -25,7 +25,6 @@ function tx(overrides: Partial<TransacaoVenda> = {}): TransacaoVenda {
     saleIcmsPercent: 18,
     extraCostsUnitario: 0,
     mercadoriaImportada: false,
-    conteudoImportacaoPercentual: 0,
     isMonophasic: false,
     saleFee: 0,
     ipiPercent: 0,
@@ -135,6 +134,24 @@ describe("calcularIcmsCreditoCompra", () => {
     assert.equal(result.aliquotaPercent, 18);
     assert.equal(result.stRecuperavelTotal, 36);
     assert.equal(result.creditoTotal, 72);
+  });
+
+  it("interestadual + ST + recuperável desligado: crédito de entrada normal continua (só o ressarcimento é gated pelo switch)", () => {
+    const result = calcularIcmsCreditoCompra(
+      tx({
+        hasIcmsSt: true,
+        purchaseIcmsPercent: 18,
+        unitCostNf: 100,
+        purchaseCostWithSt: 118,
+        quantidade: 2,
+      }),
+      false,
+      false,
+    );
+    // crédito de entrada normal: 100 * 18% * 2 = 36; sem ressarcimento (switch desligado)
+    assert.equal(result.aliquotaPercent, 18);
+    assert.equal(result.stRecuperavelTotal, 0);
+    assert.equal(result.creditoTotal, 36);
   });
 
   it("interna + ST (mesmo com purchaseIcmsPercent > 0): crédito de entrada continua zerado", () => {

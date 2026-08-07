@@ -11,8 +11,6 @@ export const SUDESTE_SUL_INTERESTADUAL_UFS = new Set([
   "RS",
 ]);
 
-export const IMPORT_CONTENT_THRESHOLD_PERCENT = 40;
-
 export function getTaxReportBillingConcurrency(): number {
   const raw = Number(process.env.TAX_REPORT_BILLING_CONCURRENCY ?? "8");
   if (!Number.isFinite(raw) || raw < 1) return 8;

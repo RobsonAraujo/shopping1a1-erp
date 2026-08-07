@@ -124,7 +124,7 @@ describe("purchaseIcmsCreditUnit", () => {
     assert.equal(credit, 0);
   });
 
-  it("ST + interestadual + recuperável desligado: crédito zerado", () => {
+  it("ST + interestadual + recuperável desligado: crédito de entrada normal (não depende do switch)", () => {
     const credit = purchaseIcmsCreditUnit({
       unitCostNf: 100,
       purchaseIcmsPercent: 18,
@@ -132,7 +132,7 @@ describe("purchaseIcmsCreditUnit", () => {
       isOperacaoInterna: false,
       considerarStRecuperavel: false,
     });
-    assert.equal(credit, 0);
+    assert.equal(credit, 18);
   });
 
   it("ST + interestadual + recuperável ligado: crédito normal (por simetria)", () => {
@@ -148,51 +148,18 @@ describe("purchaseIcmsCreditUnit", () => {
 });
 
 describe("purchasePisCofinsCreditBaseUnit", () => {
-  it("ST + venda interna: usa custo cheio com ST", () => {
-    const base = purchasePisCofinsCreditBaseUnit({
-      unitCostNf: 100,
-      purchaseIcmsPercent: 18,
-      hasIcmsSt: true,
-      purchaseCostWithSt: 112,
-      isOperacaoInterna: true,
-      considerarStRecuperavel: true,
-    });
-    assert.equal(base, 112);
-  });
-
-  it("ST + interestadual + recuperável desligado: usa custo cheio com ST", () => {
-    const base = purchasePisCofinsCreditBaseUnit({
-      unitCostNf: 100,
-      purchaseIcmsPercent: 18,
-      hasIcmsSt: true,
-      purchaseCostWithSt: 112,
-      isOperacaoInterna: false,
-      considerarStRecuperavel: false,
-    });
-    assert.equal(base, 112);
-  });
-
-  it("ST + interestadual + recuperável ligado: custo NF cheio, sem subtrair ICMS", () => {
-    const base = purchasePisCofinsCreditBaseUnit({
-      unitCostNf: 100,
-      purchaseIcmsPercent: 18,
-      hasIcmsSt: true,
-      purchaseCostWithSt: 112,
-      isOperacaoInterna: false,
-      considerarStRecuperavel: true,
-    });
+  it("ST + venda interna: usa Custo Unitário (não o custo com ST)", () => {
+    const base = purchasePisCofinsCreditBaseUnit({ unitCostNf: 100 });
     assert.equal(base, 100);
   });
 
-  it("sem ST: custo NF cheio, sem subtrair ICMS, independente de interna/interestadual", () => {
-    const base = purchasePisCofinsCreditBaseUnit({
-      unitCostNf: 100,
-      purchaseIcmsPercent: 18,
-      hasIcmsSt: false,
-      purchaseCostWithSt: null,
-      isOperacaoInterna: false,
-      considerarStRecuperavel: true,
-    });
+  it("ST + interestadual: usa Custo Unitário", () => {
+    const base = purchasePisCofinsCreditBaseUnit({ unitCostNf: 100 });
+    assert.equal(base, 100);
+  });
+
+  it("sem ST: usa Custo Unitário", () => {
+    const base = purchasePisCofinsCreditBaseUnit({ unitCostNf: 100 });
     assert.equal(base, 100);
   });
 });
