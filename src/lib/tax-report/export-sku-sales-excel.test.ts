@@ -32,6 +32,7 @@ function baseTransacao(
     mercadoriaImportada: false,
     isMonophasic: false,
     saleFee: 0,
+    freightCost: 0,
     ipiPercent: 0,
     ...overrides,
   };

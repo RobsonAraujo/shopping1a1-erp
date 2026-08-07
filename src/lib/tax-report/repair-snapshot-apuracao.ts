@@ -50,6 +50,7 @@ export function enrichTransacao(
     mercadoriaImportada: custo.isImported,
     ipiPercent: custo.ipiPercent,
     saleFee: transacao.saleFee ?? 0,
+    freightCost: transacao.freightCost ?? 0,
   };
 }
 
@@ -141,6 +142,7 @@ function needsApuracaoRepair(
       d.icmsCreditoCompra == null ||
       d.icmsCreditoCompra.stRecuperavelTotal === undefined ||
       d.pisCofins?.baseCredito === undefined ||
+      d.creditoOutrasDespesas?.frete === undefined ||
       (d.transacao as TransacaoVenda & { saleIcmsPercent?: number })
         .saleIcmsPercent === undefined ||
       (d.transacao as TransacaoVenda & { unitCostNf?: number | null })

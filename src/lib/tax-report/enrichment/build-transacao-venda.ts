@@ -12,6 +12,7 @@ import {
   skuFromOrderLineWithFallback,
 } from "@/lib/tax-report/ml/sku-from-order-line";
 import { normalizeProductSku } from "@/lib/product-pricing";
+import { roundMoney } from "@/lib/financial-margin";
 import type { CustoProduto } from "@/lib/tax-report/enrichment/custo-produto";
 import type {
   ManualFiscalOverride,
@@ -26,10 +27,18 @@ export function buildTransacoesFromOrder(input: {
   custoBySku: Map<string, CustoProduto>;
   contributorByCnpj: Map<string, boolean>;
   overrides?: Record<string, ManualFiscalOverride>;
+  /** Custo total de frete pago pela empresa por pedido (chave = orderId) — rateado por linha proporcionalmente à receita. */
+  freightCostByOrderId?: Map<string, number>;
 }): TransacaoVenda[] {
   const orderId = String(input.order.id ?? "");
   const orderDate =
     input.order.date_closed ?? input.order.date_created ?? new Date().toISOString();
+
+  const freightCostPedido = input.freightCostByOrderId?.get(orderId) ?? 0;
+  const receitaTotalPedido = (input.order.order_items ?? []).reduce(
+    (sum, line) => sum + revenueFromOrderItemLine(line),
+    0,
+  );
 
   const billingAvailable = input.billing != null;
   const docType = parseBuyerDocumentType(
@@ -76,6 +85,12 @@ export function buildTransacoesFromOrder(input: {
 
     const dadosFiscaisIndisponiveis = !billingAvailable && !override;
 
+    const receitaLinha = revenueFromOrderItemLine(line);
+    const freightCost =
+      freightCostPedido > 0 && receitaTotalPedido > 0
+        ? roundMoney((receitaLinha / receitaTotalPedido) * freightCostPedido)
+        : 0;
+
     transacoes.push({
       transactionKey,
       orderId,
@@ -83,7 +98,7 @@ export function buildTransacoesFromOrder(input: {
       sku,
       itemId,
       quantidade,
-      receitaBruta: revenueFromOrderItemLine(line),
+      receitaBruta: receitaLinha,
       ufDestino: resolveUfDestino(override?.ufDestino ?? ufFromBilling),
       tipoDocumento: override?.tipoDocumento ?? docType,
       documento,
@@ -103,6 +118,7 @@ export function buildTransacoesFromOrder(input: {
         typeof line.sale_fee === "number" && Number.isFinite(line.sale_fee)
           ? line.sale_fee
           : 0,
+      freightCost,
       ipiPercent: custo?.ipiPercent ?? 0,
     });
   }

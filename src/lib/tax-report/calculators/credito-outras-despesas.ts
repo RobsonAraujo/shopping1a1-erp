@@ -5,6 +5,8 @@ import type { CreditoOutrasDespesasBreakdown } from "@/lib/tax-report/types";
 export const MELI_FEE_CREDIT_RATE = 0.0925;
 /** Alíquota de crédito PIS/COFINS não-cumulativo sobre gasto em ADS (Product Ads). */
 export const ADS_CREDIT_RATE = 0.0925;
+/** Alíquota de crédito PIS/COFINS não-cumulativo sobre frete pago pela empresa na venda. */
+export const FREIGHT_CREDIT_RATE = 0.0925;
 
 export function calcularCreditoMeliFee(saleFee: number): {
   base: number;
@@ -57,18 +59,35 @@ export function calcularCreditoAds(input: {
   };
 }
 
+/** Crédito sobre frete pago pela empresa na venda — já rateado por linha na origem (build-transacao-venda.ts). */
+export function calcularCreditoFrete(freightCost: number): {
+  base: number;
+  aliquotaPercent: number;
+  credito: number;
+} {
+  const base = Number.isFinite(freightCost) && freightCost > 0 ? freightCost : 0;
+  return {
+    base: roundMoney(base),
+    aliquotaPercent: FREIGHT_CREDIT_RATE * 100,
+    credito: roundMoney(base * FREIGHT_CREDIT_RATE),
+  };
+}
+
 export function calcularCreditoOutrasDespesas(input: {
   saleFee: number;
   receitaBrutaVenda: number;
   receitaTotalItemMes: number;
   gastoAdsTotalItemMes: number;
+  freightCost: number;
 }): CreditoOutrasDespesasBreakdown {
   const meliFee = calcularCreditoMeliFee(input.saleFee);
   const ads = calcularCreditoAds(input);
+  const frete = calcularCreditoFrete(input.freightCost);
   return {
     meliFee,
     ads,
-    creditoTotal: roundMoney(meliFee.credito + ads.credito),
+    frete,
+    creditoTotal: roundMoney(meliFee.credito + ads.credito + frete.credito),
   };
 }
 
@@ -86,8 +105,13 @@ export function buildCreditoOutrasDespesasMemoria(
       `Gasto ADS no mês (anúncio): R$ ${result.ads.gastoAdsMesItem.toFixed(2)} / Receita do anúncio no mês: R$ ${result.ads.receitaMesItem.toFixed(2)} → rateio desta venda: R$ ${result.ads.base.toFixed(2)} × ${result.ads.aliquotaPercent.toFixed(2)}% = R$ ${result.ads.credito.toFixed(2)}`,
     );
   }
+  if (result.frete.base > 0) {
+    lines.push(
+      `Frete pago na venda: R$ ${result.frete.base.toFixed(2)} × ${result.frete.aliquotaPercent.toFixed(2)}% = R$ ${result.frete.credito.toFixed(2)}`,
+    );
+  }
   lines.push(
-    `(=) Crédito outras despesas (Meli + ADS): R$ ${result.creditoTotal.toFixed(2)}`,
+    `(=) Crédito outras despesas (Meli + ADS + Frete): R$ ${result.creditoTotal.toFixed(2)}`,
   );
   return lines;
 }

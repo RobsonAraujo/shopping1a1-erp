@@ -88,6 +88,7 @@ export function calcularDetalhamentoTransacao(input: {
     receitaTotalItemMes: input.receitaTotalByItem?.get(transacao.itemId) ?? 0,
     gastoAdsTotalItemMes:
       input.adsMetricsByItem?.get(transacao.itemId)?.cost ?? 0,
+    freightCost: transacao.freightCost,
   });
   const cmvTotal =
     (transacao.custoAquisicaoUnitario ?? 0) * transacao.quantidade +

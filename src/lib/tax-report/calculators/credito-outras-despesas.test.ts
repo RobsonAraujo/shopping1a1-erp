@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   ADS_CREDIT_RATE,
+  FREIGHT_CREDIT_RATE,
   MELI_FEE_CREDIT_RATE,
   calcularCreditoAds,
+  calcularCreditoFrete,
   calcularCreditoMeliFee,
   calcularCreditoOutrasDespesas,
 } from "@/lib/tax-report/calculators/credito-outras-despesas";
@@ -65,27 +67,52 @@ describe("calcularCreditoAds", () => {
   });
 });
 
+describe("calcularCreditoFrete", () => {
+  it("credita 9,25% sobre o frete pago na venda", () => {
+    const result = calcularCreditoFrete(20);
+    assert.equal(result.base, 20);
+    assert.equal(result.aliquotaPercent, FREIGHT_CREDIT_RATE * 100);
+    assert.equal(result.credito, 1.85);
+  });
+
+  it("retorna zero quando não há frete", () => {
+    const result = calcularCreditoFrete(0);
+    assert.equal(result.base, 0);
+    assert.equal(result.credito, 0);
+  });
+
+  it("ignora valores inválidos", () => {
+    const result = calcularCreditoFrete(-5);
+    assert.equal(result.base, 0);
+    assert.equal(result.credito, 0);
+  });
+});
+
 describe("calcularCreditoOutrasDespesas", () => {
-  it("soma o crédito de tarifa Meli e de ads", () => {
+  it("soma o crédito de tarifa Meli, ads e frete", () => {
     const result = calcularCreditoOutrasDespesas({
       saleFee: 20,
       receitaBrutaVenda: 100,
       receitaTotalItemMes: 1000,
       gastoAdsTotalItemMes: 200,
+      freightCost: 20,
     });
     assert.equal(result.meliFee.credito, 1.85);
     assert.equal(result.ads.credito, 1.85);
-    assert.equal(result.creditoTotal, 3.7);
+    assert.equal(result.frete.credito, 1.85);
+    assert.equal(result.creditoTotal, 5.55);
   });
 
-  it("funciona sem ads ativo (apenas tarifa Meli)", () => {
+  it("funciona sem ads nem frete (apenas tarifa Meli)", () => {
     const result = calcularCreditoOutrasDespesas({
       saleFee: 20,
       receitaBrutaVenda: 100,
       receitaTotalItemMes: 0,
       gastoAdsTotalItemMes: 0,
+      freightCost: 0,
     });
     assert.equal(result.ads.credito, 0);
+    assert.equal(result.frete.credito, 0);
     assert.equal(result.creditoTotal, 1.85);
   });
 });

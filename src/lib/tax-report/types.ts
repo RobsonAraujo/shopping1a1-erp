@@ -34,6 +34,8 @@ export type TransacaoVenda = {
   isMonophasic: boolean;
   /** Tarifa de venda cobrada pelo Mercado Livre (sale_fee do item na venda) — base para crédito de 9,25%. */
   saleFee: number;
+  /** Frete pago pela empresa nesta venda, rateado do custo total do pedido por receita da linha — base para crédito de 9,25%. */
+  freightCost: number;
   /** % de IPI cadastrado no produto — apenas exibição, não entra no cálculo tributário. */
   ipiPercent: number;
 };
@@ -102,6 +104,11 @@ export type CreditoOutrasDespesasBreakdown = {
     credito: number;
     gastoAdsMesItem: number;
     receitaMesItem: number;
+  };
+  frete: {
+    base: number;
+    aliquotaPercent: number;
+    credito: number;
   };
   creditoTotal: number;
 };

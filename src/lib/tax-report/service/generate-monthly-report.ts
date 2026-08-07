@@ -20,6 +20,7 @@ import {
   mapWithConcurrency,
   parseTaxpayerTypeFromMl,
 } from "@/lib/tax-report/ml/billing-info-client";
+import { fetchShipmentCost } from "@/lib/tax-report/ml/shipment-cost-client";
 import {
   itemIdFromOrderLine,
   skuFromOrderLineWithFallback,
@@ -95,6 +96,7 @@ export async function generateMonthlyTaxReport(input: {
 
   const concurrency = getTaxReportBillingConcurrency();
   let billingDone = 0;
+  const freightCostByOrderId = new Map<string, number>();
   const billingResults = await mapWithConcurrency(
     orders,
     concurrency,
@@ -102,6 +104,22 @@ export async function generateMonthlyTaxReport(input: {
       const billing = order.id
         ? await fetchOrderBillingInfo(input.accessToken, order.id)
         : null;
+
+      const shippingId = order.shipping?.id;
+      if (order.id != null && shippingId != null) {
+        try {
+          const freight = await fetchShipmentCost(input.accessToken, shippingId);
+          if (freight != null) {
+            freightCostByOrderId.set(String(order.id), freight);
+          }
+        } catch (err) {
+          console.error(
+            `[tax-report] Falha ao buscar custo de frete do pedido ${order.id} (shipping ${shippingId}) — crédito de frete será 0.`,
+            err,
+          );
+        }
+      }
+
       billingDone += 1;
       if (billingDone % 10 === 0 || billingDone === orders.length) {
         input.onProgress?.({
@@ -181,6 +199,7 @@ export async function generateMonthlyTaxReport(input: {
         custoBySku,
         contributorByCnpj,
         overrides,
+        freightCostByOrderId,
       }),
     );
   }

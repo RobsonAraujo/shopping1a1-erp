@@ -117,6 +117,7 @@ export type OrderSearchOrder = {
   date_closed?: string;
   date_created?: string;
   order_items?: OrderSearchOrderItem[];
+  shipping?: { id?: number };
 };
 
 export type OrderSearchResponse = {
