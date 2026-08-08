@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { agregarPorSku } from "@/lib/tax-report/aggregation/agregador-por-sku";
+import {
+  agregarPorSku,
+  consolidarRelatorio,
+} from "@/lib/tax-report/aggregation/agregador-por-sku";
 import type { DetalhamentoTributario } from "@/lib/tax-report/types";
 
 const aliasMap = new Map<string, string>([
@@ -85,5 +88,56 @@ describe("agregarPorSku with aliases", () => {
     assert.equal(rows[0]?.quantidadeVendas, 2);
     assert.equal(rows[0]?.transacoes[0]?.transacao.sku, "SKU-LEGADO");
     assert.equal(rows[0]?.transacoes[1]?.transacao.sku, "SKU-ATUAL");
+  });
+});
+
+function detalheComCustosFixos(
+  sku: string,
+  receita: number,
+  custosFixosCredito: number,
+): DetalhamentoTributario {
+  const base = detalhe(sku, receita);
+  return {
+    ...base,
+    creditoOutrasDespesas: {
+      meliFee: { base: 0, aliquotaPercent: 9.25, credito: 0 },
+      ads: { base: 0, aliquotaPercent: 9.25, credito: 0, gastoAdsMesItem: 0, receitaMesItem: 0 },
+      frete: { base: 0, aliquotaPercent: 9.25, credito: 0 },
+      custosFixos: {
+        base: custosFixosCredito / 0.0925,
+        aliquotaPercent: 9.25,
+        credito: custosFixosCredito,
+        custosFixosMesTotal: 800,
+        receitaMesTotal: 1000,
+      },
+      creditoTotal: custosFixosCredito,
+    },
+  };
+}
+
+describe("consolidarRelatorio — crédito de custos fixos", () => {
+  it("derives creditoCustosFixosTotal from per-transaction custosFixos credit, subtracted once (not double-counted)", () => {
+    const semCredito = consolidarRelatorio([detalhe("SKU-A", 100)]);
+    const comCredito = consolidarRelatorio(
+      [detalheComCustosFixos("SKU-A", 100, 74)],
+      {
+        creditoCustosFixosBaseRegistrada: 800,
+        creditoCustosFixosBaseCreditavel: 800,
+      },
+    );
+
+    assert.equal(comCredito.creditoCustosFixosTotal, 74);
+    assert.equal(comCredito.creditoCustosFixosBaseRegistrada, 800);
+    assert.equal(comCredito.creditoCustosFixosBaseCreditavel, 800);
+    // creditoOutrasDespesasTotal já inclui os 74 — impostosOperacionais só subtrai uma vez.
+    assert.equal(
+      comCredito.margemOperacional,
+      Math.round((semCredito.margemOperacional + 74) * 100) / 100,
+    );
+  });
+
+  it("defaults to zero when no fixed cost credit is provided", () => {
+    const result = consolidarRelatorio([detalhe("SKU-A", 100)]);
+    assert.equal(result.creditoCustosFixosTotal, 0);
   });
 });

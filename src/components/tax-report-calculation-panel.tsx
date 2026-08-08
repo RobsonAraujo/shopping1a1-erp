@@ -482,7 +482,7 @@ export function TaxReportCalculationPanel({
                 <MemoriaRow
                   label={
                     outrasDespesas && outrasDespesas.creditoTotal > 0
-                      ? "PIS/COFINS líquido (antes dos créditos Meli/ADS/Frete)"
+                      ? "PIS/COFINS líquido (antes dos créditos Meli/ADS/Frete/Custos fixos)"
                       : "PIS/COFINS líquido"
                   }
                   value={
@@ -498,14 +498,15 @@ export function TaxReportCalculationPanel({
                   <>
                     <MemoriaDivider />
                     <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
-                      (−) Créditos sobre tarifa Meli, ADS e Frete
+                      (−) Créditos sobre tarifa Meli, ADS, Frete e Custos fixos
                     </p>
                     {showDetails ? (
                       <p className="mb-1 text-[11px] text-[var(--muted-foreground)]">
-                        Também dá direito a crédito de PIS/COFINS o que você
-                        paga de tarifa ao Mercado Livre, o que gasta em
-                        anúncios patrocinados (ADS) e o frete que a empresa
-                        paga na venda.
+                        Também dá direito a crédito de PIS/COFINS (não abate
+                        ICMS) o que você paga de tarifa ao Mercado Livre, o
+                        que gasta em anúncios patrocinados (ADS), o frete que
+                        a empresa paga na venda, e a fatia desta venda nos
+                        custos fixos cadastrados (aluguel etc.).
                       </p>
                     ) : null}
                     {outrasDespesas.meliFee.base > 0 ? (
@@ -537,6 +538,22 @@ export function TaxReportCalculationPanel({
                         conta={`Frete pago nesta venda (${money(outrasDespesas.frete.base)}) × ${pct(outrasDespesas.frete.aliquotaPercent)} = ${money(outrasDespesas.frete.credito)}`}
                       />
                     ) : null}
+                    {(outrasDespesas.custosFixos?.receitaMesTotal ?? 0) > 0 &&
+                    (outrasDespesas.custosFixos?.custosFixosMesTotal ?? 0) > 0 ? (
+                      <>
+                        <MemoriaRow
+                          label="Parte desta venda nos custos fixos do mês"
+                          value={money(outrasDespesas.custosFixos.base)}
+                          conta={`Custos fixos cadastrados no mês (${money(outrasDespesas.custosFixos.custosFixosMesTotal)}) ÷ Receita total do mês (${money(outrasDespesas.custosFixos.receitaMesTotal)}) × Valor desta venda (${money(t.receitaBruta)}) = ${money(outrasDespesas.custosFixos.base)}`}
+                          muted
+                        />
+                        <MemoriaRow
+                          label="Crédito sobre custos fixos (aluguel etc.)"
+                          value={money(outrasDespesas.custosFixos.credito)}
+                          conta={`${money(outrasDespesas.custosFixos.base)} × ${pct(outrasDespesas.custosFixos.aliquotaPercent)} = ${money(outrasDespesas.custosFixos.credito)}`}
+                        />
+                      </>
+                    ) : null}
                     <MemoriaDivider />
                     <MemoriaRow
                       label="PIS/COFINS líquido final"
@@ -545,7 +562,7 @@ export function TaxReportCalculationPanel({
                           ? `${formatFinancialPercent(pisCofinsLiquidoFinalPercent)} (${money(pisCofinsLiquidoFinal)})`
                           : money(pisCofinsLiquidoFinal)
                       }
-                      conta={`PIS/COFINS líquido (${money(pis.liquido)}) − Créditos Meli/ADS/Frete (${money(outrasDespesas.creditoTotal)}) = ${money(pisCofinsLiquidoFinal)}`}
+                      conta={`PIS/COFINS líquido (${money(pis.liquido)}) − Créditos Meli/ADS/Frete/Custos fixos (${money(outrasDespesas.creditoTotal)}) = ${money(pisCofinsLiquidoFinal)}`}
                       emphasis
                     />
                   </>
@@ -578,7 +595,7 @@ export function TaxReportCalculationPanel({
                 <span>
                   PIS/COFINS líquido
                   {outrasDespesas && outrasDespesas.creditoTotal > 0
-                    ? " (já com créditos Meli/ADS/Frete)"
+                    ? " (já com créditos Meli/ADS/Frete/Custos fixos)"
                     : ""}
                 </span>
                 <span className="tabular-nums">

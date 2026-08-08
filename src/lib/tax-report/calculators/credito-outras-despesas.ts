@@ -1,4 +1,5 @@
 import { roundMoney } from "@/lib/financial-margin";
+import { FIXED_COST_CREDIT_RATE } from "@/lib/tax-report/fixed-cost-credit";
 import type { CreditoOutrasDespesasBreakdown } from "@/lib/tax-report/types";
 
 /** Alíquota de crédito PIS/COFINS não-cumulativo sobre tarifa de venda do Meli. */
@@ -73,21 +74,65 @@ export function calcularCreditoFrete(freightCost: number): {
   };
 }
 
+/**
+ * Crédito sobre custos fixos cadastrados (ex.: aluguel): rateia o total do
+ * mês (já reduzido pelos dias corridos se o mês estiver em andamento — ver
+ * `resolveFixedCostCreditForMonth`) proporcionalmente à receita desta venda
+ * dentro da receita total do mês inteiro (não por anúncio, diferente do ADS).
+ */
+export function calcularCreditoCustosFixosRateado(input: {
+  receitaBrutaVenda: number;
+  receitaTotalMes: number;
+  custosFixosBaseMes: number;
+}): {
+  base: number;
+  aliquotaPercent: number;
+  credito: number;
+  custosFixosMesTotal: number;
+  receitaMesTotal: number;
+} {
+  const { receitaBrutaVenda, receitaTotalMes, custosFixosBaseMes } = input;
+  if (!(receitaTotalMes > 0) || !(custosFixosBaseMes > 0)) {
+    return {
+      base: 0,
+      aliquotaPercent: FIXED_COST_CREDIT_RATE * 100,
+      credito: 0,
+      custosFixosMesTotal: custosFixosBaseMes > 0 ? roundMoney(custosFixosBaseMes) : 0,
+      receitaMesTotal: receitaTotalMes > 0 ? roundMoney(receitaTotalMes) : 0,
+    };
+  }
+  const proporcao = receitaBrutaVenda / receitaTotalMes;
+  const baseRateada = roundMoney(proporcao * custosFixosBaseMes);
+  return {
+    base: baseRateada,
+    aliquotaPercent: FIXED_COST_CREDIT_RATE * 100,
+    credito: roundMoney(baseRateada * FIXED_COST_CREDIT_RATE),
+    custosFixosMesTotal: roundMoney(custosFixosBaseMes),
+    receitaMesTotal: roundMoney(receitaTotalMes),
+  };
+}
+
 export function calcularCreditoOutrasDespesas(input: {
   saleFee: number;
   receitaBrutaVenda: number;
   receitaTotalItemMes: number;
   gastoAdsTotalItemMes: number;
   freightCost: number;
+  receitaTotalMes: number;
+  custosFixosBaseMes: number;
 }): CreditoOutrasDespesasBreakdown {
   const meliFee = calcularCreditoMeliFee(input.saleFee);
   const ads = calcularCreditoAds(input);
   const frete = calcularCreditoFrete(input.freightCost);
+  const custosFixos = calcularCreditoCustosFixosRateado(input);
   return {
     meliFee,
     ads,
     frete,
-    creditoTotal: roundMoney(meliFee.credito + ads.credito + frete.credito),
+    custosFixos,
+    creditoTotal: roundMoney(
+      meliFee.credito + ads.credito + frete.credito + custosFixos.credito,
+    ),
   };
 }
 
@@ -110,8 +155,13 @@ export function buildCreditoOutrasDespesasMemoria(
       `Frete pago na venda: R$ ${result.frete.base.toFixed(2)} × ${result.frete.aliquotaPercent.toFixed(2)}% = R$ ${result.frete.credito.toFixed(2)}`,
     );
   }
+  if (result.custosFixos.receitaMesTotal > 0 && result.custosFixos.custosFixosMesTotal > 0) {
+    lines.push(
+      `Custos fixos no mês (aluguel etc.): R$ ${result.custosFixos.custosFixosMesTotal.toFixed(2)} / Receita do mês: R$ ${result.custosFixos.receitaMesTotal.toFixed(2)} → rateio desta venda: R$ ${result.custosFixos.base.toFixed(2)} × ${result.custosFixos.aliquotaPercent.toFixed(2)}% = R$ ${result.custosFixos.credito.toFixed(2)}`,
+    );
+  }
   lines.push(
-    `(=) Crédito outras despesas (Meli + ADS + Frete): R$ ${result.creditoTotal.toFixed(2)}`,
+    `(=) Crédito outras despesas (Meli + ADS + Frete + Custos fixos): R$ ${result.creditoTotal.toFixed(2)}`,
   );
   return lines;
 }

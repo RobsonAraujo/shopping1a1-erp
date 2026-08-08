@@ -110,6 +110,15 @@ export type CreditoOutrasDespesasBreakdown = {
     aliquotaPercent: number;
     credito: number;
   };
+  custosFixos: {
+    base: number;
+    aliquotaPercent: number;
+    credito: number;
+    /** Total do mês já rateado por dias corridos (se mês em andamento) — informativo. */
+    custosFixosMesTotal: number;
+    /** Receita total do mês usada como denominador do rateio — informativo. */
+    receitaMesTotal: number;
+  };
   creditoTotal: number;
 };
 
@@ -153,6 +162,10 @@ export type SkuAggregation = {
   impostoOperacionalTotal?: number;
   impostoOperacionalMedioPorVenda?: number;
   impostoOperacionalMedioPercentual?: number;
+  /** Crédito PIS/COFINS 9,25% total (Meli + ADS + Frete + Custos fixos) atribuído a este SKU no mês. */
+  creditoOutrasDespesasTotal?: number;
+  /** Fatia do crédito de custos fixos (aluguel etc.) atribuída a este SKU no mês. */
+  creditoCustosFixosTotal?: number;
   /** SKUs antigos/alternativos unificados nesta linha. */
   skuAliases?: string[];
   transacoes: DetalhamentoTributario[];
@@ -194,8 +207,14 @@ export type RelatorioConsolidado = {
   icmsSemDifalTotal?: number;
   /** DIFAL (UF destino, EC 87/2015). Ausente em snapshots antigos. */
   difalTotal?: number;
-  /** Crédito 9,25% sobre tarifa Meli + ADS. Ausente em snapshots antigos. */
+  /** Crédito 9,25% sobre tarifa Meli + ADS + Frete. Ausente em snapshots antigos. */
   creditoOutrasDespesasTotal?: number;
+  /** Crédito 9,25% sobre custos fixos cadastrados (ex.: aluguel), nível consolidado (não por transação). Ausente em snapshots antigos. */
+  creditoCustosFixosTotal?: number;
+  /** Base cadastrada (soma dos itens, sem rateio) — pra transparência do rateio na UI. */
+  creditoCustosFixosBaseRegistrada?: number;
+  /** Base efetivamente creditável (já rateada por dias corridos, se mês em andamento). */
+  creditoCustosFixosBaseCreditavel?: number;
   icmsDifalTotal: number;
   cbsIbsInformativoTotal: number;
   margemOperacional: number;

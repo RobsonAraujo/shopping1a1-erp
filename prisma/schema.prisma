@@ -11,27 +11,27 @@ datasource db {
 
 /// Anúncio sincronizado do Mercado Livre (chave = ml_item_id, ex. MLB…).
 model Listing {
-  mlItemId       String    @id @map("ml_item_id")
-  titleSnapshot  String?   @map("title_snapshot")
-  skuSnapshot    String?   @map("sku_snapshot")
-  imageUrlSnapshot String? @map("image_url_snapshot")
-  catalogListing Boolean?  @map("catalog_listing")
-  lastSyncedAt   DateTime? @map("last_synced_at")
-  activeOnMl     Boolean   @default(true) @map("active_on_ml")
+  mlItemId           String                    @id @map("ml_item_id")
+  titleSnapshot      String?                   @map("title_snapshot")
+  skuSnapshot        String?                   @map("sku_snapshot")
+  imageUrlSnapshot   String?                   @map("image_url_snapshot")
+  catalogListing     Boolean?                  @map("catalog_listing")
+  lastSyncedAt       DateTime?                 @map("last_synced_at")
+  activeOnMl         Boolean                   @default(true) @map("active_on_ml")
   /// Status ML do anúncio (`active`, `paused`, …); preenchido no poll/sync.
-  mlStatus       String?   @map("ml_status")
+  mlStatus           String?                   @map("ml_status")
   /// Último status de competição confirmado pelo poll (mesmo sem novo snapshot).
-  catalogStatus       CatalogCompetitionStatus? @map("catalog_status")
-  catalogSellerPrice  Decimal?                  @map("catalog_seller_price") @db.Decimal(18, 2)
-  catalogPriceToWin   Decimal?                  @map("catalog_price_to_win") @db.Decimal(18, 2)
-  catalogPolledAt     DateTime?                 @map("catalog_polled_at")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  catalogStatus      CatalogCompetitionStatus? @map("catalog_status")
+  catalogSellerPrice Decimal?                  @map("catalog_seller_price") @db.Decimal(18, 2)
+  catalogPriceToWin  Decimal?                  @map("catalog_price_to_win") @db.Decimal(18, 2)
+  catalogPolledAt    DateTime?                 @map("catalog_polled_at")
+  createdAt          DateTime                  @default(now()) @map("created_at")
+  updatedAt          DateTime                  @updatedAt @map("updated_at")
 
-  warehouseStock WarehouseStock?
-  competitionSnapshots CatalogCompetitionSnapshot[]
+  warehouseStock                 WarehouseStock?
+  competitionSnapshots           CatalogCompetitionSnapshot[]
   stockAttentionAcknowledgements StockAttentionAcknowledgement[]
-  replenishmentCycles ReplenishmentCycle[]
+  replenishmentCycles            ReplenishmentCycle[]
 
   @@index([activeOnMl])
   @@map("listings")
@@ -128,14 +128,14 @@ model ReplenishmentCycle {
 }
 
 model CatalogCompetitionSnapshot {
-  id           String                   @id @default(cuid())
-  mlItemId     String                   @map("ml_item_id")
-  status       CatalogCompetitionStatus
-  sellerPrice  Decimal?                 @map("seller_price") @db.Decimal(18, 2)
-  priceToWin   Decimal?                 @map("price_to_win") @db.Decimal(18, 2)
-  snapshotAt   DateTime                 @default(now()) @map("snapshot_at")
-  source       CatalogCompetitionSource @default(manual_poll)
-  rawResponse  Json                     @map("raw_response")
+  id          String                   @id @default(cuid())
+  mlItemId    String                   @map("ml_item_id")
+  status      CatalogCompetitionStatus
+  sellerPrice Decimal?                 @map("seller_price") @db.Decimal(18, 2)
+  priceToWin  Decimal?                 @map("price_to_win") @db.Decimal(18, 2)
+  snapshotAt  DateTime                 @default(now()) @map("snapshot_at")
+  source      CatalogCompetitionSource @default(manual_poll)
+  rawResponse Json                     @map("raw_response")
 
   listing Listing @relation(fields: [mlItemId], references: [mlItemId], onDelete: Cascade)
 
@@ -161,14 +161,14 @@ model CatalogCompetitionPollRun {
 
 /// Estoque físico no galpão (1:1 com listing).
 model WarehouseStock {
-  mlItemId              String   @id @map("ml_item_id")
-  quantity              Int      @default(0)
+  mlItemId             String   @id @map("ml_item_id")
+  quantity             Int      @default(0)
   /// Prazo compra → chegada no galpão (dias inteiros; UI pode informar em semanas).
-  purchaseLeadTimeDays  Int?     @map("purchase_lead_time_days")
+  purchaseLeadTimeDays Int?     @map("purchase_lead_time_days")
   /// Override opcional dos dias de cobertura alvo na análise de compra.
-  targetCoverageDays    Int?     @map("target_coverage_days")
-  notes                 String?
-  updatedAt             DateTime @updatedAt @map("updated_at")
+  targetCoverageDays   Int?     @map("target_coverage_days")
+  notes                String?
+  updatedAt            DateTime @updatedAt @map("updated_at")
 
   listing Listing @relation(fields: [mlItemId], references: [mlItemId], onDelete: Cascade)
 
@@ -176,9 +176,9 @@ model WarehouseStock {
 }
 
 enum TaxRegime {
-  LUCRO_REAL     @map("lucro_real")
+  LUCRO_REAL      @map("lucro_real")
   LUCRO_PRESUMIDO @map("lucro_presumido")
-  SIMPLES        @map("simples")
+  SIMPLES         @map("simples")
 }
 
 /// Cadastro fiscal/comercial por SKU (chave = SKU do anúncio ML).
@@ -216,22 +216,22 @@ model ProductSkuAlias {
 
 /// PIS/COFINS global da empresa (uma linha).
 model CompanyTaxSettings {
-  id                            String   @id @default("default")
-  pisCofinsPercent              Decimal  @map("pis_cofins_percent") @db.Decimal(8, 4)
-  taxRegime                     TaxRegime @default(LUCRO_REAL) @map("tax_regime")
-  originUf                      String   @default("SP") @map("origin_uf")
-  pisRatePercent                Decimal  @default(1.65) @map("pis_rate_percent") @db.Decimal(8, 4)
-  cofinsRatePercent             Decimal  @default(7.6) @map("cofins_rate_percent") @db.Decimal(8, 4)
-  excludeIcmsFromPisCofinsBase  Boolean  @default(true) @map("exclude_icms_from_pis_cofins_base")
-  considerIcmsStRecuperavel    Boolean  @default(true) @map("consider_icms_st_recuperavel")
-  irpjAdditionalThreshold       Decimal  @default(20000) @map("irpj_additional_threshold") @db.Decimal(18, 2)
-  wholesaleLevel1ReductionPercent Decimal @default(10) @map("wholesale_level1_reduction_percent") @db.Decimal(8, 4)
-  wholesaleLevel2ReductionPercent Decimal @default(15) @map("wholesale_level2_reduction_percent") @db.Decimal(8, 4)
-  wholesaleLevel3ReductionPercent Decimal @default(20) @map("wholesale_level3_reduction_percent") @db.Decimal(8, 4)
-  wholesaleLevel1MinPurchaseUnit  Int      @default(1) @map("wholesale_level1_min_purchase_unit")
-  wholesaleLevel2MinPurchaseUnit  Int      @default(5) @map("wholesale_level2_min_purchase_unit")
-  wholesaleLevel3MinPurchaseUnit  Int      @default(10) @map("wholesale_level3_min_purchase_unit")
-  updatedAt                     DateTime @updatedAt @map("updated_at")
+  id                              String    @id @default("default")
+  pisCofinsPercent                Decimal   @map("pis_cofins_percent") @db.Decimal(8, 4)
+  taxRegime                       TaxRegime @default(LUCRO_REAL) @map("tax_regime")
+  originUf                        String    @default("SP") @map("origin_uf")
+  pisRatePercent                  Decimal   @default(1.65) @map("pis_rate_percent") @db.Decimal(8, 4)
+  cofinsRatePercent               Decimal   @default(7.6) @map("cofins_rate_percent") @db.Decimal(8, 4)
+  excludeIcmsFromPisCofinsBase    Boolean   @default(true) @map("exclude_icms_from_pis_cofins_base")
+  considerIcmsStRecuperavel       Boolean   @default(true) @map("consider_icms_st_recuperavel")
+  irpjAdditionalThreshold         Decimal   @default(20000) @map("irpj_additional_threshold") @db.Decimal(18, 2)
+  wholesaleLevel1ReductionPercent Decimal   @default(10) @map("wholesale_level1_reduction_percent") @db.Decimal(8, 4)
+  wholesaleLevel2ReductionPercent Decimal   @default(15) @map("wholesale_level2_reduction_percent") @db.Decimal(8, 4)
+  wholesaleLevel3ReductionPercent Decimal   @default(20) @map("wholesale_level3_reduction_percent") @db.Decimal(8, 4)
+  wholesaleLevel1MinPurchaseUnit  Int       @default(1) @map("wholesale_level1_min_purchase_unit")
+  wholesaleLevel2MinPurchaseUnit  Int       @default(5) @map("wholesale_level2_min_purchase_unit")
+  wholesaleLevel3MinPurchaseUnit  Int       @default(10) @map("wholesale_level3_min_purchase_unit")
+  updatedAt                       DateTime  @updatedAt @map("updated_at")
 
   @@map("company_tax_settings")
 }
@@ -260,12 +260,12 @@ model CbsIbsVigencia {
 
 /// Snapshot mensal do relatório tributário por vendedor ML.
 model TaxReportMonthSnapshot {
-  id         String   @id @default(cuid())
-  sellerId   Int      @map("seller_id")
-  year       Int
-  month      Int
+  id          String   @id @default(cuid())
+  sellerId    Int      @map("seller_id")
+  year        Int
+  month       Int
   generatedAt DateTime @map("generated_at")
-  payload    Json
+  payload     Json
 
   @@unique([sellerId, year, month])
   @@index([year, month])
@@ -330,14 +330,14 @@ model MlSellerCredentials {
 
 /// Push subscriptions Web Push por vendedor/dispositivo.
 model PushSubscription {
-  id         String   @id @default(cuid())
-  mlUserId   Int      @map("ml_user_id")
-  endpoint   String   @db.Text
-  p256dh     String   @db.Text
-  auth       String   @db.Text
-  userAgent  String?  @map("user_agent") @db.Text
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  id        String   @id @default(cuid())
+  mlUserId  Int      @map("ml_user_id")
+  endpoint  String   @db.Text
+  p256dh    String   @db.Text
+  auth      String   @db.Text
+  userAgent String?  @map("user_agent") @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([mlUserId, endpoint])
   @@index([mlUserId])
@@ -375,6 +375,53 @@ model DreCostMonthValue {
   @@unique([costItemId, year, month])
   @@index([year, month])
   @@map("dre_cost_month_values")
+}
+
+/// Item de custo fixo cadastrado pra gerar crédito de PIS/COFINS (ex.: aluguel).
+model TaxFixedCostItem {
+  id          String                   @id @default(cuid())
+  name        String
+  sortOrder   Int                      @default(0) @map("sort_order")
+  active      Boolean                  @default(true)
+  /// true = repete todo mês até ser alterado/removido; false = só vale nos meses com valor explícito.
+  recurring   Boolean                  @default(true)
+  /// Se setado, o item deixa de se aplicar a partir de (endYear, endMonth) inclusive — "Encerrar gasto fixo".
+  endYear     Int?                     @map("end_year")
+  endMonth    Int?                     @map("end_month")
+  createdAt   DateTime                 @default(now()) @map("created_at")
+  updatedAt   DateTime                 @updatedAt @map("updated_at")
+  monthValues TaxFixedCostMonthValue[]
+  exclusions  TaxFixedCostMonthExclusion[]
+
+  @@index([active])
+  @@map("tax_fixed_cost_items")
+}
+
+model TaxFixedCostMonthValue {
+  id         String           @id @default(cuid())
+  costItemId String           @map("cost_item_id")
+  year       Int
+  month      Int
+  amount     Decimal          @db.Decimal(18, 2)
+  costItem   TaxFixedCostItem @relation(fields: [costItemId], references: [id], onDelete: Cascade)
+
+  @@unique([costItemId, year, month])
+  @@index([year, month])
+  @@map("tax_fixed_cost_month_values")
+}
+
+/// Marca um mês específico como excluído do crédito pra um item recorrente,
+/// sem interromper a herança de valor pros meses seguintes ("Remover valor deste mês").
+model TaxFixedCostMonthExclusion {
+  id         String           @id @default(cuid())
+  costItemId String           @map("cost_item_id")
+  year       Int
+  month      Int
+  costItem   TaxFixedCostItem @relation(fields: [costItemId], references: [id], onDelete: Cascade)
+
+  @@unique([costItemId, year, month])
+  @@index([year, month])
+  @@map("tax_fixed_cost_month_exclusions")
 }
 
 /// Snapshot mensal do DRE após sync (linhas ML + ERP + ADS).

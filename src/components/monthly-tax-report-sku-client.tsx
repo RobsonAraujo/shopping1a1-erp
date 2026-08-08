@@ -38,7 +38,7 @@ function SkuSummaryCard({ data }: { data: SkuAggregation }) {
   const impostoOperacionalPercentual = skuImpostoOperacionalPercentual(data);
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
       <Card className="p-4">
         <p className="text-xs text-[var(--muted-foreground)]">Vendas</p>
         <p className="mt-1 text-xl font-semibold tabular-nums">
@@ -66,6 +66,19 @@ function SkuSummaryCard({ data }: { data: SkuAggregation }) {
           Média {formatFinancialMoney(impostoOperacionalMedio)} (
           {formatFinancialPercent(impostoOperacionalPercentual)} s/ receita)
         </p>
+      </Card>
+      <Card className="p-4">
+        <p className="text-xs text-[var(--muted-foreground)]">
+          Créditos PIS/COFINS (Meli/ADS/Frete/Custos fixos)
+        </p>
+        <p className="mt-1 text-xl font-semibold tabular-nums text-[var(--primary)]">
+          {formatFinancialMoney(data.creditoOutrasDespesasTotal ?? 0)}
+        </p>
+        {data.creditoCustosFixosTotal ? (
+          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+            Custos fixos: {formatFinancialMoney(data.creditoCustosFixosTotal)}
+          </p>
+        ) : null}
       </Card>
     </div>
   );

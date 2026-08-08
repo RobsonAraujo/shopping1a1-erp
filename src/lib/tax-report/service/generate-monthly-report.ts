@@ -11,6 +11,12 @@ import {
 import { getCalendarMonthRange } from "@/lib/mercadolibre/revenue-periods";
 import { getTaxReportBillingConcurrency } from "@/lib/tax-report/config";
 import { buildTransacoesFromOrder } from "@/lib/tax-report/enrichment/build-transacao-venda";
+import { resolveFixedCostCreditForMonth } from "@/lib/tax-report/fixed-cost-credit";
+import {
+  loadTaxFixedCostExcludedMonths,
+  loadTaxFixedCostExplicitValues,
+  loadTaxFixedCostItems,
+} from "@/lib/tax-report/tax-fixed-cost-data";
 import {
   loadCustoBySkuMap,
   type CustoProduto,
@@ -205,11 +211,13 @@ export async function generateMonthlyTaxReport(input: {
   }
 
   const receitaTotalByItem = new Map<string, number>();
+  let receitaTotalMes = 0;
   for (const t of transacoes) {
     receitaTotalByItem.set(
       t.itemId,
       (receitaTotalByItem.get(t.itemId) ?? 0) + t.receitaBruta,
     );
+    receitaTotalMes += t.receitaBruta;
   }
 
   input.onProgress?.({
@@ -244,6 +252,26 @@ export async function generateMonthlyTaxReport(input: {
     adsMetricsByItem = new Map();
   }
 
+  const [fixedCostItems, fixedCostExplicitValues, fixedCostExcludedMonths] =
+    await Promise.all([
+      loadTaxFixedCostItems(),
+      loadTaxFixedCostExplicitValues(input.year),
+      loadTaxFixedCostExcludedMonths(input.year),
+    ]);
+  const fixedCostResolution = resolveFixedCostCreditForMonth({
+    items: fixedCostItems.map((item) => ({
+      id: item.id,
+      active: true,
+      recurring: item.recurring,
+      endYear: item.endYear,
+      endMonth: item.endMonth,
+    })),
+    explicitValues: fixedCostExplicitValues,
+    excludedMonths: fixedCostExcludedMonths,
+    year: input.year,
+    month: input.month,
+  });
+
   input.onProgress?.({
     phase: "compute",
     message: "Calculando impostos por venda…",
@@ -261,6 +289,10 @@ export async function generateMonthlyTaxReport(input: {
     overrides,
     adsMetricsByItem,
     receitaTotalByItem,
+    receitaTotalMes,
+    custosFixosBaseMes: fixedCostResolution.totalCreditavel,
+    creditoCustosFixosBaseRegistrada: fixedCostResolution.totalRegistrado,
+    creditoCustosFixosBaseCreditavel: fixedCostResolution.totalCreditavel,
     meta: {
       geradoEm: new Date().toISOString(),
       pedidosProcessados: orders.length,

@@ -143,6 +143,7 @@ function needsApuracaoRepair(
       d.icmsCreditoCompra.stRecuperavelTotal === undefined ||
       d.pisCofins?.baseCredito === undefined ||
       d.creditoOutrasDespesas?.frete === undefined ||
+      d.creditoOutrasDespesas?.custosFixos === undefined ||
       (d.transacao as TransacaoVenda & { saleIcmsPercent?: number })
         .saleIcmsPercent === undefined ||
       (d.transacao as TransacaoVenda & { unitCostNf?: number | null })

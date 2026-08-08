@@ -2,12 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronRight, RefreshCw, Scale } from "lucide-react";
+import { ChevronRight, RefreshCw, Scale, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FormSelect } from "@/components/ui/form-select";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { TaxReportApuracaoPanel } from "@/components/tax-report-apuracao-panel";
+import {
+  TaxFixedCostsModal,
+  type TaxFixedCostItemRow,
+} from "@/components/tax-fixed-costs-modal";
 import {
   TaxReportGenerationOverlay,
   type TaxReportProgressState,
@@ -75,6 +79,25 @@ export function MonthlyTaxReportClient() {
     useState<TaxReportProgressState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [fixedCostModalOpen, setFixedCostModalOpen] = useState(false);
+  const [fixedCostItems, setFixedCostItems] = useState<TaxFixedCostItemRow[]>([]);
+
+  const loadFixedCostItems = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `/api/tax-report/fixed-cost-items?year=${year}&month=${month}`,
+      );
+      if (!res.ok) return;
+      const data = (await res.json()) as { items: TaxFixedCostItemRow[] };
+      setFixedCostItems(data.items);
+    } catch {
+      // silencioso — não bloqueia a tela principal do relatório
+    }
+  }, [year, month]);
+
+  useEffect(() => {
+    void loadFixedCostItems();
+  }, [loadFixedCostItems]);
 
   const loadReport = useCallback(async () => {
     setLoading(true);
@@ -258,7 +281,26 @@ export function MonthlyTaxReportClient() {
             <RefreshCw className="mr-2 size-4" />
             Recalcular
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setFixedCostModalOpen(true)}
+          >
+            <Wallet className="mr-2 size-4" />
+            Custos fixos
+          </Button>
         </div>
+
+        <TaxFixedCostsModal
+          open={fixedCostModalOpen}
+          year={year}
+          month={month}
+          items={fixedCostItems}
+          onClose={() => setFixedCostModalOpen(false)}
+          onChanged={() => {
+            void loadFixedCostItems();
+          }}
+        />
 
         {error ? (
           <Card className="border-red-200 bg-red-50/70 p-4 text-sm text-red-800">
@@ -305,6 +347,44 @@ export function MonthlyTaxReportClient() {
                 apuracao={report.consolidado.apuracao}
                 faturamento={report.consolidado.faturamento}
               />
+            ) : null}
+
+            {report.consolidado.creditoCustosFixosTotal ? (
+              <Card className="p-4 text-sm">
+                <p className="font-medium text-[var(--foreground)]">
+                  Crédito de custos fixos (aluguel etc.) já incluído na margem
+                </p>
+                <p className="mt-1 text-[var(--muted-foreground)]">
+                  {report.consolidado.creditoCustosFixosBaseCreditavel !=
+                    report.consolidado.creditoCustosFixosBaseRegistrada ? (
+                    <>
+                      Mês em andamento: base rateada{" "}
+                      {formatFinancialMoney(
+                        report.consolidado.creditoCustosFixosBaseCreditavel ?? 0,
+                      )}{" "}
+                      de{" "}
+                      {formatFinancialMoney(
+                        report.consolidado.creditoCustosFixosBaseRegistrada ?? 0,
+                      )}{" "}
+                      cadastrados ×{" "}
+                    </>
+                  ) : (
+                    <>
+                      Base cadastrada{" "}
+                      {formatFinancialMoney(
+                        report.consolidado.creditoCustosFixosBaseRegistrada ?? 0,
+                      )}{" "}
+                      ×{" "}
+                    </>
+                  )}
+                  9,25% ={" "}
+                  <strong>
+                    {formatFinancialMoney(
+                      report.consolidado.creditoCustosFixosTotal,
+                    )}
+                  </strong>
+                </p>
+              </Card>
             ) : null}
 
             <p className="text-xs text-[var(--muted-foreground)]">

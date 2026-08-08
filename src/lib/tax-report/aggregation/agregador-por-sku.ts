@@ -53,6 +53,8 @@ export function agregarPorSku(
       impostoOperacionalTotal: 0,
       impostoOperacionalMedioPorVenda: 0,
       impostoOperacionalMedioPercentual: 0,
+      creditoOutrasDespesasTotal: 0,
+      creditoCustosFixosTotal: 0,
       transacoes: [],
     };
 
@@ -64,6 +66,14 @@ export function agregarPorSku(
     existing.impostoTotal = roundMoney(existing.impostoTotal + det.impostoTotal);
     existing.impostoOperacionalTotal = roundMoney(
       (existing.impostoOperacionalTotal ?? 0) + impostoOperacionalLinhaValor(det),
+    );
+    existing.creditoOutrasDespesasTotal = roundMoney(
+      (existing.creditoOutrasDespesasTotal ?? 0) +
+        (det.creditoOutrasDespesas?.creditoTotal ?? 0),
+    );
+    existing.creditoCustosFixosTotal = roundMoney(
+      (existing.creditoCustosFixosTotal ?? 0) +
+        (det.creditoOutrasDespesas?.custosFixos?.credito ?? 0),
     );
     existing.transacoes.push(det);
     map.set(sku, existing);
@@ -100,7 +110,17 @@ export function agregarPorSku(
 
 export function consolidarRelatorio(
   transacoes: DetalhamentoTributario[],
+  options: {
+    creditoCustosFixosBaseRegistrada?: number;
+    creditoCustosFixosBaseCreditavel?: number;
+  } = {},
 ): RelatorioConsolidado {
+  const creditoCustosFixosBaseRegistrada = roundMoney(
+    options.creditoCustosFixosBaseRegistrada ?? 0,
+  );
+  const creditoCustosFixosBaseCreditavel = roundMoney(
+    options.creditoCustosFixosBaseCreditavel ?? 0,
+  );
   const incluidas = transacoes.filter((t) => t.incluidoNaApuracao);
   const excluidas = transacoes.filter((t) => !t.incluidoNaApuracao);
   const semBilling = transacoes.filter(
@@ -138,6 +158,14 @@ export function consolidarRelatorio(
       0,
     ),
   );
+  // Já embutido em creditoOutrasDespesasTotal (é um dos 4 buckets rateados por venda) —
+  // não subtrair de novo em impostosOperacionais, só exibir separado pra transparência.
+  const creditoCustosFixosTotal = roundMoney(
+    incluidas.reduce(
+      (s, t) => s + (t.creditoOutrasDespesas?.custosFixos?.credito ?? 0),
+      0,
+    ),
+  );
   const impostosOperacionais = roundMoney(
     pisCofinsLiquido +
       icmsDifalTotal -
@@ -165,6 +193,9 @@ export function consolidarRelatorio(
     icmsSemDifalTotal,
     difalTotal,
     creditoOutrasDespesasTotal,
+    creditoCustosFixosTotal,
+    creditoCustosFixosBaseRegistrada,
+    creditoCustosFixosBaseCreditavel,
     icmsDifalTotal,
     cbsIbsInformativoTotal,
     margemOperacional,

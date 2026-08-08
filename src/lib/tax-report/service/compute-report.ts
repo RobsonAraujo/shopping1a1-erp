@@ -42,6 +42,10 @@ export function calcularDetalhamentoTransacao(input: {
   incluirNaApuracao: boolean;
   adsMetricsByItem?: Map<string, ItemAdMetrics>;
   receitaTotalByItem?: Map<string, number>;
+  /** Receita total do mês inteiro (todas as vendas) — denominador do rateio do crédito de custos fixos. */
+  receitaTotalMes?: number;
+  /** Base do crédito de custos fixos do mês, já reduzida pelos dias corridos se em andamento. */
+  custosFixosBaseMes?: number;
 }): DetalhamentoTributario {
   const { transacao, config, icmsRates, cbsIbsVigencia, year, incluirNaApuracao } =
     input;
@@ -89,6 +93,8 @@ export function calcularDetalhamentoTransacao(input: {
     gastoAdsTotalItemMes:
       input.adsMetricsByItem?.get(transacao.itemId)?.cost ?? 0,
     freightCost: transacao.freightCost,
+    receitaTotalMes: input.receitaTotalMes ?? 0,
+    custosFixosBaseMes: input.custosFixosBaseMes ?? 0,
   });
   const cmvTotal =
     (transacao.custoAquisicaoUnitario ?? 0) * transacao.quantidade +
@@ -144,6 +150,14 @@ export function calcularRelatorioFromTransacoes(input: {
   aliasMap?: SkuAliasMap;
   adsMetricsByItem?: Map<string, ItemAdMetrics>;
   receitaTotalByItem?: Map<string, number>;
+  /** Receita total do mês inteiro — denominador do rateio do crédito de custos fixos. */
+  receitaTotalMes?: number;
+  /** Base do crédito de custos fixos do mês, já reduzida pelos dias corridos se em andamento. */
+  custosFixosBaseMes?: number;
+  /** Base cadastrada antes do rateio por dias corridos (transparência na UI). */
+  creditoCustosFixosBaseRegistrada?: number;
+  /** Base creditável depois do rateio por dias corridos (transparência na UI). */
+  creditoCustosFixosBaseCreditavel?: number;
 }): TaxReportPayload {
   const total = input.transacoes.length;
   const detalhes = input.transacoes.map((transacao, index) => {
@@ -167,11 +181,16 @@ export function calcularRelatorioFromTransacoes(input: {
       incluirNaApuracao: incluir,
       adsMetricsByItem: input.adsMetricsByItem,
       receitaTotalByItem: input.receitaTotalByItem,
+      receitaTotalMes: input.receitaTotalMes,
+      custosFixosBaseMes: input.custosFixosBaseMes,
     });
   });
 
   const porSku = agregarPorSku(detalhes, input.aliasMap);
-  const consolidado = consolidarRelatorio(detalhes);
+  const consolidado = consolidarRelatorio(detalhes, {
+    creditoCustosFixosBaseRegistrada: input.creditoCustosFixosBaseRegistrada,
+    creditoCustosFixosBaseCreditavel: input.creditoCustosFixosBaseCreditavel,
+  });
 
   return {
     year: input.year,
