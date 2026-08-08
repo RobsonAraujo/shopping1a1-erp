@@ -830,11 +830,6 @@ export function FinancialEvaluationClient() {
               pausedCount={pausedCount}
               disabled={loading || !data?.length}
             />
-            <ItemListSearch
-              value={searchQuery}
-              onChange={setSearchQuery}
-              placeholder="Buscar por SKU, título ou MLB…"
-            />
             <Button
               type="button"
               variant="outline"
@@ -1014,6 +1009,17 @@ export function FinancialEvaluationClient() {
                   : "Como calculamos: média simples das margens dos anúncios listados (mesmo peso cada um, sem ponderar por volume de vendas)."}
               </p>
             </div>
+          ) : null}
+
+          {data ? (
+            <ItemListSearch
+              value={searchQuery}
+              onChange={setSearchQuery}
+              filteredCount={sortedItems.length}
+              totalCount={statusVisibleItems.length}
+              placeholder="Buscar por SKU, título ou MLB…"
+              className="mb-4"
+            />
           ) : null}
 
           {error ? (
