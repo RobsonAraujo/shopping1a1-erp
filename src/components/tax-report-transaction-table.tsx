@@ -196,7 +196,27 @@ function TransactionRowCells({
         </span>
       ) : null}
       <span className="min-w-0 truncate py-2.5 pr-4 pl-2 whitespace-nowrap">{t.ufDestino ?? "—"}</span>
-      <span className="min-w-0 truncate py-2.5 pr-2 pl-4 whitespace-nowrap">{t.tipoDocumento}</span>
+      <span className="min-w-0 truncate py-2.5 pr-2 pl-4 whitespace-nowrap">
+        {t.tipoDocumento}
+        {t.tipoDocumento === "CNPJ" && t.contribuinteIcms !== null ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                className={cn(
+                  "ml-1.5 inline-block size-1.5 rounded-full align-middle",
+                  t.contribuinteIcms ? "bg-emerald-500" : "bg-[var(--muted-foreground)]",
+                )}
+                aria-label={
+                  t.contribuinteIcms ? "Contribuinte ICMS" : "Não contribuinte ICMS"
+                }
+              />
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">
+              {t.contribuinteIcms ? "Contribuinte ICMS" : "Não contribuinte ICMS"}
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
+      </span>
       <span className="min-w-0 px-2 text-right tabular-nums whitespace-nowrap">
         {t.quantidade}
       </span>

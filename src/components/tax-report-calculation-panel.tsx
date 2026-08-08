@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -195,6 +196,14 @@ export function TaxReportCalculationPanel({
             {t.ufDestino ?? "UF —"} · {t.tipoDocumento} · Qtd {t.quantidade}
             {t.hasIcmsSt ? " · ICMS-ST na compra" : ""}
           </p>
+          {t.tipoDocumento === "CNPJ" && t.contribuinteIcms !== null ? (
+            <Badge
+              variant={t.contribuinteIcms ? "success" : "muted"}
+              className="mt-1.5"
+            >
+              {t.contribuinteIcms ? "Contribuinte ICMS" : "Não contribuinte"}
+            </Badge>
+          ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-3">
           <label className="flex cursor-pointer items-center gap-2 text-xs text-[var(--muted-foreground)]">
