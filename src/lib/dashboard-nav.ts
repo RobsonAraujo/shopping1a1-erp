@@ -60,6 +60,12 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
     kind: "dropdown",
     items: [
       {
+        href: "/dashboard/produtos",
+        label: "Meus produtos",
+        description: "Cadastro fiscal e custo por SKU",
+        icon: Boxes,
+      },
+      {
         href: "/dashboard/inventory",
         label: "Estoque",
         description: "Acompanhe o estoque dos produtos",
@@ -71,12 +77,6 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
         description: "Análise por fornecedor e kanban de reposição",
         icon: ShoppingCart,
       },
-      {
-        href: "/dashboard/produtos",
-        label: "Meus produtos",
-        description: "Cadastro fiscal e custo por SKU",
-        icon: Boxes,
-      },
     ],
   },
   {
@@ -85,16 +85,16 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
     kind: "dropdown",
     items: [
       {
-        href: "/dashboard/envios-full",
-        label: "Relatório de Envios",
-        description: "Custo de coleta ao Full por unidade enviada",
-        icon: Truck,
-      },
-      {
         href: "/dashboard/operacoes-full",
         label: "Operações Full",
         description: "Kanban de agendamento e coleta Full",
         icon: Kanban,
+      },
+      {
+        href: "/dashboard/envios-full",
+        label: "Relatório de Envios",
+        description: "Custo de coleta ao Full por unidade enviada",
+        icon: Truck,
       },
     ],
   },
@@ -103,6 +103,18 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
     label: "Análises",
     kind: "dropdown",
     items: [
+      {
+        href: "/dashboard/lucratividade",
+        label: "Lucratividade",
+        description: "Margem de contribuição por anúncio",
+        icon: TrendingUp,
+      },
+      {
+        href: "/dashboard/catalog-report",
+        label: "Relatório de Catálogo",
+        description: "Veja mudanças de competição no catálogo",
+        icon: ChartNoAxesColumn,
+      },
       {
         href: "/dashboard/insights",
         label: "Insights",
@@ -114,18 +126,6 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
         label: "Potencial de faturamento",
         description: "Quanto o catálogo faturaria sem ruptura de estoque",
         icon: BarChart3,
-      },
-      {
-        href: "/dashboard/lucratividade",
-        label: "Lucratividade",
-        description: "Margem de contribuição por anúncio",
-        icon: TrendingUp,
-      },
-      {
-        href: "/dashboard/catalog-report",
-        label: "Catálogo",
-        description: "Veja mudanças de competição no catálogo",
-        icon: ChartNoAxesColumn,
       },
     ],
   },

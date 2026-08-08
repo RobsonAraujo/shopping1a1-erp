@@ -199,8 +199,35 @@ model Product {
   updatedAt           DateTime @updatedAt @map("updated_at")
 
   skuAliases ProductSkuAlias[] @relation("ProductCanonicalSku")
+  kitItems   KitItem[]
 
   @@map("products")
+}
+
+/// Anúncio "kit" do Mercado Livre (sem SKU próprio) cadastrado manualmente com
+/// os SKUs componentes, pois a API do ML não expõe essa composição.
+model Kit {
+  mlItemId  String   @id @map("ml_item_id")
+  title     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  items KitItem[]
+
+  @@map("kits")
+}
+
+model KitItem {
+  kitId    String  @map("kit_id")
+  sku      String
+  quantity Decimal @default(1) @db.Decimal(18, 4)
+
+  kit     Kit     @relation(fields: [kitId], references: [mlItemId], onDelete: Cascade)
+  product Product @relation(fields: [sku], references: [sku], onDelete: Cascade)
+
+  @@id([kitId, sku])
+  @@index([sku])
+  @@map("kit_items")
 }
 
 /// SKU antigo/alternativo que aponta para o cadastro canônico em products.

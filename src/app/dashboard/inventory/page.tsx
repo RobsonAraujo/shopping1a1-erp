@@ -14,7 +14,7 @@ import {
 import { isFulfillmentListing } from "@/lib/mercadolibre/fulfillment-stock";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
-import { getItemSku } from "@/lib/mercadolibre/item-sku";
+import { getItemSku, isKitItem } from "@/lib/mercadolibre/item-sku";
 import { countListingsByStatus } from "@/lib/mercadolibre/listing-status";
 import { computeStockPlanningDisplay } from "@/lib/stock-planning";
 import { loadStockReportProductsBySku } from "@/lib/product-data";
@@ -45,7 +45,9 @@ async function InventoryDataSection({
   let rows: InventoryRow[] = [];
 
   try {
-    const items = await fetchOperationalListings(token, userId);
+    const items = (await fetchOperationalListings(token, userId)).filter(
+      (item) => !isKitItem(item),
+    );
     const fulfillmentStockByItem = await enrichItemsWithFulfillmentStock(
       token,
       items,

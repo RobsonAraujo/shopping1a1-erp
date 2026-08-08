@@ -38,6 +38,7 @@ import {
   MaskedMoneyField,
   MaskedPercentField,
 } from "@/components/financial-cost-input-fields";
+import { PlanningInfoTrigger } from "@/components/planning-info-trigger";
 import {
   computeFinancialMargin,
   computeMarginAfterAds,
@@ -1995,7 +1996,23 @@ function FinancialDetailModal({
 
           <div className="mt-6 space-y-3 border-t border-[var(--border)] pt-6">
             <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-100">
-              {row.sku ? (
+              {row.isKitComposition && row.kitComponents ? (
+                <>
+                  Anúncio &quot;kit&quot; sem SKU próprio — custo e imposto calculados a
+                  partir da composição cadastrada em{" "}
+                  <Link
+                    href="/dashboard/produtos"
+                    className="font-medium underline underline-offset-2"
+                  >
+                    Meus produtos › Kits sem SKU
+                  </Link>
+                  :{" "}
+                  {row.kitComponents
+                    .map((c) => `${c.sku} × ${c.quantity}`)
+                    .join(", ")}
+                  .
+                </>
+              ) : row.sku ? (
                 <>
                   Valores vindos do cadastro em{" "}
                   <Link
@@ -2035,13 +2052,21 @@ function FinancialDetailModal({
                 value={row.extraCosts}
                 readOnly
               />
-              <MaskedPercentField
-                key={`tax-rate-${row.mlItemId}`}
-                id="tax-rate"
-                label="Alíquota impostos"
-                value={row.taxRatePercent}
-                readOnly
-              />
+              <div className="relative">
+                {row.isKitComposition ? (
+                  <PlanningInfoTrigger
+                    className="absolute -top-1 right-0"
+                    content="Anúncio kit: esta alíquota é a média ponderada dos impostos dos SKUs componentes cadastrados (ponderada pelo custo de cada um)."
+                  />
+                ) : null}
+                <MaskedPercentField
+                  key={`tax-rate-${row.mlItemId}`}
+                  id="tax-rate"
+                  label="Alíquota impostos"
+                  value={row.taxRatePercent}
+                  readOnly
+                />
+              </div>
             </div>
           </div>
 

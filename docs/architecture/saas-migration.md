@@ -168,6 +168,17 @@ Detalhes dos modelos: [tenant-data-model.md](tenant-data-model.md).
 
 Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templates/feature-saas-impact.md).
 
+### Cadastro manual de kits do Mercado Livre (anúncios sem SKU) — 2026-08-08
+
+- **Tabelas novas/alteradas:** novas tabelas `kits` (`Kit`, PK `mlItemId`) e `kit_items` (`KitItem`, PK composta `[kitId, sku]`, FK para `Kit.mlItemId` e `Product.sku`); `Product` ganha relação `kitItems`
+- **Precisa `organizationId`?** sim, no futuro — hoje `Kit`/`KitItem` são globais por deployment (chave é o `mlItemId`/`sku`, sem escopo de seller), mesmo padrão de `Product`
+- **APIs afetadas:** novas `GET/POST /api/kits` e `PUT/DELETE /api/kits/[id]`; `loadFinancialEvaluationRows(ForPeriod)` (Lucratividade) e `computeErpCostsFromOrderLines` (DRE mensal) passam a consultar `Kit`/`KitItem` para decompor custo/imposto de anúncios-kit; Estoque, Potencial de Faturamento, Compras e Reposição passam a filtrar (`isKitItem`) esses anúncios da listagem, sem tocar no banco
+- **Assume singleton?** não
+- **Cron/background:** nenhum
+- **Dados globais vs por org:** `Kit`/`KitItem` são globais, mesmo nível de tenant-readiness que `Product` hoje
+- **Código já tenant-ready?** parcial — `loadKitsByMlItemId`/`resolveKitPricing` (`src/lib/kit-data.ts`) recebem tudo via parâmetros explícitos, sem singleton; ainda não escopam por `organizationId` porque nada no módulo de produtos escopa hoje
+- **Ação futura na migração:** ao introduzir `organizationId`, adicionar a coluna em `Kit`/`KitItem` junto com `Product`, no mesmo passo de migração
+
 ### Novas regras de crédito PIS/COFINS + créditos Meli/ADS + produto importado — 2026-08-06
 
 - **Tabelas novas/alteradas:** nenhuma nova tabela; `Product.isImported`/`Product.importContentPercent` já existiam no schema (só ganharam caminho de escrita via `/api/products`); `tax_report_month_snapshots.payload` (JSON) ganha novos campos (`saleFee`, `ipiPercent` em `TransacaoVenda`, `creditoOutrasDespesas` em `DetalhamentoTributario`) — schema Prisma inalterado

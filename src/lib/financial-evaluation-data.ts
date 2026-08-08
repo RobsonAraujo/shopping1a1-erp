@@ -15,7 +15,7 @@ import {
 } from "@/lib/mercadolibre/api";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { buyerFacingItemPermalink } from "@/lib/mercadolibre/item-permalink";
-import { getItemSku } from "@/lib/mercadolibre/item-sku";
+import { getItemSku, isKitItem } from "@/lib/mercadolibre/item-sku";
 import {
   fetchListingSaleFee,
   siteIdFromItemId,
@@ -32,6 +32,11 @@ import {
 import { fetchSellerShippingCost } from "@/lib/mercadolibre/seller-shipping-cost";
 import type { ItemBody, OrderSearchOrder } from "@/lib/mercadolibre/types";
 import { loadProductsMapBySku } from "@/lib/product-data";
+import {
+  loadKitsByMlItemId,
+  resolveKitPricing,
+  type KitComponent,
+} from "@/lib/kit-data";
 import {
   normalizeProductSku,
   type ResolvedProductPricing,
@@ -81,6 +86,11 @@ export type FinancialEvaluationRow = {
   minSalePriceTargetPercent?: number | null;
   minSalePriceMarginBasis?: MarginBasis | null;
   minSalePriceRefined?: boolean;
+  /** true quando o anúncio é um kit do ML (com ou sem composição cadastrada). */
+  isKit?: boolean;
+  /** true quando custo/imposto vieram da composição de um kit cadastrado manualmente. */
+  isKitComposition?: boolean;
+  kitComponents?: KitComponent[] | null;
 };
 
 async function mapWithConcurrency<T, R>(
@@ -196,7 +206,7 @@ function applyAdsToRow(
   ) {
     warnings.push("Poucas vendas no período; TACOS pode variar bastante.");
   }
-  if (adMetrics.status === "idle") {
+  if (adMetrics.status === "idle" && !row.isKit) {
     warnings.push("Anúncio disponível para ADS, mas sem campanha ativa.");
   }
 
@@ -235,6 +245,10 @@ async function buildRowForItem(
   item: ItemBody,
   pricing: ResolvedProductPricing | null,
   taxBySku: Map<string, number>,
+  kitContext?: {
+    pricingBySku: Map<string, ResolvedProductPricing>;
+    kitsByMlItemId: Map<string, KitComponent[]>;
+  },
 ): Promise<
   Omit<
     FinancialEvaluationRow,
@@ -255,11 +269,34 @@ async function buildRowForItem(
   const warnings: string[] = [];
 
   const sku = getItemSku(item);
-  const productCost = pricing?.pricingCost ?? null;
-  const extraCosts = pricing?.extraCosts ?? null;
-  const taxRatePercent = sku
+  let productCost = pricing?.pricingCost ?? null;
+  let extraCosts = pricing?.extraCosts ?? null;
+  let taxRatePercent = sku
     ? (taxBySku.get(normalizeProductSku(sku)) ?? null)
     : null;
+  let isKitComposition = false;
+  let kitComponents: KitComponent[] | null = null;
+
+  if (!sku && isKitItem(item) && kitContext) {
+    const components = kitContext.kitsByMlItemId.get(item.id);
+    if (components && components.length > 0) {
+      const resolved = resolveKitPricing(
+        components,
+        kitContext.pricingBySku,
+        taxBySku,
+      );
+      productCost = resolved.productCost;
+      extraCosts = resolved.extraCosts;
+      taxRatePercent = resolved.taxRatePercent;
+      isKitComposition = true;
+      kitComponents = components;
+      if (resolved.missingSkus.length > 0) {
+        warnings.push(
+          `Kit com componente(s) sem cadastro em Meus produtos: ${resolved.missingSkus.join(", ")}.`,
+        );
+      }
+    }
+  }
 
   let salePrice = item.price;
   let regularPrice: number | null = null;
@@ -284,7 +321,13 @@ async function buildRowForItem(
     );
   }
 
-  if (!sku) {
+  if (isKitComposition) {
+    // avisos de composição do kit já foram adicionados acima (componentes faltando, se houver)
+  } else if (!sku && isKitItem(item)) {
+    warnings.push(
+      "Anúncio kit sem SKU — cadastre a composição em Meus produtos > Kits sem SKU.",
+    );
+  } else if (!sku) {
     warnings.push(
       "Anúncio sem SKU — cadastre o produto em Meus produtos com o mesmo SKU do ML.",
     );
@@ -406,6 +449,9 @@ async function buildRowForItem(
     breakdown,
     errors,
     warnings,
+    isKit: isKitItem(item),
+    isKitComposition,
+    kitComponents,
   };
 }
 
@@ -524,6 +570,10 @@ async function buildRowForPeriodItem(
   pricing: ResolvedProductPricing | null,
   agg: PeriodSaleAgg,
   taxBySku: Map<string, number>,
+  kitContext?: {
+    pricingBySku: Map<string, ResolvedProductPricing>;
+    kitsByMlItemId: Map<string, KitComponent[]>;
+  },
 ): Promise<
   Omit<
     FinancialEvaluationRow,
@@ -544,11 +594,34 @@ async function buildRowForPeriodItem(
   const warnings: string[] = [];
 
   const sku = getItemSku(item);
-  const productCost = pricing?.pricingCost ?? null;
-  const extraCosts = pricing?.extraCosts ?? null;
-  const taxRatePercent = sku
+  let productCost = pricing?.pricingCost ?? null;
+  let extraCosts = pricing?.extraCosts ?? null;
+  let taxRatePercent = sku
     ? (taxBySku.get(normalizeProductSku(sku)) ?? null)
     : null;
+  let isKitComposition = false;
+  let kitComponents: KitComponent[] | null = null;
+
+  if (!sku && isKitItem(item) && kitContext) {
+    const components = kitContext.kitsByMlItemId.get(item.id);
+    if (components && components.length > 0) {
+      const resolved = resolveKitPricing(
+        components,
+        kitContext.pricingBySku,
+        taxBySku,
+      );
+      productCost = resolved.productCost;
+      extraCosts = resolved.extraCosts;
+      taxRatePercent = resolved.taxRatePercent;
+      isKitComposition = true;
+      kitComponents = components;
+      if (resolved.missingSkus.length > 0) {
+        warnings.push(
+          `Kit com componente(s) sem cadastro em Meus produtos: ${resolved.missingSkus.join(", ")}.`,
+        );
+      }
+    }
+  }
 
   const salePrice =
     agg.quantity > 0 ? roundMoney(agg.revenue / agg.quantity) : 0;
@@ -558,7 +631,13 @@ async function buildRowForPeriodItem(
     `Preço médio de ${agg.quantity} un. vendidas no período (custos/impostos do cadastro atual).`,
   );
 
-  if (!sku) {
+  if (isKitComposition) {
+    // avisos de composição do kit já foram adicionados acima (componentes faltando, se houver)
+  } else if (!sku && isKitItem(item)) {
+    warnings.push(
+      "Anúncio kit sem SKU — cadastre a composição em Meus produtos > Kits sem SKU.",
+    );
+  } else if (!sku) {
     warnings.push(
       "Anúncio sem SKU — cadastre o produto em Meus produtos com o mesmo SKU do ML.",
     );
@@ -664,6 +743,9 @@ async function buildRowForPeriodItem(
     breakdown,
     errors,
     warnings,
+    isKit: isKitItem(item),
+    isKitComposition,
+    kitComponents,
   };
 }
 
@@ -773,9 +855,18 @@ export async function loadFinancialEvaluationRows(
     isOperationalStatus(item.status),
   );
 
+  const kitItemIds = operationalItems
+    .filter((item) => !getItemSku(item) && isKitItem(item))
+    .map((item) => item.id);
+  const kitsByMlItemId = await loadKitsByMlItemId(kitItemIds);
+  const kitComponentSkus = [...kitsByMlItemId.values()].flatMap((components) =>
+    components.map((c) => c.sku),
+  );
+
   const skus = operationalItems
     .map((item) => getItemSku(item))
-    .filter((sku): sku is string => Boolean(sku));
+    .filter((sku): sku is string => Boolean(sku))
+    .concat(kitComponentSkus);
   const [pricingBySku, taxFromReport] = await Promise.all([
     loadProductsMapBySku(skus),
     loadProductTaxFromLatestReport(userId),
@@ -792,7 +883,10 @@ export async function loadFinancialEvaluationRows(
       const pricing = sku
         ? (pricingBySku.get(normalizeProductSku(sku)) ?? null)
         : null;
-      return buildRowForItem(accessToken, userId, item, pricing, taxBySku);
+      return buildRowForItem(accessToken, userId, item, pricing, taxBySku, {
+        pricingBySku,
+        kitsByMlItemId,
+      });
     },
   );
 
@@ -890,9 +984,17 @@ export async function loadFinancialEvaluationRowsForPeriod(
   ]);
 
   const itemById = new Map(items.map((item) => [item.id, item]));
+  const kitItemIds = items
+    .filter((item) => !getItemSku(item) && isKitItem(item))
+    .map((item) => item.id);
+  const kitsByMlItemId = await loadKitsByMlItemId(kitItemIds);
+  const kitComponentSkus = [...kitsByMlItemId.values()].flatMap((components) =>
+    components.map((c) => c.sku),
+  );
   const skus = items
     .map((item) => getItemSku(item))
-    .filter((sku): sku is string => Boolean(sku));
+    .filter((sku): sku is string => Boolean(sku))
+    .concat(kitComponentSkus);
   const [pricingBySku, taxFromReport] = await Promise.all([
     loadProductsMapBySku(skus),
     loadProductTaxFromLatestReport(userId),
@@ -915,7 +1017,10 @@ export async function loadFinancialEvaluationRowsForPeriod(
     const pricing = sku
       ? (pricingBySku.get(normalizeProductSku(sku)) ?? null)
       : null;
-    return buildRowForPeriodItem(accessToken, userId, item, pricing, agg, taxBySku);
+    return buildRowForPeriodItem(accessToken, userId, item, pricing, agg, taxBySku, {
+      pricingBySku,
+      kitsByMlItemId,
+    });
   });
 
   const rows = baseRows.map((row) => {

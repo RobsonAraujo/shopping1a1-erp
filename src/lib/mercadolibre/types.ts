@@ -100,6 +100,8 @@ export type ItemBody = {
     value_name?: string;
     value_id?: string;
   }>;
+  /** Ex.: inclui `"bundle"` quando o anúncio é um kit formado a partir de outros SKUs. */
+  tags?: string[];
 };
 
 export type ItemMultigetEntry =

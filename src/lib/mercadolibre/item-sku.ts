@@ -31,6 +31,14 @@ export function groupBySkuSupplier<T>(
     .map(([supplier, groupRows]) => ({ supplier, rows: groupRows }));
 }
 
+/**
+ * Anúncio "kit" do Mercado Livre: formado a partir de outros SKUs já cadastrados,
+ * não tem `seller_custom_field`/`SELLER_SKU` próprio (não é possível cadastrar SKU nele).
+ */
+export function isKitItem(item: ItemBody): boolean {
+  return Boolean(item.tags?.includes("bundle")) && !getItemSku(item);
+}
+
 export function getItemSku(item: ItemBody): string | null {
   const directSku = item.seller_custom_field
     ? normalizeProductSku(item.seller_custom_field)

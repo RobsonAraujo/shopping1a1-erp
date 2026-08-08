@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { Boxes, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { KitsModal } from "@/components/kits-modal";
 import {
   ItemListSearch,
   itemListSearchEmptyMessage,
@@ -503,6 +504,7 @@ export function ProductsClient() {
     | null
   >(null);
   const [importing, setImporting] = useState(false);
+  const [kitsModalOpen, setKitsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
   const load = useCallback(async () => {
@@ -723,6 +725,16 @@ export function ProductsClient() {
           </Button>
           <Button
             type="button"
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => setKitsModalOpen(true)}
+          >
+            <Boxes className="size-4" aria-hidden />
+            Kits sem SKU
+          </Button>
+          <Button
+            type="button"
             size="sm"
             className="gap-2"
             onClick={() =>
@@ -734,6 +746,8 @@ export function ProductsClient() {
           </Button>
         </div>
       </div>
+
+      <KitsModal open={kitsModalOpen} onClose={() => setKitsModalOpen(false)} />
 
       <ItemListSearch
         value={searchQuery}

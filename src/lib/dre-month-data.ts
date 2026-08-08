@@ -10,7 +10,8 @@ import {
 import { loadProductsMapBySku } from "@/lib/product-data";
 import { loadProductTaxFromLatestReport } from "@/lib/product-tax-from-report";
 import { roundMoney } from "@/lib/financial-margin";
-import { getItemSku } from "@/lib/mercadolibre/item-sku";
+import { getItemSku, isKitItem } from "@/lib/mercadolibre/item-sku";
+import { loadKitsByMlItemId, resolveKitPricing } from "@/lib/kit-data";
 import { normalizeProductSku } from "@/lib/product-pricing";
 import {
   fetchCancelledOrderLinesInDateRange,
@@ -52,17 +53,29 @@ async function computeErpCostsFromOrderLines(
 }> {
   const itemIds = [...new Set(orderLines.map((line) => line.itemId))];
   const items = await fetchItemsByIdsBatched(accessToken, itemIds);
+  const itemById = new Map(items.map((item) => [item.id, item]));
   const skuByItemId = new Map(
     items.map((item) => [item.id, getItemSku(item)]),
+  );
+  const kitItemIds = items
+    .filter((item) => !getItemSku(item) && isKitItem(item))
+    .map((item) => item.id);
+  const kitsByMlItemId = await loadKitsByMlItemId(kitItemIds);
+  const kitComponentSkus = [...kitsByMlItemId.values()].flatMap((components) =>
+    components.map((c) => c.sku),
   );
   const skus = items
     .map((item) => getItemSku(item))
     .filter((sku): sku is string => Boolean(sku))
-    .map((sku) => normalizeProductSku(sku));
+    .map((sku) => normalizeProductSku(sku))
+    .concat(kitComponentSkus);
   const [pricingBySku, taxFromReport] = await Promise.all([
     loadProductsMapBySku(skus),
     loadProductTaxFromLatestReport(sellerId, undefined, { year, month }),
   ]);
+  const taxPercentBySku = new Map(
+    [...taxFromReport.bySku].map(([sku, entry]) => [sku, entry.taxPercent]),
+  );
 
   let productCostErp = 0;
   let taxErp = 0;
@@ -80,9 +93,7 @@ async function computeErpCostsFromOrderLines(
       : null;
     const taxPercent = taxEntry?.taxPercent ?? null;
 
-    if (!pricing) {
-      missingItems.add(line.itemId);
-    } else {
+    if (pricing) {
       productCostErp +=
         line.quantity * (pricing.pricingCost + pricing.extraCosts);
       if (taxPercent !== null && taxPercent > 0 && line.revenue > 0) {
@@ -93,7 +104,29 @@ async function computeErpCostsFromOrderLines(
       } else if (taxEntry.year !== year || taxEntry.month !== month) {
         differentPeriodTaxItems.add(line.itemId);
       }
+      continue;
     }
+
+    const item = itemById.get(line.itemId);
+    const kitComponents = item ? kitsByMlItemId.get(item.id) : undefined;
+    if (!normalizedSku && item && isKitItem(item) && kitComponents) {
+      const resolved = resolveKitPricing(
+        kitComponents,
+        pricingBySku,
+        taxPercentBySku,
+      );
+      if (resolved.missingSkus.length === 0) {
+        productCostErp += line.quantity * (resolved.productCost + resolved.extraCosts);
+        if (resolved.taxRatePercent !== null && line.revenue > 0) {
+          taxErp += line.revenue * (resolved.taxRatePercent / 100);
+        } else {
+          missingTaxItems.add(line.itemId);
+        }
+        continue;
+      }
+    }
+
+    missingItems.add(line.itemId);
   }
 
   incompleteProductCostCount = missingItems.size;

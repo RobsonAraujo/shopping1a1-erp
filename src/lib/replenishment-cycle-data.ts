@@ -28,7 +28,7 @@ import {
   fetchUnitsSoldForItemsInWindowBatched,
 } from "@/lib/mercadolibre/api";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
-import { getItemSku, getSkuSupplier } from "@/lib/mercadolibre/item-sku";
+import { getItemSku, getSkuSupplier, isKitItem } from "@/lib/mercadolibre/item-sku";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
 import { computeStockPlanningDisplay } from "@/lib/stock-planning";
 import type { ItemBody } from "@/lib/mercadolibre/types";
@@ -581,7 +581,7 @@ export async function loadOperationsBoards(
   const dateField = stockPlanningConfig.salesWindowDateField;
   const listingIds = await fetchOperationalListingIds(token, userId);
 
-  const [items, salesByItem, warehouseStocks] = await Promise.all([
+  const [rawItems, salesByItem, warehouseStocks] = await Promise.all([
     fetchItemsByIdsBatched(token, listingIds),
     fetchUnitsSoldForItemsInWindowBatched(
       token,
@@ -599,6 +599,7 @@ export async function loadOperationsBoards(
       },
     }),
   ]);
+  const items = rawItems.filter((item) => !isKitItem(item));
 
   const warehouseById = Object.fromEntries(
     warehouseStocks.map((row) => [

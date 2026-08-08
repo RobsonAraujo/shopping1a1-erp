@@ -18,7 +18,7 @@ import {
   fetchItemsByIdsBatched,
   fetchDailyUnitsSoldByItemInDateRange,
 } from "@/lib/mercadolibre/api";
-import { getItemSku } from "@/lib/mercadolibre/item-sku";
+import { getItemSku, isKitItem } from "@/lib/mercadolibre/item-sku";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { loadStockReportProductsBySku } from "@/lib/product-data";
 import type { RevenuePotentialRow } from "@/lib/insights/types";
@@ -43,7 +43,7 @@ export async function loadRevenuePotentialData(
 
   const allIds = await fetchOperationalListingIds(token, userId);
 
-  const [items, dailyByItem] = await Promise.all([
+  const [rawItems, dailyByItem] = await Promise.all([
     fetchItemsByIdsBatched(token, allIds),
     fetchDailyUnitsSoldByItemInDateRange(
       token,
@@ -53,6 +53,7 @@ export async function loadRevenuePotentialData(
       dateField,
     ),
   ]);
+  const items = rawItems.filter((item) => !isKitItem(item));
 
   const todayKey = dayKey(now);
 

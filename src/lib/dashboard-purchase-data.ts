@@ -7,7 +7,7 @@ import {
 } from "@/lib/mercadolibre/api";
 import { formatCategoryPath } from "@/lib/mercadolibre/category-labels";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
-import { getItemSku, getSkuSupplier } from "@/lib/mercadolibre/item-sku";
+import { getItemSku, getSkuSupplier, isKitItem } from "@/lib/mercadolibre/item-sku";
 import {
   buildPurchasePlan,
   computePurchaseAnalysis,
@@ -144,7 +144,7 @@ export async function loadDashboardPurchaseData(
   const dateField = stockPlanningConfig.salesWindowDateField;
 
   const allIds = await fetchOperationalListingIds(token, userId);
-  const [items, salesByItem, warehouseStocks, replenishmentCycles, snapshots] =
+  const [rawItems, salesByItem, warehouseStocks, replenishmentCycles, snapshots] =
     await Promise.all([
       fetchItemsByIdsBatched(token, allIds),
       fetchUnitsSoldForItemsInWindowBatched(
@@ -182,6 +182,7 @@ export async function loadDashboardPurchaseData(
         select: { mlItemId: true, status: true },
       }),
     ]);
+  const items = rawItems.filter((item) => !isKitItem(item));
 
   const warehouseById = Object.fromEntries(
     warehouseStocks.map((s) => [
