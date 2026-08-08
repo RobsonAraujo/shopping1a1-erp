@@ -1,22 +1,15 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { CatalogLosingStrip } from "@/components/catalog-losing-strip";
 import { DashboardHomeShortcuts } from "@/components/dashboard-home-shortcuts";
 import { DashboardOperationsSummary } from "@/components/dashboard-operations-summary";
 import { DashboardSummaryClient } from "@/components/dashboard-summary-client";
 import { Card, CardContent } from "@/components/ui/card";
-import { prisma } from "@/lib/db";
 import {
   getSessionAccessState,
   readSession,
   refreshSessionPath,
 } from "@/lib/mercadolibre/session";
 import { loadOperationsSummaryFromDb } from "@/lib/replenishment-cycle-data";
-
-const losingWhere = {
-  catalogStatus: "losing" as const,
-  activeOnMl: true,
-};
 
 export default async function DashboardPage() {
   const cookieStore = await cookies();
@@ -34,32 +27,10 @@ export default async function DashboardPage() {
   let operationsSummary: Awaited<
     ReturnType<typeof loadOperationsSummaryFromDb>
   > | null = null;
-  let losingCount = 0;
-  let sampleTitles: Array<{ mlItemId: string; label: string }> = [];
   let loadError: string | null = null;
 
   try {
-    const [opsSummary, losingSamples, count] = await Promise.all([
-      loadOperationsSummaryFromDb(),
-      prisma.listing.findMany({
-        where: losingWhere,
-        select: {
-          mlItemId: true,
-          skuSnapshot: true,
-          titleSnapshot: true,
-        },
-        orderBy: { catalogPolledAt: "desc" },
-        take: 3,
-      }),
-      prisma.listing.count({ where: losingWhere }),
-    ]);
-
-    operationsSummary = opsSummary;
-    losingCount = count;
-    sampleTitles = losingSamples.map((row) => ({
-      mlItemId: row.mlItemId,
-      label: row.skuSnapshot ?? row.titleSnapshot ?? row.mlItemId,
-    }));
+    operationsSummary = await loadOperationsSummaryFromDb();
   } catch (e) {
     loadError = e instanceof Error ? e.message : "Erro ao carregar início";
   }
@@ -122,10 +93,6 @@ export default async function DashboardPage() {
         </div>
 
         <aside className="space-y-6 lg:sticky lg:top-6">
-          <CatalogLosingStrip
-            losingCount={losingCount}
-            sampleTitles={sampleTitles}
-          />
           <DashboardHomeShortcuts />
         </aside>
       </div>

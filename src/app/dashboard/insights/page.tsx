@@ -3,7 +3,6 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
-  AlertTriangle,
   Map,
   PieChart,
   TrendingDown,
@@ -18,13 +17,10 @@ import {
 import { loadDashboardPurchaseData } from "@/lib/dashboard-purchase-data";
 import { loadLatestTaxReportSnapshot } from "@/lib/tax-report/service/generate-monthly-report";
 import { mapToSlowMoverRows, DEFAULT_SLOW_MOVER_THRESHOLD_DAYS } from "@/lib/insights/slow-movers";
-import { buildRupturaRows } from "@/lib/insights/ruptura";
 import { buildDifalMap } from "@/lib/insights/difal-map";
 import { buildParetoRows, paretoConcentration } from "@/lib/insights/pareto";
 import { InsightExpandableCard } from "@/components/insights/insight-expandable-card";
 import { SlowMoversCard } from "@/components/insights/slow-movers-card";
-import { RupturaCard } from "@/components/insights/ruptura-card";
-import { AdsMargemCard } from "@/components/insights/ads-margem-card";
 import { DifalMapCard } from "@/components/insights/difal-map-card";
 import { ParetoCard } from "@/components/insights/pareto-card";
 import { InsightsPageSkeleton } from "@/components/insights/insights-page-skeleton";
@@ -51,7 +47,6 @@ async function InsightsDataSection({
   ]);
 
   const allSlowMoverRows = purchaseData ? mapToSlowMoverRows(purchaseData.rows) : [];
-  const rupturaRows = purchaseData ? buildRupturaRows(purchaseData.rows) : [];
   const difalRows = taxSnapshot ? buildDifalMap(taxSnapshot) : [];
   const paretoRows = taxSnapshot ? buildParetoRows(taxSnapshot) : [];
 
@@ -66,9 +61,6 @@ async function InsightsDataSection({
       (r.coverageDays !== null && r.coverageDays > DEFAULT_SLOW_MOVER_THRESHOLD_DAYS),
   ).length;
 
-  const rupturaCount = rupturaRows.length;
-  const rupturaUrgent = rupturaRows.filter((r) => (r.coverageDays ?? 0) <= 7).length;
-
   const worstDifalUf = difalRows.find((r) => r.margemMedia < 0);
 
   const { top3Percent, skusFor80Percent } = paretoRows.length > 0
@@ -77,14 +69,6 @@ async function InsightsDataSection({
   const highConcentration = top3Percent > 60;
 
   const kpis = [
-    purchaseData && {
-      key: "ruptura",
-      label: "Ruptura iminente",
-      value: rupturaCount,
-      hint: rupturaUrgent > 0 ? `${plural(rupturaUrgent, "crítico", "críticos")}` : "sob controle",
-      tone: rupturaCount === 0 ? "success" : rupturaUrgent > 0 ? "destructive" : "warning",
-      icon: AlertTriangle,
-    },
     purchaseData && {
       key: "rotacao",
       label: "Rotação baixa",
@@ -115,7 +99,7 @@ async function InsightsDataSection({
     value: string | number;
     hint: string;
     tone: "success" | "warning" | "destructive" | "secondary";
-    icon: typeof AlertTriangle;
+    icon: typeof TrendingDown;
   }>;
 
   const toneStyles: Record<string, string> = {
@@ -177,25 +161,6 @@ async function InsightsDataSection({
               Estoque &amp; reposição
             </h2>
             <InsightExpandableCard
-              title="Ruptura iminente"
-              subtitle="Produtos que vão acabar antes de chegar a reposição"
-              icon={<AlertTriangle className="size-4" aria-hidden />}
-              iconClassName="bg-red-100 text-red-700"
-              accentClassName="border-l-red-500"
-              badge={
-                rupturaCount > 0
-                  ? rupturaUrgent > 0
-                    ? `${rupturaUrgent} crítico${rupturaUrgent !== 1 ? "s" : ""}`
-                    : plural(rupturaCount, "produto", "produtos")
-                  : "tudo ok"
-              }
-              badgeVariant={rupturaCount > 0 ? (rupturaUrgent > 0 ? "destructive" : "warning") : "success"}
-              defaultOpen={rupturaCount > 0}
-            >
-              <RupturaCard rows={rupturaRows} />
-            </InsightExpandableCard>
-
-            <InsightExpandableCard
               title="Rotação baixa"
               subtitle={`Produtos com cobertura acima de ${DEFAULT_SLOW_MOVER_THRESHOLD_DAYS} dias ou sem vendas no período`}
               icon={<TrendingDown className="size-4" aria-hidden />}
@@ -208,13 +173,6 @@ async function InsightsDataSection({
             </InsightExpandableCard>
           </section>
         )}
-
-        <section className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-            Publicidade
-          </h2>
-          <AdsMargemCard />
-        </section>
 
         {taxSnapshot && taxPeriod && (
           <section className="space-y-3">
