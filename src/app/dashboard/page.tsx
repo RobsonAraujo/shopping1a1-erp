@@ -102,7 +102,7 @@ export default async function DashboardPage() {
             <PmaAlertSection token={token} userId={userId} />
           </Suspense>
 
-          <section className="space-y-4">
+          <section className="space-y-3">
             <div>
               <h2 className="text-xl font-semibold tracking-tight text-[var(--primary)]">
                 Promoções

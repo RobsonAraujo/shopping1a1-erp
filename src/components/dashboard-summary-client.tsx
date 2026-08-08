@@ -2,31 +2,12 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ExternalLink,
-  ImageOff,
-  Percent,
-  RefreshCw,
-  Tag,
-} from "lucide-react";
-import { AttentionPanelCollapseToggle } from "@/components/attention-panel-collapse-toggle";
-import {
-  ItemListSearch,
-  itemListSearchEmptyMessage,
-} from "@/components/item-list-search";
+import { useCallback, useEffect, useState } from "react";
+import { ExternalLink, ImageOff, RefreshCw, Tag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { usePersistedOpen } from "@/hooks/use-persisted-open";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { formatFinancialMoney } from "@/lib/financial-margin";
-import { filterByItemListSearch } from "@/lib/item-list-search";
 import type {
   PromotionSummaryPayload,
   PromotionSummaryRow,
@@ -50,22 +31,12 @@ function daysUntilLabel(days: number | null): string {
   return `termina em ${days} dias`;
 }
 
-type PromotionSectionProps = {
-  title: string;
-  description: string;
-  rows: PromotionSummaryRow[];
-  collapseStorageKey: string;
-  variant: "neutral" | "warning";
-  showPromotionMeta?: boolean;
-  searchQuery: string;
-};
-
 function PromotionRow({
   row,
   showPromotionMeta,
 }: {
   row: PromotionSummaryRow;
-  showPromotionMeta?: boolean;
+  showPromotionMeta: boolean;
 }) {
   return (
     <li className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 transition-colors hover:bg-[var(--muted)]/20">
@@ -133,19 +104,23 @@ function PromotionRow({
                 {formatFinancialMoney(row.regularPrice)}
               </span>
             ) : null}
-            <span className="font-mono text-[11px] sm:text-xs">{row.mlItemId}</span>
+            <span className="font-mono text-[11px] sm:text-xs">
+              {row.mlItemId}
+            </span>
           </div>
 
           {showPromotionMeta ? (
             <div className="flex flex-wrap items-center gap-2 pt-0.5">
-              {row.daysUntilEnd !== null ? (
-                <Badge
-                  variant={row.daysUntilEnd <= 1 ? "destructive" : "secondary"}
-                  className="text-xs"
-                >
-                  {daysUntilLabel(row.daysUntilEnd)}
-                </Badge>
-              ) : null}
+              <Badge
+                variant={
+                  row.daysUntilEnd !== null && row.daysUntilEnd <= 1
+                    ? "destructive"
+                    : "warning"
+                }
+                className="text-xs"
+              >
+                {daysUntilLabel(row.daysUntilEnd)}
+              </Badge>
               <span className="text-xs text-[var(--muted-foreground)]">
                 até {formatPromotionEndDate(row.promotionEndsAt)}
               </span>
@@ -166,109 +141,10 @@ function PromotionRow({
   );
 }
 
-function PromotionSection({
-  title,
-  description,
-  rows,
-  collapseStorageKey,
-  variant,
-  showPromotionMeta,
-  searchQuery,
-}: PromotionSectionProps) {
-  const { open, toggle } = usePersistedOpen(collapseStorageKey, true);
-  const filteredRows = useMemo(
-    () =>
-      filterByItemListSearch(rows, searchQuery, (row) => ({
-        sku: row.sku,
-        title: row.title,
-        mlItemId: row.mlItemId,
-      })),
-    [rows, searchQuery],
-  );
-
-  const ringClass =
-    variant === "warning"
-      ? "border-amber-200/90 ring-amber-100/70"
-      : "border-[var(--border)] ring-[var(--border)]/40";
-  const iconBgClass =
-    variant === "warning"
-      ? "bg-amber-100 text-amber-900"
-      : "bg-[var(--muted)] text-[var(--primary)]";
-
-  return (
-    <Card
-      className={cn(
-        "overflow-hidden bg-gradient-to-br from-white via-white to-[var(--card)] shadow-md ring-1",
-        ringClass,
-      )}
-    >
-      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4 space-y-0 pb-3">
-        <div className="space-y-1.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={cn(
-                "flex h-9 w-9 items-center justify-center rounded-lg",
-                iconBgClass,
-              )}
-            >
-              {variant === "warning" ? (
-                <Tag className="size-5" aria-hidden />
-              ) : (
-                <Percent className="size-5" aria-hidden />
-              )}
-            </span>
-            <CardTitle className="text-lg text-[var(--primary)]">
-              {title}
-            </CardTitle>
-          </div>
-          <CardDescription className="max-w-2xl text-sm leading-relaxed">
-            {description}
-          </CardDescription>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <Badge variant="secondary" className="px-3 py-1 text-sm">
-            {rows.length} {rows.length === 1 ? "anúncio" : "anúncios"}
-          </Badge>
-          <AttentionPanelCollapseToggle
-            open={open}
-            onToggle={toggle}
-            panelLabel={title}
-          />
-        </div>
-      </CardHeader>
-
-      {open ? (
-        <CardContent className="pb-4">
-          {filteredRows.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-[var(--border)] bg-[var(--muted)]/30 px-6 py-12 text-center">
-              <p className="max-w-md text-sm leading-relaxed text-[var(--muted-foreground)]">
-                {rows.length === 0
-                  ? "Nenhum anúncio nesta situação no momento."
-                  : itemListSearchEmptyMessage(searchQuery)}
-              </p>
-            </div>
-          ) : (
-            <ul className="space-y-2.5">
-              {filteredRows.map((row) => (
-                <PromotionRow
-                  key={row.mlItemId}
-                  row={row}
-                  showPromotionMeta={showPromotionMeta}
-                />
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      ) : null}
-    </Card>
-  );
-}
-
 export function DashboardSummaryClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<PromotionSummaryPayload | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -299,48 +175,26 @@ export function DashboardSummaryClient() {
     void loadData();
   }, [loadData]);
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-[var(--muted-foreground)]">
-          Anúncios próprios ativos no Mercado Livre.
-          {data?.fetchedAt ? (
-            <>
-              {" "}
-              Atualizado em{" "}
-              {new Date(data.fetchedAt).toLocaleString("pt-BR", {
-                timeZone: "America/Sao_Paulo",
-              })}
-              .
-            </>
-          ) : null}
-        </p>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="gap-2"
-          disabled={loading}
-          onClick={() => void loadData()}
-        >
-          <RefreshCw
-            className={cn("size-4", loading ? "animate-spin" : "")}
-            aria-hidden
-          />
-          Atualizar
-        </Button>
-      </div>
+  const expiringSoon = data?.expiringSoon ?? [];
+  const withoutPromotion = data?.withoutPromotion ?? [];
+  const totalCount = expiringSoon.length + withoutPromotion.length;
 
+  return (
+    <div className="space-y-3">
       {error ? (
         <Card className="border-red-200 bg-red-50/50">
-          <CardContent className="pt-6 text-sm text-red-900">{error}</CardContent>
+          <CardContent className="pt-6 text-sm text-red-900">
+            {error}
+          </CardContent>
         </Card>
       ) : null}
 
       {data?.warnings?.length ? (
         <Card className="border-amber-200 bg-amber-50/40">
           <CardContent className="pt-6 text-sm text-amber-950">
-            <p className="font-medium">Alguns dados não puderam ser carregados:</p>
+            <p className="font-medium">
+              Alguns dados não puderam ser carregados:
+            </p>
             <ul className="mt-2 list-disc space-y-1 pl-5">
               {data.warnings.slice(0, 5).map((warning) => (
                 <li key={warning}>{warning}</li>
@@ -353,12 +207,6 @@ export function DashboardSummaryClient() {
         </Card>
       ) : null}
 
-      <ItemListSearch
-        value={searchQuery}
-        onChange={setSearchQuery}
-        placeholder="Buscar por SKU, título ou ID do anúncio…"
-      />
-
       {loading && !data ? (
         <Card>
           <CardContent className="py-12 text-center text-sm text-[var(--muted-foreground)]">
@@ -366,26 +214,68 @@ export function DashboardSummaryClient() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-6">
-          <PromotionSection
-            title="Sem promoção"
-            description="Anúncios próprios ativos vendendo pelo preço regular, sem desconto vigente."
-            rows={data?.withoutPromotion ?? []}
-            collapseStorageKey="dashboard-summary-without-promotion"
-            variant="neutral"
-            searchQuery={searchQuery}
-          />
+        <Card className="overflow-hidden border-[var(--border)] border-l-4 border-l-amber-500">
+          <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0 pb-2">
+            <div className="flex items-center gap-2 text-sm font-medium text-amber-900">
+              <Tag className="size-4 shrink-0" aria-hidden />
+              Anúncios próprios ativos
+            </div>
+            <Badge variant="warning" className="px-2.5 py-0.5 text-xs">
+              {totalCount} {totalCount === 1 ? "anúncio" : "anúncios"}
+            </Badge>
+          </CardHeader>
+          <CardContent className="space-y-5 pt-0 pb-4">
+            {totalCount === 0 ? (
+              <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-[var(--border)] bg-[var(--muted)]/30 px-6 py-12 text-center">
+                <p className="max-w-md text-sm leading-relaxed text-[var(--muted-foreground)]">
+                  Nenhum anúncio próprio ativo no momento.
+                </p>
+              </div>
+            ) : (
+              <>
+                {expiringSoon.length > 0 ? (
+                  <div className="space-y-2.5">
+                    <h3 className="text-sm font-semibold text-[var(--foreground)]">
+                      Termina em até {data?.expiringSoonDays ?? 3} dias
+                      <span className="ml-1.5 font-normal text-[var(--muted-foreground)]">
+                        ({expiringSoon.length})
+                      </span>
+                    </h3>
+                    <ul className="space-y-2">
+                      {expiringSoon.map((row) => (
+                        <PromotionRow
+                          key={row.mlItemId}
+                          row={row}
+                          showPromotionMeta
+                        />
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
 
-          <PromotionSection
-            title={`Promoção termina em até ${data?.expiringSoonDays ?? 3} dias`}
-            description="Anúncios com desconto ativo que encerra em breve — útil para renovar antes de perder visibilidade."
-            rows={data?.expiringSoon ?? []}
-            collapseStorageKey="dashboard-summary-expiring-promotion"
-            variant="warning"
-            showPromotionMeta
-            searchQuery={searchQuery}
-          />
-        </div>
+                {withoutPromotion.length > 0 ? (
+                  <div className="space-y-2.5">
+                    <h3 className="text-sm font-semibold text-[var(--foreground)]">
+                      Sem promoção
+                      <span className="ml-1.5 font-normal text-[var(--muted-foreground)]">
+                        ({withoutPromotion.length})
+                      </span>
+                    </h3>
+                    <ul className="space-y-2">
+                      {withoutPromotion.map((row) => (
+                        <PromotionRow
+                          key={row.mlItemId}
+                          row={row}
+                          showPromotionMeta={false}
+                        />
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </>
+            )}
+          </CardContent>
+        </Card>
       )}
     </div>
   );
