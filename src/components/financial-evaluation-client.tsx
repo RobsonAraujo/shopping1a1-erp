@@ -78,6 +78,11 @@ type ApiResponse = {
   periodDays?: number;
 };
 
+type StreamEvent =
+  | { type: "row"; row: FinancialEvaluationRow }
+  | ({ type: "complete" } & Omit<ApiResponse, "items">)
+  | { type: "error"; message: string };
+
 type SortKey = "product" | "price" | "margin" | "afterAds";
 type SortDir = "asc" | "desc";
 
@@ -621,6 +626,7 @@ export function FinancialEvaluationClient() {
           "/api/financial-evaluation",
           window.location.origin,
         );
+        url.searchParams.set("stream", "1");
         if (mode === "period" && options?.from && options?.to) {
           url.searchParams.set("from", options.from);
           url.searchParams.set("to", options.to);
@@ -628,37 +634,66 @@ export function FinancialEvaluationClient() {
           url.searchParams.set("itemIds", itemIds.join(","));
         }
         const res = await fetch(url.toString());
-        const json = (await res.json()) as ApiResponse | { error?: string };
-        if (!res.ok) {
-          setError(
-            (json as { error?: string }).error ??
-              "Falha ao carregar lucratividade.",
-          );
+        if (!res.ok || !res.body) {
+          setError(await readApiError(res, "Falha ao carregar lucratividade."));
           return null;
         }
-        const payload = json as ApiResponse;
-        setData(payload.items);
-        setWholesaleReductions(payload.wholesaleReductions);
-        setEvaluationMode(payload.mode ?? mode);
-        if (payload.mode === "period") {
-          setAppliedFrom(payload.from ?? options?.from ?? null);
-          setAppliedTo(payload.to ?? options?.to ?? null);
-          setPeriodSalesCount(payload.salesCount ?? null);
-          setPeriodDays(payload.periodDays ?? null);
-          setAppliedTargetMargin(null);
-          setAppliedMarginBasis(null);
-          initialMinPriceRefineDone.current = true;
-        } else {
-          setAppliedFrom(null);
-          setAppliedTo(null);
-          setPeriodSalesCount(null);
-          setPeriodDays(null);
-          if (itemIds?.length) {
-            setAppliedTargetMargin(null);
-            setAppliedMarginBasis(null);
+
+        const collected: FinancialEvaluationRow[] = [];
+        let streamError: string | null = null;
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const chunks = buffer.split("\n\n");
+          buffer = chunks.pop() ?? "";
+
+          for (const chunk of chunks) {
+            const line = chunk.trim();
+            if (!line.startsWith("data: ")) continue;
+            const event = JSON.parse(line.slice(6)) as StreamEvent;
+
+            if (event.type === "row") {
+              collected.push(event.row);
+              setData((prev) => (prev ? [...prev, event.row] : [event.row]));
+            } else if (event.type === "complete") {
+              setWholesaleReductions(event.wholesaleReductions);
+              setEvaluationMode(event.mode ?? mode);
+              if (event.mode === "period") {
+                setAppliedFrom(event.from ?? options?.from ?? null);
+                setAppliedTo(event.to ?? options?.to ?? null);
+                setPeriodSalesCount(event.salesCount ?? null);
+                setPeriodDays(event.periodDays ?? null);
+                setAppliedTargetMargin(null);
+                setAppliedMarginBasis(null);
+                initialMinPriceRefineDone.current = true;
+              } else {
+                setAppliedFrom(null);
+                setAppliedTo(null);
+                setPeriodSalesCount(null);
+                setPeriodDays(null);
+                if (itemIds?.length) {
+                  setAppliedTargetMargin(null);
+                  setAppliedMarginBasis(null);
+                }
+              }
+              if (collected.length === 0) setData([]);
+            } else if (event.type === "error") {
+              streamError = event.message;
+            }
           }
         }
-        return payload.items;
+
+        if (streamError) {
+          setError(streamError);
+          return null;
+        }
+        return collected;
       } catch {
         setError("Falha de rede ao carregar lucratividade.");
         return null;
@@ -1033,6 +1068,13 @@ export function FinancialEvaluationClient() {
           {loading && !data ? (
             <p className="text-sm text-[var(--muted-foreground)]">
               Carregando margens…
+            </p>
+          ) : null}
+
+          {loading && data && data.length > 0 ? (
+            <p className="mb-3 flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
+              <RefreshCw className="size-3.5 animate-spin" aria-hidden />
+              Carregando mais anúncios… ({data.length} carregados)
             </p>
           ) : null}
 

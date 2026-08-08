@@ -97,6 +97,7 @@ async function mapWithConcurrency<T, R>(
   items: T[],
   concurrency: number,
   fn: (item: T, index: number) => Promise<R>,
+  onEach?: (result: R, index: number) => void,
 ): Promise<R[]> {
   if (items.length === 0) return [];
   const results = new Array<R>(items.length);
@@ -106,7 +107,9 @@ async function mapWithConcurrency<T, R>(
     while (nextIndex < items.length) {
       const index = nextIndex;
       nextIndex += 1;
-      results[index] = await fn(items[index], index);
+      const result = await fn(items[index], index);
+      results[index] = result;
+      onEach?.(result, index);
     }
   }
 
@@ -344,9 +347,11 @@ async function buildRowForItem(
   let mlFeeAmount: number | null = null;
   let listingTypeLabel = listingTypeLabelFromId(item.listing_type_id);
 
-  if (!item.category_id || !item.listing_type_id) {
-    errors.push("Anúncio sem categoria ou tipo de listagem para calcular taxa.");
-  } else {
+  async function loadFee(): Promise<void> {
+    if (!item.category_id || !item.listing_type_id) {
+      errors.push("Anúncio sem categoria ou tipo de listagem para calcular taxa.");
+      return;
+    }
     try {
       const fee = await fetchListingSaleFee(accessToken, {
         siteId: siteIdFromItemId(item.id),
@@ -367,21 +372,28 @@ async function buildRowForItem(
   }
 
   let shippingCost: number | null = null;
-  try {
-    const shipping = await fetchSellerShippingCost(accessToken, {
-      sellerId: userId,
-      item,
-      effectiveSalePrice: salePrice,
-    });
-    shippingCost = shipping.applicable ? shipping.cost : 0;
-    if (!shipping.applicable) {
-      warnings.push("Frete grátis não aplicável ou indisponível (considerado 0).");
+
+  async function loadShipping(): Promise<void> {
+    try {
+      const shipping = await fetchSellerShippingCost(accessToken, {
+        sellerId: userId,
+        item,
+        effectiveSalePrice: salePrice,
+      });
+      shippingCost = shipping.applicable ? shipping.cost : 0;
+      if (!shipping.applicable) {
+        warnings.push("Frete grátis não aplicável ou indisponível (considerado 0).");
+      }
+    } catch (e) {
+      errors.push(
+        e instanceof Error ? e.message : "Falha ao consultar frete do vendedor.",
+      );
     }
-  } catch (e) {
-    errors.push(
-      e instanceof Error ? e.message : "Falha ao consultar frete do vendedor.",
-    );
   }
+
+  // fetchListingSaleFee e fetchSellerShippingCost só dependem do salePrice já resolvido
+  // acima, não uma da outra — rodam em paralelo pra reduzir a latência por item.
+  await Promise.all([loadFee(), loadShipping()]);
 
   let mlFeeRebate: number | null = null;
   let mlFeeRebateOrderId: string | null = null;
@@ -655,13 +667,17 @@ async function buildRowForPeriodItem(
   let listingTypeLabel = listingTypeLabelFromId(item.listing_type_id);
   let usedOrderFee = false;
 
-  if (agg.saleFeeKnownQty > 0) {
-    mlFeeAmount = roundMoney(agg.saleFeeSum / agg.saleFeeKnownQty);
-    usedOrderFee = true;
-    warnings.push("Taxa ML média das vendas do período.");
-  } else if (!item.category_id || !item.listing_type_id) {
-    errors.push("Anúncio sem categoria ou tipo de listagem para calcular taxa.");
-  } else {
+  async function loadFee(): Promise<void> {
+    if (agg.saleFeeKnownQty > 0) {
+      mlFeeAmount = roundMoney(agg.saleFeeSum / agg.saleFeeKnownQty);
+      usedOrderFee = true;
+      warnings.push("Taxa ML média das vendas do período.");
+      return;
+    }
+    if (!item.category_id || !item.listing_type_id) {
+      errors.push("Anúncio sem categoria ou tipo de listagem para calcular taxa.");
+      return;
+    }
     try {
       const fee = await fetchListingSaleFee(accessToken, {
         siteId: siteIdFromItemId(item.id),
@@ -684,27 +700,34 @@ async function buildRowForPeriodItem(
     }
   }
 
-  if (usedOrderFee && item.listing_type_id) {
-    listingTypeLabel = listingTypeLabelFromId(item.listing_type_id);
+  let shippingCost: number | null = null;
+
+  async function loadShipping(): Promise<void> {
+    try {
+      const shipping = await fetchSellerShippingCost(accessToken, {
+        sellerId: userId,
+        item,
+        effectiveSalePrice: salePrice,
+      });
+      shippingCost = shipping.applicable ? shipping.cost : 0;
+      if (!shipping.applicable) {
+        warnings.push("Frete grátis não aplicável ou indisponível (considerado 0).");
+      } else {
+        warnings.push("Frete estimado no preço médio do período.");
+      }
+    } catch (e) {
+      errors.push(
+        e instanceof Error ? e.message : "Falha ao consultar frete do vendedor.",
+      );
+    }
   }
 
-  let shippingCost: number | null = null;
-  try {
-    const shipping = await fetchSellerShippingCost(accessToken, {
-      sellerId: userId,
-      item,
-      effectiveSalePrice: salePrice,
-    });
-    shippingCost = shipping.applicable ? shipping.cost : 0;
-    if (!shipping.applicable) {
-      warnings.push("Frete grátis não aplicável ou indisponível (considerado 0).");
-    } else {
-      warnings.push("Frete estimado no preço médio do período.");
-    }
-  } catch (e) {
-    errors.push(
-      e instanceof Error ? e.message : "Falha ao consultar frete do vendedor.",
-    );
+  // fetchListingSaleFee (quando necessário) e fetchSellerShippingCost não dependem
+  // uma da outra — rodam em paralelo pra reduzir a latência por item.
+  await Promise.all([loadFee(), loadShipping()]);
+
+  if (usedOrderFee && item.listing_type_id) {
+    listingTypeLabel = listingTypeLabelFromId(item.listing_type_id);
   }
 
   const breakdown =
@@ -833,6 +856,8 @@ export async function loadFinancialEvaluationRows(
     itemIds?: string[];
     targetMarginPercent?: number;
     marginBasis?: MarginBasis;
+    /** Chamado a cada linha pronta (com ADS já aplicado), pra permitir streaming incremental. */
+    onRow?: (row: FinancialEvaluationRow) => void;
   },
 ): Promise<FinancialEvaluationRow[]> {
   const listingIds =
@@ -888,6 +913,21 @@ export async function loadFinancialEvaluationRows(
         kitsByMlItemId,
       });
     },
+    options?.onRow
+      ? (row) => {
+          const withAds = applyAdsToRow(
+            row,
+            adsLoad.map.get(row.mlItemId),
+            adsLoad.available,
+          );
+          if (!adsLoad.available) {
+            withAds.warnings.push(
+              "Métricas de Product Ads indisponíveis; margem pós ADS não calculada.",
+            );
+          }
+          options.onRow!(withAds);
+        }
+      : undefined,
   );
 
   const rows = baseRows.map((row) => {
@@ -949,6 +989,10 @@ export async function loadFinancialEvaluationRowsForPeriod(
   userId: number,
   fromYmd: string,
   toYmd: string,
+  options?: {
+    /** Chamado a cada linha pronta (com ADS já aplicado), pra permitir streaming incremental. */
+    onRow?: (row: FinancialEvaluationRow) => void;
+  },
 ): Promise<FinancialEvaluationPeriodResult> {
   const range = calendarYmdRangeToUtc(fromYmd, toYmd);
   if (!range) {
@@ -1012,16 +1056,35 @@ export async function loadFinancialEvaluationRowsForPeriod(
     })
     .filter((row): row is { agg: PeriodSaleAgg; item: ItemBody } => row !== null);
 
-  const baseRows = await mapWithConcurrency(orderedAggs, 5, async ({ agg, item }) => {
-    const sku = getItemSku(item);
-    const pricing = sku
-      ? (pricingBySku.get(normalizeProductSku(sku)) ?? null)
-      : null;
-    return buildRowForPeriodItem(accessToken, userId, item, pricing, agg, taxBySku, {
-      pricingBySku,
-      kitsByMlItemId,
-    });
-  });
+  const baseRows = await mapWithConcurrency(
+    orderedAggs,
+    5,
+    async ({ agg, item }) => {
+      const sku = getItemSku(item);
+      const pricing = sku
+        ? (pricingBySku.get(normalizeProductSku(sku)) ?? null)
+        : null;
+      return buildRowForPeriodItem(accessToken, userId, item, pricing, agg, taxBySku, {
+        pricingBySku,
+        kitsByMlItemId,
+      });
+    },
+    options?.onRow
+      ? (row) => {
+          const withAds = applyAdsToRow(
+            row,
+            adsLoad.map.get(row.mlItemId),
+            adsLoad.available,
+          );
+          if (!adsLoad.available) {
+            withAds.warnings.push(
+              "Métricas de Product Ads indisponíveis; margem pós ADS não calculada.",
+            );
+          }
+          options.onRow!(withAds);
+        }
+      : undefined,
+  );
 
   const rows = baseRows.map((row) => {
     const withAds = applyAdsToRow(
