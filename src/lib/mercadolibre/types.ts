@@ -7,11 +7,27 @@ export type TokenResponse = {
   user_id?: number;
 };
 
+export type SellerReputation = {
+  level_id: string | null;
+  power_seller_status: "platinum" | "gold" | "silver" | null;
+  transactions?: {
+    completed?: number;
+    canceled?: number;
+    ratings?: {
+      positive?: number;
+      negative?: number;
+      neutral?: number;
+    };
+  };
+};
+
 export type UserMe = {
   id: number;
   nickname: string;
   email?: string;
   country_id?: string;
+  permalink?: string;
+  seller_reputation?: SellerReputation;
 };
 
 export type ItemsSearchResponse = {
