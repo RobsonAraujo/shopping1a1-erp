@@ -137,4 +137,16 @@ describe("buildSkuSalesExcelFilename", () => {
       "relatorio-tributario-SKU_A_B-2026-03.xlsx",
     );
   });
+
+  it("uses periodLabel instead of year/month when present", () => {
+    assert.equal(
+      buildSkuSalesExcelFilename({
+        sku: "SKU-A",
+        year: null,
+        month: null,
+        periodLabel: "2026-07-25_a_2026-08-05",
+      }),
+      "relatorio-tributario-SKU-A-2026-07-25_a_2026-08-05.xlsx",
+    );
+  });
 });

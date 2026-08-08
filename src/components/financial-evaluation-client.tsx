@@ -49,6 +49,7 @@ import {
   type MinSalePriceResult,
 } from "@/lib/financial-margin";
 import { readApiError } from "@/lib/api-client-error";
+import { lastDaysYmdRange, todayYmdLocal } from "@/lib/date-range";
 import type { FinancialEvaluationRow } from "@/lib/financial-evaluation-data";
 import { filterByItemListSearch } from "@/lib/item-list-search";
 import {
@@ -81,29 +82,6 @@ type SortDir = "asc" | "desc";
 const TARGET_MARGIN_STORAGE_KEY = "lucratividade-target-margin";
 const MARGIN_BASIS_STORAGE_KEY = "lucratividade-margin-basis";
 const DEFAULT_TARGET_MARGIN_PERCENT = 6;
-
-function todayYmdLocal(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-function ymdFromLocalDate(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-/** Inclusive window ending today (7 = today + 6 previous days). */
-function lastDaysYmdRange(days: 7 | 15 | 30): { from: string; to: string } {
-  const to = new Date();
-  const from = new Date(to);
-  from.setDate(from.getDate() - (days - 1));
-  return { from: ymdFromLocalDate(from), to: ymdFromLocalDate(to) };
-}
 
 function compareNullableNumber(
   a: number | null | undefined,

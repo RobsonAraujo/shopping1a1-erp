@@ -26,10 +26,17 @@ import { calcularSkuVendasPorUf } from "@/lib/tax-report/sku-vendas-por-uf";
 import type { SkuAggregation, TaxReportPayload } from "@/lib/tax-report/types";
 import { TaxReportSkuUfBreakdown } from "@/components/tax-report-sku-uf-breakdown";
 
+function formatYmdBr(ymd: string): string {
+  const [y, m, d] = ymd.split("-");
+  return `${d}/${m}/${y}`;
+}
+
 type MonthlyTaxReportSkuClientProps = {
   year: number;
   month: number;
   sku: string;
+  /** Quando presente, a tela busca dados do período de dias em vez do mês único. */
+  period?: { from: string; to: string };
 };
 
 function SkuSummaryCard({ data }: { data: SkuAggregation }) {
@@ -88,6 +95,7 @@ export function MonthlyTaxReportSkuClient({
   year,
   month,
   sku,
+  period,
 }: MonthlyTaxReportSkuClientProps) {
   const [report, setReport] = useState<TaxReportPayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -102,7 +110,9 @@ export function MonthlyTaxReportSkuClient({
     setNotFound(false);
     try {
       const res = await fetch(
-        `/api/reports/monthly-tax?year=${year}&month=${month}`,
+        period
+          ? `/api/reports/period-tax?from=${period.from}&to=${period.to}`
+          : `/api/reports/monthly-tax?year=${year}&month=${month}`,
       );
       if (res.status === 404) {
         setReport(null);
@@ -126,7 +136,7 @@ export function MonthlyTaxReportSkuClient({
     } finally {
       setLoading(false);
     }
-  }, [year, month, sku]);
+  }, [year, month, sku, period]);
 
   useEffect(() => {
     void loadReport();
@@ -171,7 +181,9 @@ export function MonthlyTaxReportSkuClient({
     [ufFilteredTransactions, searchQuery],
   );
 
-  const periodLabel = `${TAX_REPORT_MONTH_NAMES[month - 1]}/${year}`;
+  const periodLabel = period
+    ? `${formatYmdBr(period.from)} – ${formatYmdBr(period.to)}`
+    : `${TAX_REPORT_MONTH_NAMES[month - 1]}/${year}`;
 
   if (loading) {
     return (
@@ -241,8 +253,11 @@ export function MonthlyTaxReportSkuClient({
                 onClick={() =>
                   downloadSkuSalesExcel(filteredTransactions, {
                     sku: canonicalSku,
-                    year,
-                    month,
+                    year: period ? null : year,
+                    month: period ? null : month,
+                    periodLabel: period
+                      ? `${period.from}_a_${period.to}`
+                      : undefined,
                     filterUf: filterUf.trim() || undefined,
                   })
                 }

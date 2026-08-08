@@ -232,6 +232,9 @@ export type RelatorioConsolidado = {
 export type TaxReportPayload = {
   year: number;
   month: number;
+  /** Presentes só em relatórios de período (filtro de dias); ausentes em snapshots mensais normais. */
+  periodFrom?: string;
+  periodTo?: string;
   consolidado: RelatorioConsolidado;
   porSku: SkuAggregation[];
   /** Detalhes por venda na raiz; vazio em snapshots persistidos (ver porSku[].transacoes). */

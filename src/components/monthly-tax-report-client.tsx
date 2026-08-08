@@ -21,7 +21,9 @@ import {
   ItemListSearch,
   itemListSearchEmptyMessage,
 } from "@/components/item-list-search";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { readApiError } from "@/lib/api-client-error";
+import { lastDaysYmdRange, todayYmdLocal } from "@/lib/date-range";
 import {
   formatFinancialMoney,
   formatFinancialPercent,
@@ -31,6 +33,7 @@ import { getZonedYearMonth } from "@/lib/mercadolibre/revenue-periods";
 import {
   TAX_REPORT_MONTH_NAMES,
   taxReportSkuPath,
+  taxReportSkuPeriodPath,
 } from "@/lib/tax-report/routes";
 import {
   skuImpostoOperacionalMedio,
@@ -39,6 +42,11 @@ import {
 } from "@/lib/tax-report/imposto-operacional";
 import type { TaxReportPayload } from "@/lib/tax-report/types";
 import { cn } from "@/lib/utils";
+
+function formatYmdBr(ymd: string): string {
+  const [y, m, d] = ymd.split("-");
+  return `${d}/${m}/${y}`;
+}
 
 function SummaryCard({
   label,
@@ -72,6 +80,13 @@ export function MonthlyTaxReportClient() {
   const now = getZonedYearMonth();
   const [year, setYear] = useState(now.year);
   const [month, setMonth] = useState(now.month);
+  const [mode, setMode] = useState<"month" | "period">("month");
+  const [fromDate, setFromDate] = useState(todayYmdLocal);
+  const [toDate, setToDate] = useState(todayYmdLocal);
+  const [rangePreset, setRangePreset] = useState<"custom" | 7 | 15 | 30>(7);
+  const [missingMonths, setMissingMonths] = useState<
+    { year: number; month: number }[]
+  >([]);
   const [report, setReport] = useState<TaxReportPayload | null>(null);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -81,6 +96,24 @@ export function MonthlyTaxReportClient() {
   const [searchQuery, setSearchQuery] = useState("");
   const [fixedCostModalOpen, setFixedCostModalOpen] = useState(false);
   const [fixedCostItems, setFixedCostItems] = useState<TaxFixedCostItemRow[]>([]);
+  const isPeriodMode = mode === "period";
+
+  const applyPreset = useCallback((days: 7 | 15 | 30) => {
+    const { from, to } = lastDaysYmdRange(days);
+    setRangePreset(days);
+    setFromDate(from);
+    setToDate(to);
+  }, []);
+
+  const switchToPeriod = useCallback(() => {
+    if (mode === "period") return;
+    setMode("period");
+    applyPreset(rangePreset === "custom" ? 7 : rangePreset);
+  }, [mode, rangePreset, applyPreset]);
+
+  const switchToMonth = useCallback(() => {
+    setMode("month");
+  }, []);
 
   const loadFixedCostItems = useCallback(async () => {
     try {
@@ -102,9 +135,12 @@ export function MonthlyTaxReportClient() {
   const loadReport = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setMissingMonths([]);
     try {
       const res = await fetch(
-        `/api/reports/monthly-tax?year=${year}&month=${month}`,
+        isPeriodMode
+          ? `/api/reports/period-tax?from=${fromDate}&to=${toDate}`
+          : `/api/reports/monthly-tax?year=${year}&month=${month}`,
       );
       if (res.status === 404) {
         setReport(null);
@@ -113,14 +149,18 @@ export function MonthlyTaxReportClient() {
       if (!res.ok) {
         throw new Error(await readApiError(res, "monthly_tax_load_failed"));
       }
-      setReport((await res.json()) as TaxReportPayload);
+      const data = (await res.json()) as TaxReportPayload & {
+        missingMonths?: { year: number; month: number }[];
+      };
+      setMissingMonths(data.missingMonths ?? []);
+      setReport(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao carregar relatório");
       setReport(null);
     } finally {
       setLoading(false);
     }
-  }, [year, month]);
+  }, [isPeriodMode, year, month, fromDate, toDate]);
 
   const generateReport = useCallback(
     async (force: boolean) => {
@@ -218,6 +258,14 @@ export function MonthlyTaxReportClient() {
     [],
   );
 
+  const skuPathFor = useCallback(
+    (sku: string) =>
+      isPeriodMode
+        ? taxReportSkuPeriodPath(fromDate, toDate, sku)
+        : taxReportSkuPath(year, month, sku),
+    [isPeriodMode, fromDate, toDate, year, month],
+  );
+
   const filteredSkuRows = useMemo(
     () =>
       filterByItemListSearch(report?.porSku ?? [], searchQuery, (row) => ({
@@ -246,61 +294,149 @@ export function MonthlyTaxReportClient() {
           </p>
         </Card>
 
-        <div className="flex flex-wrap items-end gap-3">
-          <FormSelect
-            id="tax-report-year"
-            label="Ano"
-            value={String(year)}
-            onValueChange={(value) => setYear(Number(value))}
-            options={yearOptions}
-            disabled={generating}
-            triggerClassName="w-[7.5rem]"
-          />
-          <FormSelect
-            id="tax-report-month"
-            label="Mês"
-            value={String(month)}
-            onValueChange={(value) => setMonth(Number(value))}
-            options={monthOptions}
-            disabled={generating}
-            triggerClassName="w-[10.5rem]"
-          />
-          <Button
-            type="button"
-            disabled={loading || generating}
-            onClick={() => void generateReport(false)}
-          >
-            Gerar relatório
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={loading || generating}
-            onClick={() => void generateReport(true)}
-          >
-            <RefreshCw className="mr-2 size-4" />
-            Recalcular
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setFixedCostModalOpen(true)}
-          >
-            <Wallet className="mr-2 size-4" />
-            Custos fixos
-          </Button>
+        <div className="flex flex-wrap items-end gap-3 rounded-lg border border-[var(--border)] bg-[var(--muted)]/10 px-3 py-2">
+          <div className="flex rounded-lg border border-[var(--border)] bg-[var(--background)] p-0.5">
+            <Button
+              type="button"
+              size="sm"
+              variant={!isPeriodMode ? "default" : "ghost"}
+              className="h-8 rounded-md px-3 text-xs"
+              disabled={loading || generating}
+              onClick={switchToMonth}
+            >
+              Mês
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={isPeriodMode ? "default" : "ghost"}
+              className="h-8 rounded-md px-3 text-xs"
+              disabled={loading || generating}
+              onClick={switchToPeriod}
+            >
+              Período
+            </Button>
+          </div>
+
+          {isPeriodMode ? (
+            <>
+              <div>
+                <label className="mb-1 block text-xs text-[var(--muted-foreground)]">
+                  Período
+                </label>
+                <DateRangePicker
+                  fromYmd={fromDate}
+                  toYmd={toDate}
+                  disabled={loading}
+                  onChange={(from, to) => {
+                    setRangePreset("custom");
+                    setFromDate(from);
+                    setToDate(to);
+                  }}
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant={rangePreset === 7 ? "default" : "outline"}
+                  size="sm"
+                  className="h-[38px]"
+                  disabled={loading}
+                  onClick={() => applyPreset(7)}
+                >
+                  Últimos 7 dias
+                </Button>
+                <Button
+                  type="button"
+                  variant={rangePreset === 15 ? "default" : "outline"}
+                  size="sm"
+                  className="h-[38px]"
+                  disabled={loading}
+                  onClick={() => applyPreset(15)}
+                >
+                  Últimos 15 dias
+                </Button>
+                <Button
+                  type="button"
+                  variant={rangePreset === 30 ? "default" : "outline"}
+                  size="sm"
+                  className="h-[38px]"
+                  disabled={loading}
+                  onClick={() => applyPreset(30)}
+                >
+                  Últimos 30 dias
+                </Button>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={loading}
+                onClick={() => void loadReport()}
+              >
+                <RefreshCw className={cn("mr-2 size-4", loading && "animate-spin")} />
+                Atualizar
+              </Button>
+            </>
+          ) : (
+            <>
+              <FormSelect
+                id="tax-report-year"
+                label="Ano"
+                value={String(year)}
+                onValueChange={(value) => setYear(Number(value))}
+                options={yearOptions}
+                disabled={generating}
+                triggerClassName="w-[7.5rem]"
+              />
+              <FormSelect
+                id="tax-report-month"
+                label="Mês"
+                value={String(month)}
+                onValueChange={(value) => setMonth(Number(value))}
+                options={monthOptions}
+                disabled={generating}
+                triggerClassName="w-[10.5rem]"
+              />
+              <Button
+                type="button"
+                disabled={loading || generating}
+                onClick={() => void generateReport(false)}
+              >
+                Gerar relatório
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={loading || generating}
+                onClick={() => void generateReport(true)}
+              >
+                <RefreshCw className="mr-2 size-4" />
+                Recalcular
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setFixedCostModalOpen(true)}
+              >
+                <Wallet className="mr-2 size-4" />
+                Custos fixos
+              </Button>
+            </>
+          )}
         </div>
 
-        <TaxFixedCostsModal
-          open={fixedCostModalOpen}
-          year={year}
-          month={month}
-          items={fixedCostItems}
-          onClose={() => setFixedCostModalOpen(false)}
-          onChanged={() => {
-            void loadFixedCostItems();
-          }}
-        />
+        {!isPeriodMode ? (
+          <TaxFixedCostsModal
+            open={fixedCostModalOpen}
+            year={year}
+            month={month}
+            items={fixedCostItems}
+            onClose={() => setFixedCostModalOpen(false)}
+            onChanged={() => {
+              void loadFixedCostItems();
+            }}
+          />
+        ) : null}
 
         {error ? (
           <Card className="border-red-200 bg-red-50/70 p-4 text-sm text-red-800">
@@ -308,11 +444,26 @@ export function MonthlyTaxReportClient() {
           </Card>
         ) : null}
 
+        {isPeriodMode && missingMonths.length > 0 ? (
+          <Card className="border-amber-200 bg-amber-50/60 p-4 text-sm text-amber-950">
+            Sem relatório gerado para{" "}
+            {missingMonths
+              .map((m) => `${TAX_REPORT_MONTH_NAMES[m.month - 1]}/${m.year}`)
+              .join(", ")}
+            {" — "}parte do período pode estar incompleta. Gere esse(s) mês(es)
+            no modo &quot;Mês&quot;.
+          </Card>
+        ) : null}
+
         {!report && !loading && !generating && !error ? (
           <Card className="p-6 text-center text-sm text-[var(--muted-foreground)]">
-            Nenhum snapshot salvo para {TAX_REPORT_MONTH_NAMES[month - 1]}/
-            {year}. Clique em &quot;Gerar relatório&quot; para buscar pedidos no
-            Mercado Livre.
+            {isPeriodMode
+              ? "Nenhum dado encontrado para o período selecionado."
+              : <>
+                  Nenhum snapshot salvo para {TAX_REPORT_MONTH_NAMES[month - 1]}/
+                  {year}. Clique em &quot;Gerar relatório&quot; para buscar pedidos no
+                  Mercado Livre.
+                </>}
           </Card>
         ) : null}
 
@@ -355,7 +506,8 @@ export function MonthlyTaxReportClient() {
                   Crédito de custos fixos (aluguel etc.) já incluído na margem
                 </p>
                 <p className="mt-1 text-[var(--muted-foreground)]">
-                  {report.consolidado.creditoCustosFixosBaseCreditavel !=
+                  {!isPeriodMode &&
+                  report.consolidado.creditoCustosFixosBaseCreditavel !=
                     report.consolidado.creditoCustosFixosBaseRegistrada ? (
                     <>
                       Mês em andamento: base rateada{" "}
@@ -368,7 +520,7 @@ export function MonthlyTaxReportClient() {
                       )}{" "}
                       cadastrados ×{" "}
                     </>
-                  ) : (
+                  ) : !isPeriodMode ? (
                     <>
                       Base cadastrada{" "}
                       {formatFinancialMoney(
@@ -376,7 +528,7 @@ export function MonthlyTaxReportClient() {
                       )}{" "}
                       ×{" "}
                     </>
-                  )}
+                  ) : null}
                   9,25% ={" "}
                   <strong>
                     {formatFinancialMoney(
@@ -388,7 +540,17 @@ export function MonthlyTaxReportClient() {
             ) : null}
 
             <p className="text-xs text-[var(--muted-foreground)]">
-              Gerado em {new Date(report.meta.geradoEm).toLocaleString("pt-BR")}{" "}
+              {report.periodFrom && report.periodTo ? (
+                <>
+                  Período: {formatYmdBr(report.periodFrom)} –{" "}
+                  {formatYmdBr(report.periodTo)}{" "}
+                </>
+              ) : (
+                <>
+                  Gerado em{" "}
+                  {new Date(report.meta.geradoEm).toLocaleString("pt-BR")}{" "}
+                </>
+              )}
               · {report.meta.pedidosProcessados} pedidos ·{" "}
               {report.meta.linhasProcessadas} linhas ·{" "}
               {report.meta.semBillingInfo} sem billing_info · UF origem{" "}
@@ -456,7 +618,7 @@ export function MonthlyTaxReportClient() {
                         >
                           <td className="py-2 pr-3 font-medium">
                             <Link
-                              href={taxReportSkuPath(year, month, row.sku)}
+                              href={skuPathFor(row.sku)}
                               className="inline-flex flex-col gap-0.5 text-[var(--primary)] hover:underline"
                             >
                               <span>{row.sku}</span>
@@ -488,7 +650,7 @@ export function MonthlyTaxReportClient() {
                           </td>
                           <td className="py-2 text-[var(--muted-foreground)]">
                             <Link
-                              href={taxReportSkuPath(year, month, row.sku)}
+                              href={skuPathFor(row.sku)}
                               aria-label={`Ver vendas de ${row.sku}`}
                             >
                               <ChevronRight className="size-4" />

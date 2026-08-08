@@ -31,8 +31,10 @@ export type SkuSalesExcelRow = {
 
 export type SkuSalesExcelMeta = {
   sku: string;
-  year: number;
-  month: number;
+  year: number | null;
+  month: number | null;
+  /** Presente em exportações de período (filtro de dias) — substitui year/month no nome do arquivo. */
+  periodLabel?: string;
   filterUf?: string;
 };
 
@@ -93,6 +95,10 @@ export function buildSkuSalesExcelRows(
 
 export function buildSkuSalesExcelFilename(meta: SkuSalesExcelMeta): string {
   const safeSku = meta.sku.replace(/[^a-zA-Z0-9._-]+/g, "_");
+  if (meta.periodLabel) {
+    const safePeriod = meta.periodLabel.replace(/[^a-zA-Z0-9._-]+/g, "_");
+    return `relatorio-tributario-${safeSku}-${safePeriod}.xlsx`;
+  }
   const month = String(meta.month).padStart(2, "0");
   return `relatorio-tributario-${safeSku}-${meta.year}-${month}.xlsx`;
 }
