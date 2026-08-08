@@ -76,7 +76,7 @@ function includedRow(
     },
     creditoOutrasDespesas: null,
     cbsIbs: null,
-    impostoTotal: 41.1,
+    impostoTotal: 32.1,
     margemOperacionalEstimada: 78.9,
     incluidoNaApuracao: true,
     memoriaCalculo: ["Linha 1", "Linha 2"],
@@ -102,8 +102,8 @@ describe("buildSkuSalesExcelRows", () => {
     assert.equal(row.ICMS, 24);
     assert.equal(row["ICMS crédito compra"], 9);
     assert.equal(row.DIFAL, 6);
-    assert.equal(row["Imp. oper. (R$)"], 41.1);
-    assert.equal(row["Imp. oper. (%)"], 20.55);
+    assert.equal(row["Imp. oper. (R$)"], 32.1);
+    assert.equal(row["Imp. oper. (%)"], 16.05);
     assert.equal(row["Margem oper. (R$)"], 78.9);
     assert.equal(row["Incluído na apuração"], "Sim");
     assert.equal(row["Memória de cálculo"], "Linha 1\nLinha 2");
