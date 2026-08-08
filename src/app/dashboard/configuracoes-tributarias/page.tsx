@@ -1,4 +1,9 @@
+import type { Metadata } from "next";
 import { TaxConfigClient } from "@/components/tax-config-client";
+
+export const metadata: Metadata = {
+  title: "Config. tributária",
+};
 
 export default function ConfiguracoesTributariasPage() {
   return (

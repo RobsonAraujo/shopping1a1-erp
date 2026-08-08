@@ -47,7 +47,7 @@ export function DashboardPmaAlertPanel({ rows }: { rows: PmaAlertRow[] }) {
                     {row.imageUrl ? (
                       <Image
                         src={row.imageUrl}
-                        alt=""
+                        alt={row.title}
                         width={64}
                         height={64}
                         className="size-14 object-contain sm:size-16"

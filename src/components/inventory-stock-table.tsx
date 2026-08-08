@@ -371,7 +371,7 @@ export function InventoryStockTable({
                                   {row.imageUrl ? (
                                     <Image
                                       src={row.imageUrl}
-                                      alt=""
+                                      alt={row.title}
                                       width={128}
                                       height={128}
                                       className="size-12 object-contain sm:size-14"

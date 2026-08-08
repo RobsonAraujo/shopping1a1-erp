@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { FullShipmentsClient } from "@/components/full-shipments-client";
@@ -12,6 +13,10 @@ import {
   readSession,
   refreshSessionPath,
 } from "@/lib/mercadolibre/session";
+
+export const metadata: Metadata = {
+  title: "Relatório de Envios",
+};
 
 export default async function EnviosFullPage() {
   const cookieStore = await cookies();

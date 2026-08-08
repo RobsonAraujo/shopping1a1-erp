@@ -1,4 +1,9 @@
+import type { Metadata } from "next";
 import { FinancialEvaluationClient } from "@/components/financial-evaluation-client";
+
+export const metadata: Metadata = {
+  title: "Lucratividade",
+};
 
 export default function LucratividadePage() {
   return (

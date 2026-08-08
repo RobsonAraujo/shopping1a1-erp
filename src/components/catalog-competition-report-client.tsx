@@ -273,7 +273,7 @@ export function CatalogCompetitionReportClient() {
                               {row.imageUrlSnapshot ? (
                                 <Image
                                   src={row.imageUrlSnapshot}
-                                  alt=""
+                                  alt={row.titleSnapshot ?? ""}
                                   fill
                                   sizes="40px"
                                   className="object-contain"

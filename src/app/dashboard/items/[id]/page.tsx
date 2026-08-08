@@ -1,8 +1,8 @@
+import type { Metadata } from "next";
 import Image from "next/image";
-import Link from "next/link";
 import { cookies } from "next/headers";
-import { ChevronLeft } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import {
   ItemDetailCatalogSection,
   ItemDetailHeroMeta,
@@ -11,7 +11,6 @@ import {
   ItemDetailStockSection,
   ItemDetailVariationsSection,
 } from "@/components/item-detail-sections";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { loadItemDetailContext } from "@/lib/item-detail-data";
 import { fetchItemById } from "@/lib/mercadolibre/api";
@@ -26,6 +25,22 @@ import {
 type PageProps = {
   params: Promise<{ id: string }>;
 };
+
+export async function generateMetadata({
+  params,
+}: PageProps): Promise<Metadata> {
+  const { id } = await params;
+  const cookieStore = await cookies();
+  const session = getSessionAccessState(cookieStore);
+  if (!session.accessToken) return { title: "Detalhe do anúncio" };
+  try {
+    const item = await fetchItemById(session.accessToken, id);
+    const sku = item ? getItemSku(item) : null;
+    return { title: sku ?? item?.title ?? "Detalhe do anúncio" };
+  } catch {
+    return { title: "Detalhe do anúncio" };
+  }
+}
 
 export default async function ItemDetailPage({ params }: PageProps) {
   const { id } = await params;
@@ -64,16 +79,12 @@ export default async function ItemDetailPage({ params }: PageProps) {
 
   return (
     <div className="space-y-8">
-      <nav className="flex flex-wrap items-center gap-2 text-sm text-[var(--muted-foreground)]">
-        <Button variant="ghost" size="sm" className="-ml-2 h-8 gap-1 px-2" asChild>
-          <Link href="/dashboard">
-            <ChevronLeft className="size-4" />
-            Início
-          </Link>
-        </Button>
-        <span className="text-[var(--border)]">/</span>
-        <span className="text-[var(--foreground)]">Detalhe</span>
-      </nav>
+      <Breadcrumbs
+        items={[
+          { label: "Início", href: "/dashboard" },
+          { label: sku ?? item.title },
+        ]}
+      />
 
       <Card className="overflow-hidden shadow-sm">
         <CardContent className="p-6 sm:p-8">

@@ -93,7 +93,13 @@ function SaveNameModal({
           <h2 id={titleId} className="text-base font-semibold text-[var(--primary)]">
             {title}
           </h2>
-          <Button type="button" variant="ghost" size="icon-sm" onClick={onCancel}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={onCancel}
+            aria-label="Fechar"
+          >
             <X className="size-4" aria-hidden />
           </Button>
         </div>
@@ -175,7 +181,13 @@ function ConfirmDeleteModal({ name, busy, onCancel, onConfirm }: ConfirmDeleteMo
           <h2 id={titleId} className="text-base font-semibold text-rose-600">
             Excluir simulação
           </h2>
-          <Button type="button" variant="ghost" size="icon-sm" onClick={onCancel}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={onCancel}
+            aria-label="Fechar"
+          >
             <X className="size-4" aria-hidden />
           </Button>
         </div>
@@ -442,6 +454,7 @@ export function SavedSimulationsMenu({
                     <button
                       type="button"
                       title="Excluir simulação"
+                      aria-label={`Excluir simulação "${sim.name}"`}
                       disabled={busy}
                       onClick={() => setDeleteTarget(sim)}
                       className="shrink-0 cursor-pointer text-[var(--muted-foreground)] hover:text-rose-600"

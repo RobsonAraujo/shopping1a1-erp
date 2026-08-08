@@ -324,7 +324,7 @@ export function CatalogCompetitionItemReportClient({ itemId }: { itemId: string 
                 {data.item.imageUrlSnapshot ? (
                   <Image
                     src={data.item.imageUrlSnapshot}
-                    alt=""
+                    alt={data.item.titleSnapshot ?? ""}
                     fill
                     sizes="56px"
                     className="object-contain"

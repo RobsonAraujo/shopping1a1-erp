@@ -1,6 +1,8 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { notFound } from "next/navigation";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { MonthlyTaxReportSkuClient } from "@/components/monthly-tax-report-sku-client";
 import { Button } from "@/components/ui/button";
 import { parseTaxReportSkuPeriodParams, taxReportPath } from "@/lib/tax-report/routes";
@@ -13,6 +15,21 @@ type PageProps = {
 function formatYmdBr(ymd: string): string {
   const [y, m, d] = ymd.split("-");
   return `${d}/${m}/${y}`;
+}
+
+export async function generateMetadata({
+  params,
+  searchParams,
+}: PageProps): Promise<Metadata> {
+  const rawParams = await params;
+  const rawSearchParams = await searchParams;
+  const parsed = parseTaxReportSkuPeriodParams({
+    sku: rawParams.sku,
+    from: rawSearchParams.from,
+    to: rawSearchParams.to,
+  });
+  if (!parsed) return { title: "Vendas por SKU" };
+  return { title: `${parsed.sku} · Tributário` };
 }
 
 export default async function RelatorioTributarioSkuPeriodoPage({
@@ -36,6 +53,14 @@ export default async function RelatorioTributarioSkuPeriodoPage({
   return (
     <div className="space-y-6">
       <div className="space-y-3">
+        <Breadcrumbs
+          items={[
+            { label: "Início", href: "/dashboard" },
+            { label: "Tributário", href: taxReportPath() },
+            { label: periodLabel },
+            { label: sku },
+          ]}
+        />
         <Button variant="ghost" size="sm" asChild>
           <Link href={taxReportPath()} className="gap-1.5">
             <ChevronLeft className="size-4" />

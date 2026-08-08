@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -163,6 +164,10 @@ async function InventoryDataSection({
     </>
   );
 }
+
+export const metadata: Metadata = {
+  title: "Estoque",
+};
 
 export default async function InventoryPage() {
   const cookieStore = await cookies();

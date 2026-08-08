@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -9,6 +10,7 @@ import {
   type PurchaseAnalysisItemRow,
 } from "@/lib/dashboard-purchase-data";
 import { decodeSupplierParam, supplierPathSegment } from "@/lib/purchase-analysis";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { SupplierPurchaseAnalysisView } from "@/components/supplier-purchase-analysis-view";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -20,6 +22,14 @@ import {
 type PageProps = {
   params: Promise<{ supplier: string }>;
 };
+
+export async function generateMetadata({
+  params,
+}: PageProps): Promise<Metadata> {
+  const { supplier: supplierParam } = await params;
+  const supplier = decodeSupplierParam(supplierParam);
+  return { title: `${supplier} · Compras` };
+}
 
 export default async function SupplierPurchasePage({ params }: PageProps) {
   const { supplier: supplierParam } = await params;
@@ -70,9 +80,16 @@ export default async function SupplierPurchasePage({ params }: PageProps) {
   return (
     <div className="space-y-8">
       <div>
+        <Breadcrumbs
+          items={[
+            { label: "Início", href: "/dashboard" },
+            { label: "Compras", href: "/dashboard/compras" },
+            { label: supplier },
+          ]}
+        />
         <Link
           href="/dashboard/compras"
-          className="mb-4 inline-flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+          className="mt-3 mb-4 inline-flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
         >
           <ArrowLeft className="size-4" aria-hidden />
           Voltar para fornecedores

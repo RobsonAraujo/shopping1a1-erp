@@ -1278,7 +1278,7 @@ export function FinancialEvaluationClient() {
                               {row.imageUrl ? (
                                 <Image
                                   src={row.imageUrl}
-                                  alt=""
+                                  alt={row.title}
                                   width={40}
                                   height={40}
                                   className="size-10 rounded-md object-cover"

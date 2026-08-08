@@ -1,8 +1,13 @@
+import type { Metadata } from "next";
 import { AlertTriangle } from "lucide-react";
 import { DreClient } from "@/components/dre-client";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { DRE_DISCLAIMER_PAGE } from "@/lib/dre-disclaimer";
+
+export const metadata: Metadata = {
+  title: "DRE",
+};
 
 export default function DrePage() {
   return (

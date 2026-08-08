@@ -54,7 +54,7 @@ export function OperationsKanbanCard({
         {card.imageUrl ? (
           <Image
             src={card.imageUrl}
-            alt=""
+            alt={card.title}
             width={40}
             height={40}
             className="size-10 shrink-0 rounded-md object-cover"

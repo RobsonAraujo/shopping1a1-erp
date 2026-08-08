@@ -1,4 +1,9 @@
+import type { Metadata } from "next";
 import { MonthlyTaxReportClient } from "@/components/monthly-tax-report-client";
+
+export const metadata: Metadata = {
+  title: "Tributário",
+};
 
 export default function RelatorioTributarioPage() {
   return (

@@ -385,7 +385,7 @@ export function SupplierPurchaseAnalysisTable({
                             {imageUrl ? (
                               <Image
                                 src={imageUrl}
-                                alt=""
+                                alt={row.item.title}
                                 width={40}
                                 height={40}
                                 className="size-10 object-contain"

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -41,6 +42,10 @@ async function OperacoesFullDataSection({
 
   return <OperationsKanban initialData={boards} kind="full" />;
 }
+
+export const metadata: Metadata = {
+  title: "Operações Full",
+};
 
 export default async function OperacoesFullPage() {
   const cookieStore = await cookies();

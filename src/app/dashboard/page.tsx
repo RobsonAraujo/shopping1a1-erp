@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { cache, Suspense } from "react";
 import { cookies } from "next/headers";
 import Link from "next/link";
@@ -165,6 +166,10 @@ async function SellerStats({ token }: { token: string }) {
     </div>
   );
 }
+
+export const metadata: Metadata = {
+  title: "Início",
+};
 
 export default async function DashboardPage() {
   const cookieStore = await cookies();

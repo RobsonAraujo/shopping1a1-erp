@@ -1,4 +1,9 @@
+import type { Metadata } from "next";
 import { BranchSimulationClient } from "@/components/branch-simulation-client";
+
+export const metadata: Metadata = {
+  title: "Simulação de filial",
+};
 
 export default function SimulacaoFilialPage() {
   return (

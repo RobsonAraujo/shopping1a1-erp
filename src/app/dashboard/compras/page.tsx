@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
@@ -57,6 +58,10 @@ async function ComprasDataSection({
     <ComprasPageClient summaries={summaries} rows={rows} boards={boards} />
   );
 }
+
+export const metadata: Metadata = {
+  title: "Compras",
+};
 
 export default async function ComprasPage() {
   const cookieStore = await cookies();

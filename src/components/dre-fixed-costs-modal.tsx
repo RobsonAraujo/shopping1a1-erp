@@ -155,7 +155,13 @@ export function DreCostItemsModal({
               {description}
             </p>
           </div>
-          <Button type="button" variant="ghost" size="icon-sm" onClick={onClose}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={onClose}
+            aria-label="Fechar"
+          >
             <X className="size-4" aria-hidden />
           </Button>
         </div>

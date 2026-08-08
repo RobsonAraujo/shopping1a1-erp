@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { cookies } from "next/headers";
@@ -15,6 +16,18 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+
+export const metadata: Metadata = {
+  title: "Conecte sua loja",
+  description:
+    "Conecte sua conta do Mercado Livre para gerenciar anúncios, estoque, compras e relatórios tributários num só painel.",
+  openGraph: {
+    title: "ERP 1a1 — Mercado Livre",
+    description:
+      "Conecte sua conta do Mercado Livre para gerenciar anúncios, estoque, compras e relatórios tributários num só painel.",
+    images: ["/logo-bg-blue.png"],
+  },
+};
 
 type PageProps = {
   searchParams: Promise<{

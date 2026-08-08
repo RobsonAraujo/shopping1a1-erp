@@ -39,6 +39,12 @@ export default async function DashboardLayout({
 
   return (
     <div className="flex min-h-full flex-col bg-[var(--background)]">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-[var(--primary)] focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-[var(--primary-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)] focus:ring-offset-2"
+      >
+        Pular para o conteúdo
+      </a>
       <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[var(--card)]/85 backdrop-blur-md supports-[backdrop-filter]:bg-[var(--card)]/75">
         <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6">
           <div className="flex items-center justify-between gap-3">
@@ -87,7 +93,10 @@ export default async function DashboardLayout({
           <DashboardNav />
         </div>
       </header>
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
+      <main
+        id="main-content"
+        className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 sm:py-10"
+      >
         {children}
       </main>
     </div>

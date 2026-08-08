@@ -182,7 +182,7 @@ function AttentionSection({
                             {imageUrl ? (
                               <Image
                                 src={imageUrl}
-                                alt=""
+                                alt={item.title}
                                 width={80}
                                 height={80}
                                 className="size-14 object-contain sm:size-16"

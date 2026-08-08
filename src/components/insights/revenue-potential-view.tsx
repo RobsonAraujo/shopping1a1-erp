@@ -492,7 +492,7 @@ export function RevenuePotentialView({ rows }: { rows: RevenuePotentialRow[] }) 
                         {row.imageUrl ? (
                           <Image
                             src={row.imageUrl}
-                            alt=""
+                            alt={row.title}
                             width={32}
                             height={32}
                             className="size-8 object-contain"
@@ -562,6 +562,7 @@ export function RevenuePotentialView({ rows }: { rows: RevenuePotentialRow[] }) 
                         <button
                           type="button"
                           title="Restaurar estimativa original"
+                          aria-label={`Restaurar estimativa original de ${row.title}`}
                           onClick={() => clearOverride(row.mlItemId)}
                           className="cursor-pointer text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
                         >
@@ -583,6 +584,11 @@ export function RevenuePotentialView({ rows }: { rows: RevenuePotentialRow[] }) 
                     <button
                       type="button"
                       title={row.isExcluded ? "Voltar a considerar" : "Não considerar na análise"}
+                      aria-label={
+                        row.isExcluded
+                          ? `Voltar a considerar ${row.title} na análise`
+                          : `Não considerar ${row.title} na análise`
+                      }
                       onClick={() => toggleExcluded(row.mlItemId)}
                       className="cursor-pointer text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
                     >

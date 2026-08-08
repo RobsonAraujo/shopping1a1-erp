@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { PwaSwRegister } from "@/components/pwa-sw-register";
 import "./globals.css";
@@ -13,8 +13,16 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
+
 export const metadata: Metadata = {
-  title: "ERP 1a1 — Mercado Livre",
+  title: {
+    default: "ERP 1a1 — Mercado Livre",
+    template: "%s · ERP 1a1",
+  },
   description: "Dashboard de anúncios e estoque",
   manifest: "/manifest.webmanifest",
   icons: {

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -216,6 +217,10 @@ async function InsightsDataSection({
     </>
   );
 }
+
+export const metadata: Metadata = {
+  title: "Insights",
+};
 
 export default async function InsightsPage() {
   const cookieStore = await cookies();

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -33,6 +34,10 @@ async function RevenuePotentialSection({
 
   return <RevenuePotentialView rows={data.rows} />;
 }
+
+export const metadata: Metadata = {
+  title: "Potencial de faturamento",
+};
 
 export default async function PotencialFaturamentoPage() {
   const cookieStore = await cookies();
