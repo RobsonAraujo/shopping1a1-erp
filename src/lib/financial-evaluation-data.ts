@@ -422,7 +422,7 @@ async function buildRowForItem(
           shippingCost,
           productCost,
           extraCosts: extraCosts ?? 0,
-          taxRatePercent: taxRatePercent ?? 0,
+          taxRatePercent,
           listingTypeLabel,
         })
       : null;
@@ -716,7 +716,7 @@ async function buildRowForPeriodItem(
           shippingCost,
           productCost,
           extraCosts: extraCosts ?? 0,
-          taxRatePercent: taxRatePercent ?? 0,
+          taxRatePercent,
           listingTypeLabel,
         })
       : null;

@@ -22,6 +22,7 @@ import {
   ItemListSearch,
   itemListSearchEmptyMessage,
 } from "@/components/item-list-search";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
@@ -1297,6 +1298,15 @@ export function FinancialEvaluationClient() {
                                     mlStock={0}
                                     warehouseStock={0}
                                   />
+                                  {row.taxRatePercent === null &&
+                                  row.productCost !== null ? (
+                                    <Badge
+                                      variant="warning"
+                                      title="Imposto não considerado na margem — sem alíquota no relatório tributário. Recalcule em Relatório tributário."
+                                    >
+                                      Sem alíquota
+                                    </Badge>
+                                  ) : null}
                                 </div>
                                 <p className="truncate text-xs text-[var(--muted-foreground)]">
                                   {row.mlItemId}
