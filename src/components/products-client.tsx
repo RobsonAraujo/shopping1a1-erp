@@ -74,6 +74,7 @@ type ProductFormState = {
   isMonophasic: boolean;
   isImported: boolean;
   saleIcmsPercent: number | null;
+  pmaPrice: number | null;
 };
 
 function emptyForm(sku = ""): ProductFormState {
@@ -89,6 +90,7 @@ function emptyForm(sku = ""): ProductFormState {
     isMonophasic: false,
     isImported: false,
     saleIcmsPercent: null,
+    pmaPrice: null,
   };
 }
 
@@ -105,6 +107,7 @@ function formFromProduct(product: ProductView): ProductFormState {
     isMonophasic: product.isMonophasic,
     isImported: product.isImported,
     saleIcmsPercent: product.saleIcmsPercent,
+    pmaPrice: product.pmaPrice,
   };
 }
 
@@ -461,6 +464,12 @@ function ProductFormModal({
               onValueChange={(v) =>
                 setForm((f) => ({ ...f, saleIcmsPercent: v }))
               }
+            />
+            <MaskedMoneyField
+              id="pma-price"
+              label="PMA (preço máximo autorizado de venda)"
+              value={form.pmaPrice}
+              onValueChange={(v) => setForm((f) => ({ ...f, pmaPrice: v }))}
             />
           </div>
           {isEdit ? <ProductSkuAliasesEditor canonicalSku={form.sku} /> : null}

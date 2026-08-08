@@ -1,7 +1,9 @@
+import { Suspense } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { DashboardHomeShortcuts } from "@/components/dashboard-home-shortcuts";
 import { DashboardOperationsSummary } from "@/components/dashboard-operations-summary";
+import { DashboardPmaAlertPanel } from "@/components/dashboard-pma-alert-panel";
 import { DashboardSummaryClient } from "@/components/dashboard-summary-client";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -10,6 +12,24 @@ import {
   refreshSessionPath,
 } from "@/lib/mercadolibre/session";
 import { loadOperationsSummaryFromDb } from "@/lib/replenishment-cycle-data";
+import { loadPmaAlerts } from "@/lib/pma-alert-data";
+
+async function PmaAlertSection({
+  token,
+  userId,
+}: {
+  token: string;
+  userId: number;
+}) {
+  const rows = await loadPmaAlerts(token, userId).catch(() => []);
+  return <DashboardPmaAlertPanel rows={rows} />;
+}
+
+function PmaAlertSkeleton() {
+  return (
+    <div className="h-24 animate-pulse rounded-2xl border border-[var(--border)] bg-[var(--muted)]/30" />
+  );
+}
 
 export default async function DashboardPage() {
   const cookieStore = await cookies();
@@ -77,6 +97,10 @@ export default async function DashboardPage() {
               </CardContent>
             </Card>
           )}
+
+          <Suspense fallback={<PmaAlertSkeleton />}>
+            <PmaAlertSection token={token} userId={userId} />
+          </Suspense>
 
           <section className="space-y-4">
             <div>

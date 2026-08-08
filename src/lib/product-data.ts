@@ -55,6 +55,7 @@ export type ProductView = ProductRecordForPricing & {
   /** Mês/ano do relatório tributário de onde veio taxPercent (pode ser um mês anterior ao mais recente). */
   taxPercentYear: number | null;
   taxPercentMonth: number | null;
+  pmaPrice: number | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -77,6 +78,7 @@ export function buildProductView(
     taxPercentGeneratedAt: reportTax?.generatedAt ?? null,
     taxPercentYear: reportTax?.year ?? null,
     taxPercentMonth: reportTax?.month ?? null,
+    pmaPrice: decimalToNumber(product.pmaPrice),
     createdAt: product.createdAt.toISOString(),
     updatedAt: product.updatedAt.toISOString(),
   };
@@ -258,6 +260,7 @@ export type ProductWriteInput = {
   isMonophasic: boolean;
   isImported: boolean;
   saleIcmsPercent: number;
+  pmaPrice?: number | null;
 };
 
 export function validateProductInput(
@@ -298,6 +301,13 @@ export function validateProductInput(
   ) {
     return "ICMS de venda inválido";
   }
+  if (
+    input.pmaPrice !== null &&
+    input.pmaPrice !== undefined &&
+    (!Number.isFinite(input.pmaPrice) || input.pmaPrice <= 0)
+  ) {
+    return "PMA inválido";
+  }
   return null;
 }
 
@@ -315,5 +325,6 @@ export function productWriteToPrismaData(input: ProductWriteInput) {
     isMonophasic: input.isMonophasic,
     isImported: input.isImported,
     saleIcmsPercent: input.saleIcmsPercent,
+    pmaPrice: input.pmaPrice ?? null,
   };
 }

@@ -21,6 +21,7 @@ function sampleView(overrides: Partial<ProductView> = {}): ProductView {
     taxPercentGeneratedAt: "2026-01-01T00:00:00.000Z",
     taxPercentYear: 2026,
     taxPercentMonth: 1,
+    pmaPrice: null,
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
     ...overrides,

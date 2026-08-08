@@ -38,6 +38,10 @@ function parseProductBody(body: Record<string, unknown>): ProductWriteInput | "i
   const isMonophasic = body.isMonophasic === true;
   const isImported = body.isImported === true;
   const saleIcmsPercent = Number(body.saleIcmsPercent);
+  const pmaPrice =
+    body.pmaPrice === null || body.pmaPrice === undefined
+      ? null
+      : Number(body.pmaPrice);
 
   if (
     !sku ||
@@ -60,6 +64,7 @@ function parseProductBody(body: Record<string, unknown>): ProductWriteInput | "i
     isMonophasic,
     isImported,
     saleIcmsPercent,
+    pmaPrice,
   };
 }
 
