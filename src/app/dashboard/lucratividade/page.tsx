@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { FinancialEvaluationClient } from "@/components/financial-evaluation-client";
+import { FinancialEvaluationClient } from "@/components/lucratividade/financial-evaluation-client";
 
 export const metadata: Metadata = {
   title: "Lucratividade",

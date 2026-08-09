@@ -15,7 +15,7 @@ import {
   readSession,
   refreshSessionPath,
 } from "@/lib/mercadolibre/session";
-import { loadDashboardPurchaseData } from "@/lib/dashboard-purchase-data";
+import { loadDashboardPurchaseData } from "@/lib/compras/dashboard-purchase-data";
 import { loadLatestTaxReportSnapshot } from "@/lib/tax-report/service/generate-monthly-report";
 import { mapToSlowMoverRows, DEFAULT_SLOW_MOVER_THRESHOLD_DAYS } from "@/lib/insights/slow-movers";
 import { buildDifalMap } from "@/lib/insights/difal-map";

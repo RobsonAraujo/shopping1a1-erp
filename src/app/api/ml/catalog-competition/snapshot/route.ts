@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import {
   pollCatalogCompetitionForSeller,
-} from "@/lib/catalog-competition-poll";
-import { recordCatalogPollRun } from "@/lib/catalog-competition-poll-stats";
+} from "@/lib/catalog-report/catalog-competition-poll";
+import { recordCatalogPollRun } from "@/lib/catalog-report/catalog-competition-poll-stats";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 import { getValidAccessToken, readSession } from "@/lib/mercadolibre/session";
 

@@ -3,8 +3,8 @@ import { Suspense } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { stockPlanningConfig } from "@/config/stock-planning";
-import { InventoryStockTable, type InventoryRow } from "@/components/inventory-stock-table";
-import { InventoryStockTableSkeleton } from "@/components/inventory-stock-table-skeleton";
+import { InventoryStockTable, type InventoryRow } from "@/components/inventory/inventory-stock-table";
+import { InventoryStockTableSkeleton } from "@/components/inventory/inventory-stock-table-skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   enrichItemsWithFulfillmentStock,
@@ -18,7 +18,7 @@ import { getItemSku, isKitItem } from "@/lib/mercadolibre/item-sku";
 import { countListingsByStatus } from "@/lib/mercadolibre/listing-status";
 import { computeStockPlanningDisplay } from "@/lib/stock-planning";
 import { loadStockReportProductsBySku } from "@/lib/product-data";
-import type { StockReportProductInfo } from "@/lib/inventory-stock-report";
+import type { StockReportProductInfo } from "@/lib/inventory/inventory-stock-report";
 import { prisma } from "@/lib/db";
 import {
   getSessionAccessState,

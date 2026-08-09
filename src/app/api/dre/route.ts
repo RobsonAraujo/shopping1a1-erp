@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { loadDreYearView } from "@/lib/dre-year-data";
+import { loadDreYearView } from "@/lib/dre/dre-year-data";
 import {
   getValidAccessToken,
   readSession,

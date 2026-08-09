@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
-import { getCatalogPollStats } from "@/lib/catalog-competition-poll-stats";
+import { getCatalogPollStats } from "@/lib/catalog-report/catalog-competition-poll-stats";
 import { getValidAccessToken } from "@/lib/mercadolibre/session";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 

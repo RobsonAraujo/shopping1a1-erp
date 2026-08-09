@@ -4,10 +4,10 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Award, ExternalLink } from "lucide-react";
-import { DashboardHomeShortcuts } from "@/components/dashboard-home-shortcuts";
-import { DashboardOperationsSummary } from "@/components/dashboard-operations-summary";
-import { DashboardPmaAlertPanel } from "@/components/dashboard-pma-alert-panel";
-import { DashboardSummaryClient } from "@/components/dashboard-summary-client";
+import { DashboardHomeShortcuts } from "@/components/home/dashboard-home-shortcuts";
+import { DashboardOperationsSummary } from "@/components/home/dashboard-operations-summary";
+import { DashboardPmaAlertPanel } from "@/components/home/dashboard-pma-alert-panel";
+import { DashboardSummaryClient } from "@/components/home/dashboard-summary-client";
 import { Card, CardContent } from "@/components/ui/card";
 import { fetchMe } from "@/lib/mercadolibre/api";
 import {
@@ -20,7 +20,7 @@ import {
   type SellerReputationBadge,
 } from "@/lib/mercadolibre/seller-reputation";
 import { loadOperationsSummaryFromDb } from "@/lib/replenishment-cycle-data";
-import { loadPmaAlerts } from "@/lib/pma-alert-data";
+import { loadPmaAlerts } from "@/lib/home/pma-alert-data";
 import { cn } from "@/lib/utils";
 
 async function PmaAlertSection({

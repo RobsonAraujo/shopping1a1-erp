@@ -16,7 +16,7 @@ import {
   countItemSaleEventsBetween,
   fetchItemSaleEventsInDateRange,
 } from "@/lib/mercadolibre/api";
-import { loadCatalogMockSaleEvents } from "@/lib/catalog-report-mock-sales";
+import { loadCatalogMockSaleEvents } from "@/lib/catalog-report/catalog-report-mock-sales";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 
 type RouteContext = { params: Promise<{ itemId: string }> };

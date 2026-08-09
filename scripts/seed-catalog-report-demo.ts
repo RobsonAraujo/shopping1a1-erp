@@ -12,7 +12,7 @@ import "dotenv/config";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "../src/lib/db";
-import { catalogReportMockSalesPath } from "../src/lib/catalog-report-mock-sales";
+import { catalogReportMockSalesPath } from "../src/lib/catalog-report/catalog-report-mock-sales";
 import { atReportTime } from "../src/lib/report-timezone";
 import { reportsConfig } from "../src/config/reports";
 

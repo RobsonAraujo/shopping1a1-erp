@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { stockPlanningConfig } from "@/config/stock-planning";
-import { loadCatalogMlStockAtOrBefore } from "@/lib/catalog-snapshot-stock";
+import { loadCatalogMlStockAtOrBefore } from "@/lib/inventory/catalog-snapshot-stock";
 import { fetchUnitsSoldForItemsInDateRangeBatched } from "@/lib/mercadolibre/api";
 import {
   parseStockReportSnapshotDateInput,
   stockReportSalesAdjustmentRange,
-} from "@/lib/inventory-stock-report";
+} from "@/lib/inventory/inventory-stock-report";
 import { prisma } from "@/lib/db";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 import {

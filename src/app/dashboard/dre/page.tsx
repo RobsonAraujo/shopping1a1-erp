@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { AlertTriangle } from "lucide-react";
-import { DreClient } from "@/components/dre-client";
+import { DreClient } from "@/components/dre/dre-client";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { DRE_DISCLAIMER_PAGE } from "@/lib/dre-disclaimer";

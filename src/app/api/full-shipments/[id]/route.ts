@@ -3,8 +3,8 @@ import { cookies } from "next/headers";
 import {
   deleteFullShipment,
   updateFullShipment,
-} from "@/lib/full-shipment-data";
-import { FullShipmentValidationError } from "@/lib/full-shipment";
+} from "@/lib/envios-full/full-shipment-data";
+import { FullShipmentValidationError } from "@/lib/envios-full/full-shipment";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 import {
   getValidAccessToken,

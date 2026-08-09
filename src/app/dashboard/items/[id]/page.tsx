@@ -10,9 +10,9 @@ import {
   ItemDetailOperationsSection,
   ItemDetailStockSection,
   ItemDetailVariationsSection,
-} from "@/components/item-detail-sections";
+} from "@/components/items/item-detail-sections";
 import { Card, CardContent } from "@/components/ui/card";
-import { loadItemDetailContext } from "@/lib/item-detail-data";
+import { loadItemDetailContext } from "@/lib/items/item-detail-data";
 import { fetchItemById } from "@/lib/mercadolibre/api";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { getItemSku } from "@/lib/mercadolibre/item-sku";

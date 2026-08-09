@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { BranchSimulationClient } from "@/components/branch-simulation-client";
+import { BranchSimulationClient } from "@/components/simulacao-filial/branch-simulation-client";
 
 export const metadata: Metadata = {
   title: "Simulação de filial",

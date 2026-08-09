@@ -21,7 +21,7 @@ import {
 import {
   stockReportUnitCostFromProduct,
   type StockReportProductInfo,
-} from "@/lib/inventory-stock-report";
+} from "@/lib/inventory/inventory-stock-report";
 import type { CompanyTaxSettings, Product } from "@/generated/prisma/client";
 
 function decimalToNumber(value: unknown): number | null {

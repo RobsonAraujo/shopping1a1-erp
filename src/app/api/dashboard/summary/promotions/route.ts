@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { dashboardSummaryConfig } from "@/config/dashboard-summary";
-import { loadPromotionSummary } from "@/lib/promotion-summary-data";
+import { loadPromotionSummary } from "@/lib/home/promotion-summary-data";
 import {
   getValidAccessToken,
   readSession,

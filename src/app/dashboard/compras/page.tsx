@@ -5,10 +5,10 @@ import { Suspense } from "react";
 import {
   buildSupplierSummaries,
   loadDashboardPurchaseData,
-} from "@/lib/dashboard-purchase-data";
+} from "@/lib/compras/dashboard-purchase-data";
 import { ShoppingCart } from "lucide-react";
-import { ComprasPageClient } from "@/components/compras-page-client";
-import { ComprasPageSkeleton } from "@/components/compras-page-skeleton";
+import { ComprasPageClient } from "@/components/compras/compras-page-client";
+import { ComprasPageSkeleton } from "@/components/compras/compras-page-skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { loadOperationsBoards } from "@/lib/replenishment-cycle-data";
 import {

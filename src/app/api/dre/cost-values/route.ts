@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
-import { loadDreYearView } from "@/lib/dre-year-data";
+import { loadDreYearView } from "@/lib/dre/dre-year-data";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 import {
   getValidAccessToken,

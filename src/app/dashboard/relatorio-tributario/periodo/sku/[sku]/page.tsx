@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/breadcrumbs";
-import { MonthlyTaxReportSkuClient } from "@/components/monthly-tax-report-sku-client";
+import { MonthlyTaxReportSkuClient } from "@/components/relatorio-tributario/monthly-tax-report-sku-client";
 import { Button } from "@/components/ui/button";
 import { parseTaxReportSkuPeriodParams, taxReportPath } from "@/lib/tax-report/routes";
 

@@ -3,8 +3,8 @@ import { Suspense } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Kanban } from "lucide-react";
-import { OperationsKanban } from "@/components/operations-kanban";
-import { OperationsKanbanSkeleton } from "@/components/operations-kanban-skeleton";
+import { OperationsKanban } from "@/components/operacoes-full/operations-kanban";
+import { OperationsKanbanSkeleton } from "@/components/operacoes-full/operations-kanban-skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { loadOperationsBoards } from "@/lib/replenishment-cycle-data";
 import {

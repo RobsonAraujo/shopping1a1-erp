@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { Breadcrumbs } from "@/components/breadcrumbs";
-import { CatalogCompetitionItemReportClient } from "@/components/catalog-competition-item-report-client";
+import { CatalogCompetitionItemReportClient } from "@/components/catalog-report/catalog-competition-item-report-client";
 import { Button } from "@/components/ui/button";
 
 type PageProps = {

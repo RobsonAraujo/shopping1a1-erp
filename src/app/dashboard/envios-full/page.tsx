@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { FullShipmentsClient } from "@/components/full-shipments-client";
+import { FullShipmentsClient } from "@/components/envios-full/full-shipments-client";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   listFullShipmentsForPeriod,
   listImportedBillingPeriods,
-} from "@/lib/full-shipment-data";
+} from "@/lib/envios-full/full-shipment-data";
 import { getZonedYearMonth } from "@/lib/mercadolibre/revenue-periods";
 import {
   getSessionAccessState,

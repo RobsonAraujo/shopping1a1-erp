@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { loadDreYearView } from "@/lib/dre-year-data";
+import { loadDreYearView } from "@/lib/dre/dre-year-data";
 import {
   buildDreMonthSnapshot,
   persistDreMonthSnapshot,
-} from "@/lib/dre-month-data";
+} from "@/lib/dre/dre-month-data";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 import {
   getValidAccessToken,

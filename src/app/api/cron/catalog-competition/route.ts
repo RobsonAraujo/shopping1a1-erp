@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   pollCatalogCompetitionForSeller,
   resolveCronMlUserId,
-} from "@/lib/catalog-competition-poll";
-import { recordCatalogPollRun } from "@/lib/catalog-competition-poll-stats";
+} from "@/lib/catalog-report/catalog-competition-poll";
+import { recordCatalogPollRun } from "@/lib/catalog-report/catalog-competition-poll-stats";
 import { resolveSellerAccessToken } from "@/lib/mercadolibre/persist-seller-tokens";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 

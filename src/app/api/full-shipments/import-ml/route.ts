@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { importFullCollectChargesFromBilling } from "@/lib/full-shipment-data";
-import { FullShipmentValidationError } from "@/lib/full-shipment";
+import { importFullCollectChargesFromBilling } from "@/lib/envios-full/full-shipment-data";
+import { FullShipmentValidationError } from "@/lib/envios-full/full-shipment";
 import { MlApiFetchError } from "@/lib/mercadolibre/fetch-with-retry";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 import {

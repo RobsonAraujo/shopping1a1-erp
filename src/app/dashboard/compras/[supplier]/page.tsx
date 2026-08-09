@@ -8,10 +8,10 @@ import {
   filterRowsBySupplier,
   loadDashboardPurchaseData,
   type PurchaseAnalysisItemRow,
-} from "@/lib/dashboard-purchase-data";
+} from "@/lib/compras/dashboard-purchase-data";
 import { decodeSupplierParam, supplierPathSegment } from "@/lib/purchase-analysis";
 import { Breadcrumbs } from "@/components/breadcrumbs";
-import { SupplierPurchaseAnalysisView } from "@/components/supplier-purchase-analysis-view";
+import { SupplierPurchaseAnalysisView } from "@/components/compras/supplier-purchase-analysis-view";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   getSessionAccessState,
