@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
   Map,
@@ -10,11 +9,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import {
-  getSessionAccessState,
-  readSession,
-  refreshSessionPath,
-} from "@/lib/mercadolibre/session";
+import { readSession } from "@/lib/mercadolibre/session";
 import { loadDashboardPurchaseData } from "@/lib/compras/dashboard-purchase-data";
 import { loadLatestTaxReportSnapshot } from "@/lib/tax-report/service/generate-monthly-report";
 import { mapToSlowMoverRows, DEFAULT_SLOW_MOVER_THRESHOLD_DAYS } from "@/lib/insights/slow-movers";
@@ -224,12 +219,7 @@ export const metadata: Metadata = {
 
 export default async function InsightsPage() {
   const cookieStore = await cookies();
-  const session = getSessionAccessState(cookieStore);
-  if (session.needsRefresh) {
-    redirect(refreshSessionPath("/dashboard/insights"));
-  }
-  const token = session.accessToken;
-  const { userId } = readSession(cookieStore);
+  const { accessToken: token, userId } = readSession(cookieStore);
 
   if (!token || userId === undefined) return null;
 

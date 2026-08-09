@@ -1,25 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import {
-  getValidAccessToken,
-  readSession,
-} from "@/lib/mercadolibre/session";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { parseJsonBody } from "@/lib/api-validation";
 
-async function requireAuth() {
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
-  if (!token || userId === undefined) {
-    return null;
-  }
-  return true;
-}
+const costItemBodySchema = z.object({
+  name: z.string().trim().min(1, "Name is required"),
+  section: z.enum(["fixed", "operational"]).optional(),
+});
 
 export async function GET() {
   if (!(await requireAuth())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return unauthorizedResponse();
   }
 
   try {
@@ -39,22 +32,13 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   if (!(await requireAuth())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return unauthorizedResponse();
   }
 
-  let body: { name?: string; section?: "fixed" | "operational" };
-  try {
-    body = (await request.json()) as { name?: string; section?: "fixed" | "operational" };
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  const name = body.name?.trim();
-  if (!name) {
-    return NextResponse.json({ error: "Name is required" }, { status: 400 });
-  }
-
-  const section = body.section === "operational" ? "OPERATIONAL" : "FIXED";
+  const parsedBody = await parseJsonBody(request, costItemBodySchema);
+  if (!parsedBody.ok) return parsedBody.response;
+  const { name } = parsedBody.data;
+  const section = parsedBody.data.section === "operational" ? "OPERATIONAL" : "FIXED";
 
   try {
     const maxSort = await prisma.dreCostItem.aggregate({

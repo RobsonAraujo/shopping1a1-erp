@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { fetchItemById } from "@/lib/mercadolibre/api";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { getValidAccessToken } from "@/lib/mercadolibre/session";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -11,15 +10,11 @@ export async function GET(
   context: RouteContext,
 ) {
   const { id } = await context.params;
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-
-  if (!token) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!auth) return unauthorizedResponse();
 
   try {
-    const item = await fetchItemById(token, id);
+    const item = await fetchItemById(auth.token, id);
     if (!item) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }

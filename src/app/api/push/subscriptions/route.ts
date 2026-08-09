@@ -1,16 +1,22 @@
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { readSession } from "@/lib/mercadolibre/session";
 import { getVapidPublicKey } from "@/lib/push/webpush";
+import { parseJsonBody } from "@/lib/api-validation";
 
-type PushSubscriptionBody = {
-  endpoint?: unknown;
-  keys?: {
-    p256dh?: unknown;
-    auth?: unknown;
-  };
-};
+const pushSubscriptionSchema = z.object({
+  endpoint: z.string().min(1),
+  keys: z.object({
+    p256dh: z.string().min(1),
+    auth: z.string().min(1),
+  }),
+});
+
+const deleteBodySchema = z.object({
+  endpoint: z.string().min(1).optional(),
+});
 
 function unauthorized() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -62,19 +68,12 @@ export async function POST(request: NextRequest) {
   const session = readSession(cookieStore);
   if (!session.userId) return unauthorized();
 
-  let body: PushSubscriptionBody;
-  try {
-    body = (await request.json()) as PushSubscriptionBody;
-  } catch {
-    return NextResponse.json({ error: "invalid_json" }, { status: 400 });
-  }
-
-  const endpoint = typeof body.endpoint === "string" ? body.endpoint : "";
-  const p256dh = typeof body.keys?.p256dh === "string" ? body.keys.p256dh : "";
-  const auth = typeof body.keys?.auth === "string" ? body.keys.auth : "";
-  if (!endpoint || !p256dh || !auth) {
-    return NextResponse.json({ error: "invalid_subscription" }, { status: 400 });
-  }
+  const parsedBody = await parseJsonBody(request, pushSubscriptionSchema);
+  if (!parsedBody.ok) return parsedBody.response;
+  const {
+    endpoint,
+    keys: { p256dh, auth },
+  } = parsedBody.data;
 
   const userAgent = request.headers.get("user-agent");
   const pushSubscription = getPushSubscriptionDelegate();
@@ -108,8 +107,9 @@ export async function DELETE(request: NextRequest) {
 
   let endpoint: string | null = null;
   try {
-    const body = (await request.json()) as { endpoint?: unknown };
-    endpoint = typeof body.endpoint === "string" ? body.endpoint : null;
+    const raw: unknown = await request.json();
+    const parsed = deleteBodySchema.safeParse(raw);
+    endpoint = parsed.success ? (parsed.data.endpoint ?? null) : null;
   } catch {
     endpoint = null;
   }

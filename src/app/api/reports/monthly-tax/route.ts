@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import {
   generateMonthlyTaxReport,
   loadTaxReportSnapshot,
@@ -8,10 +7,7 @@ import {
 } from "@/lib/tax-report/service/generate-monthly-report";
 import type { ManualFiscalOverride } from "@/lib/tax-report/types";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import {
-  getValidAccessToken,
-  readSession,
-} from "@/lib/mercadolibre/session";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
 
 export const maxDuration = 300;
 
@@ -34,13 +30,9 @@ function parseYearMonth(searchParams: URLSearchParams): {
 }
 
 export async function GET(request: NextRequest) {
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
-
-  if (!token || userId === undefined) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!auth) return unauthorizedResponse();
+  const { userId } = auth;
 
   const parsed = parseYearMonth(request.nextUrl.searchParams);
   if (!parsed) {
@@ -82,13 +74,9 @@ function sseLine(data: unknown): string {
 }
 
 export async function POST(request: NextRequest) {
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
-
-  if (!token || userId === undefined) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!auth) return unauthorizedResponse();
+  const { token, userId } = auth;
 
   let body: PostBody = {};
   try {

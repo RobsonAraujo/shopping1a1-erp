@@ -1,60 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { normalizeProductSku } from "@/lib/product-pricing";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { getValidAccessToken, readSession } from "@/lib/mercadolibre/session";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { parseJsonBody } from "@/lib/api-validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
-type KitItemInput = { sku: string; quantity: number };
 
-async function requireAuth() {
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
-  if (!token || userId === undefined) return null;
-  return true;
-}
-
-function parseKitItems(body: Record<string, unknown>): {
-  title: string | null;
-  items: KitItemInput[];
-} | "invalid" {
-  const title = typeof body.title === "string" && body.title.trim() ? body.title.trim() : null;
-  const rawItems = Array.isArray(body.items) ? body.items : [];
-
-  const items: KitItemInput[] = [];
-  for (const raw of rawItems) {
-    if (typeof raw !== "object" || raw === null) return "invalid";
-    const record = raw as Record<string, unknown>;
-    const sku = typeof record.sku === "string" ? normalizeProductSku(record.sku) : "";
-    const quantity = Number(record.quantity ?? 1);
-    if (!sku || !Number.isFinite(quantity) || quantity <= 0) return "invalid";
-    items.push({ sku, quantity });
-  }
-
-  if (items.length === 0) return "invalid";
-  return { title, items };
-}
+const kitItemsSchema = z.object({
+  title: z
+    .string()
+    .trim()
+    .nullish()
+    .transform((v) => (v ? v : null)),
+  items: z
+    .array(
+      z.object({
+        sku: z.string().min(1).transform(normalizeProductSku),
+        quantity: z.coerce.number().finite().positive().default(1),
+      }),
+    )
+    .min(1, "Informe pelo menos 1 item"),
+});
 
 export async function PUT(request: NextRequest, context: RouteContext) {
   if (!(await requireAuth())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return unauthorizedResponse();
   }
 
   const { id: mlItemId } = await context.params;
 
-  let body: Record<string, unknown>;
-  try {
-    body = (await request.json()) as Record<string, unknown>;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  const parsed = parseKitItems(body);
-  if (parsed === "invalid") {
-    return NextResponse.json({ error: "Invalid kit payload" }, { status: 400 });
-  }
+  const parsedBody = await parseJsonBody(request, kitItemsSchema);
+  if (!parsedBody.ok) return parsedBody.response;
+  const parsed = parsedBody.data;
 
   try {
     const kit = await prisma.$transaction(async (tx) => {
@@ -84,7 +63,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {
   if (!(await requireAuth())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return unauthorizedResponse();
   }
 
   const { id: mlItemId } = await context.params;

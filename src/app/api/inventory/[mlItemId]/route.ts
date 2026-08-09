@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { z } from "zod";
 import { stockPlanningConfig } from "@/config/stock-planning";
 import { fetchItemById } from "@/lib/mercadolibre/api";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
@@ -8,10 +8,8 @@ import { prisma } from "@/lib/db";
 import { syncPurchaseCycleFromWarehouse } from "@/lib/replenishment-cycle-data";
 import { computeStockPlanningDisplay } from "@/lib/stock-planning";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import {
-  getValidAccessToken,
-  readSession,
-} from "@/lib/mercadolibre/session";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { parseJsonBody } from "@/lib/api-validation";
 
 type RouteContext = { params: Promise<{ mlItemId: string }> };
 
@@ -32,13 +30,9 @@ function listingUpsertData(item: ItemBody) {
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { mlItemId } = await context.params;
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
-
-  if (!token || userId === undefined) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!auth) return unauthorizedResponse();
+  const { token, userId } = auth;
 
   try {
     const item = await fetchItemById(token, mlItemId);
@@ -83,96 +77,29 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
 const MAX_PURCHASE_LEAD_TIME_DAYS = 365;
 
-type PatchBody = {
-  quantity?: unknown;
-  notes?: unknown;
-  purchaseLeadTimeDays?: unknown;
-  targetCoverageDays?: unknown;
-};
+const patchBodySchema = z.object({
+  quantity: z.number().int().min(0, "quantity must be >= 0").optional(),
+  notes: z.string().nullable().optional(),
+  purchaseLeadTimeDays: z
+    .number()
+    .int()
+    .min(0)
+    .max(MAX_PURCHASE_LEAD_TIME_DAYS)
+    .nullable()
+    .optional(),
+  targetCoverageDays: z.number().int().min(0).nullable().optional(),
+});
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   const { mlItemId } = await context.params;
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
+  const auth = await requireAuth();
+  if (!auth) return unauthorizedResponse();
+  const { token, userId } = auth;
 
-  if (!token || userId === undefined) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  let body: PatchBody;
-  try {
-    body = (await request.json()) as PatchBody;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  let quantity: number | undefined;
-  if (body.quantity !== undefined) {
-    if (typeof body.quantity !== "number" || !Number.isInteger(body.quantity)) {
-      return NextResponse.json(
-        { error: "quantity must be an integer" },
-        { status: 400 },
-      );
-    }
-    if (body.quantity < 0) {
-      return NextResponse.json(
-        { error: "quantity must be >= 0" },
-        { status: 400 },
-      );
-    }
-    quantity = body.quantity;
-  }
-
-  let notes: string | null | undefined;
-  if (body.notes !== undefined) {
-    if (body.notes !== null && typeof body.notes !== "string") {
-      return NextResponse.json(
-        { error: "notes must be a string or null" },
-        { status: 400 },
-      );
-    }
-    notes = body.notes === null ? null : body.notes;
-  }
-
-  let purchaseLeadTimeDays: number | null | undefined;
-  if (body.purchaseLeadTimeDays !== undefined) {
-    if (body.purchaseLeadTimeDays === null) {
-      purchaseLeadTimeDays = null;
-    } else if (
-      typeof body.purchaseLeadTimeDays === "number" &&
-      Number.isInteger(body.purchaseLeadTimeDays) &&
-      body.purchaseLeadTimeDays >= 0 &&
-      body.purchaseLeadTimeDays <= MAX_PURCHASE_LEAD_TIME_DAYS
-    ) {
-      purchaseLeadTimeDays = body.purchaseLeadTimeDays;
-    } else {
-      return NextResponse.json(
-        {
-          error: `purchaseLeadTimeDays must be null or an integer 0–${MAX_PURCHASE_LEAD_TIME_DAYS}`,
-        },
-        { status: 400 },
-      );
-    }
-  }
-
-  let targetCoverageDays: number | null | undefined;
-  if (body.targetCoverageDays !== undefined) {
-    if (body.targetCoverageDays === null) {
-      targetCoverageDays = null;
-    } else if (
-      typeof body.targetCoverageDays === "number" &&
-      Number.isInteger(body.targetCoverageDays) &&
-      body.targetCoverageDays >= 0
-    ) {
-      targetCoverageDays = body.targetCoverageDays;
-    } else {
-      return NextResponse.json(
-        { error: "targetCoverageDays must be null or an integer >= 0" },
-        { status: 400 },
-      );
-    }
-  }
+  const parsedBody = await parseJsonBody(request, patchBodySchema);
+  if (!parsedBody.ok) return parsedBody.response;
+  const { quantity, notes, purchaseLeadTimeDays, targetCoverageDays } =
+    parsedBody.data;
 
   try {
     const item = await fetchItemById(token, mlItemId);

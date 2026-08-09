@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { fetchItemOrderMetricsForCalendarMonths } from "@/lib/mercadolibre/api";
-import {
-  getValidAccessToken,
-  readSession,
-} from "@/lib/mercadolibre/session";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
 import {
   sumRevenueForItems,
   sumUnitsForItems,
@@ -18,13 +14,9 @@ type RouteContext = {
 export async function GET(request: NextRequest, context: RouteContext) {
   await context.params;
 
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
-
-  if (!token || userId === undefined) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!auth) return unauthorizedResponse();
+  const { token, userId } = auth;
 
   const itemIdsParam = request.nextUrl.searchParams.get("itemIds") ?? "";
   const itemIds = itemIdsParam

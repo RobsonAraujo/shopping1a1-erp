@@ -1,56 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { loadDreYearView } from "@/lib/dre/dre-year-data";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import {
-  getValidAccessToken,
-  readSession,
-} from "@/lib/mercadolibre/session";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { parseJsonBody } from "@/lib/api-validation";
+
+const costValueSchema = z.object({
+  costItemId: z.string().trim().min(1),
+  year: z.number().int().min(2000).max(2100),
+  month: z.number().int().min(1).max(12),
+  amount: z.number().finite().min(0).nullish(),
+});
 
 export async function PUT(request: NextRequest) {
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
+  const auth = await requireAuth();
+  if (!auth) return unauthorizedResponse();
 
-  if (!token || userId === undefined) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  let body: {
-    costItemId?: string;
-    year?: number;
-    month?: number;
-    amount?: number | null;
-  };
-  try {
-    body = (await request.json()) as typeof body;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  const costItemId = body.costItemId?.trim();
-  const year = Number(body.year);
-  const month = Number(body.month);
-  const amount = body.amount;
-
-  if (
-    !costItemId ||
-    !Number.isInteger(year) ||
-    year < 2000 ||
-    year > 2100 ||
-    !Number.isInteger(month) ||
-    month < 1 ||
-    month > 12
-  ) {
-    return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
-  }
-
-  if (amount !== null && amount !== undefined) {
-    if (typeof amount !== "number" || !Number.isFinite(amount) || amount < 0) {
-      return NextResponse.json({ error: "Invalid amount" }, { status: 400 });
-    }
-  }
+  const parsedBody = await parseJsonBody(request, costValueSchema);
+  if (!parsedBody.ok) return parsedBody.response;
+  const { costItemId, year, month, amount } = parsedBody.data;
 
   try {
     const item = await prisma.dreCostItem.findFirst({

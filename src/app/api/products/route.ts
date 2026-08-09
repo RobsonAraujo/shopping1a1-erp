@@ -1,77 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { z } from "zod";
 import { prisma } from "@/lib/db";
 import {
   buildProductView,
   ensureCompanySettings,
   productWriteToPrismaData,
   validateProductInput,
-  type ProductWriteInput,
 } from "@/lib/product-data";
 import { loadProductTaxFromLatestReport } from "@/lib/product-tax-from-report";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import {
-  getValidAccessToken,
-  readSession,
-} from "@/lib/mercadolibre/session";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { parseJsonBody } from "@/lib/api-validation";
 
-async function requireAuth() {
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
-  if (!token || userId === undefined) return null;
-  return { token, userId };
-}
-
-function parseProductBody(body: Record<string, unknown>): ProductWriteInput | "invalid" {
-  const sku = typeof body.sku === "string" ? body.sku : "";
-  const ncm = typeof body.ncm === "string" ? body.ncm : null;
-  const unitCostNf = Number(body.unitCostNf);
-  const purchaseIcmsPercent = Number(body.purchaseIcmsPercent);
-  const hasIcmsSt = body.hasIcmsSt === true;
-  const purchaseCostWithSt =
-    body.purchaseCostWithSt === null || body.purchaseCostWithSt === undefined
-      ? null
-      : Number(body.purchaseCostWithSt);
-  const ipiPercent = Number(body.ipiPercent ?? 0);
-  const extraCosts = Number(body.extraCosts ?? 0);
-  const isMonophasic = body.isMonophasic === true;
-  const isImported = body.isImported === true;
-  const saleIcmsPercent = Number(body.saleIcmsPercent);
-  const pmaPrice =
-    body.pmaPrice === null || body.pmaPrice === undefined
-      ? null
-      : Number(body.pmaPrice);
-
-  if (
-    !sku ||
-    !Number.isFinite(unitCostNf) ||
-    !Number.isFinite(purchaseIcmsPercent) ||
-    !Number.isFinite(saleIcmsPercent)
-  ) {
-    return "invalid";
-  }
-
-  return {
-    sku,
-    ncm,
-    unitCostNf,
-    purchaseIcmsPercent,
-    hasIcmsSt,
-    purchaseCostWithSt,
-    ipiPercent: Number.isFinite(ipiPercent) ? ipiPercent : 0,
-    extraCosts: Number.isFinite(extraCosts) ? extraCosts : 0,
-    isMonophasic,
-    isImported,
-    saleIcmsPercent,
-    pmaPrice,
-  };
-}
+const productWriteSchema = z.object({
+  sku: z.string().min(1, "SKU é obrigatório"),
+  ncm: z.string().nullable().optional(),
+  unitCostNf: z.coerce.number().finite(),
+  purchaseIcmsPercent: z.coerce.number().finite(),
+  hasIcmsSt: z.boolean().default(false),
+  purchaseCostWithSt: z.coerce.number().finite().nullable().optional(),
+  ipiPercent: z.coerce.number().finite().default(0),
+  extraCosts: z.coerce.number().finite().default(0),
+  isMonophasic: z.boolean().default(false),
+  isImported: z.boolean().default(false),
+  saleIcmsPercent: z.coerce.number().finite(),
+  pmaPrice: z.coerce.number().finite().nullable().optional(),
+});
 
 export async function GET() {
   const auth = await requireAuth();
   if (!auth) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return unauthorizedResponse();
   }
 
   try {
@@ -97,20 +56,12 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   if (!(await requireAuth())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return unauthorizedResponse();
   }
 
-  let body: Record<string, unknown>;
-  try {
-    body = (await request.json()) as Record<string, unknown>;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  const parsed = parseProductBody(body);
-  if (parsed === "invalid") {
-    return NextResponse.json({ error: "Invalid product payload" }, { status: 400 });
-  }
+  const parsedBody = await parseJsonBody(request, productWriteSchema);
+  if (!parsedBody.ok) return parsedBody.response;
+  const parsed = parsedBody.data;
 
   const validationError = validateProductInput(parsed);
   if (validationError) {

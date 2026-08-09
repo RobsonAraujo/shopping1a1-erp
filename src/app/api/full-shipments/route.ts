@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { z } from "zod";
 import {
   createFullShipment,
   listFullShipments,
@@ -8,29 +8,19 @@ import {
 } from "@/lib/envios-full/full-shipment-data";
 import { FullShipmentValidationError } from "@/lib/envios-full/full-shipment";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import {
-  getValidAccessToken,
-  readSession,
-} from "@/lib/mercadolibre/session";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { parseJsonBody } from "@/lib/api-validation";
 
-async function requireAuth() {
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
-  if (!token || userId === undefined) return null;
-  return { token, userId };
-}
-
-function parseDate(value: unknown): Date | null {
-  if (typeof value !== "string" || value.trim().length === 0) return null;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed;
-}
+const createShipmentSchema = z.object({
+  shippedAt: z.coerce.date({ error: "Informe uma data de envio válida." }),
+  totalCost: z.coerce.number().finite(),
+  totalUnits: z.coerce.number().finite(),
+  notes: z.string().nullish(),
+});
 
 export async function GET(request: NextRequest) {
   if (!(await requireAuth())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return unauthorizedResponse();
   }
 
   try {
@@ -69,28 +59,19 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   if (!(await requireAuth())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return unauthorizedResponse();
   }
 
+  const parsedBody = await parseJsonBody(request, createShipmentSchema);
+  if (!parsedBody.ok) return parsedBody.response;
+  const { shippedAt, totalCost, totalUnits, notes } = parsedBody.data;
+
   try {
-    const body = (await request.json()) as Record<string, unknown>;
-    const shippedAt = parseDate(body.shippedAt);
-    const totalCost = Number(body.totalCost);
-    const totalUnits = Number(body.totalUnits);
-    const notes = typeof body.notes === "string" ? body.notes : null;
-
-    if (!shippedAt) {
-      return NextResponse.json(
-        { error: "Informe uma data de envio válida." },
-        { status: 400 },
-      );
-    }
-
     const shipment = await createFullShipment({
       shippedAt,
       totalCost,
       totalUnits,
-      notes,
+      notes: notes ?? null,
       source: "manual",
     });
 

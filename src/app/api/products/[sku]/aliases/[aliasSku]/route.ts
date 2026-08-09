@@ -1,31 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import {
   deleteSkuAlias,
   listAliasesForCanonicalSku,
 } from "@/lib/product-sku-alias-data";
 import { normalizeProductSku } from "@/lib/product-pricing";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import {
-  getValidAccessToken,
-  readSession,
-} from "@/lib/mercadolibre/session";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
 
 type RouteContext = {
   params: Promise<{ sku: string; aliasSku: string }>;
 };
 
-async function requireAuth() {
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
-  if (!token || userId === undefined) return null;
-  return true;
-}
-
 export async function DELETE(_request: NextRequest, context: RouteContext) {
   if (!(await requireAuth())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return unauthorizedResponse();
   }
 
   const { sku: skuParam, aliasSku: aliasParam } = await context.params;

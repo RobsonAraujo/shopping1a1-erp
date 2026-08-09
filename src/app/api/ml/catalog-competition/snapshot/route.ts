@@ -1,34 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { z } from "zod";
 import {
   pollCatalogCompetitionForSeller,
 } from "@/lib/catalog-report/catalog-competition-poll";
 import { recordCatalogPollRun } from "@/lib/catalog-report/catalog-competition-poll-stats";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { getValidAccessToken, readSession } from "@/lib/mercadolibre/session";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
 
-type Body = {
-  itemIds?: unknown;
-};
+const bodySchema = z.object({
+  itemIds: z.array(z.string()).optional(),
+});
 
 export async function POST(request: NextRequest) {
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
-  if (!token || userId === undefined) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!auth) return unauthorizedResponse();
+  const { token, userId } = auth;
 
-  let body: Body = {};
+  let itemIds: string[] | undefined;
   try {
-    body = (await request.json()) as Body;
+    const raw: unknown = await request.json();
+    const parsed = bodySchema.safeParse(raw);
+    itemIds = parsed.success ? parsed.data.itemIds : undefined;
   } catch {
     // optional body
   }
-
-  const itemIds = Array.isArray(body.itemIds)
-    ? body.itemIds.filter((x): x is string => typeof x === "string")
-    : undefined;
 
   try {
     const result = await pollCatalogCompetitionForSeller(

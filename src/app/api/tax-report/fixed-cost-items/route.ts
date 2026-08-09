@@ -1,28 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { z } from "zod";
 import {
   createTaxFixedCostItem,
   loadTaxFixedCostItemsWithMonthValue,
 } from "@/lib/tax-report/tax-fixed-cost-data";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import {
-  getValidAccessToken,
-  readSession,
-} from "@/lib/mercadolibre/session";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { parseJsonBody } from "@/lib/api-validation";
 
-async function requireAuth() {
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
-  if (!token || userId === undefined) {
-    return null;
-  }
-  return true;
-}
+const createFixedCostItemSchema = z
+  .object({
+    name: z.string().trim().min(1, "Name is required"),
+    recurring: z.boolean().default(true),
+    amount: z.number().finite().min(0).nullish(),
+    year: z.number().int().min(2000).optional(),
+    month: z.number().int().min(1).max(12).optional(),
+  })
+  .refine(
+    (body) =>
+      body.amount === undefined ||
+      body.amount === null ||
+      (body.year !== undefined && body.month !== undefined),
+    { error: "Invalid amount/year/month" },
+  );
 
 export async function GET(request: NextRequest) {
   if (!(await requireAuth())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return unauthorizedResponse();
   }
 
   const year = Number(request.nextUrl.searchParams.get("year"));
@@ -54,46 +58,17 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   if (!(await requireAuth())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return unauthorizedResponse();
   }
 
-  let body: {
-    name?: string;
-    recurring?: boolean;
-    amount?: number | null;
-    year?: number;
-    month?: number;
-  };
-  try {
-    body = (await request.json()) as typeof body;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
+  const parsedBody = await parseJsonBody(request, createFixedCostItemSchema);
+  if (!parsedBody.ok) return parsedBody.response;
+  const { name, recurring, amount, year, month } = parsedBody.data;
 
-  const name = body.name?.trim();
-  if (!name) {
-    return NextResponse.json({ error: "Name is required" }, { status: 400 });
-  }
-  const recurring = body.recurring !== false;
-
-  let initialAmount: { year: number; month: number; amount: number } | null = null;
-  if (body.amount !== undefined && body.amount !== null) {
-    const year = Number(body.year);
-    const month = Number(body.month);
-    if (
-      typeof body.amount !== "number" ||
-      !Number.isFinite(body.amount) ||
-      body.amount < 0 ||
-      !Number.isInteger(year) ||
-      year < 2000 ||
-      !Number.isInteger(month) ||
-      month < 1 ||
-      month > 12
-    ) {
-      return NextResponse.json({ error: "Invalid amount/year/month" }, { status: 400 });
-    }
-    initialAmount = { year, month, amount: body.amount };
-  }
+  const initialAmount =
+    amount !== undefined && amount !== null
+      ? { year: year!, month: month!, amount }
+      : null;
 
   try {
     const item = await createTaxFixedCostItem(name, recurring, initialAmount);

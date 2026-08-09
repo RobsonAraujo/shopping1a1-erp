@@ -1,20 +1,12 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { loadOperationsBoards } from "@/lib/replenishment-cycle-data";
-import {
-  getValidAccessToken,
-  readSession,
-} from "@/lib/mercadolibre/session";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 
 export async function GET() {
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
-
-  if (!token || userId === undefined) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!auth) return unauthorizedResponse();
+  const { token, userId } = auth;
 
   try {
     const boards = await loadOperationsBoards(token, userId);
@@ -28,13 +20,9 @@ export async function GET() {
 }
 
 export async function POST() {
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
-
-  if (!token || userId === undefined) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!auth) return unauthorizedResponse();
+  const { token, userId } = auth;
 
   try {
     const boards = await loadOperationsBoards(token, userId);

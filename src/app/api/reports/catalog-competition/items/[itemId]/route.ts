@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { reportsConfig } from "@/config/reports";
 import { prisma } from "@/lib/db";
 import {
@@ -11,7 +10,7 @@ import {
   type CompetitionPoint,
   type CompetitionStatus,
 } from "@/lib/catalog-competition";
-import { getValidAccessToken, readSession } from "@/lib/mercadolibre/session";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
 import {
   countItemSaleEventsBetween,
   fetchItemSaleEventsInDateRange,
@@ -158,11 +157,9 @@ function snapshotToPoint(
 
 export async function GET(request: NextRequest, context: RouteContext) {
   const { itemId } = await context.params;
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  if (!token) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!auth) return unauthorizedResponse();
+  const { token, userId } = auth;
 
   const tz = request.nextUrl.searchParams.get("tz") ?? reportsConfig.catalogCompetitionTimezone;
   const fromDateOnly = parseDateOnlyParamInTz(
@@ -332,7 +329,6 @@ export async function GET(request: NextRequest, context: RouteContext) {
       (interval) => interval.status !== "unknown",
     );
 
-    const { userId } = readSession(cookieStore);
     let saleEvents: Awaited<ReturnType<typeof fetchItemSaleEventsInDateRange>> =
       [];
 

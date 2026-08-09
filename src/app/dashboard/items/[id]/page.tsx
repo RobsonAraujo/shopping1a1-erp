@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import { cookies } from "next/headers";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import {
   ItemDetailCatalogSection,
@@ -16,11 +16,7 @@ import { loadItemDetailContext } from "@/lib/items/item-detail-data";
 import { fetchItemById } from "@/lib/mercadolibre/api";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { getItemSku } from "@/lib/mercadolibre/item-sku";
-import {
-  getSessionAccessState,
-  readSession,
-  refreshSessionPath,
-} from "@/lib/mercadolibre/session";
+import { readSession } from "@/lib/mercadolibre/session";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -31,10 +27,10 @@ export async function generateMetadata({
 }: PageProps): Promise<Metadata> {
   const { id } = await params;
   const cookieStore = await cookies();
-  const session = getSessionAccessState(cookieStore);
-  if (!session.accessToken) return { title: "Detalhe do anúncio" };
+  const { accessToken } = readSession(cookieStore);
+  if (!accessToken) return { title: "Detalhe do anúncio" };
   try {
-    const item = await fetchItemById(session.accessToken, id);
+    const item = await fetchItemById(accessToken, id);
     const sku = item ? getItemSku(item) : null;
     return { title: sku ?? item?.title ?? "Detalhe do anúncio" };
   } catch {
@@ -45,12 +41,7 @@ export async function generateMetadata({
 export default async function ItemDetailPage({ params }: PageProps) {
   const { id } = await params;
   const cookieStore = await cookies();
-  const session = getSessionAccessState(cookieStore);
-  if (session.needsRefresh) {
-    redirect(refreshSessionPath(`/dashboard/items/${encodeURIComponent(id)}`));
-  }
-  const token = session.accessToken;
-  const { userId } = readSession(cookieStore);
+  const { accessToken: token, userId } = readSession(cookieStore);
 
   if (!token || userId === undefined) {
     return null;

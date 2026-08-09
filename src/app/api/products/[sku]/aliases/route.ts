@@ -1,29 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { z } from "zod";
 import {
   createSkuAlias,
   listAliasesForCanonicalSku,
 } from "@/lib/product-sku-alias-data";
 import { normalizeProductSku } from "@/lib/product-pricing";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import {
-  getValidAccessToken,
-  readSession,
-} from "@/lib/mercadolibre/session";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { parseJsonBody } from "@/lib/api-validation";
 
 type RouteContext = { params: Promise<{ sku: string }> };
 
-async function requireAuth() {
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
-  if (!token || userId === undefined) return null;
-  return true;
-}
+const createAliasSchema = z.object({
+  aliasSku: z
+    .string()
+    .transform(normalizeProductSku)
+    .refine((v) => v.length > 0, "aliasSku é obrigatório"),
+});
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   if (!(await requireAuth())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return unauthorizedResponse();
   }
 
   const { sku: skuParam } = await context.params;
@@ -42,26 +39,15 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
 export async function POST(request: NextRequest, context: RouteContext) {
   if (!(await requireAuth())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return unauthorizedResponse();
   }
 
   const { sku: skuParam } = await context.params;
   const canonicalSku = normalizeProductSku(decodeURIComponent(skuParam));
 
-  let body: Record<string, unknown>;
-  try {
-    body = (await request.json()) as Record<string, unknown>;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  const aliasSku =
-    typeof body.aliasSku === "string"
-      ? normalizeProductSku(body.aliasSku)
-      : "";
-  if (!aliasSku) {
-    return NextResponse.json({ error: "aliasSku é obrigatório" }, { status: 400 });
-  }
+  const parsedBody = await parseJsonBody(request, createAliasSchema);
+  if (!parsedBody.ok) return parsedBody.response;
+  const { aliasSku } = parsedBody.data;
 
   try {
     const result = await createSkuAlias({ canonicalSku, aliasSku });

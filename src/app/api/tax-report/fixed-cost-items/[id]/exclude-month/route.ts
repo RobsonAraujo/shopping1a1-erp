@@ -1,41 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { excludeTaxFixedCostMonth } from "@/lib/tax-report/tax-fixed-cost-data";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import {
-  getValidAccessToken,
-  readSession,
-} from "@/lib/mercadolibre/session";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { parseJsonBody, yearMonthSchema } from "@/lib/api-validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function POST(request: NextRequest, context: RouteContext) {
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
-  if (!token || userId === undefined) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!auth) return unauthorizedResponse();
 
   const { id } = await context.params;
-  let body: { year?: number; month?: number };
-  try {
-    body = (await request.json()) as { year?: number; month?: number };
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  const year = Number(body.year);
-  const month = Number(body.month);
-  if (
-    !Number.isInteger(year) ||
-    year < 2000 ||
-    !Number.isInteger(month) ||
-    month < 1 ||
-    month > 12
-  ) {
-    return NextResponse.json({ error: "Invalid year/month" }, { status: 400 });
-  }
+  const parsedBody = await parseJsonBody(request, yearMonthSchema);
+  if (!parsedBody.ok) return parsedBody.response;
+  const { year, month } = parsedBody.data;
 
   try {
     await excludeTaxFixedCostMonth(id, year, month);

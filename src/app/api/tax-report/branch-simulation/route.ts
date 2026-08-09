@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { getValidAccessToken, readSession } from "@/lib/mercadolibre/session";
+import { z } from "zod";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
+import { parseJsonBody } from "@/lib/api-validation";
 import { collectDetalhes } from "@/lib/tax-report/repair-snapshot-apuracao";
 import {
   listTaxReportSnapshotPeriods,
@@ -18,19 +19,10 @@ import {
 } from "@/lib/tax-report/tax-config-data";
 import type { DetalhamentoTributario } from "@/lib/tax-report/types";
 
-async function requireSellerId(): Promise<number | null> {
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
-  if (!token || userId === undefined) return null;
-  return userId;
-}
-
 export async function GET() {
-  const sellerId = await requireSellerId();
-  if (sellerId === null) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!auth) return unauthorizedResponse();
+  const sellerId = auth.userId;
 
   try {
     const periods = await listTaxReportSnapshotPeriods(sellerId);
@@ -44,28 +36,33 @@ export async function GET() {
   }
 }
 
-type PostBody = {
-  periods?: { year: number; month: number }[];
-  targetUf?: string;
-  creditoPresumidoPercent?: number;
-  supplierUfByFornecedor?: Record<string, string>;
-  compareUfs?: { uf: string; creditoPresumidoPercent: number }[];
-};
+const postBodySchema = z.object({
+  periods: z
+    .array(z.object({ year: z.number().int(), month: z.number().int() }))
+    .default([]),
+  targetUf: z.string().default(""),
+  creditoPresumidoPercent: z.number().finite().default(0),
+  supplierUfByFornecedor: z.record(z.string(), z.string()).optional(),
+  compareUfs: z
+    .array(
+      z.object({
+        uf: z.string(),
+        creditoPresumidoPercent: z.number().finite(),
+      }),
+    )
+    .default([]),
+});
 
 export async function POST(request: NextRequest) {
-  const sellerId = await requireSellerId();
-  if (sellerId === null) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!auth) return unauthorizedResponse();
+  const sellerId = auth.userId;
 
-  let body: PostBody;
-  try {
-    body = (await request.json()) as PostBody;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
+  const parsedBody = await parseJsonBody(request, postBodySchema);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.data;
 
-  const periods = body.periods ?? [];
+  const periods = body.periods;
   const targetUf = (body.targetUf ?? "").toUpperCase();
   const creditoPresumidoPercent = Number(body.creditoPresumidoPercent ?? 0);
 

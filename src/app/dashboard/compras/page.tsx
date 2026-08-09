@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import {
   buildSupplierSummaries,
@@ -11,11 +10,7 @@ import { ComprasPageClient } from "@/components/compras/compras-page-client";
 import { ComprasPageSkeleton } from "@/components/compras/compras-page-skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { loadOperationsBoards } from "@/lib/replenishment-cycle-data";
-import {
-  getSessionAccessState,
-  readSession,
-  refreshSessionPath,
-} from "@/lib/mercadolibre/session";
+import { readSession } from "@/lib/mercadolibre/session";
 
 async function ComprasDataSection({
   token,
@@ -65,12 +60,7 @@ export const metadata: Metadata = {
 
 export default async function ComprasPage() {
   const cookieStore = await cookies();
-  const session = getSessionAccessState(cookieStore);
-  if (session.needsRefresh) {
-    redirect(refreshSessionPath("/dashboard/compras"));
-  }
-  const token = session.accessToken;
-  const { userId } = readSession(cookieStore);
+  const { accessToken: token, userId } = readSession(cookieStore);
 
   if (!token || userId === undefined) {
     return null;

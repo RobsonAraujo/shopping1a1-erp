@@ -23,6 +23,7 @@ import {
 } from "@/components/item-list-search";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { readApiError } from "@/lib/api-client-error";
+import { useSSEStream } from "@/hooks/use-sse-stream";
 import { lastDaysYmdRange, todayYmdLocal } from "@/lib/date-range";
 import {
   formatFinancialMoney,
@@ -89,7 +90,6 @@ export function MonthlyTaxReportClient() {
   >([]);
   const [report, setReport] = useState<TaxReportPayload | null>(null);
   const [loading, setLoading] = useState(false);
-  const [generating, setGenerating] = useState(false);
   const [generateProgress, setGenerateProgress] =
     useState<TaxReportProgressState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -162,73 +162,54 @@ export function MonthlyTaxReportClient() {
     }
   }, [isPeriodMode, year, month, fromDate, toDate]);
 
+  const generateSSE = useSSEStream<
+    | ({ type: "progress" } & TaxReportProgressState)
+    | { type: "complete" }
+    | { type: "error"; message: string }
+  >(
+    useCallback(
+      async (event) => {
+        if (event.type === "progress") {
+          setGenerateProgress({
+            phase: event.phase,
+            message: event.message,
+            current: event.current,
+            total: event.total,
+          });
+        } else if (event.type === "complete") {
+          await loadReport();
+          setGenerateProgress({
+            phase: "done",
+            message: "Relatório gerado com sucesso.",
+          });
+        } else if (event.type === "error") {
+          throw new Error(event.message);
+        }
+      },
+      [loadReport],
+    ),
+  );
+  const generating = generateSSE.streaming;
+
+  useEffect(() => {
+    if (generateSSE.error) setError(generateSSE.error);
+  }, [generateSSE.error]);
+
   const generateReport = useCallback(
     async (force: boolean) => {
-      setGenerating(true);
       setGenerateProgress({
         phase: "orders",
         message: "Iniciando geração do relatório…",
       });
       setError(null);
-      try {
-        const res = await fetch("/api/reports/monthly-tax", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ year, month, force, stream: true }),
-        });
-
-        if (!res.ok || !res.body) {
-          throw new Error(
-            await readApiError(res, "monthly_tax_generate_failed"),
-          );
-        }
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const chunks = buffer.split("\n\n");
-          buffer = chunks.pop() ?? "";
-
-          for (const chunk of chunks) {
-            const line = chunk.trim();
-            if (!line.startsWith("data: ")) continue;
-            const data = JSON.parse(line.slice(6)) as
-              | ({ type: "progress" } & TaxReportProgressState)
-              | { type: "complete" }
-              | { type: "error"; message: string };
-
-            if (data.type === "progress") {
-              setGenerateProgress({
-                phase: data.phase,
-                message: data.message,
-                current: data.current,
-                total: data.total,
-              });
-            } else if (data.type === "complete") {
-              await loadReport();
-              setGenerateProgress({
-                phase: "done",
-                message: "Relatório gerado com sucesso.",
-              });
-            } else if (data.type === "error") {
-              throw new Error(data.message);
-            }
-          }
-        }
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Erro ao gerar relatório");
-      } finally {
-        setGenerating(false);
-        setTimeout(() => setGenerateProgress(null), 400);
-      }
+      await generateSSE.start("/api/reports/monthly-tax", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ year, month, force, stream: true }),
+      });
+      setTimeout(() => setGenerateProgress(null), 400);
     },
-    [year, month, loadReport],
+    [year, month, generateSSE],
   );
 
   useEffect(() => {

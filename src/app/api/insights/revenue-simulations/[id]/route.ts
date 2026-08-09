@@ -1,47 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { getValidAccessToken, readSession } from "@/lib/mercadolibre/session";
-import type { RevenueSimulationPayload } from "@/lib/insights/types";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { parseJsonBody } from "@/lib/api-validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-async function requireSellerId(): Promise<number | null> {
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
-  if (!token || userId === undefined) return null;
-  return userId;
-}
+const revenueSimulationPayloadSchema = z.object({
+  overrides: z.record(z.string(), z.number().finite()),
+  excluded: z.record(z.string(), z.boolean()),
+  periodDays: z.number().finite(),
+  installmentsBySupplier: z.record(z.string(), z.number().finite()),
+});
 
-function isValidPayload(value: unknown): value is RevenueSimulationPayload {
-  if (!value || typeof value !== "object") return false;
-  const p = value as Record<string, unknown>;
-  return (
-    isRecordOfNumbers(p.overrides) &&
-    isRecordOfBooleans(p.excluded) &&
-    typeof p.periodDays === "number" &&
-    Number.isFinite(p.periodDays) &&
-    isRecordOfNumbers(p.installmentsBySupplier)
-  );
-}
-
-function isRecordOfNumbers(value: unknown): value is Record<string, number> {
-  if (!value || typeof value !== "object") return false;
-  return Object.values(value).every((v) => typeof v === "number" && Number.isFinite(v));
-}
-
-function isRecordOfBooleans(value: unknown): value is Record<string, boolean> {
-  if (!value || typeof value !== "object") return false;
-  return Object.values(value).every((v) => typeof v === "boolean");
-}
+const patchSimulationSchema = z.object({
+  name: z.string().trim().min(1, "Name is required").optional(),
+  payload: revenueSimulationPayloadSchema,
+});
 
 export async function GET(_request: NextRequest, context: RouteContext) {
-  const sellerId = await requireSellerId();
-  if (sellerId === null) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!auth) return unauthorizedResponse();
+  const sellerId = auth.userId;
 
   const { id } = await context.params;
 
@@ -63,34 +44,15 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 }
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
-  const sellerId = await requireSellerId();
-  if (sellerId === null) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!auth) return unauthorizedResponse();
+  const sellerId = auth.userId;
 
   const { id } = await context.params;
 
-  let body: { name?: string; payload?: unknown };
-  try {
-    body = (await request.json()) as { name?: string; payload?: unknown };
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  if (!isValidPayload(body.payload)) {
-    return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
-  }
-
-  const data: { payload: RevenueSimulationPayload; name?: string } = {
-    payload: body.payload,
-  };
-  if (body.name !== undefined) {
-    const name = body.name.trim();
-    if (!name) {
-      return NextResponse.json({ error: "Name is required" }, { status: 400 });
-    }
-    data.name = name;
-  }
+  const parsedBody = await parseJsonBody(request, patchSimulationSchema);
+  if (!parsedBody.ok) return parsedBody.response;
+  const data = parsedBody.data;
 
   try {
     const existing = await prisma.revenueSimulation.findFirst({
@@ -116,10 +78,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 }
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {
-  const sellerId = await requireSellerId();
-  if (sellerId === null) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!auth) return unauthorizedResponse();
+  const sellerId = auth.userId;
 
   const { id } = await context.params;
 

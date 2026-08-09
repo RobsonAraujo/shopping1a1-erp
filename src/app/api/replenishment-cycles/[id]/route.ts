@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { z } from "zod";
 import type { ReplenishmentStatus } from "@/generated/prisma/client";
 import {
   advanceReplenishmentCycle,
@@ -9,37 +9,28 @@ import {
 import {
   isValidStatusForKind,
 } from "@/lib/replenishment-cycle";
-import {
-  getValidAccessToken,
-  readSession,
-} from "@/lib/mercadolibre/session";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
+import { parseJsonBody } from "@/lib/api-validation";
 import { prisma } from "@/lib/db";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-type PatchBody = {
-  status?: unknown;
-  advance?: unknown;
-  notes?: unknown;
-};
+const patchBodySchema = z.object({
+  status: z.string().optional(),
+  advance: z.boolean().optional(),
+  notes: z.string().optional(),
+});
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   const { id: cycleId } = await context.params;
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
+  const auth = await requireAuth();
+  if (!auth) return unauthorizedResponse();
+  const { token, userId } = auth;
 
-  if (!token || userId === undefined) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  let body: PatchBody;
-  try {
-    body = (await request.json()) as PatchBody;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
+  const parsedBody = await parseJsonBody(request, patchBodySchema);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.data;
 
   try {
     const cycle = await prisma.replenishmentCycle.findUnique({

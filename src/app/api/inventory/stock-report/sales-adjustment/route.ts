@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { stockPlanningConfig } from "@/config/stock-planning";
 import { loadCatalogMlStockAtOrBefore } from "@/lib/inventory/catalog-snapshot-stock";
 import { fetchUnitsSoldForItemsInDateRangeBatched } from "@/lib/mercadolibre/api";
@@ -9,10 +8,7 @@ import {
 } from "@/lib/inventory/inventory-stock-report";
 import { prisma } from "@/lib/db";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import {
-  getValidAccessToken,
-  readSession,
-} from "@/lib/mercadolibre/session";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
 
 function parseItemIds(value: string | null): string[] {
   if (!value?.trim()) return [];
@@ -20,13 +16,9 @@ function parseItemIds(value: string | null): string[] {
 }
 
 export async function GET(request: NextRequest) {
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
-
-  if (!token || userId === undefined) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!auth) return unauthorizedResponse();
+  const { token, userId } = auth;
 
   const snapshotParam = request.nextUrl.searchParams.get("snapshot");
   const itemIds = parseItemIds(request.nextUrl.searchParams.get("itemIds"));

@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { cache, Suspense } from "react";
 import { cookies } from "next/headers";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { Award, ExternalLink } from "lucide-react";
 import { DashboardHomeShortcuts } from "@/components/home/dashboard-home-shortcuts";
 import { DashboardOperationsSummary } from "@/components/home/dashboard-operations-summary";
@@ -10,11 +9,7 @@ import { DashboardPmaAlertPanel } from "@/components/home/dashboard-pma-alert-pa
 import { DashboardSummaryClient } from "@/components/home/dashboard-summary-client";
 import { Card, CardContent } from "@/components/ui/card";
 import { fetchMe } from "@/lib/mercadolibre/api";
-import {
-  getSessionAccessState,
-  readSession,
-  refreshSessionPath,
-} from "@/lib/mercadolibre/session";
+import { readSession } from "@/lib/mercadolibre/session";
 import {
   buildSellerReputationBadge,
   type SellerReputationBadge,
@@ -173,12 +168,7 @@ export const metadata: Metadata = {
 
 export default async function DashboardPage() {
   const cookieStore = await cookies();
-  const session = getSessionAccessState(cookieStore);
-  if (session.needsRefresh) {
-    redirect(refreshSessionPath("/dashboard"));
-  }
-  const token = session.accessToken;
-  const { userId } = readSession(cookieStore);
+  const { accessToken: token, userId } = readSession(cookieStore);
 
   if (!token || userId === undefined) {
     return null;

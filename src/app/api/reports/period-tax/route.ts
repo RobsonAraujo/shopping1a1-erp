@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { loadTaxReportForPeriod } from "@/lib/tax-report/service/period-report";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { getValidAccessToken, readSession } from "@/lib/mercadolibre/session";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
 
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_RANGE_DAYS = 90;
@@ -25,13 +24,9 @@ function parseFromTo(searchParams: URLSearchParams): {
 }
 
 export async function GET(request: NextRequest) {
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
-
-  if (!token || userId === undefined) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!auth) return unauthorizedResponse();
+  const { userId } = auth;
 
   const parsed = parseFromTo(request.nextUrl.searchParams);
   if (!parsed) {

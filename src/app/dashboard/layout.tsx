@@ -1,16 +1,12 @@
 import { cookies } from "next/headers";
 import Image from "next/image";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { DashboardNav } from "@/components/dashboard-nav";
 import { fetchMe } from "@/lib/mercadolibre/api";
 import { PushNotificationToggle } from "@/components/push-notification-toggle";
 import { MobileDashboardMenu } from "@/components/mobile-dashboard-menu";
-import {
-  getSessionAccessState,
-  refreshSessionPath,
-} from "@/lib/mercadolibre/session";
+import { readSession } from "@/lib/mercadolibre/session";
 import { Button } from "@/components/ui/button";
 
 export default async function DashboardLayout({
@@ -19,13 +15,7 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const cookieStore = await cookies();
-  const session = getSessionAccessState(cookieStore);
-  if (!session.isLoggedIn) {
-    redirect("/");
-  }
-  if (session.needsRefresh) {
-    redirect(refreshSessionPath("/dashboard"));
-  }
+  const session = readSession(cookieStore);
 
   let nickname = "Conta";
   if (session.accessToken) {

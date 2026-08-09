@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 import { stockPlanningConfig } from "@/config/stock-planning";
 import { InventoryStockTable, type InventoryRow } from "@/components/inventory/inventory-stock-table";
 import { InventoryStockTableSkeleton } from "@/components/inventory/inventory-stock-table-skeleton";
@@ -20,11 +19,7 @@ import { computeStockPlanningDisplay } from "@/lib/stock-planning";
 import { loadStockReportProductsBySku } from "@/lib/product-data";
 import type { StockReportProductInfo } from "@/lib/inventory/inventory-stock-report";
 import { prisma } from "@/lib/db";
-import {
-  getSessionAccessState,
-  readSession,
-  refreshSessionPath,
-} from "@/lib/mercadolibre/session";
+import { readSession } from "@/lib/mercadolibre/session";
 
 function stockUnits(value: number | null | undefined): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return 0;
@@ -173,12 +168,7 @@ export const metadata: Metadata = {
 
 export default async function InventoryPage() {
   const cookieStore = await cookies();
-  const session = getSessionAccessState(cookieStore);
-  if (session.needsRefresh) {
-    redirect(refreshSessionPath("/dashboard/inventory"));
-  }
-  const token = session.accessToken;
-  const { userId } = readSession(cookieStore);
+  const { accessToken: token, userId } = readSession(cookieStore);
 
   if (!token || userId === undefined) {
     return null;

@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 import { FullShipmentsClient } from "@/components/envios-full/full-shipments-client";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -8,11 +7,7 @@ import {
   listImportedBillingPeriods,
 } from "@/lib/envios-full/full-shipment-data";
 import { getZonedYearMonth } from "@/lib/mercadolibre/revenue-periods";
-import {
-  getSessionAccessState,
-  readSession,
-  refreshSessionPath,
-} from "@/lib/mercadolibre/session";
+import { readSession } from "@/lib/mercadolibre/session";
 
 export const metadata: Metadata = {
   title: "Relatório de Envios",
@@ -20,12 +15,7 @@ export const metadata: Metadata = {
 
 export default async function EnviosFullPage() {
   const cookieStore = await cookies();
-  const session = getSessionAccessState(cookieStore);
-  if (session.needsRefresh) {
-    redirect(refreshSessionPath("/dashboard/envios-full"));
-  }
-  const token = session.accessToken;
-  const { userId } = readSession(cookieStore);
+  const { accessToken: token, userId } = readSession(cookieStore);
 
   if (!token || userId === undefined) {
     return null;

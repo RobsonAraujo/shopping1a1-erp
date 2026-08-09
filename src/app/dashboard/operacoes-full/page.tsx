@@ -1,17 +1,12 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 import { Kanban } from "lucide-react";
 import { OperationsKanban } from "@/components/operacoes-full/operations-kanban";
 import { OperationsKanbanSkeleton } from "@/components/operacoes-full/operations-kanban-skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { loadOperationsBoards } from "@/lib/replenishment-cycle-data";
-import {
-  getSessionAccessState,
-  readSession,
-  refreshSessionPath,
-} from "@/lib/mercadolibre/session";
+import { readSession } from "@/lib/mercadolibre/session";
 
 async function OperacoesFullDataSection({
   token,
@@ -49,12 +44,7 @@ export const metadata: Metadata = {
 
 export default async function OperacoesFullPage() {
   const cookieStore = await cookies();
-  const session = getSessionAccessState(cookieStore);
-  if (session.needsRefresh) {
-    redirect(refreshSessionPath("/dashboard/operacoes-full"));
-  }
-  const token = session.accessToken;
-  const { userId } = readSession(cookieStore);
+  const { accessToken: token, userId } = readSession(cookieStore);
 
   if (!token || userId === undefined) {
     return null;

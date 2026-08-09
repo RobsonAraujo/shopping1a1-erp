@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { z } from "zod";
 import { fetchItemById } from "@/lib/mercadolibre/api";
 import { buildNetWholesalePricesPayload } from "@/lib/mercadolibre/build-net-wholesale-prices-payload";
 import {
@@ -20,59 +20,48 @@ import {
   wholesaleReductionsToTuple,
 } from "@/lib/wholesale-pricing";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import {
-  getValidAccessToken,
-  readSession,
-} from "@/lib/mercadolibre/session";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-type PostBody = {
-  levels?: number[];
-};
+const postBodySchema = z.object({
+  levels: z
+    .array(z.union([z.literal(1), z.literal(2), z.literal(3)]))
+    .optional(),
+});
 
 function itemOwnedByUser(item: ItemBody, userId: number): boolean {
   return item.seller_id === userId;
 }
 
-function parseLevels(body: PostBody): Array<1 | 2 | 3> | null {
-  if (!body.levels || body.levels.length === 0) {
-    return [1, 2, 3];
-  }
-  const parsed = [...new Set(body.levels)]
-    .map((n) => Number(n))
-    .filter((n): n is 1 | 2 | 3 => n === 1 || n === 2 || n === 3);
-  if (parsed.length === 0) return null;
-  return parsed.sort((a, b) => a - b);
+function normalizeLevels(levels: number[] | undefined): Array<1 | 2 | 3> {
+  if (!levels || levels.length === 0) return [1, 2, 3];
+  return [...new Set(levels)].sort((a, b) => a - b) as Array<1 | 2 | 3>;
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
   const { id: mlItemId } = await context.params;
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
+  const auth = await requireAuth();
+  if (!auth) return unauthorizedResponse();
+  const { token, userId } = auth;
 
-  if (!token || userId === undefined) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  let body: PostBody = {};
-  try {
-    const text = await request.text();
-    if (text.trim()) {
-      body = JSON.parse(text) as PostBody;
+  const text = await request.text();
+  let rawBody: unknown = {};
+  if (text.trim()) {
+    try {
+      rawBody = JSON.parse(text);
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
     }
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
-
-  const levels = parseLevels(body);
-  if (!levels) {
+  const parsedResult = postBodySchema.safeParse(rawBody);
+  if (!parsedResult.success) {
     return NextResponse.json(
       { error: "levels deve conter 1, 2 e/ou 3" },
       { status: 400 },
     );
   }
+  const levels = normalizeLevels(parsedResult.data.levels);
 
   try {
     const item = await fetchItemById(token, mlItemId);

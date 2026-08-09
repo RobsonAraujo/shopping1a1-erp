@@ -1,17 +1,20 @@
-import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { fetchItemById } from "@/lib/mercadolibre/api";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import { prisma } from "@/lib/db";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { getValidAccessToken, readSession } from "@/lib/mercadolibre/session";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { parseJsonBody } from "@/lib/api-validation";
 
 type RouteContext = { params: Promise<{ mlItemId: string }> };
-type AttentionKind = "full" | "purchase";
-type AckBody = {
-  kind?: unknown;
-};
+
+const ackBodySchema = z.object({
+  kind: z.enum(["full", "purchase"], {
+    error: "kind must be full or purchase",
+  }),
+});
 
 function itemOwnedByUser(item: ItemBody, userId: number): boolean {
   return item.seller_id === userId;
@@ -28,34 +31,15 @@ function listingUpsertData(item: ItemBody) {
   };
 }
 
-function parseAttentionKind(value: unknown): AttentionKind | null {
-  return value === "full" || value === "purchase" ? value : null;
-}
-
 export async function POST(request: NextRequest, context: RouteContext) {
   const { mlItemId } = await context.params;
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
+  const auth = await requireAuth();
+  if (!auth) return unauthorizedResponse();
+  const { token, userId } = auth;
 
-  if (!token || userId === undefined) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  let body: AckBody;
-  try {
-    body = (await request.json()) as AckBody;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  const kind = parseAttentionKind(body.kind);
-  if (!kind) {
-    return NextResponse.json(
-      { error: "kind must be full or purchase" },
-      { status: 400 },
-    );
-  }
+  const parsedBody = await parseJsonBody(request, ackBodySchema);
+  if (!parsedBody.ok) return parsedBody.response;
+  const { kind } = parsedBody.data;
 
   try {
     const item = await fetchItemById(token, mlItemId);

@@ -1,7 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useApiResource } from "@/hooks/use-api-resource";
 import { ImageOff, Pencil, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -116,7 +117,17 @@ export function KitsModal({ open, onClose }: KitsModalProps) {
   const [candidatesLoading, setCandidatesLoading] = useState(false);
   const [candidatesError, setCandidatesError] = useState<string | null>(null);
 
-  const [productSkus, setProductSkus] = useState<string[]>([]);
+  const productsResource = useApiResource<{ products: { sku: string }[] }>(
+    "/api/products",
+    { enabled: open, fallbackError: "products_load_failed" },
+  );
+  const productSkus = useMemo(
+    () =>
+      (productsResource.data?.products ?? [])
+        .map((p) => p.sku)
+        .sort((a, b) => a.localeCompare(b, "pt-BR")),
+    [productsResource.data],
+  );
 
   const [editingMlItemId, setEditingMlItemId] = useState<string | null>(null);
   const [mlItemId, setMlItemId] = useState("");
@@ -160,24 +171,12 @@ export function KitsModal({ open, onClose }: KitsModalProps) {
     }
   }, []);
 
-  const loadProductSkus = useCallback(async () => {
-    try {
-      const res = await fetch("/api/products");
-      if (!res.ok) return;
-      const data = (await res.json()) as { products: { sku: string }[] };
-      setProductSkus(data.products.map((p) => p.sku).sort((a, b) => a.localeCompare(b, "pt-BR")));
-    } catch {
-      // busca de SKUs cadastrados é só um atalho de UI; falha aqui não bloqueia o cadastro manual
-    }
-  }, []);
-
   useEffect(() => {
     if (open) {
       void loadKits();
       void loadCandidates();
-      void loadProductSkus();
     }
-  }, [open, loadKits, loadCandidates, loadProductSkus]);
+  }, [open, loadKits, loadCandidates]);
 
   function resetForm() {
     setEditingMlItemId(null);

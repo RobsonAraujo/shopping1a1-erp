@@ -1,13 +1,8 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  getSessionAccessState,
-  readSession,
-  refreshSessionPath,
-} from "@/lib/mercadolibre/session";
+import { readSession } from "@/lib/mercadolibre/session";
 import { loadRevenuePotentialData } from "@/lib/insights/revenue-potential";
 import { RevenuePotentialView } from "@/components/insights/revenue-potential-view";
 import { RevenuePotentialSkeleton } from "@/components/insights/revenue-potential-skeleton";
@@ -41,12 +36,7 @@ export const metadata: Metadata = {
 
 export default async function PotencialFaturamentoPage() {
   const cookieStore = await cookies();
-  const session = getSessionAccessState(cookieStore);
-  if (session.needsRefresh) {
-    redirect(refreshSessionPath("/dashboard/insights/potencial-faturamento"));
-  }
-  const token = session.accessToken;
-  const { userId } = readSession(cookieStore);
+  const { accessToken: token, userId } = readSession(cookieStore);
 
   if (!token || userId === undefined) return null;
 

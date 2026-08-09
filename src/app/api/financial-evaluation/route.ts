@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { ensureCompanySettings } from "@/lib/product-data";
 import { calendarYmdRangeToUtc } from "@/lib/financial-evaluation-period";
 import {
@@ -7,10 +6,7 @@ import {
   loadFinancialEvaluationRowsForPeriod,
   type FinancialEvaluationRow,
 } from "@/lib/financial-evaluation-data";
-import {
-  getValidAccessToken,
-  readSession,
-} from "@/lib/mercadolibre/session";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 
 export const maxDuration = 300;
@@ -47,13 +43,9 @@ function sseLine(data: unknown): string {
 }
 
 export async function GET(request: NextRequest) {
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
-
-  if (!token || userId === undefined) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!auth) return unauthorizedResponse();
+  const { token, userId } = auth;
 
   const itemIdsParam = request.nextUrl.searchParams.get("itemIds");
   const itemIds = itemIdsParam

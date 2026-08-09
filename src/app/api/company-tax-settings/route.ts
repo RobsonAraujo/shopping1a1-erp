@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { z } from "zod";
 import { prisma } from "@/lib/db";
 import {
   ensureCompanySettings,
@@ -14,18 +14,8 @@ import {
   type WholesaleReductionSettings,
 } from "@/lib/wholesale-pricing";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import {
-  getValidAccessToken,
-  readSession,
-} from "@/lib/mercadolibre/session";
-
-async function requireAuth() {
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
-  if (!token || userId === undefined) return null;
-  return true;
-}
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { parseJsonBody } from "@/lib/api-validation";
 
 function wholesaleReductionsResponse(
   settings: Pick<
@@ -57,7 +47,7 @@ function settingsResponse(settings: CompanySettings) {
 
 export async function GET() {
   if (!(await requireAuth())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return unauthorizedResponse();
   }
 
   try {
@@ -71,29 +61,28 @@ export async function GET() {
   }
 }
 
-type PatchBody = {
-  pisCofinsPercent?: unknown;
-  wholesaleReductions?: {
-    level1ReductionPercent?: unknown;
-    level2ReductionPercent?: unknown;
-    level3ReductionPercent?: unknown;
-    level1MinPurchaseUnit?: unknown;
-    level2MinPurchaseUnit?: unknown;
-    level3MinPurchaseUnit?: unknown;
-  };
-};
+const patchBodySchema = z.object({
+  pisCofinsPercent: z.unknown().optional(),
+  wholesaleReductions: z
+    .object({
+      level1ReductionPercent: z.unknown().optional(),
+      level2ReductionPercent: z.unknown().optional(),
+      level3ReductionPercent: z.unknown().optional(),
+      level1MinPurchaseUnit: z.unknown().optional(),
+      level2MinPurchaseUnit: z.unknown().optional(),
+      level3MinPurchaseUnit: z.unknown().optional(),
+    })
+    .optional(),
+});
 
 export async function PATCH(request: NextRequest) {
   if (!(await requireAuth())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return unauthorizedResponse();
   }
 
-  let body: PatchBody;
-  try {
-    body = (await request.json()) as PatchBody;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
+  const parsedBody = await parseJsonBody(request, patchBodySchema);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.data;
 
   const current = await ensureCompanySettings();
 

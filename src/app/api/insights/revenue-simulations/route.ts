@@ -1,45 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { getValidAccessToken, readSession } from "@/lib/mercadolibre/session";
-import type { RevenueSimulationPayload } from "@/lib/insights/types";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { parseJsonBody } from "@/lib/api-validation";
 
-async function requireSellerId(): Promise<number | null> {
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
-  if (!token || userId === undefined) return null;
-  return userId;
-}
+const revenueSimulationPayloadSchema = z.object({
+  overrides: z.record(z.string(), z.number().finite()),
+  excluded: z.record(z.string(), z.boolean()),
+  periodDays: z.number().finite(),
+  installmentsBySupplier: z.record(z.string(), z.number().finite()),
+});
 
-function isValidPayload(value: unknown): value is RevenueSimulationPayload {
-  if (!value || typeof value !== "object") return false;
-  const p = value as Record<string, unknown>;
-  return (
-    isRecordOfNumbers(p.overrides) &&
-    isRecordOfBooleans(p.excluded) &&
-    typeof p.periodDays === "number" &&
-    Number.isFinite(p.periodDays) &&
-    isRecordOfNumbers(p.installmentsBySupplier)
-  );
-}
-
-function isRecordOfNumbers(value: unknown): value is Record<string, number> {
-  if (!value || typeof value !== "object") return false;
-  return Object.values(value).every((v) => typeof v === "number" && Number.isFinite(v));
-}
-
-function isRecordOfBooleans(value: unknown): value is Record<string, boolean> {
-  if (!value || typeof value !== "object") return false;
-  return Object.values(value).every((v) => typeof v === "boolean");
-}
+const createSimulationSchema = z.object({
+  name: z.string().trim().min(1, "Name is required"),
+  payload: revenueSimulationPayloadSchema,
+});
 
 export async function GET() {
-  const sellerId = await requireSellerId();
-  if (sellerId === null) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!auth) return unauthorizedResponse();
+  const sellerId = auth.userId;
 
   try {
     const simulations = await prisma.revenueSimulation.findMany({
@@ -57,29 +38,17 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const sellerId = await requireSellerId();
-  if (sellerId === null) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!auth) return unauthorizedResponse();
+  const sellerId = auth.userId;
 
-  let body: { name?: string; payload?: unknown };
-  try {
-    body = (await request.json()) as { name?: string; payload?: unknown };
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  const name = body.name?.trim();
-  if (!name) {
-    return NextResponse.json({ error: "Name is required" }, { status: 400 });
-  }
-  if (!isValidPayload(body.payload)) {
-    return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
-  }
+  const parsedBody = await parseJsonBody(request, createSimulationSchema);
+  if (!parsedBody.ok) return parsedBody.response;
+  const { name, payload } = parsedBody.data;
 
   try {
     const simulation = await prisma.revenueSimulation.create({
-      data: { sellerId, name, payload: body.payload },
+      data: { sellerId, name, payload },
       select: { id: true, name: true, createdAt: true, updatedAt: true },
     });
     return NextResponse.json({ simulation });

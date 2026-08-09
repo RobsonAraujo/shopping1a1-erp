@@ -1,79 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { z } from "zod";
 import { prisma } from "@/lib/db";
 import {
   buildProductView,
   ensureCompanySettings,
   productWriteToPrismaData,
   validateProductInput,
-  type ProductWriteInput,
 } from "@/lib/product-data";
 import { listAliasesForCanonicalSku } from "@/lib/product-sku-alias-data";
 import { normalizeProductSku } from "@/lib/product-pricing";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import {
-  getValidAccessToken,
-  readSession,
-} from "@/lib/mercadolibre/session";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { parseJsonBody } from "@/lib/api-validation";
 
 type RouteContext = { params: Promise<{ sku: string }> };
 
-async function requireAuth() {
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
-  if (!token || userId === undefined) return null;
-  return true;
-}
-
-function parseProductBody(body: Record<string, unknown>): ProductWriteInput | "invalid" {
-  const sku = typeof body.sku === "string" ? body.sku : "";
-  const ncm = typeof body.ncm === "string" ? body.ncm : null;
-  const unitCostNf = Number(body.unitCostNf);
-  const purchaseIcmsPercent = Number(body.purchaseIcmsPercent);
-  const hasIcmsSt = body.hasIcmsSt === true;
-  const purchaseCostWithSt =
-    body.purchaseCostWithSt === null || body.purchaseCostWithSt === undefined
-      ? null
-      : Number(body.purchaseCostWithSt);
-  const ipiPercent = Number(body.ipiPercent ?? 0);
-  const extraCosts = Number(body.extraCosts ?? 0);
-  const isMonophasic = body.isMonophasic === true;
-  const isImported = body.isImported === true;
-  const saleIcmsPercent = Number(body.saleIcmsPercent);
-  const pmaPrice =
-    body.pmaPrice === null || body.pmaPrice === undefined
-      ? null
-      : Number(body.pmaPrice);
-
-  if (
-    !sku ||
-    !Number.isFinite(unitCostNf) ||
-    !Number.isFinite(purchaseIcmsPercent) ||
-    !Number.isFinite(saleIcmsPercent)
-  ) {
-    return "invalid";
-  }
-
-  return {
-    sku,
-    ncm,
-    unitCostNf,
-    purchaseIcmsPercent,
-    hasIcmsSt,
-    purchaseCostWithSt,
-    ipiPercent: Number.isFinite(ipiPercent) ? ipiPercent : 0,
-    extraCosts: Number.isFinite(extraCosts) ? extraCosts : 0,
-    isMonophasic,
-    isImported,
-    saleIcmsPercent,
-    pmaPrice,
-  };
-}
+const productPatchBodySchema = z.object({
+  ncm: z.string().nullable().optional(),
+  unitCostNf: z.coerce.number().finite(),
+  purchaseIcmsPercent: z.coerce.number().finite(),
+  hasIcmsSt: z.boolean().default(false),
+  purchaseCostWithSt: z.coerce.number().finite().nullable().optional(),
+  ipiPercent: z.coerce.number().finite().default(0),
+  extraCosts: z.coerce.number().finite().default(0),
+  isMonophasic: z.boolean().default(false),
+  isImported: z.boolean().default(false),
+  saleIcmsPercent: z.coerce.number().finite(),
+  pmaPrice: z.coerce.number().finite().nullable().optional(),
+});
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   if (!(await requireAuth())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return unauthorizedResponse();
   }
 
   const { sku: skuParam } = await context.params;
@@ -101,23 +59,15 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   if (!(await requireAuth())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return unauthorizedResponse();
   }
 
   const { sku: skuParam } = await context.params;
   const sku = normalizeProductSku(decodeURIComponent(skuParam));
 
-  let body: Record<string, unknown>;
-  try {
-    body = (await request.json()) as Record<string, unknown>;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  const parsed = parseProductBody({ ...body, sku });
-  if (parsed === "invalid") {
-    return NextResponse.json({ error: "Invalid product payload" }, { status: 400 });
-  }
+  const parsedBody = await parseJsonBody(request, productPatchBodySchema);
+  if (!parsedBody.ok) return parsedBody.response;
+  const parsed = { ...parsedBody.data, sku };
 
   const validationError = validateProductInput(parsed);
   if (validationError) {
@@ -156,7 +106,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {
   if (!(await requireAuth())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return unauthorizedResponse();
   }
 
   const { sku: skuParam } = await context.params;

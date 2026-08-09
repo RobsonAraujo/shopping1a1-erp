@@ -1,16 +1,12 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
 import { getCatalogPollStats } from "@/lib/catalog-report/catalog-competition-poll-stats";
-import { getValidAccessToken } from "@/lib/mercadolibre/session";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
 
 export async function GET() {
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  if (!token) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!auth) return unauthorizedResponse();
 
   try {
     const [listings, pollStats] = await Promise.all([

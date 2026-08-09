@@ -1,57 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { z } from "zod";
 import {
   deactivateTaxFixedCostItem,
   endTaxFixedCostItem,
   updateTaxFixedCostItem,
 } from "@/lib/tax-report/tax-fixed-cost-data";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import {
-  getValidAccessToken,
-  readSession,
-} from "@/lib/mercadolibre/session";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { parseJsonBody } from "@/lib/api-validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-async function requireAuth() {
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
-  if (!token || userId === undefined) {
-    return null;
-  }
-  return true;
-}
+const patchBodySchema = z.object({
+  name: z.string().trim().min(1, "Name is required").optional(),
+  recurring: z.boolean().optional(),
+  end: z
+    .object({
+      year: z.number().int().min(2000, "Invalid end year/month"),
+      month: z.number().int().min(1).max(12, "Invalid end year/month"),
+    })
+    .optional(),
+});
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   if (!(await requireAuth())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return unauthorizedResponse();
   }
 
   const { id } = await context.params;
-  let body: {
-    name?: string;
-    recurring?: boolean;
-    end?: { year?: number; month?: number };
-  };
-  try {
-    body = (await request.json()) as typeof body;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
+  const parsedBody = await parseJsonBody(request, patchBodySchema);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.data;
 
   if (body.end) {
-    const year = Number(body.end.year);
-    const month = Number(body.end.month);
-    if (
-      !Number.isInteger(year) ||
-      year < 2000 ||
-      !Number.isInteger(month) ||
-      month < 1 ||
-      month > 12
-    ) {
-      return NextResponse.json({ error: "Invalid end year/month" }, { status: 400 });
-    }
+    const { year, month } = body.end;
     try {
       const item = await endTaxFixedCostItem(id, year, month);
       return NextResponse.json({ item });
@@ -93,7 +75,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {
   if (!(await requireAuth())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return unauthorizedResponse();
   }
 
   const { id } = await context.params;

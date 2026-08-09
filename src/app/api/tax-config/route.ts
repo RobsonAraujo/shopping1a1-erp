@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { z } from "zod";
 import {
   listCbsIbsVigencia,
   listIcmsInternalRates,
@@ -8,21 +8,13 @@ import {
   upsertCbsIbsVigencia,
   upsertIcmsInternalRate,
 } from "@/lib/tax-report/tax-config-data";
-import type { TaxCompanyConfig } from "@/lib/tax-report/types";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import {
-  getValidAccessToken,
-  readSession,
-} from "@/lib/mercadolibre/session";
+import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { parseJsonBody } from "@/lib/api-validation";
 
 export async function GET() {
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
-
-  if (!token || userId === undefined) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!auth) return unauthorizedResponse();
 
   try {
     const [company, icmsRates, cbsIbs] = await Promise.all([
@@ -39,33 +31,43 @@ export async function GET() {
   }
 }
 
-type PatchBody = {
-  company?: Partial<TaxCompanyConfig>;
-  icmsRate?: { uf: string; aliquotaBase: number; fcp: number };
-  cbsIbs?: {
-    year: number;
-    cbsRate: number | null;
-    ibsEstadualRate: number | null;
-    ibsMunicipalRate: number | null;
-    notes?: string | null;
-  };
-};
+const patchBodySchema = z.object({
+  company: z
+    .object({
+      taxRegime: z.enum(["LUCRO_REAL", "LUCRO_PRESUMIDO", "SIMPLES"]),
+      originUf: z.string().length(2),
+      pisRatePercent: z.number().finite(),
+      cofinsRatePercent: z.number().finite(),
+      excludeIcmsFromPisCofinsBase: z.boolean(),
+      considerIcmsStRecuperavel: z.boolean(),
+    })
+    .partial()
+    .optional(),
+  icmsRate: z
+    .object({
+      uf: z.string().length(2),
+      aliquotaBase: z.number().finite(),
+      fcp: z.number().finite(),
+    })
+    .optional(),
+  cbsIbs: z
+    .object({
+      year: z.number().int(),
+      cbsRate: z.number().finite().nullable(),
+      ibsEstadualRate: z.number().finite().nullable(),
+      ibsMunicipalRate: z.number().finite().nullable(),
+      notes: z.string().nullish(),
+    })
+    .optional(),
+});
 
 export async function PATCH(request: NextRequest) {
-  const cookieStore = await cookies();
-  const token = await getValidAccessToken(cookieStore);
-  const { userId } = readSession(cookieStore);
+  const auth = await requireAuth();
+  if (!auth) return unauthorizedResponse();
 
-  if (!token || userId === undefined) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  let body: PatchBody;
-  try {
-    body = (await request.json()) as PatchBody;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
+  const parsedBody = await parseJsonBody(request, patchBodySchema);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.data;
 
   try {
     if (body.company) {

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { stockPlanningConfig } from "@/config/stock-planning";
 import {
@@ -13,11 +13,7 @@ import { decodeSupplierParam, supplierPathSegment } from "@/lib/purchase-analysi
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { SupplierPurchaseAnalysisView } from "@/components/compras/supplier-purchase-analysis-view";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  getSessionAccessState,
-  readSession,
-  refreshSessionPath,
-} from "@/lib/mercadolibre/session";
+import { readSession } from "@/lib/mercadolibre/session";
 
 type PageProps = {
   params: Promise<{ supplier: string }>;
@@ -36,12 +32,7 @@ export default async function SupplierPurchasePage({ params }: PageProps) {
   const supplier = decodeSupplierParam(supplierParam);
 
   const cookieStore = await cookies();
-  const session = getSessionAccessState(cookieStore);
-  if (session.needsRefresh) {
-    redirect(refreshSessionPath(`/dashboard/compras/${supplierParam}`));
-  }
-  const token = session.accessToken;
-  const { userId } = readSession(cookieStore);
+  const { accessToken: token, userId } = readSession(cookieStore);
 
   if (!token || userId === undefined) {
     return null;

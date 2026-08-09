@@ -12,8 +12,11 @@ export const ML_COOKIE = {
 
 const isProd = process.env.NODE_ENV === "production";
 
-export type MlCookieStore = {
+export type MlCookieReader = {
   get(name: string): { value: string } | undefined;
+};
+
+export type MlCookieStore = MlCookieReader & {
   set(
     name: string,
     value: string,
@@ -50,7 +53,7 @@ export function readOAuthState(store: MlCookieStore): string | undefined {
   return store.get(ML_COOKIE.oauthState)?.value;
 }
 
-export function readSession(store: MlCookieStore) {
+export function readSession(store: MlCookieReader) {
   const access = store.get(ML_COOKIE.access)?.value;
   const refresh = store.get(ML_COOKIE.refresh)?.value;
   const expiresAt = store.get(ML_COOKIE.expiresAt)?.value;
@@ -63,7 +66,7 @@ export function readSession(store: MlCookieStore) {
   };
 }
 
-export function getSessionAccessState(store: MlCookieStore) {
+export function getSessionAccessState(store: MlCookieReader) {
   const session = readSession(store);
   const now = Date.now();
   const needsRefresh = Boolean(
