@@ -4,7 +4,6 @@ import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { NumericFormat } from "react-number-format";
 import { AlertCircle, Pencil, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
@@ -50,6 +49,9 @@ const PERCENT_ROW_DIVIDER_STYLE = {
 const MAIN_ROW_DIVIDER_STYLE = {
   boxShadow: "inset 0 -1px 0 0 rgba(148, 163, 184, 0.35)",
 } as const;
+
+/** Zebra striping das linhas de detalhe (fundo branco/card) — só a cor #f4f2f7, sem borda extra. */
+const ALT_ROW_BG = "#f4f2f7";
 
 type DreYearTableProps = {
   data: DreYearView;
@@ -183,24 +185,17 @@ function MonthSyncTooltip({
   );
 }
 
-function SourceTag({ source }: { source?: string }) {
-  if (!source) return null;
-  const label =
-    source === "ml"
-      ? "ML"
-      : source === "erp"
-        ? "ERP"
-        : source === "ads"
-          ? "ADS"
-          : "Manual";
-  return (
-    <Badge
-      variant="outline"
-      className="ml-1 px-1 py-0 text-[12.5px] font-bold leading-none"
-    >
-      {label}
-    </Badge>
-  );
+function sourceOriginLabel(source: string): string {
+  switch (source) {
+    case "ml":
+      return "Mercado Livre";
+    case "erp":
+      return "ERP (nosso sistema)";
+    case "ads":
+      return "Campanhas ADS (Mercado Livre)";
+    default:
+      return "Valor manual";
+  }
 }
 
 function DreManualCostCell({
@@ -307,13 +302,27 @@ function renderLabelCell(row: DreTableRow) {
     row.type === "investment-cost" ||
     (row.type === "static" && row.indent);
 
+  const labelSpan = <span className={rowLabelClass(row)}>{row.label}</span>;
+
   return (
     <div
-      className={cn("flex min-w-0 items-start gap-1", indent && "pl-2.5")}
-      title={row.label}
+      className={cn("flex min-w-0 items-start", indent && "pl-2.5")}
+      title={source ? undefined : row.label}
     >
-      <span className={rowLabelClass(row)}>{row.label}</span>
-      <SourceTag source={source} />
+      {source ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="cursor-help underline decoration-dotted decoration-1 underline-offset-2">
+              {labelSpan}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="right" align="start">
+            Fonte: {sourceOriginLabel(source)}
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        labelSpan
+      )}
     </div>
   );
 }
@@ -566,14 +575,24 @@ export function DreYearTable({
     showDetails,
   );
 
+  // Zebra striping só entre as linhas "brancas" (detalhe) — as linhas de
+  // grupo/resultado (verde/vermelho) ficam de fora da contagem.
+  const altRowFlags = rows.map((row, index) => {
+    if (isColoredRow(row)) return false;
+    const whiteRowsBefore = rows
+      .slice(0, index)
+      .filter((r) => !isColoredRow(r)).length;
+    return whiteRowsBefore % 2 === 1;
+  });
+
   return (
     <TooltipProvider delayDuration={200}>
       <div className="overflow-x-auto rounded-lg border border-[var(--border)] bg-white shadow-sm">
         <table className="w-full min-w-[64rem] table-fixed border-collapse text-[12.5px]">
         <colgroup>
-          <col style={{ width: "11%" }} />
+          <col style={{ width: "8%" }} />
           {data.months.map((month) => (
-            <col key={month.month} style={{ width: `${81 / 12}%` }} />
+            <col key={month.month} style={{ width: `${84 / 12}%` }} />
           ))}
           <col style={{ width: "8%" }} />
         </colgroup>
@@ -597,21 +616,26 @@ export function DreYearTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => {
+          {rows.map((row, index) => {
             const bg = rowBackgroundClass(row);
             const showPercentRow = row.type === "static" && row.showPercent;
+            const isAlt = altRowFlags[index];
             // Linhas com percentual logo abaixo não desenham borda inferior —
             // a separação já é feita pela borda da própria linha de percentual.
             const dividerStyle = showPercentRow
               ? undefined
               : MAIN_ROW_DIVIDER_STYLE;
+            const rowClassName = isAlt ? undefined : bg;
+            const cellStyle = isAlt
+              ? { ...dividerStyle, backgroundColor: ALT_ROW_BG }
+              : dividerStyle;
 
             return (
               <Fragment key={row.id}>
-                <tr className={bg}>
+                <tr className={rowClassName}>
                   <td
-                    className={cn("sticky left-0 z-10 px-3 py-2", bg)}
-                    style={dividerStyle}
+                    className={cn("sticky left-0 z-10 px-3 py-2", rowClassName)}
+                    style={cellStyle}
                   >
                     {renderLabelCell(row)}
                   </td>
@@ -619,7 +643,7 @@ export function DreYearTable({
                     <td
                       key={month.month}
                       className="px-1.5 py-2 align-middle"
-                      style={dividerStyle}
+                      style={cellStyle}
                     >
                       {renderValueCell(
                         row,
@@ -631,8 +655,8 @@ export function DreYearTable({
                     </td>
                   ))}
                   <td
-                    className={cn("px-2 py-2 align-middle", bg)}
-                    style={dividerStyle}
+                    className={cn("px-2 py-2 align-middle", rowClassName)}
+                    style={cellStyle}
                   >
                     <div
                       className={cn(
