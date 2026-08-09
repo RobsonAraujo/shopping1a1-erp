@@ -284,6 +284,16 @@ export function buildDreTableRows(
   return rows;
 }
 
+/** Linhas de grupo/resultado ficam com fundo verde ou vermelho — só essas. */
+export function isColoredRow(row: DreTableRow): boolean {
+  return (
+    row.type === "static" &&
+    (row.kind === "entrada-total" ||
+      row.kind === "custo-total" ||
+      row.kind === "resultado")
+  );
+}
+
 export function rowBackgroundClass(row: DreTableRow): string {
   if (
     row.type === "fixed-cost" ||
@@ -296,30 +306,29 @@ export function rowBackgroundClass(row: DreTableRow): string {
     return "bg-[var(--card)]";
   }
   if (row.kind === "entrada-total" || row.kind === "resultado") {
-    return "bg-emerald-200/95 text-emerald-950 dark:bg-emerald-900/55 dark:text-emerald-50";
+    return "bg-[#1c573a] text-white";
   }
   if (row.kind === "custo-total") {
-    return "bg-rose-200/95 text-rose-950 dark:bg-rose-900/55 dark:text-rose-50";
+    return "bg-[#d43b4f] text-white";
   }
   return "bg-[var(--card)]";
 }
 
 export function rowLabelClass(row: DreTableRow): string {
+  if (isColoredRow(row)) {
+    return "text-[12.5px] font-bold uppercase leading-tight text-white";
+  }
   if (
     row.type === "fixed-cost" ||
     row.type === "operational-cost" ||
     row.type === "investment-cost"
   ) {
-    return "text-xs leading-tight";
+    return "text-[12.5px] font-bold leading-tight";
   }
   if (row.kind === "entrada-detail" || row.kind === "custo-detail") {
-    return "text-xs leading-tight text-[var(--foreground)]";
+    return "text-[12.5px] font-bold leading-tight text-[var(--foreground)]";
   }
-  if (row.kind === "resultado") return "text-xs font-bold leading-tight";
-  if (row.kind === "entrada-total" || row.kind === "custo-total") {
-    return "text-xs font-semibold leading-tight";
-  }
-  return "text-xs leading-tight";
+  return "text-[12.5px] font-bold leading-tight";
 }
 
 export function valueToneClass(value: number | null | undefined): string {

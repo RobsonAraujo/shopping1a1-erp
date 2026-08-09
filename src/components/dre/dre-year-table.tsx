@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { NumericFormat } from "react-number-format";
 import { AlertCircle, Pencil, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import {
   buildDreTableRows,
   dreMonthShortLabel,
   getCellValue,
+  isColoredRow,
   rowBackgroundClass,
   rowLabelClass,
   valueToneClass,
@@ -96,10 +97,10 @@ function MonthAlertsTooltip({
       <TooltipTrigger asChild>
         <button
           type="button"
-          className="inline-flex size-4 shrink-0 items-center justify-center rounded-full text-amber-600 hover:bg-amber-50 hover:text-amber-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+          className="inline-flex size-3.5 shrink-0 items-center justify-center rounded-full text-amber-500/70 opacity-60 hover:opacity-100 hover:text-amber-600 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]"
           aria-label={`Ver avisos de ${month.label}`}
         >
-          <AlertCircle className="size-3" aria-hidden />
+          <AlertCircle className="size-2.5" aria-hidden />
         </button>
       </TooltipTrigger>
       <TooltipContent
@@ -177,7 +178,7 @@ function SourceTag({ source }: { source?: string }) {
   return (
     <Badge
       variant="outline"
-      className="ml-1 px-1 py-0 text-[9px] font-normal leading-none"
+      className="ml-1 px-1 py-0 text-[12.5px] font-bold leading-none"
     >
       {label}
     </Badge>
@@ -237,7 +238,7 @@ function DreManualCostCell({
         prefix="R$ "
         decimalScale={2}
         allowNegative={false}
-        className="w-full rounded border border-[var(--border)] bg-[var(--background)] px-1 py-0.5 text-right text-[11px] tabular-nums"
+        className="w-full rounded border border-[var(--border)] bg-[var(--background)] px-1 py-0.5 text-right text-[12.5px] font-bold tabular-nums"
       />
     );
   }
@@ -249,7 +250,7 @@ function DreManualCostCell({
     <div className="flex items-center justify-end gap-0">
       <span
         className={cn(
-          "text-[11px] tabular-nums leading-tight",
+          "text-[12.5px] font-bold tabular-nums leading-tight",
           inherited && "text-[var(--muted-foreground)]",
         )}
         title={inherited ? "Valor herdado do mês anterior" : undefined}
@@ -351,33 +352,33 @@ function renderValueCell(
     );
   }
 
-  const { amount, percent } = getCellValue(row, month);
-  const showPercent = row.type === "static" && row.showPercent;
+  const { amount } = getCellValue(row, month);
+  const colored = isColoredRow(row);
 
   const moneyLabel = formatFinancialMoney(amount);
 
   return (
-    <div className="text-right tabular-nums leading-tight">
-      <div
-        className={cn(
-          "truncate text-[11px]",
-          row.type === "static" && row.kind === "resultado" && "font-bold",
-          row.type === "static" &&
-            (row.kind === "entrada-total" || row.kind === "custo-total") &&
-            "font-semibold",
-          row.type === "static" && row.kind === "resultado"
-            ? valueToneClass(amount)
-            : "",
-        )}
-        title={moneyLabel}
-      >
-        {moneyLabel}
-      </div>
-      {showPercent ? (
-        <div className={cn("text-[10px]", valueToneClass(percent))}>
-          {formatFinancialPercent(percent)}
-        </div>
-      ) : null}
+    <div
+      className={cn(
+        "truncate text-right text-[12.5px] font-bold tabular-nums leading-tight",
+        colored ? "text-white" : "",
+      )}
+      title={moneyLabel}
+    >
+      {moneyLabel}
+    </div>
+  );
+}
+
+function renderPercentCell(percent: number | null, colored: boolean) {
+  return (
+    <div
+      className={cn(
+        "truncate text-right text-[12.5px] font-bold tabular-nums leading-tight",
+        colored ? "text-white" : valueToneClass(percent),
+      )}
+    >
+      {formatFinancialPercent(percent)}
     </div>
   );
 }
@@ -492,7 +493,7 @@ function MonthHeaderCell({
   return (
     <th
       className={cn(
-        "border-b border-[var(--border)] bg-white px-0 py-1 text-center font-normal",
+        "border-b border-[var(--border)] bg-white px-1 py-2 text-center font-normal",
         month.isFutureMonth && "opacity-45",
       )}
     >
@@ -500,7 +501,7 @@ function MonthHeaderCell({
         <MonthSyncTooltip year={year} month={month}>
           <span
             className={cn(
-              "cursor-default text-[10px] font-semibold tracking-wider text-[var(--muted-foreground)]",
+              "cursor-default text-[12.5px] font-bold tracking-wider text-[var(--muted-foreground)]",
               month.isCurrentMonth && "text-[var(--primary)]",
               !month.syncedAt && !month.isFutureMonth && "text-amber-700",
             )}
@@ -516,7 +517,7 @@ function MonthHeaderCell({
             type="button"
             variant="ghost"
             size="icon-sm"
-            className="size-5 shrink-0 p-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+            className="size-5 shrink-0 rounded-sm border border-[var(--border)] p-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
             aria-label={`Sincronizar ${month.label}`}
             disabled={syncing}
             onClick={onSync}
@@ -551,7 +552,7 @@ export function DreYearTable({
   return (
     <TooltipProvider delayDuration={200}>
       <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-white shadow-sm">
-        <table className="w-full table-fixed border-collapse text-xs">
+        <table className="w-full table-fixed border-collapse text-[12.5px]">
         <colgroup>
           <col style={{ width: "13%" }} />
           {data.months.map((month) => (
@@ -561,7 +562,7 @@ export function DreYearTable({
         </colgroup>
         <thead>
           <tr>
-            <th className="sticky left-0 z-20 border-b border-[var(--border)] bg-white px-2 py-1 text-left text-[10px] font-medium text-[var(--muted-foreground)]">
+            <th className="sticky left-0 z-20 border-b border-[var(--border)] bg-white px-3 py-2 text-left text-[12.5px] font-bold uppercase text-[var(--muted-foreground)]">
               Linha
             </th>
             {data.months.map((month) => (
@@ -573,7 +574,7 @@ export function DreYearTable({
                 onSync={() => onSyncMonth(month.month)}
               />
             ))}
-            <th className="border-b border-[var(--border)] bg-[var(--muted)]/30 px-1 py-1 text-center text-[10px] font-semibold text-[var(--muted-foreground)]">
+            <th className="border-b border-[var(--border)] bg-[var(--muted)]/30 px-2 py-2 text-center text-[12.5px] font-bold uppercase text-[var(--muted-foreground)]">
               Total
             </th>
           </tr>
@@ -582,68 +583,74 @@ export function DreYearTable({
           {rows.map((row) => {
             const bg = rowBackgroundClass(row);
             const isResult = row.type === "static" && row.kind === "resultado";
+            const showPercentRow = row.type === "static" && row.showPercent;
 
             return (
-              <tr
-                key={row.id}
-                className={cn(
-                  "border-b border-[var(--border)]/50",
-                  bg,
-                  isResult && "border-t border-t-[var(--border)]",
-                )}
-              >
-                <td className={cn("sticky left-0 z-10 px-2 py-1", bg)}>
-                  {renderLabelCell(row)}
-                </td>
-                {data.months.map((month) => (
-                  <td key={month.month} className="px-0.5 py-1 align-middle">
-                    {renderValueCell(
-                      row,
-                      month,
-                      onFixedCostChange,
-                      onOperationalCostChange,
-                      onInvestmentCostChange,
-                    )}
+              <Fragment key={row.id}>
+                <tr
+                  className={cn(
+                    "border-b border-[var(--border)]/50",
+                    bg,
+                    isResult && "border-t border-t-[var(--border)]",
+                    showPercentRow && "border-b-0",
+                  )}
+                >
+                  <td className={cn("sticky left-0 z-10 px-3 py-2", bg)}>
+                    {renderLabelCell(row)}
                   </td>
-                ))}
-                <td className="bg-[var(--muted)]/15 px-1 py-1 align-middle">
-                  {row.type === "fixed-cost" ||
-                  row.type === "operational-cost" ||
-                  row.type === "investment-cost" ? (
-                    <div className="text-right text-[11px] tabular-nums text-[var(--muted-foreground)]">
+                  {data.months.map((month) => (
+                    <td key={month.month} className="px-1.5 py-2 align-middle">
+                      {renderValueCell(
+                        row,
+                        month,
+                        onFixedCostChange,
+                        onOperationalCostChange,
+                        onInvestmentCostChange,
+                      )}
+                    </td>
+                  ))}
+                  <td className={cn("px-2 py-2 align-middle", bg)}>
+                    <div
+                      className={cn(
+                        "truncate text-right text-[12.5px] font-bold tabular-nums leading-tight",
+                        isColoredRow(row) ? "text-white" : "",
+                      )}
+                    >
                       {formatFinancialMoney(
                         getYearTotalForRow(row, data).amount,
                       )}
                     </div>
-                  ) : (
-                    (() => {
-                      const { amount, percent } = getYearTotalForRow(row, data);
-                      return (
-                        <div className="text-right tabular-nums leading-tight">
-                          <div
-                            className={cn(
-                              "text-[11px] font-semibold",
-                              isResult ? valueToneClass(amount) : "",
-                            )}
-                          >
-                            {formatFinancialMoney(amount)}
-                          </div>
-                          {row.type === "static" && row.showPercent ? (
-                            <div
-                              className={cn(
-                                "text-[10px]",
-                                valueToneClass(percent),
-                              )}
-                            >
-                              {formatFinancialPercent(percent)}
-                            </div>
-                          ) : null}
-                        </div>
-                      );
-                    })()
-                  )}
-                </td>
-              </tr>
+                  </td>
+                </tr>
+                {showPercentRow ? (
+                  <tr
+                    key={`${row.id}-percent`}
+                    className={cn(
+                      "border-t border-b border-white/30",
+                      bg,
+                    )}
+                  >
+                    <td className={cn("sticky left-0 z-10 px-3 py-1.5", bg)} />
+                    {data.months.map((month) => (
+                      <td
+                        key={month.month}
+                        className="px-1.5 py-1.5 align-middle"
+                      >
+                        {renderPercentCell(
+                          getCellValue(row, month).percent,
+                          isColoredRow(row),
+                        )}
+                      </td>
+                    ))}
+                    <td className={cn("px-2 py-1.5 align-middle", bg)}>
+                      {renderPercentCell(
+                        getYearTotalForRow(row, data).percent,
+                        isColoredRow(row),
+                      )}
+                    </td>
+                  </tr>
+                ) : null}
+              </Fragment>
             );
           })}
         </tbody>

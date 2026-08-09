@@ -100,24 +100,36 @@ describe("buildDreTableRows", () => {
 });
 
 describe("rowBackgroundClass / rowLabelClass", () => {
-  it("highlights entrada-total/resultado rows in emerald", () => {
+  it("highlights entrada-total/resultado rows in green with white text", () => {
     const row = DRE_STATIC_ROWS.find((r) => r.id === "totalEntrada")!;
-    assert.match(rowBackgroundClass(row), /emerald/);
+    assert.match(rowBackgroundClass(row), /#1c573a/);
+    assert.match(rowBackgroundClass(row), /text-white/);
   });
 
-  it("highlights custo-total rows in rose", () => {
+  it("highlights custo-total rows in red with white text", () => {
     const row = DRE_STATIC_ROWS.find((r) => r.id === "totalCustoOperacional")!;
-    assert.match(rowBackgroundClass(row), /rose/);
+    assert.match(rowBackgroundClass(row), /#d43b4f/);
+    assert.match(rowBackgroundClass(row), /text-white/);
   });
 
-  it("uses bold label class for resultado rows", () => {
+  it("uses bold uppercase white label class for resultado rows", () => {
     const row = DRE_STATIC_ROWS.find((r) => r.id === "lucroOperacional")!;
     assert.match(rowLabelClass(row), /font-bold/);
+    assert.match(rowLabelClass(row), /uppercase/);
+    assert.match(rowLabelClass(row), /text-white/);
   });
 
-  it("uses semibold label class for total rows", () => {
+  it("uses bold uppercase white label class for total rows", () => {
     const row = DRE_STATIC_ROWS.find((r) => r.id === "totalEntrada")!;
-    assert.match(rowLabelClass(row), /font-semibold/);
+    assert.match(rowLabelClass(row), /font-bold/);
+    assert.match(rowLabelClass(row), /uppercase/);
+    assert.match(rowLabelClass(row), /text-white/);
+  });
+
+  it("uses bold (non-uppercase) label class for detail rows", () => {
+    const row = DRE_STATIC_ROWS.find((r) => r.id === "revenueMl")!;
+    assert.match(rowLabelClass(row), /font-bold/);
+    assert.doesNotMatch(rowLabelClass(row), /uppercase/);
   });
 });
 
