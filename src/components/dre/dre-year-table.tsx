@@ -33,6 +33,24 @@ import {
 } from "@/lib/mercadolibre/revenue-periods";
 import { cn } from "@/lib/utils";
 
+const PERCENT_ROW_DIVIDER_STYLE = {
+  boxShadow:
+    "inset 0 1px 0 0 rgba(255,255,255,0.3), inset 0 -1px 0 0 rgba(255,255,255,0.3)",
+} as const;
+
+/**
+ * Border em <td> sticky dentro de tabela border-collapse não compõe de forma
+ * confiável (bug de renderização do Chromium/Safari) — usamos box-shadow
+ * inset por célula em vez de border no <tr>, aplicado a toda a linha para
+ * manter o alinhamento entre a coluna sticky e as demais. Uma única variante
+ * (linha inferior, translúcida) é usada em toda a tabela — sem uma borda
+ * opaca especial antes das linhas de resultado, para não ficar inconsistente
+ * ao lado das demais bordas translúcidas.
+ */
+const MAIN_ROW_DIVIDER_STYLE = {
+  boxShadow: "inset 0 -1px 0 0 rgba(148, 163, 184, 0.35)",
+} as const;
+
 type DreYearTableProps = {
   data: DreYearView;
   showDetails: boolean;
@@ -250,7 +268,7 @@ function DreManualCostCell({
     <div className="flex items-center justify-end gap-0">
       <span
         className={cn(
-          "text-[12.5px] font-bold tabular-nums leading-tight",
+          "whitespace-nowrap text-[12.5px] font-bold tabular-nums leading-tight",
           inherited && "text-[var(--muted-foreground)]",
         )}
         title={inherited ? "Valor herdado do mês anterior" : undefined}
@@ -291,10 +309,10 @@ function renderLabelCell(row: DreTableRow) {
 
   return (
     <div
-      className={cn("flex min-w-0 items-center truncate", indent && "pl-2.5")}
+      className={cn("flex min-w-0 items-start gap-1", indent && "pl-2.5")}
       title={row.label}
     >
-      <span className={cn(rowLabelClass(row), "truncate")}>{row.label}</span>
+      <span className={rowLabelClass(row)}>{row.label}</span>
       <SourceTag source={source} />
     </div>
   );
@@ -360,10 +378,9 @@ function renderValueCell(
   return (
     <div
       className={cn(
-        "truncate text-right text-[12.5px] font-bold tabular-nums leading-tight",
+        "whitespace-nowrap text-right text-[12.5px] font-bold tabular-nums leading-tight",
         colored ? "text-white" : "",
       )}
-      title={moneyLabel}
     >
       {moneyLabel}
     </div>
@@ -374,7 +391,7 @@ function renderPercentCell(percent: number | null, colored: boolean) {
   return (
     <div
       className={cn(
-        "truncate text-right text-[12.5px] font-bold tabular-nums leading-tight",
+        "whitespace-nowrap text-right text-[12.5px] font-bold tabular-nums leading-tight",
         colored ? "text-white" : valueToneClass(percent),
       )}
     >
@@ -551,14 +568,14 @@ export function DreYearTable({
 
   return (
     <TooltipProvider delayDuration={200}>
-      <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-white shadow-sm">
-        <table className="w-full table-fixed border-collapse text-[12.5px]">
+      <div className="overflow-x-auto rounded-lg border border-[var(--border)] bg-white shadow-sm">
+        <table className="w-full min-w-[64rem] table-fixed border-collapse text-[12.5px]">
         <colgroup>
-          <col style={{ width: "13%" }} />
+          <col style={{ width: "11%" }} />
           {data.months.map((month) => (
-            <col key={month.month} style={{ width: `${67 / 12}%` }} />
+            <col key={month.month} style={{ width: `${81 / 12}%` }} />
           ))}
-          <col style={{ width: "7%" }} />
+          <col style={{ width: "8%" }} />
         </colgroup>
         <thead>
           <tr>
@@ -582,24 +599,28 @@ export function DreYearTable({
         <tbody>
           {rows.map((row) => {
             const bg = rowBackgroundClass(row);
-            const isResult = row.type === "static" && row.kind === "resultado";
             const showPercentRow = row.type === "static" && row.showPercent;
+            // Linhas com percentual logo abaixo não desenham borda inferior —
+            // a separação já é feita pela borda da própria linha de percentual.
+            const dividerStyle = showPercentRow
+              ? undefined
+              : MAIN_ROW_DIVIDER_STYLE;
 
             return (
               <Fragment key={row.id}>
-                <tr
-                  className={cn(
-                    "border-b border-[var(--border)]/50",
-                    bg,
-                    isResult && "border-t border-t-[var(--border)]",
-                    showPercentRow && "border-b-0",
-                  )}
-                >
-                  <td className={cn("sticky left-0 z-10 px-3 py-2", bg)}>
+                <tr className={bg}>
+                  <td
+                    className={cn("sticky left-0 z-10 px-3 py-2", bg)}
+                    style={dividerStyle}
+                  >
                     {renderLabelCell(row)}
                   </td>
                   {data.months.map((month) => (
-                    <td key={month.month} className="px-1.5 py-2 align-middle">
+                    <td
+                      key={month.month}
+                      className="px-1.5 py-2 align-middle"
+                      style={dividerStyle}
+                    >
                       {renderValueCell(
                         row,
                         month,
@@ -609,10 +630,13 @@ export function DreYearTable({
                       )}
                     </td>
                   ))}
-                  <td className={cn("px-2 py-2 align-middle", bg)}>
+                  <td
+                    className={cn("px-2 py-2 align-middle", bg)}
+                    style={dividerStyle}
+                  >
                     <div
                       className={cn(
-                        "truncate text-right text-[12.5px] font-bold tabular-nums leading-tight",
+                        "whitespace-nowrap text-right text-[12.5px] font-bold tabular-nums leading-tight",
                         isColoredRow(row) ? "text-white" : "",
                       )}
                     >
@@ -623,18 +647,16 @@ export function DreYearTable({
                   </td>
                 </tr>
                 {showPercentRow ? (
-                  <tr
-                    key={`${row.id}-percent`}
-                    className={cn(
-                      "border-t border-b border-white/30",
-                      bg,
-                    )}
-                  >
-                    <td className={cn("sticky left-0 z-10 px-3 py-1.5", bg)} />
+                  <tr key={`${row.id}-percent`} className={bg}>
+                    <td
+                      className={cn("sticky left-0 z-10 px-3 py-1.5", bg)}
+                      style={PERCENT_ROW_DIVIDER_STYLE}
+                    />
                     {data.months.map((month) => (
                       <td
                         key={month.month}
                         className="px-1.5 py-1.5 align-middle"
+                        style={PERCENT_ROW_DIVIDER_STYLE}
                       >
                         {renderPercentCell(
                           getCellValue(row, month).percent,
@@ -642,7 +664,10 @@ export function DreYearTable({
                         )}
                       </td>
                     ))}
-                    <td className={cn("px-2 py-1.5 align-middle", bg)}>
+                    <td
+                      className={cn("px-2 py-1.5 align-middle", bg)}
+                      style={PERCENT_ROW_DIVIDER_STYLE}
+                    >
                       {renderPercentCell(
                         getYearTotalForRow(row, data).percent,
                         isColoredRow(row),

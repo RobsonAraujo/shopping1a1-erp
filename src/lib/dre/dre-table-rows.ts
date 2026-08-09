@@ -74,7 +74,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     type: "static",
     id: "totalEntrada",
     kind: "entrada-total",
-    label: "(+) Receita/Faturamento",
+    label: "(+) Total de Entrada",
   },
   {
     type: "static",
@@ -386,8 +386,7 @@ export function getCellValue(
       return { amount: totals?.totalCustoFixo ?? null, percent: null };
     case "adsCost":
       return {
-        amount:
-          month.adsCost === null ? null : -Math.max(0, month.adsCost),
+        amount: month.adsCost === null ? null : -Math.max(0, month.adsCost),
         percent: null,
       };
     case "lucroOperacionalAntesInvestimentos":
