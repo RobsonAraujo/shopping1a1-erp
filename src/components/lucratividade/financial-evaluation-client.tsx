@@ -660,7 +660,13 @@ export function FinancialEvaluationClient() {
 
             if (event.type === "row") {
               collected.push(event.row);
-              setData((prev) => (prev ? [...prev, event.row] : [event.row]));
+              setData((prev) => {
+                if (!prev) return [event.row];
+                const withoutDupe = prev.filter(
+                  (r) => r.mlItemId !== event.row.mlItemId,
+                );
+                return [...withoutDupe, event.row];
+              });
             } else if (event.type === "complete") {
               setWholesaleReductions(event.wholesaleReductions);
               setEvaluationMode(event.mode ?? mode);
@@ -883,7 +889,7 @@ export function FinancialEvaluationClient() {
                     });
                     return;
                   }
-                  const items = await loadData({ mode: "current" });
+                  const items = await loadData({ mode: "current", clear: true });
                   if (items?.length) {
                     await refineMinPrices(items.map((row) => row.mlItemId));
                   }
