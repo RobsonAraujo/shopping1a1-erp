@@ -167,7 +167,7 @@ export function ufFromStateId(stateId: string | null | undefined): string | null
   const direct = normalizeUf(normalized);
   if (direct) return direct;
 
-  const brMatch = normalized.match(/(?:^BR-)?([A-Z]{2})$/i);
+  const brMatch = normalized.match(/^(?:BR-)?([A-Z]{2})$/i);
   if (brMatch) return normalizeUf(brMatch[1]);
 
   const fromName = ufFromStateName(trimmed);

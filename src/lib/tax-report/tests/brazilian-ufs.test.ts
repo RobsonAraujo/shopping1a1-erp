@@ -98,22 +98,16 @@ describe("ufFromStateId", () => {
     assert.equal(ufFromStateId("br-rj"), "RJ");
   });
 
-  it("KNOWN QUIRK: does not fall back to name resolution for most full names", () => {
-    // The trailing-letters regex (`/(?:^BR-)?([A-Z]{2})$/i`) matches the last 2
-    // letters of ANY string ending in letters — e.g. "Bahia" -> "IA", "São
-    // Paulo" -> "LO" — none of which are real UF codes, so `normalizeUf()`
-    // returns null and the function short-circuits there instead of falling
-    // through to `ufFromStateName`. Real ML state ids are short codes
-    // ("SP"/"BR-SP"), not full names, so this doesn't bite in practice —
-    // `resolveUfDestino()` also tries `ufFromStateName` before `ufFromStateId`.
-    assert.equal(ufFromStateId("São Paulo"), null);
-    assert.equal(ufFromStateId("Bahia"), null);
-  });
-
-  it("KNOWN QUIRK (worse case): a name ending in a real UF's letters resolves to the WRONG state", () => {
-    // "Rio de Janeiro" ends in "RO", which IS a valid UF (Rondônia) — so this
-    // returns "RO" instead of "RJ" or null. Same root cause as above.
-    assert.equal(ufFromStateId("Rio de Janeiro"), "RO");
+  it("falls back to name resolution for a multi-word full name", () => {
+    // Regression test: the "BR-XX"/"XX" regex used to have no overall anchor
+    // (`/(?:^BR-)?([A-Z]{2})$/i`), so it matched the last 2 letters of ANY
+    // string ending in letters — e.g. "Rio de Janeiro" -> "RO" (a real UF,
+    // Rondônia!) was returned instead of falling through to name resolution.
+    // Now anchored (`/^(?:BR-)?([A-Z]{2})$/i`) so only exact "XX"/"BR-XX"
+    // forms match, and everything else falls through correctly.
+    assert.equal(ufFromStateId("São Paulo"), "SP");
+    assert.equal(ufFromStateId("Bahia"), "BA");
+    assert.equal(ufFromStateId("Rio de Janeiro"), "RJ");
   });
 
   it("resolves an IBGE numeric code", () => {
