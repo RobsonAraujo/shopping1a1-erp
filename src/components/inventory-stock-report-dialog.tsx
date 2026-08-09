@@ -51,8 +51,10 @@ import {
   inventoryBaseUnits,
   listingAuditBreakdown,
   listingStateFor,
+  listingTotalUnits,
   parseStockReportSnapshotDateInput,
   skuKeyFromListing,
+  skuLabelFromKey,
   type StockReportListingInput,
   type StockReportListingState,
   type StockReportMergeGroup,
@@ -195,12 +197,14 @@ function SkuCalculationMemory({
   row,
   memberListings,
   listingStatesByMlItemId,
+  productsBySku,
   salesPeriod,
   snapshotDateInput,
 }: {
   row: StockReportRow;
   memberListings: StockReportListingInput[];
   listingStatesByMlItemId: Record<string, StockReportListingState>;
+  productsBySku: Record<string, StockReportProductInfo>;
   salesPeriod: { from: string; to: string } | null;
   snapshotDateInput: string;
 }) {
@@ -208,6 +212,24 @@ function SkuCalculationMemory({
   const periodDays = salesPeriod
     ? countPeriodDays(salesPeriod.from, salesPeriod.to)
     : 0;
+
+  const perSkuValuation = (() => {
+    if (row.skus.length <= 1) return null;
+    const unitsBySku = new Map<string, number>();
+    for (const listing of memberListings) {
+      const skuKey = skuKeyFromListing(listing.sku, listing.mlItemId);
+      const state = listingStateFor(listingStatesByMlItemId, listing.mlItemId);
+      const units = listingTotalUnits(listing, state);
+      unitsBySku.set(skuKey, (unitsBySku.get(skuKey) ?? 0) + units);
+    }
+    return row.skus
+      .filter((skuKey) => (unitsBySku.get(skuKey) ?? 0) > 0)
+      .map((skuKey) => ({
+        skuKey,
+        units: unitsBySku.get(skuKey) ?? 0,
+        unitCost: productsBySku[skuKey]?.unitCost ?? null,
+      }));
+  })();
 
   return (
     <div className="max-w-2xl rounded-lg border border-[var(--border)] bg-[var(--background)] px-4 py-3">
@@ -337,7 +359,38 @@ function SkuCalculationMemory({
       <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
         Valorização
       </p>
-      {row.unitCost != null ? (
+      {perSkuValuation ? (
+        <>
+          {perSkuValuation.map((entry) => (
+            <MemoriaLinha
+              key={entry.skuKey}
+              label={`Unidades × Custo — ${skuLabelFromKey(entry.skuKey)}`}
+              value={
+                entry.unitCost != null
+                  ? formatStockReportCurrency(entry.units * entry.unitCost)
+                  : "—"
+              }
+              nota={
+                entry.unitCost != null
+                  ? `${formatStockReportUnits(entry.units)} × ${formatStockReportCurrency(entry.unitCost)}`
+                  : "sem custo cadastrado"
+              }
+              fraca={entry.unitCost == null}
+            />
+          ))}
+          <MemoriaDivider />
+          <MemoriaLinha
+            label="Soma do valor em estoque"
+            value={
+              row.stockValue != null
+                ? formatStockReportCurrency(row.stockValue)
+                : "—"
+            }
+            nota={row.missingCost ? "1 ou mais SKUs sem custo — não entra no valor total do relatório" : undefined}
+            destaque
+          />
+        </>
+      ) : row.unitCost != null ? (
         <MemoriaLinha
           label="Unidades × Custo unitário"
           value={formatStockReportCurrency(row.stockValue ?? 0)}
@@ -1203,6 +1256,7 @@ export function InventoryStockReportDialog({
                                   listingStatesByMlItemId={
                                     listingStatesByMlItemId
                                   }
+                                  productsBySku={productsBySku}
                                   salesPeriod={salesPeriod}
                                   snapshotDateInput={snapshotDateInput}
                                 />

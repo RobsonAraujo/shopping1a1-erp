@@ -224,7 +224,7 @@ export function InventoryStockTable({
       <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <InventoryStockReportLauncher
-            rows={statusVisibleRows}
+            rows={rows}
             productsBySku={productsBySku}
           />
           <ShowPausedListingsSwitch
