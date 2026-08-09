@@ -676,10 +676,10 @@ function SupplierUfConfig({
         <h3 className="text-sm font-semibold">UF dos fornecedores</h3>
       </div>
       <p className="mb-3 text-xs leading-relaxed text-[var(--muted-foreground)]">
-        Fornecedor identificado pelo prefixo do SKU (ex.: "MXT-123" →
-        fornecedor "MXT"), mesma lógica usada em Compras. Informe a UF de cada
+        Fornecedor identificado pelo prefixo do SKU (ex.: &quot;MXT-123&quot; →
+        fornecedor &quot;MXT&quot;), mesma lógica usada em Compras. Informe a UF de cada
         um pra refinar o ICMS de entrada no cenário — só afeta produtos sem
-        ICMS-ST, e só o cenário (o "atual" não muda). Salvo neste navegador.
+        ICMS-ST, e só o cenário (o &quot;atual&quot; não muda). Salvo neste navegador.
       </p>
       {loading ? (
         <p className="text-sm text-[var(--muted-foreground)]">Carregando produtos…</p>
@@ -999,8 +999,8 @@ export function BranchSimulationClient() {
         selecionados. O % de crédito presumido deve ser validado com sua
         contabilidade e a legislação do estado escolhido. Não considera custo
         de transferência de estoque entre filiais nem obrigações acessórias
-        da nova filial (inscrição estadual, folha, aluguel etc). O "% médio"
-        por produto é o mesmo indicador usado como "Imposto" em Meus produtos
+        da nova filial (inscrição estadual, folha, aluguel etc). O &quot;% médio&quot;
+        por produto é o mesmo indicador usado como &quot;Imposto&quot; em Meus produtos
         e Lucratividade — dá pra ver o quanto a margem de precificação
         melhoraria em cada SKU se a filial saísse do papel.
       </Card>

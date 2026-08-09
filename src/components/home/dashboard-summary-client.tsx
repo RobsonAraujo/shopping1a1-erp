@@ -3,16 +3,14 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ExternalLink, ImageOff, RefreshCw, Tag } from "lucide-react";
+import { ExternalLink, ImageOff, Tag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { formatFinancialMoney } from "@/lib/financial-margin";
 import type {
   PromotionSummaryPayload,
   PromotionSummaryRow,
 } from "@/lib/home/promotion-summary-data";
-import { cn } from "@/lib/utils";
 
 function formatPromotionEndDate(iso: string | null): string {
   if (!iso) return "—";

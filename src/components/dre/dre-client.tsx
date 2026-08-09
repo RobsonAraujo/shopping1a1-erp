@@ -23,6 +23,7 @@ import {
   applyDreIncludeCancelledView,
   computeDreTotals,
   sumYearLineAmounts,
+  type DreLineAmounts,
 } from "@/lib/dre/dre-calculations";
 import type { DreYearView } from "@/lib/dre/dre-year-data";
 import { getZonedYearMonth, isDreMonthSyncable } from "@/lib/mercadolibre/revenue-periods";
@@ -186,7 +187,9 @@ export function DreClient() {
     });
 
     // compute year totals similar to server
-    const monthLines = months.map((m) => m.lines).filter((l): l is any => l !== null);
+    const monthLines = months
+      .map((m) => m.lines)
+      .filter((l): l is DreLineAmounts => l !== null);
     const yearLines = monthLines.length > 0 ? sumYearLineAmounts(monthLines) : null;
     const yearAds = months.reduce((s, m) => s + (m.adsCost ?? 0), 0);
 

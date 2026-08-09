@@ -78,7 +78,6 @@ function OverviewStat({
 }
 
 export function ComprasSupplierGrid({
-  summaries: _summaries,
   rows,
 }: ComprasSupplierGridProps) {
   const { bufferDays, setBufferDays } = usePurchaseCoverageBufferDays();

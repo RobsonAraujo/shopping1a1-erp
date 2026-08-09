@@ -531,15 +531,12 @@ export function ProductsClient() {
     void load();
   }, [load]);
 
-  const products = data?.products ?? [];
-
-  const sortedProducts = useMemo(
-    () =>
-      [...products].sort((a, b) =>
-        a.sku.localeCompare(b.sku, "pt-BR", { sensitivity: "base" }),
-      ),
-    [products],
-  );
+  const sortedProducts = useMemo(() => {
+    const list = data?.products ?? [];
+    return [...list].sort((a, b) =>
+      a.sku.localeCompare(b.sku, "pt-BR", { sensitivity: "base" }),
+    );
+  }, [data?.products]);
 
   const filteredProducts = useMemo(
     () =>

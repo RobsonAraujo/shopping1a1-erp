@@ -389,12 +389,11 @@ function IcmsRateRowEditor({
   const [base, setBase] = useState(String(row.aliquotaBase * 100));
   const [fcp, setFcp] = useState(String(row.fcp * 100));
 
-  useEffect(() => {
-    if (!editing) {
-      setBase(String(row.aliquotaBase * 100));
-      setFcp(String(row.fcp * 100));
-    }
-  }, [row, editing]);
+  function startEditing() {
+    setBase(String(row.aliquotaBase * 100));
+    setFcp(String(row.fcp * 100));
+    setEditing(true);
+  }
 
   if (!editing) {
     return (
@@ -413,7 +412,7 @@ function IcmsRateRowEditor({
             variant="ghost"
             className="gap-1.5"
             disabled={saving}
-            onClick={() => setEditing(true)}
+            onClick={startEditing}
           >
             <Pencil className="size-3.5" aria-hidden />
             Editar

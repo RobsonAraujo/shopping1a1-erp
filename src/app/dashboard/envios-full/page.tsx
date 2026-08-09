@@ -31,27 +31,39 @@ export default async function EnviosFullPage() {
     return null;
   }
 
+  let data: {
+    year: number;
+    month: number;
+    shipments: Awaited<ReturnType<typeof listFullShipmentsForPeriod>>;
+    importedPeriods: Awaited<ReturnType<typeof listImportedBillingPeriods>>;
+  } | null = null;
+  let errorMsg: string | null = null;
+
   try {
     const { year, month } = getZonedYearMonth();
     const [shipments, importedPeriods] = await Promise.all([
       listFullShipmentsForPeriod(year, month),
       listImportedBillingPeriods(),
     ]);
-    return (
-      <FullShipmentsClient
-        initialShipments={shipments}
-        initialYear={year}
-        initialMonth={month}
-        initialImportedPeriods={importedPeriods}
-      />
-    );
+    data = { year, month, shipments, importedPeriods };
   } catch (e) {
-    const msg =
-      e instanceof Error ? e.message : "Erro ao carregar envios Full";
+    errorMsg = e instanceof Error ? e.message : "Erro ao carregar envios Full";
+  }
+
+  if (!data) {
     return (
       <Card className="border-red-200 bg-red-50/50">
-        <CardContent className="pt-6 text-red-900">{msg}</CardContent>
+        <CardContent className="pt-6 text-red-900">{errorMsg}</CardContent>
       </Card>
     );
   }
+
+  return (
+    <FullShipmentsClient
+      initialShipments={data.shipments}
+      initialYear={data.year}
+      initialMonth={data.month}
+      initialImportedPeriods={data.importedPeriods}
+    />
+  );
 }
