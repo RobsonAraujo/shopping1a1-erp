@@ -53,6 +53,18 @@ const MAIN_ROW_DIVIDER_STYLE = {
 /** Zebra striping das linhas de detalhe (fundo branco/card) — só a cor #f4f2f7, sem borda extra. */
 const ALT_ROW_BG = "#f4f2f7";
 
+const SELECTED_MONTH_CELL_CLASS = "relative";
+
+/**
+ * Esmaece e desativa a interação das colunas que NÃO são a do mês
+ * selecionado. `opacity` funciona de forma uniforme em cima de qualquer cor
+ * de fundo (verde/vermelho/branco) — diferente do `box-shadow` inset escuro
+ * que tentamos antes, que ficava inconsistente sobre as linhas já coloridas.
+ * `pointer-events-none` também desliga os ícones/botões (sync, aviso, editar
+ * valor manual) dessas colunas enquanto uma está em destaque.
+ */
+const DIM_CLASS = "pointer-events-none opacity-40 transition-opacity duration-150";
+
 type DreYearTableProps = {
   data: DreYearView;
   showDetails: boolean;
@@ -117,8 +129,9 @@ function MonthAlertsTooltip({
       <TooltipTrigger asChild>
         <button
           type="button"
-          className="inline-flex size-3.5 shrink-0 items-center justify-center rounded-full text-amber-500/70 opacity-60 hover:opacity-100 hover:text-amber-600 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]"
+          className="inline-flex size-5 shrink-0 items-center justify-center rounded-full p-1 text-amber-500/70 opacity-60 hover:opacity-100 hover:text-amber-600 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]"
           aria-label={`Ver avisos de ${month.label}`}
+          onClick={(e) => e.stopPropagation()}
         >
           <AlertCircle className="size-2.5" aria-hidden />
         </button>
@@ -506,12 +519,18 @@ function MonthHeaderCell({
   year,
   month,
   syncing,
+  selected,
+  dimmed,
   onSync,
+  onToggleSelect,
 }: {
   year: number;
   month: DreMonthView;
   syncing: boolean;
+  selected: boolean;
+  dimmed: boolean;
   onSync: () => void;
+  onToggleSelect: () => void;
 }) {
   const alertMessages = getMonthAlertMessages(month);
   const hasAlert = alertMessages.length > 0;
@@ -519,17 +538,33 @@ function MonthHeaderCell({
   return (
     <th
       className={cn(
-        "border-b border-[var(--border)] bg-white px-1 py-2 text-center font-normal",
+        "relative cursor-pointer border-b border-[var(--border)] px-1 py-2 text-center font-normal transition-colors",
+        selected
+          ? "bg-[var(--primary)]/10"
+          : "bg-white hover:bg-[var(--muted)]/40",
         month.isFutureMonth && "opacity-45",
+        dimmed && DIM_CLASS,
       )}
+      onClick={onToggleSelect}
+      role="button"
+      tabIndex={0}
+      aria-pressed={selected}
+      aria-label={`Destacar coluna de ${month.label}`}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onToggleSelect();
+        }
+      }}
     >
       <div className="flex items-center justify-center gap-0.5">
         <MonthSyncTooltip year={year} month={month}>
           <span
             className={cn(
-              "cursor-default text-[12.5px] font-bold tracking-wider text-[var(--muted-foreground)]",
+              "cursor-pointer text-[12.5px] font-bold tracking-wider text-[var(--muted-foreground)]",
               month.isCurrentMonth && "text-[var(--primary)]",
               !month.syncedAt && !month.isFutureMonth && "text-amber-700",
+              selected && "text-[var(--primary)]",
             )}
           >
             {dreMonthShortLabel(month.month)}
@@ -546,7 +581,10 @@ function MonthHeaderCell({
             className="size-5 shrink-0 rounded-sm border border-[var(--border)] p-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
             aria-label={`Sincronizar ${month.label}`}
             disabled={syncing}
-            onClick={onSync}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSync();
+            }}
           >
             <RefreshCw
               className={cn("size-3", syncing && "animate-spin")}
@@ -568,6 +606,8 @@ export function DreYearTable({
   onOperationalCostChange,
   onInvestmentCostChange,
 }: DreYearTableProps) {
+  const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
+
   const rows = buildDreTableRows(
     data.costItems,
     data.operationalCostItems,
@@ -598,7 +638,12 @@ export function DreYearTable({
         </colgroup>
         <thead>
           <tr>
-            <th className="sticky left-0 z-20 border-b border-[var(--border)] bg-white px-3 py-2 text-left text-[12.5px] font-bold uppercase text-[var(--muted-foreground)]">
+            <th
+              className={cn(
+                "sticky left-0 z-20 border-b border-[var(--border)] bg-white px-3 py-2 text-left text-[12.5px] font-bold uppercase text-[var(--muted-foreground)]",
+                selectedMonth !== null && DIM_CLASS,
+              )}
+            >
               Linha
             </th>
             {data.months.map((month) => (
@@ -607,10 +652,22 @@ export function DreYearTable({
                 year={data.year}
                 month={month}
                 syncing={syncingMonths.has(month.month)}
+                selected={selectedMonth === month.month}
+                dimmed={selectedMonth !== null && selectedMonth !== month.month}
                 onSync={() => onSyncMonth(month.month)}
+                onToggleSelect={() =>
+                  setSelectedMonth((prev) =>
+                    prev === month.month ? null : month.month,
+                  )
+                }
               />
             ))}
-            <th className="border-b border-[var(--border)] bg-[var(--muted)]/30 px-2 py-2 text-center text-[12.5px] font-bold uppercase text-[var(--muted-foreground)]">
+            <th
+              className={cn(
+                "border-b border-[var(--border)] bg-[var(--muted)]/30 px-2 py-2 text-center text-[12.5px] font-bold uppercase text-[var(--muted-foreground)]",
+                selectedMonth !== null && DIM_CLASS,
+              )}
+            >
               Total
             </th>
           </tr>
@@ -634,7 +691,11 @@ export function DreYearTable({
               <Fragment key={row.id}>
                 <tr className={rowClassName}>
                   <td
-                    className={cn("sticky left-0 z-10 px-3 py-2", rowClassName)}
+                    className={cn(
+                      "sticky left-0 z-10 px-3 py-2",
+                      rowClassName,
+                      selectedMonth !== null && DIM_CLASS,
+                    )}
                     style={cellStyle}
                   >
                     {renderLabelCell(row)}
@@ -642,7 +703,12 @@ export function DreYearTable({
                   {data.months.map((month) => (
                     <td
                       key={month.month}
-                      className="px-1.5 py-2 align-middle"
+                      className={cn(
+                        "px-1.5 py-2 align-middle",
+                        month.month === selectedMonth
+                          ? cn(SELECTED_MONTH_CELL_CLASS, bg || "bg-white")
+                          : selectedMonth !== null && DIM_CLASS,
+                      )}
                       style={cellStyle}
                     >
                       {renderValueCell(
@@ -655,7 +721,11 @@ export function DreYearTable({
                     </td>
                   ))}
                   <td
-                    className={cn("px-2 py-2 align-middle", rowClassName)}
+                    className={cn(
+                      "px-2 py-2 align-middle",
+                      rowClassName,
+                      selectedMonth !== null && DIM_CLASS,
+                    )}
                     style={cellStyle}
                   >
                     <div
@@ -673,13 +743,22 @@ export function DreYearTable({
                 {showPercentRow ? (
                   <tr key={`${row.id}-percent`} className={bg}>
                     <td
-                      className={cn("sticky left-0 z-10 px-3 py-1.5", bg)}
+                      className={cn(
+                        "sticky left-0 z-10 px-3 py-1.5",
+                        bg,
+                        selectedMonth !== null && DIM_CLASS,
+                      )}
                       style={PERCENT_ROW_DIVIDER_STYLE}
                     />
                     {data.months.map((month) => (
                       <td
                         key={month.month}
-                        className="px-1.5 py-1.5 align-middle"
+                        className={cn(
+                          "px-1.5 py-1.5 align-middle",
+                          month.month === selectedMonth
+                            ? cn(SELECTED_MONTH_CELL_CLASS, bg)
+                            : selectedMonth !== null && DIM_CLASS,
+                        )}
                         style={PERCENT_ROW_DIVIDER_STYLE}
                       >
                         {renderPercentCell(
@@ -689,7 +768,11 @@ export function DreYearTable({
                       </td>
                     ))}
                     <td
-                      className={cn("px-2 py-1.5 align-middle", bg)}
+                      className={cn(
+                        "px-2 py-1.5 align-middle",
+                        bg,
+                        selectedMonth !== null && DIM_CLASS,
+                      )}
                       style={PERCENT_ROW_DIVIDER_STYLE}
                     >
                       {renderPercentCell(
