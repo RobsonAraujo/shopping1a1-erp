@@ -47,6 +47,11 @@ type DreYearTableProps = {
     month: number,
     amount: number | null,
   ) => void;
+  onInvestmentCostChange: (
+    costItemId: string,
+    month: number,
+    amount: number | null,
+  ) => void;
 };
 
 function formatSyncTime(iso: string | null): string {
@@ -270,7 +275,9 @@ function DreManualCostCell({
 
 function renderLabelCell(row: DreTableRow) {
   const source =
-    row.type === "fixed-cost" || row.type === "operational-cost"
+    row.type === "fixed-cost" ||
+    row.type === "operational-cost" ||
+    row.type === "investment-cost"
       ? row.source
       : row.type === "static"
         ? row.source
@@ -278,6 +285,7 @@ function renderLabelCell(row: DreTableRow) {
   const indent =
     row.type === "fixed-cost" ||
     row.type === "operational-cost" ||
+    row.type === "investment-cost" ||
     (row.type === "static" && row.indent);
 
   return (
@@ -296,6 +304,7 @@ function renderValueCell(
   month: DreMonthView,
   onFixedCostChange: DreYearTableProps["onFixedCostChange"],
   onOperationalCostChange: DreYearTableProps["onOperationalCostChange"],
+  onInvestmentCostChange: DreYearTableProps["onInvestmentCostChange"],
 ) {
   if (row.type === "fixed-cost") {
     const stored = month.fixedCostValues[row.costItemId];
@@ -322,6 +331,21 @@ function renderValueCell(
         label={`${row.label} (${month.label})`}
         onCommit={(amount) =>
           onOperationalCostChange(row.costItemId, month.month, amount)
+        }
+      />
+    );
+  }
+
+  if (row.type === "investment-cost") {
+    const stored = month.investmentCostValues[row.costItemId];
+    const override = month.investmentCostOverrides[row.costItemId];
+    return (
+      <DreManualCostCell
+        value={stored}
+        override={override}
+        label={`${row.label} (${month.label})`}
+        onCommit={(amount) =>
+          onInvestmentCostChange(row.costItemId, month.month, amount)
         }
       />
     );
@@ -388,6 +412,19 @@ function getYearTotalForRow(
     return { amount: hasAny ? -sum : null, percent: null };
   }
 
+  if (row.type === "investment-cost") {
+    let sum = 0;
+    let hasAny = false;
+    for (const month of data.months) {
+      const v = month.investmentCostValues[row.costItemId];
+      if (v !== null && v !== undefined) {
+        sum += v;
+        hasAny = true;
+      }
+    }
+    return { amount: hasAny ? -sum : null, percent: null };
+  }
+
   const totals = data.yearTotals;
   if (!totals) return { amount: null, percent: null };
 
@@ -413,10 +450,17 @@ function getYearTotalForRow(
         amount: -totals.adsCost,
         percent: null,
       };
-    case "lucroLiquido":
+    case "lucroOperacionalAntesInvestimentos":
       return {
-        amount: totals.lucroLiquido,
-        percent: totals.lucroLiquidoPercent,
+        amount: totals.lucroOperacionalAntesInvestimentos,
+        percent: totals.lucroOperacionalAntesInvestimentosPercent,
+      };
+    case "totalInvestimento":
+      return { amount: totals.totalInvestimento, percent: null };
+    case "lucroOperacional":
+      return {
+        amount: totals.lucroOperacional,
+        percent: totals.lucroOperacionalPercent,
       };
     default:
       if (row.type === "static" && row.lineKey) {
@@ -495,10 +539,12 @@ export function DreYearTable({
   onSyncMonth,
   onFixedCostChange,
   onOperationalCostChange,
+  onInvestmentCostChange,
 }: DreYearTableProps) {
   const rows = buildDreTableRows(
     data.costItems,
     data.operationalCostItems,
+    data.investmentCostItems,
     showDetails,
   );
 
@@ -539,11 +585,7 @@ export function DreYearTable({
 
             return (
               <tr
-                key={
-                  row.type === "fixed-cost" || row.type === "operational-cost"
-                    ? row.id
-                    : row.id
-                }
+                key={row.id}
                 className={cn(
                   "border-b border-[var(--border)]/50",
                   bg,
@@ -560,12 +602,14 @@ export function DreYearTable({
                       month,
                       onFixedCostChange,
                       onOperationalCostChange,
+                      onInvestmentCostChange,
                     )}
                   </td>
                 ))}
                 <td className="bg-[var(--muted)]/15 px-1 py-1 align-middle">
                   {row.type === "fixed-cost" ||
-                  row.type === "operational-cost" ? (
+                  row.type === "operational-cost" ||
+                  row.type === "investment-cost" ? (
                     <div className="text-right text-[11px] tabular-nums text-[var(--muted-foreground)]">
                       {formatFinancialMoney(
                         getYearTotalForRow(row, data).amount,

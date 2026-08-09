@@ -40,6 +40,8 @@ export function DreClient() {
   const [fixedCostsModalOpen, setFixedCostsModalOpen] = useState(false);
   const [operationalCostsModalOpen, setOperationalCostsModalOpen] =
     useState(false);
+  const [investmentCostsModalOpen, setInvestmentCostsModalOpen] =
+    useState(false);
   const [syncingMonths, setSyncingMonths] = useState<Set<number>>(new Set());
   const [syncingAll, setSyncingAll] = useState(false);
 
@@ -172,6 +174,10 @@ export function DreClient() {
         costItemId: item.id,
         amount: month.operationalCostValues[item.id] ?? 0,
       }));
+      const investmentCosts = data.investmentCostItems.map((item) => ({
+        costItemId: item.id,
+        amount: month.investmentCostValues[item.id] ?? 0,
+      }));
 
       const totals =
         month.adsCost !== null
@@ -180,6 +186,7 @@ export function DreClient() {
               month.adsCost,
               fixedCosts.filter((r) => r.amount > 0),
               operationalCosts.filter((r) => r.amount > 0),
+              investmentCosts.filter((r) => r.amount > 0),
             )
           : month.totals;
 
@@ -209,6 +216,14 @@ export function DreClient() {
       }
       yearOperationalByItem.set(item.id, sum);
     }
+    const yearInvestmentByItem = new Map<string, number>();
+    for (const item of data.investmentCostItems) {
+      let sum = 0;
+      for (const month of months) {
+        sum += month.investmentCostValues[item.id] ?? 0;
+      }
+      yearInvestmentByItem.set(item.id, sum);
+    }
 
     const yearManualFixed = data.costItems
       .map((item) => ({ costItemId: item.id, amount: yearFixedByItem.get(item.id) ?? 0 }))
@@ -216,11 +231,22 @@ export function DreClient() {
     const yearManualOperational = data.operationalCostItems
       .map((item) => ({ costItemId: item.id, amount: yearOperationalByItem.get(item.id) ?? 0 }))
       .filter((r) => r.amount > 0);
+    const yearManualInvestment = data.investmentCostItems
+      .map((item) => ({ costItemId: item.id, amount: yearInvestmentByItem.get(item.id) ?? 0 }))
+      .filter((r) => r.amount > 0);
 
     const yearTotals =
       yearLines !== null
-        ? computeDreTotals(yearLines, yearAds, yearManualFixed, yearManualOperational)
-        : yearManualFixed.length > 0 || yearManualOperational.length > 0
+        ? computeDreTotals(
+            yearLines,
+            yearAds,
+            yearManualFixed,
+            yearManualOperational,
+            yearManualInvestment,
+          )
+        : yearManualFixed.length > 0 ||
+            yearManualOperational.length > 0 ||
+            yearManualInvestment.length > 0
         ? computeDreTotals(
             {
               revenueMl: 0,
@@ -237,6 +263,7 @@ export function DreClient() {
             0,
             yearManualFixed,
             yearManualOperational,
+            yearManualInvestment,
           )
         : null;
 
@@ -284,6 +311,15 @@ export function DreClient() {
             onClick={() => setFixedCostsModalOpen(true)}
           >
             Custos fixos
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => setInvestmentCostsModalOpen(true)}
+          >
+            Investimentos
           </Button>
           <Button
             type="button"
@@ -374,13 +410,13 @@ export function DreClient() {
           <Card className="shadow-sm">
             <CardHeader className="px-3 pb-1 pt-3">
               <CardTitle className="text-xs font-medium text-[var(--muted-foreground)]">
-                Lucro líquido
+                Lucro operacional
               </CardTitle>
             </CardHeader>
             <CardContent className="px-3 pb-3 text-base font-semibold">
-              {formatFinancialMoney(displayData.yearTotals.lucroLiquido)}{" "}
+              {formatFinancialMoney(displayData.yearTotals.lucroOperacional)}{" "}
               <span className="text-xs font-normal text-[var(--muted-foreground)]">
-                ({formatFinancialPercent(displayData.yearTotals.lucroLiquidoPercent)})
+                ({formatFinancialPercent(displayData.yearTotals.lucroOperacionalPercent)})
               </span>
             </CardContent>
           </Card>
@@ -422,6 +458,9 @@ export function DreClient() {
           onOperationalCostChange={(costItemId, month, amount) =>
             void handleManualCostChange(costItemId, month, amount)
           }
+          onInvestmentCostChange={(costItemId, month, amount) =>
+            void handleManualCostChange(costItemId, month, amount)
+          }
         />
       ) : null}
 
@@ -442,6 +481,16 @@ export function DreClient() {
         description="Itens extras de custo operacional (além das linhas ML). Valores por mês na tabela."
         costItems={data?.operationalCostItems ?? []}
         onClose={() => setOperationalCostsModalOpen(false)}
+        onChanged={() => void loadYear(year)}
+        onError={setError}
+      />
+      <DreCostItemsModal
+        open={investmentCostsModalOpen}
+        section="investment"
+        title="Investimentos"
+        description="Itens de investimento (ex.: marketing institucional, CAPEX), descontados após o Lucro Operacional Antes dos Investimentos. Valores por mês na tabela."
+        costItems={data?.investmentCostItems ?? []}
+        onClose={() => setInvestmentCostsModalOpen(false)}
         onChanged={() => void loadYear(year)}
         onError={setError}
       />

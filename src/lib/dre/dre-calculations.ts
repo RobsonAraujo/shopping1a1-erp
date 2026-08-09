@@ -46,10 +46,14 @@ export type DreComputedTotals = {
   margemContribuicaoPercent: number | null;
   totalCustoFixoManual: number;
   totalCustoOperacionalManual: number;
+  totalInvestimentoManual: number;
   adsCost: number;
   totalCustoFixo: number;
-  lucroLiquido: number;
-  lucroLiquidoPercent: number | null;
+  totalInvestimento: number;
+  lucroOperacionalAntesInvestimentos: number;
+  lucroOperacionalAntesInvestimentosPercent: number | null;
+  lucroOperacional: number;
+  lucroOperacionalPercent: number | null;
 };
 
 const OPERATIONAL_LINE_KEYS: (keyof DreLineAmounts)[] = [
@@ -77,6 +81,7 @@ export function computeDreTotals(
   adsCost: number,
   fixedCosts: DreManualCostInput[],
   operationalCosts: DreManualCostInput[] = [],
+  investmentCosts: DreManualCostInput[] = [],
 ): DreComputedTotals {
   const revenueMl = roundMoney(Math.max(0, lines.revenueMl));
   const totalEntrada = revenueMl;
@@ -91,8 +96,11 @@ export function computeDreTotals(
     totalCustoOperacionalManual += Math.max(0, row.amount);
   }
   totalCustoOperacionalManual = roundMoney(-totalCustoOperacionalManual);
+
+  const ads = roundMoney(Math.max(0, adsCost));
+
   totalCustoOperacional = roundMoney(
-    totalCustoOperacional + totalCustoOperacionalManual,
+    totalCustoOperacional + totalCustoOperacionalManual - ads,
   );
 
   const margemContribuicao = roundMoney(totalEntrada + totalCustoOperacional);
@@ -101,16 +109,35 @@ export function computeDreTotals(
     totalEntrada,
   );
 
-  const ads = roundMoney(Math.max(0, adsCost));
   let totalCustoFixoManual = 0;
   for (const row of fixedCosts) {
     totalCustoFixoManual += Math.max(0, row.amount);
   }
   totalCustoFixoManual = roundMoney(totalCustoFixoManual);
 
-  const totalCustoFixo = roundMoney(-(totalCustoFixoManual + ads));
-  const lucroLiquido = roundMoney(margemContribuicao + totalCustoFixo);
-  const lucroLiquidoPercent = percentOfRevenue(lucroLiquido, totalEntrada);
+  const totalCustoFixo = roundMoney(-totalCustoFixoManual);
+  const lucroOperacionalAntesInvestimentos = roundMoney(
+    margemContribuicao + totalCustoFixo,
+  );
+  const lucroOperacionalAntesInvestimentosPercent = percentOfRevenue(
+    lucroOperacionalAntesInvestimentos,
+    totalEntrada,
+  );
+
+  let totalInvestimentoManual = 0;
+  for (const row of investmentCosts) {
+    totalInvestimentoManual += Math.max(0, row.amount);
+  }
+  totalInvestimentoManual = roundMoney(totalInvestimentoManual);
+
+  const totalInvestimento = roundMoney(-totalInvestimentoManual);
+  const lucroOperacional = roundMoney(
+    lucroOperacionalAntesInvestimentos + totalInvestimento,
+  );
+  const lucroOperacionalPercent = percentOfRevenue(
+    lucroOperacional,
+    totalEntrada,
+  );
 
   return {
     totalEntrada,
@@ -119,10 +146,14 @@ export function computeDreTotals(
     margemContribuicaoPercent,
     totalCustoFixoManual,
     totalCustoOperacionalManual,
+    totalInvestimentoManual,
     adsCost: ads,
     totalCustoFixo,
-    lucroLiquido,
-    lucroLiquidoPercent,
+    totalInvestimento,
+    lucroOperacionalAntesInvestimentos,
+    lucroOperacionalAntesInvestimentosPercent,
+    lucroOperacional,
+    lucroOperacionalPercent,
   };
 }
 

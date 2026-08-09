@@ -20,42 +20,81 @@ const costItems: DreCostItemView[] = [
 const operationalItems: DreCostItemView[] = [
   { id: "o1", name: "Salários" } as DreCostItemView,
 ];
+const investmentItems: DreCostItemView[] = [
+  { id: "i1", name: "Marketing institucional" } as DreCostItemView,
+];
 
 describe("buildDreTableRows", () => {
   it("returns only top-level (non-indented) rows when showDetails is false", () => {
-    const rows = buildDreTableRows(costItems, operationalItems, false);
+    const rows = buildDreTableRows(
+      costItems,
+      operationalItems,
+      investmentItems,
+      false,
+    );
     assert.ok(rows.every((r) => !("indent" in r) || !r.indent));
-    // custom fixed/operational cost rows never appear without details
+    // custom fixed/operational/investment cost rows never appear without details
     assert.ok(!rows.some((r) => r.type === "fixed-cost"));
     assert.ok(!rows.some((r) => r.type === "operational-cost"));
+    assert.ok(!rows.some((r) => r.type === "investment-cost"));
   });
 
-  it("includes fixed-cost and operational-cost rows when showDetails is true", () => {
-    const rows = buildDreTableRows(costItems, operationalItems, true);
+  it("includes fixed-cost, operational-cost and investment-cost rows when showDetails is true", () => {
+    const rows = buildDreTableRows(
+      costItems,
+      operationalItems,
+      investmentItems,
+      true,
+    );
     const fixed = rows.find((r) => r.type === "fixed-cost");
     const operational = rows.find((r) => r.type === "operational-cost");
+    const investment = rows.find((r) => r.type === "investment-cost");
     assert.ok(fixed);
     assert.equal(fixed.costItemId, "c1");
     assert.ok(operational);
     assert.equal(operational.costItemId, "o1");
+    assert.ok(investment);
+    assert.equal(investment.costItemId, "i1");
   });
 
   it("places operational-cost rows right before margemContribuicao", () => {
-    const rows = buildDreTableRows(costItems, operationalItems, true);
+    const rows = buildDreTableRows(
+      costItems,
+      operationalItems,
+      investmentItems,
+      true,
+    );
     const marginIndex = rows.findIndex((r) => r.id === "margemContribuicao");
     const opIndex = rows.findIndex((r) => r.type === "operational-cost");
     assert.ok(opIndex >= 0 && opIndex < marginIndex);
   });
 
   it("places fixed-cost rows right after totalCustoFixo", () => {
-    const rows = buildDreTableRows(costItems, operationalItems, true);
+    const rows = buildDreTableRows(
+      costItems,
+      operationalItems,
+      investmentItems,
+      true,
+    );
     const totalIndex = rows.findIndex((r) => r.id === "totalCustoFixo");
     const fixedIndex = rows.findIndex((r) => r.type === "fixed-cost");
     assert.equal(fixedIndex, totalIndex + 1);
   });
 
+  it("places investment-cost rows right after totalInvestimento", () => {
+    const rows = buildDreTableRows(
+      costItems,
+      operationalItems,
+      investmentItems,
+      true,
+    );
+    const totalIndex = rows.findIndex((r) => r.id === "totalInvestimento");
+    const investmentIndex = rows.findIndex((r) => r.type === "investment-cost");
+    assert.equal(investmentIndex, totalIndex + 1);
+  });
+
   it("produces the same number of static rows as DRE_STATIC_ROWS when there are no custom cost items", () => {
-    const rows = buildDreTableRows([], [], true);
+    const rows = buildDreTableRows([], [], [], true);
     assert.equal(rows.length, DRE_STATIC_ROWS.length);
   });
 });
@@ -72,7 +111,7 @@ describe("rowBackgroundClass / rowLabelClass", () => {
   });
 
   it("uses bold label class for resultado rows", () => {
-    const row = DRE_STATIC_ROWS.find((r) => r.id === "lucroLiquido")!;
+    const row = DRE_STATIC_ROWS.find((r) => r.id === "lucroOperacional")!;
     assert.match(rowLabelClass(row), /font-bold/);
   });
 
@@ -105,6 +144,7 @@ function month(overrides: Partial<DreMonthView> = {}): DreMonthView {
   return {
     fixedCostValues: {},
     operationalCostValues: {},
+    investmentCostValues: {},
     totals: null,
     lines: null,
     adsCost: null,
@@ -131,6 +171,12 @@ describe("getCellValue", () => {
     assert.equal(result.amount, -50);
   });
 
+  it("negates an investment-cost value", () => {
+    const row = { type: "investment-cost", costItemId: "i1" } as DreTableRow;
+    const result = getCellValue(row, month({ investmentCostValues: { i1: 75 } }));
+    assert.equal(result.amount, -75);
+  });
+
   it("reads totalEntrada from month.totals", () => {
     const row = DRE_STATIC_ROWS.find((r) => r.id === "totalEntrada")!;
     const result = getCellValue(row, month({ totals: { totalEntrada: 1000 } as never }));
@@ -155,6 +201,47 @@ describe("getCellValue", () => {
     assert.equal(result.amount, -20);
   });
 
+  it("reads lucroOperacionalAntesInvestimentos amount and percent", () => {
+    const row = DRE_STATIC_ROWS.find(
+      (r) => r.id === "lucroOperacionalAntesInvestimentos",
+    )!;
+    const result = getCellValue(
+      row,
+      month({
+        totals: {
+          lucroOperacionalAntesInvestimentos: 700,
+          lucroOperacionalAntesInvestimentosPercent: 70,
+        } as never,
+      }),
+    );
+    assert.equal(result.amount, 700);
+    assert.equal(result.percent, 70);
+  });
+
+  it("reads totalInvestimento amount", () => {
+    const row = DRE_STATIC_ROWS.find((r) => r.id === "totalInvestimento")!;
+    const result = getCellValue(
+      row,
+      month({ totals: { totalInvestimento: -50 } as never }),
+    );
+    assert.equal(result.amount, -50);
+  });
+
+  it("reads lucroOperacional amount and percent", () => {
+    const row = DRE_STATIC_ROWS.find((r) => r.id === "lucroOperacional")!;
+    const result = getCellValue(
+      row,
+      month({
+        totals: {
+          lucroOperacional: 650,
+          lucroOperacionalPercent: 65,
+        } as never,
+      }),
+    );
+    assert.equal(result.amount, 650);
+    assert.equal(result.percent, 65);
+  });
+
   it("reads a static row's raw lineKey value from month.lines", () => {
     const row = DRE_STATIC_ROWS.find((r) => r.id === "revenueMl")!;
     const result = getCellValue(row, month({ lines: { revenueMl: 500 } as never }));
@@ -169,9 +256,10 @@ describe("getCellValue", () => {
 });
 
 describe("isDetailRow", () => {
-  it("is true for fixed-cost and operational-cost rows", () => {
+  it("is true for fixed-cost, operational-cost and investment-cost rows", () => {
     assert.equal(isDetailRow({ type: "fixed-cost" } as DreTableRow), true);
     assert.equal(isDetailRow({ type: "operational-cost" } as DreTableRow), true);
+    assert.equal(isDetailRow({ type: "investment-cost" } as DreTableRow), true);
   });
 
   it("reflects the static row's indent flag", () => {

@@ -23,10 +23,12 @@ export type DreStaticRowId =
   | "fullShippingMl"
   | "fullStorageMl"
   | "fullNonComplianceMl"
+  | "adsCost"
   | "margemContribuicao"
   | "totalCustoFixo"
-  | "adsCost"
-  | "lucroLiquido";
+  | "lucroOperacionalAntesInvestimentos"
+  | "totalInvestimento"
+  | "lucroOperacional";
 
 export type DreTableRow =
   | {
@@ -56,6 +58,15 @@ export type DreTableRow =
       label: string;
       source: "manual";
       indent: true;
+    }
+  | {
+      type: "investment-cost";
+      id: string;
+      costItemId: string;
+      kind: "custo-detail";
+      label: string;
+      source: "manual";
+      indent: true;
     };
 
 export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
@@ -63,7 +74,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     type: "static",
     id: "totalEntrada",
     kind: "entrada-total",
-    label: "(+) Entrada",
+    label: "(+) Receita/Faturamento",
   },
   {
     type: "static",
@@ -78,7 +89,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     type: "static",
     id: "totalCustoOperacional",
     kind: "custo-total",
-    label: "(-) Custo operacional",
+    label: "(-) Custos Variáveis",
   },
   {
     type: "static",
@@ -163,9 +174,17 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
   },
   {
     type: "static",
+    id: "adsCost",
+    kind: "custo-detail",
+    label: "Campanhas ADS",
+    source: "ads",
+    indent: true,
+  },
+  {
+    type: "static",
     id: "margemContribuicao",
     kind: "resultado",
-    label: "(=) Margem contrib.",
+    label: "(=) Margem de Contribuição",
     showPercent: true,
   },
   {
@@ -176,17 +195,22 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
   },
   {
     type: "static",
-    id: "adsCost",
-    kind: "custo-detail",
-    label: "Campanhas ADS",
-    source: "ads",
-    indent: true,
+    id: "lucroOperacionalAntesInvestimentos",
+    kind: "resultado",
+    label: "(=) Lucro Operacional Antes dos Investimentos",
+    showPercent: true,
   },
   {
     type: "static",
-    id: "lucroLiquido",
+    id: "totalInvestimento",
+    kind: "custo-total",
+    label: "(-) Investimentos",
+  },
+  {
+    type: "static",
+    id: "lucroOperacional",
     kind: "resultado",
-    label: "(=) Lucro líquido",
+    label: "(=) Lucro Operacional",
     showPercent: true,
   },
 ];
@@ -194,6 +218,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
 export function buildDreTableRows(
   costItems: DreCostItemView[],
   operationalCostItems: DreCostItemView[],
+  investmentCostItems: DreCostItemView[],
   showDetails: boolean,
 ): DreTableRow[] {
   const rows: DreTableRow[] = [];
@@ -236,13 +261,35 @@ export function buildDreTableRows(
       continue;
     }
 
+    if (row.id === "totalInvestimento") {
+      rows.push(row);
+      if (showDetails) {
+        for (const item of investmentCostItems) {
+          rows.push({
+            type: "investment-cost",
+            id: `investment-${item.id}`,
+            costItemId: item.id,
+            kind: "custo-detail",
+            label: item.name,
+            source: "manual",
+            indent: true,
+          });
+        }
+      }
+      continue;
+    }
+
     rows.push(row);
   }
   return rows;
 }
 
 export function rowBackgroundClass(row: DreTableRow): string {
-  if (row.type === "fixed-cost" || row.type === "operational-cost") {
+  if (
+    row.type === "fixed-cost" ||
+    row.type === "operational-cost" ||
+    row.type === "investment-cost"
+  ) {
     return "bg-[var(--card)]";
   }
   if (row.kind === "entrada-detail" || row.kind === "custo-detail") {
@@ -258,7 +305,11 @@ export function rowBackgroundClass(row: DreTableRow): string {
 }
 
 export function rowLabelClass(row: DreTableRow): string {
-  if (row.type === "fixed-cost" || row.type === "operational-cost") {
+  if (
+    row.type === "fixed-cost" ||
+    row.type === "operational-cost" ||
+    row.type === "investment-cost"
+  ) {
     return "text-xs leading-tight";
   }
   if (row.kind === "entrada-detail" || row.kind === "custo-detail") {
@@ -300,6 +351,14 @@ export function getCellValue(
     };
   }
 
+  if (row.type === "investment-cost") {
+    const raw = month.investmentCostValues[row.costItemId];
+    return {
+      amount: raw === null || raw === undefined ? null : -raw,
+      percent: null,
+    };
+  }
+
   const totals = month.totals;
 
   switch (row.id) {
@@ -322,10 +381,17 @@ export function getCellValue(
           month.adsCost === null ? null : -Math.max(0, month.adsCost),
         percent: null,
       };
-    case "lucroLiquido":
+    case "lucroOperacionalAntesInvestimentos":
       return {
-        amount: totals?.lucroLiquido ?? null,
-        percent: totals?.lucroLiquidoPercent ?? null,
+        amount: totals?.lucroOperacionalAntesInvestimentos ?? null,
+        percent: totals?.lucroOperacionalAntesInvestimentosPercent ?? null,
+      };
+    case "totalInvestimento":
+      return { amount: totals?.totalInvestimento ?? null, percent: null };
+    case "lucroOperacional":
+      return {
+        amount: totals?.lucroOperacional ?? null,
+        percent: totals?.lucroOperacionalPercent ?? null,
       };
     default:
       if (row.type === "static" && row.lineKey && month.lines) {
@@ -336,7 +402,11 @@ export function getCellValue(
 }
 
 export function isDetailRow(row: DreTableRow): boolean {
-  if (row.type === "fixed-cost" || row.type === "operational-cost") {
+  if (
+    row.type === "fixed-cost" ||
+    row.type === "operational-cost" ||
+    row.type === "investment-cost"
+  ) {
     return true;
   }
   return Boolean(row.indent);

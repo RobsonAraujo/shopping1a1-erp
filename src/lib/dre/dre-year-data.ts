@@ -48,6 +48,8 @@ export type DreMonthView = {
   fixedCostOverrides: Record<string, number | null>;
   operationalCostValues: Record<string, number | null>;
   operationalCostOverrides: Record<string, number | null>;
+  investmentCostValues: Record<string, number | null>;
+  investmentCostOverrides: Record<string, number | null>;
   totals: DreComputedTotals | null;
 };
 
@@ -55,6 +57,7 @@ export type DreYearView = {
   year: number;
   costItems: DreCostItemView[];
   operationalCostItems: DreCostItemView[];
+  investmentCostItems: DreCostItemView[];
   months: DreMonthView[];
   yearTotals: DreComputedTotals | null;
 };
@@ -64,8 +67,10 @@ function buildMonthTotalsFromLines(
   adsCost: number,
   fixedCostItems: DreCostItemView[],
   operationalCostItems: DreCostItemView[],
+  investmentCostItems: DreCostItemView[],
   fixedCostValues: Record<string, number | null>,
   operationalCostValues: Record<string, number | null>,
+  investmentCostValues: Record<string, number | null>,
 ): DreComputedTotals {
   const fixed = fixedCostItems.map((item) => ({
     costItemId: item.id,
@@ -75,12 +80,17 @@ function buildMonthTotalsFromLines(
     costItemId: item.id,
     amount: operationalCostValues[item.id] ?? 0,
   }));
+  const investment = investmentCostItems.map((item) => ({
+    costItemId: item.id,
+    amount: investmentCostValues[item.id] ?? 0,
+  }));
 
   return computeDreTotals(
     lines,
     adsCost,
     fixed.filter((row) => row.amount > 0),
     operational.filter((row) => row.amount > 0),
+    investment.filter((row) => row.amount > 0),
   );
 }
 
@@ -88,8 +98,10 @@ function buildMonthTotals(
   payload: DreMonthSnapshotPayload | null,
   fixedCostItems: DreCostItemView[],
   operationalCostItems: DreCostItemView[],
+  investmentCostItems: DreCostItemView[],
   fixedCostValues: Record<string, number | null>,
   operationalCostValues: Record<string, number | null>,
+  investmentCostValues: Record<string, number | null>,
 ): DreComputedTotals | null {
   const fixed = fixedCostItems.map((item) => ({
     costItemId: item.id,
@@ -99,9 +111,15 @@ function buildMonthTotals(
     costItemId: item.id,
     amount: operationalCostValues[item.id] ?? 0,
   }));
+  const investment = investmentCostItems.map((item) => ({
+    costItemId: item.id,
+    amount: investmentCostValues[item.id] ?? 0,
+  }));
 
   if (!payload) {
-    const manualOnly = [...fixed, ...operational].filter((row) => row.amount > 0);
+    const manualOnly = [...fixed, ...operational, ...investment].filter(
+      (row) => row.amount > 0,
+    );
     if (manualOnly.length === 0) return null;
     return computeDreTotals(
       {
@@ -119,6 +137,7 @@ function buildMonthTotals(
       0,
       fixed.filter((row) => row.amount > 0),
       operational.filter((row) => row.amount > 0),
+      investment.filter((row) => row.amount > 0),
     );
   }
 
@@ -127,6 +146,7 @@ function buildMonthTotals(
     payload.adsCost,
     fixed.filter((row) => row.amount > 0),
     operational.filter((row) => row.amount > 0),
+    investment.filter((row) => row.amount > 0),
   );
 }
 
@@ -188,6 +208,9 @@ export async function loadDreYearView(year: number): Promise<DreYearView> {
   const operationalCostItems = allCostItems
     .filter((item) => item.section === "OPERATIONAL")
     .map(({ id, name, sortOrder }) => ({ id, name, sortOrder }));
+  const investmentCostItems = allCostItems
+    .filter((item) => item.section === "INVESTMENT")
+    .map(({ id, name, sortOrder }) => ({ id, name, sortOrder }));
 
   const snapshotByMonth = new Map(
     snapshots.map((row) => [row.month, row]),
@@ -197,6 +220,11 @@ export async function loadDreYearView(year: number): Promise<DreYearView> {
   const fixedMaps = buildEffectiveCostMaps(costItems, year, explicitMap);
   const operationalMaps = buildEffectiveCostMaps(
     operationalCostItems,
+    year,
+    explicitMap,
+  );
+  const investmentMaps = buildEffectiveCostMaps(
+    investmentCostItems,
     year,
     explicitMap,
   );
@@ -214,13 +242,18 @@ export async function loadDreYearView(year: number): Promise<DreYearView> {
     const operationalCostValues = operationalMaps.valuesByMonth[month] ?? {};
     const operationalCostOverrides =
       operationalMaps.overridesByMonth[month] ?? {};
+    const investmentCostValues = investmentMaps.valuesByMonth[month] ?? {};
+    const investmentCostOverrides =
+      investmentMaps.overridesByMonth[month] ?? {};
 
     const totals = buildMonthTotals(
       payload,
       costItems,
       operationalCostItems,
+      investmentCostItems,
       fixedCostValues,
       operationalCostValues,
+      investmentCostValues,
     );
 
     months.push({
@@ -241,16 +274,24 @@ export async function loadDreYearView(year: number): Promise<DreYearView> {
       fixedCostOverrides,
       operationalCostValues,
       operationalCostOverrides,
+      investmentCostValues,
+      investmentCostOverrides,
       totals,
     });
   }
 
-  const yearTotals = buildYearTotals(months, costItems, operationalCostItems);
+  const yearTotals = buildYearTotals(
+    months,
+    costItems,
+    operationalCostItems,
+    investmentCostItems,
+  );
 
   return {
     year,
     costItems,
     operationalCostItems,
+    investmentCostItems,
     months,
     yearTotals,
   };
@@ -260,6 +301,7 @@ function buildYearTotals(
   months: DreMonthView[],
   costItems: DreCostItemView[],
   operationalCostItems: DreCostItemView[],
+  investmentCostItems: DreCostItemView[],
 ): DreComputedTotals | null {
   const monthLines = months
     .map((month) => month.lines)
@@ -288,6 +330,15 @@ function buildYearTotals(
     yearOperationalByItem.set(item.id, sum);
   }
 
+  const yearInvestmentByItem = new Map<string, number>();
+  for (const item of investmentCostItems) {
+    let sum = 0;
+    for (const month of months) {
+      sum += month.investmentCostValues[item.id] ?? 0;
+    }
+    yearInvestmentByItem.set(item.id, sum);
+  }
+
   const yearManualFixed = costItems
     .map((item) => ({
       costItemId: item.id,
@@ -302,16 +353,28 @@ function buildYearTotals(
     }))
     .filter((row) => row.amount > 0);
 
+  const yearManualInvestment = investmentCostItems
+    .map((item) => ({
+      costItemId: item.id,
+      amount: yearInvestmentByItem.get(item.id) ?? 0,
+    }))
+    .filter((row) => row.amount > 0);
+
   if (yearLines !== null) {
     return computeDreTotals(
       yearLines,
       yearAds,
       yearManualFixed,
       yearManualOperational,
+      yearManualInvestment,
     );
   }
 
-  if (yearManualFixed.length > 0 || yearManualOperational.length > 0) {
+  if (
+    yearManualFixed.length > 0 ||
+    yearManualOperational.length > 0 ||
+    yearManualInvestment.length > 0
+  ) {
     return computeDreTotals(
       {
         revenueMl: 0,
@@ -328,6 +391,7 @@ function buildYearTotals(
       0,
       yearManualFixed,
       yearManualOperational,
+      yearManualInvestment,
     );
   }
 
@@ -352,8 +416,10 @@ export function applyIncludeCancelledSalesToYearView(
             month.adsCost,
             view.costItems,
             view.operationalCostItems,
+            view.investmentCostItems,
             month.fixedCostValues,
             month.operationalCostValues,
+            month.investmentCostValues,
           )
         : month.totals;
 
@@ -363,6 +429,11 @@ export function applyIncludeCancelledSalesToYearView(
   return {
     ...view,
     months,
-    yearTotals: buildYearTotals(months, view.costItems, view.operationalCostItems),
+    yearTotals: buildYearTotals(
+      months,
+      view.costItems,
+      view.operationalCostItems,
+      view.investmentCostItems,
+    ),
   };
 }

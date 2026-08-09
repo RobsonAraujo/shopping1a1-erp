@@ -22,7 +22,7 @@ const BASE_LINES = {
 };
 
 describe("computeDreTotals", () => {
-  it("computes margem and lucro with negative operational costs", () => {
+  it("includes ADS in custos variáveis (before margem de contribuição)", () => {
     const totals = computeDreTotals(
       {
         revenueMl: 63160.3,
@@ -43,9 +43,34 @@ describe("computeDreTotals", () => {
 
     assert.equal(totals.totalEntrada, 63160.3);
     assert.ok(totals.totalCustoOperacional < 0);
-    assert.equal(totals.margemContribuicao, 2616.78);
-    assert.equal(totals.totalCustoFixo, -7400);
-    assert.equal(totals.lucroLiquido, -4783.22);
+    // ADS agora é descontado dentro de Custos Variáveis, então a Margem de
+    // Contribuição cai em relação ao valor antigo (que só descontava ADS depois).
+    assert.equal(totals.margemContribuicao, -1783.22);
+    // Custo fixo não inclui mais ADS.
+    assert.equal(totals.totalCustoFixo, -3000);
+    assert.equal(totals.lucroOperacionalAntesInvestimentos, -4783.22);
+    // Sem itens de investimento cadastrados, Lucro Operacional == Lucro
+    // Operacional Antes dos Investimentos (mesmo valor que era "lucro líquido").
+    assert.equal(totals.totalInvestimento, -0);
+    assert.equal(totals.lucroOperacional, -4783.22);
+  });
+
+  it("subtracts investment items after lucro operacional antes dos investimentos", () => {
+    const totals = computeDreTotals(
+      {
+        ...BASE_LINES,
+        revenueMl: 10000,
+      },
+      0,
+      [{ costItemId: "rent", amount: 1000 }],
+      [],
+      [{ costItemId: "marketing-institucional", amount: 500 }],
+    );
+
+    assert.equal(totals.lucroOperacionalAntesInvestimentos, 9000);
+    assert.equal(totals.totalInvestimentoManual, 500);
+    assert.equal(totals.totalInvestimento, -500);
+    assert.equal(totals.lucroOperacional, 8500);
   });
 
   it("returns null percent when revenue is zero", () => {

@@ -7,8 +7,14 @@ import { parseJsonBody } from "@/lib/api-validation";
 
 const costItemBodySchema = z.object({
   name: z.string().trim().min(1, "Name is required"),
-  section: z.enum(["fixed", "operational"]).optional(),
+  section: z.enum(["fixed", "operational", "investment"]).optional(),
 });
+
+const SECTION_MAP = {
+  fixed: "FIXED",
+  operational: "OPERATIONAL",
+  investment: "INVESTMENT",
+} as const;
 
 export async function GET() {
   if (!(await requireAuth())) {
@@ -38,7 +44,7 @@ export async function POST(request: NextRequest) {
   const parsedBody = await parseJsonBody(request, costItemBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const { name } = parsedBody.data;
-  const section = parsedBody.data.section === "operational" ? "OPERATIONAL" : "FIXED";
+  const section = SECTION_MAP[parsedBody.data.section ?? "fixed"];
 
   try {
     const maxSort = await prisma.dreCostItem.aggregate({

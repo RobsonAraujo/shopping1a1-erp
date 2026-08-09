@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { readApiError } from "@/lib/api-client-error";
 import type { DreCostItemView } from "@/lib/dre/dre-year-data";
 
-export type DreCostSection = "fixed" | "operational";
+export type DreCostSection = "fixed" | "operational" | "investment";
 
 type DreCostItemsModalProps = {
   open: boolean;

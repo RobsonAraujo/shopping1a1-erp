@@ -390,6 +390,7 @@ model DreCostItem {
 enum DreCostSection {
   FIXED       @map("fixed")
   OPERATIONAL @map("operational")
+  INVESTMENT  @map("investment")
 }
 
 model DreCostMonthValue {
