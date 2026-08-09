@@ -63,7 +63,8 @@ const SELECTED_MONTH_CELL_CLASS = "relative";
  * `pointer-events-none` também desliga os ícones/botões (sync, aviso, editar
  * valor manual) dessas colunas enquanto uma está em destaque.
  */
-const DIM_CLASS = "pointer-events-none opacity-40 transition-opacity duration-150";
+const DIM_CLASS =
+  "pointer-events-none opacity-40 transition-opacity duration-150";
 
 type DreYearTableProps = {
   data: DreYearView;
@@ -578,7 +579,7 @@ function MonthHeaderCell({
             type="button"
             variant="ghost"
             size="icon-sm"
-            className="size-5 shrink-0 rounded-sm border border-[var(--border)] p-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+            className="size-6 shrink-0 rounded-sm border border-[var(--border)] p-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
             aria-label={`Sincronizar ${month.label}`}
             disabled={syncing}
             onClick={(e) => {
@@ -589,6 +590,7 @@ function MonthHeaderCell({
             <RefreshCw
               className={cn("size-3", syncing && "animate-spin")}
               aria-hidden
+              // style={{ padding: 2 }}
             />
           </Button>
         ) : null}
@@ -629,163 +631,165 @@ export function DreYearTable({
     <TooltipProvider delayDuration={200}>
       <div className="overflow-x-auto rounded-lg border border-[var(--border)] bg-white shadow-sm">
         <table className="w-full min-w-[64rem] table-fixed border-collapse text-[12.5px]">
-        <colgroup>
-          <col style={{ width: "8%" }} />
-          {data.months.map((month) => (
-            <col key={month.month} style={{ width: `${84 / 12}%` }} />
-          ))}
-          <col style={{ width: "8%" }} />
-        </colgroup>
-        <thead>
-          <tr>
-            <th
-              className={cn(
-                "sticky left-0 z-20 border-b border-[var(--border)] bg-white px-3 py-2 text-left text-[12.5px] font-bold uppercase text-[var(--muted-foreground)]",
-                selectedMonth !== null && DIM_CLASS,
-              )}
-            >
-              Linha
-            </th>
+          <colgroup>
+            <col style={{ width: "8%" }} />
             {data.months.map((month) => (
-              <MonthHeaderCell
-                key={month.month}
-                year={data.year}
-                month={month}
-                syncing={syncingMonths.has(month.month)}
-                selected={selectedMonth === month.month}
-                dimmed={selectedMonth !== null && selectedMonth !== month.month}
-                onSync={() => onSyncMonth(month.month)}
-                onToggleSelect={() =>
-                  setSelectedMonth((prev) =>
-                    prev === month.month ? null : month.month,
-                  )
-                }
-              />
+              <col key={month.month} style={{ width: `${84 / 12}%` }} />
             ))}
-            <th
-              className={cn(
-                "border-b border-[var(--border)] bg-[var(--muted)]/30 px-2 py-2 text-center text-[12.5px] font-bold uppercase text-[var(--muted-foreground)]",
-                selectedMonth !== null && DIM_CLASS,
-              )}
-            >
-              Total
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, index) => {
-            const bg = rowBackgroundClass(row);
-            const showPercentRow = row.type === "static" && row.showPercent;
-            const isAlt = altRowFlags[index];
-            // Linhas com percentual logo abaixo não desenham borda inferior —
-            // a separação já é feita pela borda da própria linha de percentual.
-            const dividerStyle = showPercentRow
-              ? undefined
-              : MAIN_ROW_DIVIDER_STYLE;
-            const rowClassName = isAlt ? undefined : bg;
-            const cellStyle = isAlt
-              ? { ...dividerStyle, backgroundColor: ALT_ROW_BG }
-              : dividerStyle;
+            <col style={{ width: "8%" }} />
+          </colgroup>
+          <thead>
+            <tr>
+              <th
+                className={cn(
+                  "sticky left-0 z-20 border-b border-[var(--border)] bg-white px-3 py-2 text-left text-[12.5px] font-bold uppercase text-[var(--muted-foreground)]",
+                  selectedMonth !== null && DIM_CLASS,
+                )}
+              >
+                Linha
+              </th>
+              {data.months.map((month) => (
+                <MonthHeaderCell
+                  key={month.month}
+                  year={data.year}
+                  month={month}
+                  syncing={syncingMonths.has(month.month)}
+                  selected={selectedMonth === month.month}
+                  dimmed={
+                    selectedMonth !== null && selectedMonth !== month.month
+                  }
+                  onSync={() => onSyncMonth(month.month)}
+                  onToggleSelect={() =>
+                    setSelectedMonth((prev) =>
+                      prev === month.month ? null : month.month,
+                    )
+                  }
+                />
+              ))}
+              <th
+                className={cn(
+                  "border-b border-[var(--border)] bg-[var(--muted)]/30 px-2 py-2 text-center text-[12.5px] font-bold uppercase text-[var(--muted-foreground)]",
+                  selectedMonth !== null && DIM_CLASS,
+                )}
+              >
+                Total
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => {
+              const bg = rowBackgroundClass(row);
+              const showPercentRow = row.type === "static" && row.showPercent;
+              const isAlt = altRowFlags[index];
+              // Linhas com percentual logo abaixo não desenham borda inferior —
+              // a separação já é feita pela borda da própria linha de percentual.
+              const dividerStyle = showPercentRow
+                ? undefined
+                : MAIN_ROW_DIVIDER_STYLE;
+              const rowClassName = isAlt ? undefined : bg;
+              const cellStyle = isAlt
+                ? { ...dividerStyle, backgroundColor: ALT_ROW_BG }
+                : dividerStyle;
 
-            return (
-              <Fragment key={row.id}>
-                <tr className={rowClassName}>
-                  <td
-                    className={cn(
-                      "sticky left-0 z-10 px-3 py-2",
-                      rowClassName,
-                      selectedMonth !== null && DIM_CLASS,
-                    )}
-                    style={cellStyle}
-                  >
-                    {renderLabelCell(row)}
-                  </td>
-                  {data.months.map((month) => (
+              return (
+                <Fragment key={row.id}>
+                  <tr className={rowClassName}>
                     <td
-                      key={month.month}
                       className={cn(
-                        "px-1.5 py-2 align-middle",
-                        month.month === selectedMonth
-                          ? cn(SELECTED_MONTH_CELL_CLASS, bg || "bg-white")
-                          : selectedMonth !== null && DIM_CLASS,
+                        "sticky left-0 z-10 px-3 py-2",
+                        rowClassName,
+                        selectedMonth !== null && DIM_CLASS,
                       )}
                       style={cellStyle}
                     >
-                      {renderValueCell(
-                        row,
-                        month,
-                        onFixedCostChange,
-                        onOperationalCostChange,
-                        onInvestmentCostChange,
-                      )}
+                      {renderLabelCell(row)}
                     </td>
-                  ))}
-                  <td
-                    className={cn(
-                      "px-2 py-2 align-middle",
-                      rowClassName,
-                      selectedMonth !== null && DIM_CLASS,
-                    )}
-                    style={cellStyle}
-                  >
-                    <div
-                      className={cn(
-                        "whitespace-nowrap text-right text-[12.5px] font-bold tabular-nums leading-tight",
-                        isColoredRow(row) ? "text-white" : "",
-                      )}
-                    >
-                      {formatFinancialMoney(
-                        getYearTotalForRow(row, data).amount,
-                      )}
-                    </div>
-                  </td>
-                </tr>
-                {showPercentRow ? (
-                  <tr key={`${row.id}-percent`} className={bg}>
-                    <td
-                      className={cn(
-                        "sticky left-0 z-10 px-3 py-1.5",
-                        bg,
-                        selectedMonth !== null && DIM_CLASS,
-                      )}
-                      style={PERCENT_ROW_DIVIDER_STYLE}
-                    />
                     {data.months.map((month) => (
                       <td
                         key={month.month}
                         className={cn(
-                          "px-1.5 py-1.5 align-middle",
+                          "px-1.5 py-2 align-middle",
                           month.month === selectedMonth
-                            ? cn(SELECTED_MONTH_CELL_CLASS, bg)
+                            ? cn(SELECTED_MONTH_CELL_CLASS, bg || "bg-white")
                             : selectedMonth !== null && DIM_CLASS,
                         )}
-                        style={PERCENT_ROW_DIVIDER_STYLE}
+                        style={cellStyle}
                       >
-                        {renderPercentCell(
-                          getCellValue(row, month).percent,
-                          isColoredRow(row),
+                        {renderValueCell(
+                          row,
+                          month,
+                          onFixedCostChange,
+                          onOperationalCostChange,
+                          onInvestmentCostChange,
                         )}
                       </td>
                     ))}
                     <td
                       className={cn(
-                        "px-2 py-1.5 align-middle",
-                        bg,
+                        "px-2 py-2 align-middle",
+                        rowClassName,
                         selectedMonth !== null && DIM_CLASS,
                       )}
-                      style={PERCENT_ROW_DIVIDER_STYLE}
+                      style={cellStyle}
                     >
-                      {renderPercentCell(
-                        getYearTotalForRow(row, data).percent,
-                        isColoredRow(row),
-                      )}
+                      <div
+                        className={cn(
+                          "whitespace-nowrap text-right text-[12.5px] font-bold tabular-nums leading-tight",
+                          isColoredRow(row) ? "text-white" : "",
+                        )}
+                      >
+                        {formatFinancialMoney(
+                          getYearTotalForRow(row, data).amount,
+                        )}
+                      </div>
                     </td>
                   </tr>
-                ) : null}
-              </Fragment>
-            );
-          })}
-        </tbody>
+                  {showPercentRow ? (
+                    <tr key={`${row.id}-percent`} className={bg}>
+                      <td
+                        className={cn(
+                          "sticky left-0 z-10 px-3 py-1.5",
+                          bg,
+                          selectedMonth !== null && DIM_CLASS,
+                        )}
+                        style={PERCENT_ROW_DIVIDER_STYLE}
+                      />
+                      {data.months.map((month) => (
+                        <td
+                          key={month.month}
+                          className={cn(
+                            "px-1.5 py-1.5 align-middle",
+                            month.month === selectedMonth
+                              ? cn(SELECTED_MONTH_CELL_CLASS, bg)
+                              : selectedMonth !== null && DIM_CLASS,
+                          )}
+                          style={PERCENT_ROW_DIVIDER_STYLE}
+                        >
+                          {renderPercentCell(
+                            getCellValue(row, month).percent,
+                            isColoredRow(row),
+                          )}
+                        </td>
+                      ))}
+                      <td
+                        className={cn(
+                          "px-2 py-1.5 align-middle",
+                          bg,
+                          selectedMonth !== null && DIM_CLASS,
+                        )}
+                        style={PERCENT_ROW_DIVIDER_STYLE}
+                      >
+                        {renderPercentCell(
+                          getYearTotalForRow(row, data).percent,
+                          isColoredRow(row),
+                        )}
+                      </td>
+                    </tr>
+                  ) : null}
+                </Fragment>
+              );
+            })}
+          </tbody>
         </table>
       </div>
     </TooltipProvider>
