@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it, mock, afterEach } from "node:test";
-import { fetchSellerShippingCost } from "./seller-shipping-cost";
-import type { ItemBody } from "./types";
+import { fetchSellerShippingCost } from "../seller-shipping-cost";
+import type { ItemBody } from "../types";
 
 const item: ItemBody = {
   id: "MLB5236253058",

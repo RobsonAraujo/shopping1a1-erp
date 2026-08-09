@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { applyOperationEnrichment } from "./fulfillment-inbound-operations";
+import { applyOperationEnrichment } from "../fulfillment-inbound-operations";
 
 describe("applyOperationEnrichment", () => {
   it("prefers operation date and higher unit totals", () => {

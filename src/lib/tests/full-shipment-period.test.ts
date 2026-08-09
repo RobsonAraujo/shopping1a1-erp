@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import {
   matchesFullShipmentViewPeriod,
   shipmentShippedAtInCalendarMonth,
-} from "./full-shipment-period";
+} from "../full-shipment-period";
 
 describe("shipmentShippedAtInCalendarMonth", () => {
   it("uses America/Sao_Paulo calendar month, not UTC", () => {

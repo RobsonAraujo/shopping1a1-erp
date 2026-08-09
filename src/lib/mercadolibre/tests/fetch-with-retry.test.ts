@@ -4,7 +4,7 @@ import {
   fetchWithRetry,
   isRetryableMlStatus,
   MlApiFetchError,
-} from "./fetch-with-retry";
+} from "../fetch-with-retry";
 
 describe("isRetryableMlStatus", () => {
   it("retries 429 and 5xx", () => {

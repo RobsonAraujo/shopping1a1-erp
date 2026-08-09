@@ -8,7 +8,7 @@ import {
   displayMinPurchaseUnitForLevel,
   mlDiscountMinPurchaseUnitForLevel,
   validateWholesaleReductionSettings,
-} from "./wholesale-pricing";
+} from "../wholesale-pricing";
 
 describe("computeTargetMarginFromReduction", () => {
   it("reduces current margin by the configured percent", () => {

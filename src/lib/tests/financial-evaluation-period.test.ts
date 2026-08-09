@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import {
   calendarYmdRangeToUtc,
   parseFinancialEvaluationYmd,
-} from "./financial-evaluation-period";
+} from "../financial-evaluation-period";
 
 describe("financial-evaluation period dates", () => {
   it("parses valid YYYY-MM-DD", () => {

@@ -6,7 +6,7 @@ import {
   FullShipmentValidationError,
   normalizeFullShipmentInput,
   normalizeImportedShipmentInput,
-} from "./full-shipment";
+} from "../full-shipment";
 
 describe("computeCostPerUnit", () => {
   it("divides total cost by units", () => {

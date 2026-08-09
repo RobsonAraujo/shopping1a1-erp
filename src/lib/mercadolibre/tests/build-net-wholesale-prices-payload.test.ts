@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildNetWholesalePricesPayload } from "./build-net-wholesale-prices-payload";
-import type { ItemPriceRecord } from "./item-quantity-prices";
+import { buildNetWholesalePricesPayload } from "../build-net-wholesale-prices-payload";
+import type { ItemPriceRecord } from "../item-quantity-prices";
 
 describe("buildNetWholesalePricesPayload", () => {
   const currentPrices: ItemPriceRecord[] = [

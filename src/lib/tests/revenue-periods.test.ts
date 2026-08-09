@@ -4,7 +4,7 @@ import {
   formatCalendarRangeYmd,
   getCalendarMonthRange,
   isMlBillingPeriodCivilMonth,
-} from "./mercadolibre/revenue-periods";
+} from "../mercadolibre/revenue-periods";
 
 describe("isMlBillingPeriodCivilMonth", () => {
   const timeZone = "America/Sao_Paulo";

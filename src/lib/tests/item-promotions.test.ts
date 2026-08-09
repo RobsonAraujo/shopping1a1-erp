@@ -8,7 +8,7 @@ import {
   isPromotionExpiringWithinDays,
   parsePromotionFinishDate,
   pickEarliestActivePromotion,
-} from "./mercadolibre/item-promotions";
+} from "../mercadolibre/item-promotions";
 
 describe("item-promotions", () => {
   it("treats started and active as active promotion statuses", () => {

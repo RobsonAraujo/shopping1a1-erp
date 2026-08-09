@@ -5,7 +5,7 @@ import {
   computeMarginAfterAds,
   computeMinSalePriceForTargetMargin,
   roundMoney,
-} from "./financial-margin";
+} from "../financial-margin";
 
 describe("computeFinancialMargin", () => {
   it("calculates Cabo 10m example margins", () => {

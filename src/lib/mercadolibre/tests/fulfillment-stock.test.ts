@@ -7,7 +7,7 @@ import {
   emptyFulfillmentStock,
   isFulfillmentListing,
   parseFulfillmentStockResponse,
-} from "./fulfillment-stock";
+} from "../fulfillment-stock";
 
 function baseItem(overrides: Partial<ItemBody> = {}): ItemBody {
   return {

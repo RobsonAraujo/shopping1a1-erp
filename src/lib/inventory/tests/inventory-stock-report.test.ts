@@ -8,7 +8,7 @@ import {
   listingAuditBreakdown,
   listingUnitsAtSnapshot,
   stockReportSalesAdjustmentRange,
-} from "./inventory-stock-report";
+} from "../inventory-stock-report";
 
 describe("inventory-stock-report", () => {
   it("computes base units from warehouse, full and on the way", () => {

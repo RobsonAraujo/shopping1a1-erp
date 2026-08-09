@@ -5,8 +5,8 @@ import {
   computeDreTotals,
   percentOfRevenue,
   sumYearLineAmounts,
-} from "./dre-calculations";
-import { mapBillingSummaryToDreLines } from "../mercadolibre/billing-summary";
+} from "../dre-calculations";
+import { mapBillingSummaryToDreLines } from "../../mercadolibre/billing-summary";
 
 const BASE_LINES = {
   revenueMl: 0,

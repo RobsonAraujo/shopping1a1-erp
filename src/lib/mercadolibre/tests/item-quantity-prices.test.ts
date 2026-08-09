@@ -4,7 +4,7 @@ import {
   resolveMlAnchorNetAmount,
   splitBusinessPrices,
   type ItemPriceRecord,
-} from "./item-quantity-prices";
+} from "../item-quantity-prices";
 
 describe("splitBusinessPrices", () => {
   const prices: ItemPriceRecord[] = [

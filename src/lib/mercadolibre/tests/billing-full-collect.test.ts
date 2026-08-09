@@ -5,7 +5,7 @@ import {
   extractFullCollectChargesFromMlDetails,
   extractFullCollectChargesFromSummary,
   groupFullDetailsIntoInboundShipments,
-} from "./billing-full-collect";
+} from "../billing-full-collect";
 
 describe("extractFullCollectChargesFromMlDetails", () => {
   it("extracts CFCBI coleta Full lines with detail id and cost", () => {

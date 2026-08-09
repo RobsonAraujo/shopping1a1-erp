@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import {
   buildExplicitFixedCostMap,
   resolveEffectiveFixedCostsForYear,
-} from "./dre-fixed-costs";
+} from "../dre-fixed-costs";
 
 describe("resolveEffectiveFixedCostsForYear", () => {
   it("carries forward within the year", () => {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it, mock, afterEach } from "node:test";
-import { fetchLastSaleFeeRebate } from "./last-sale-fee-rebate";
+import { fetchLastSaleFeeRebate } from "../last-sale-fee-rebate";
 
 describe("fetchLastSaleFeeRebate", () => {
   afterEach(() => {

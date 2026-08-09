@@ -3,8 +3,8 @@ import { describe, it } from "node:test";
 import {
   aggregateMlBillingDetails,
   mergeBillingLines,
-} from "./mercadolibre/billing-details";
-import { mapBillingSummaryToDreLines } from "./mercadolibre/billing-summary";
+} from "../mercadolibre/billing-details";
+import { mapBillingSummaryToDreLines } from "../mercadolibre/billing-summary";
 
 describe("aggregateMlBillingDetails", () => {
   it("aggregates MLB sub types CVVML, CFFE, CFCBI, CFPB", () => {
