@@ -84,10 +84,6 @@ const EMPTY_MANUAL: ManualListingAdjustments = {
 type SalesAdjustmentResponse = {
   period: { from: string; to: string } | null;
   salesByMlItemId: Record<string, number>;
-  catalogSnapshotByMlItemId: Record<
-    string,
-    { mlStock: number; snapshotAt: string }
-  >;
   dateField: string;
   includeCancelled?: boolean;
 };
@@ -128,18 +124,6 @@ function manualFor(
 
 function hasManualAdjustments(manual: ManualListingAdjustments): boolean {
   return manual.nfEmitidaNaoEntregue !== 0 || manual.ajusteManual !== 0;
-}
-
-function formatSnapshotBadgeTime(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString("pt-BR", {
-    timeZone: "America/Sao_Paulo",
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 function formatPeriodDate(iso: string): string {
@@ -256,7 +240,6 @@ function SkuCalculationMemory({
             listing.mlItemId,
           );
           const audit = listingAuditBreakdown(listing, state);
-          const usesCatalogSnapshot = audit.mlStockSource === "catalog_snapshot";
 
           return (
             <div
@@ -278,19 +261,9 @@ function SkuCalculationMemory({
                 nota="dado atual, direto do cadastro de estoque"
               />
               <MemoriaLinha
-                label={
-                  usesCatalogSnapshot
-                    ? "Estoque no Mercado Livre (na data)"
-                    : "Estoque no Mercado Livre (hoje)"
-                }
-                value={String(
-                  usesCatalogSnapshot ? audit.mlStockAtSnapshot : audit.mlStockToday,
-                )}
-                nota={
-                  usesCatalogSnapshot && audit.snapshotAt
-                    ? `snapshot de catálogo de ${formatSnapshotBadgeTime(audit.snapshotAt)} (hoje seria ${audit.mlStockToday})`
-                    : "dado atual do Mercado Livre"
-                }
+                label="Estoque no Mercado Livre (hoje)"
+                value={String(audit.mlStockToday)}
+                nota="dado atual do Mercado Livre"
               />
               <MemoriaLinha
                 label="Estoque a caminho (Full)"
@@ -298,24 +271,15 @@ function SkuCalculationMemory({
                 nota="dado atual"
               />
 
-              {usesCatalogSnapshot ? (
-                <MemoriaLinha
-                  label="Vendas no período"
-                  value="não se aplica"
-                  nota="este anúncio usa o estoque ML real do dia (snapshot) em vez de descontar vendas"
-                  fraca
-                />
-              ) : (
-                <MemoriaLinha
-                  label="+ Vendas feitas depois da data escolhida"
-                  value={`+${audit.salesAfterSnapshot}`}
-                  nota={
-                    salesPeriod
-                      ? `pedidos pagos entre ${formatPeriodDate(salesPeriod.from)} e ${formatPeriodDate(salesPeriod.to)} (${periodDays} dia${periodDays !== 1 ? "s" : ""}) — já saíram do estoque, por isso somamos de volta`
-                      : "sem período de vendas a somar (data escolhida é hoje ou no futuro)"
-                  }
-                />
-              )}
+              <MemoriaLinha
+                label="+ Vendas feitas depois da data escolhida"
+                value={`+${audit.salesAfterSnapshot}`}
+                nota={
+                  salesPeriod
+                    ? `pedidos pagos entre ${formatPeriodDate(salesPeriod.from)} e ${formatPeriodDate(salesPeriod.to)} (${periodDays} dia${periodDays !== 1 ? "s" : ""}) — já saíram do estoque, por isso somamos de volta`
+                    : "sem período de vendas a somar (data escolhida é hoje ou no futuro)"
+                }
+              />
               <MemoriaLinha
                 label="+ NF emitida não entregue"
                 value={`+${audit.nfEmitidaNaoEntregue}`}
@@ -435,9 +399,6 @@ export function InventoryStockReportDialog({
   const [salesByMlItemId, setSalesByMlItemId] = useState<
     Record<string, number>
   >({});
-  const [catalogSnapshotByMlItemId, setCatalogSnapshotByMlItemId] = useState<
-    SalesAdjustmentResponse["catalogSnapshotByMlItemId"]
-  >({});
   const [salesPeriod, setSalesPeriod] = useState<
     SalesAdjustmentResponse["period"]
   >(null);
@@ -489,27 +450,17 @@ export function InventoryStockReportDialog({
     const map: Record<string, StockReportListingState> = {};
     for (const listing of listings) {
       const manual = manualFor(manualByMlItemId, listing.mlItemId);
-      const catalogSnap = catalogSnapshotByMlItemId[listing.mlItemId];
-      const snapshotSource =
-        listing.catalogListing && catalogSnap
-          ? {
-              kind: "catalog_snapshot" as const,
-              mlStockAtSnapshot: catalogSnap.mlStock,
-              snapshotAt: catalogSnap.snapshotAt,
-            }
-          : { kind: "sales" as const };
-
       map[listing.mlItemId] = {
         adjustment: {
           salesAfterSnapshot: salesByMlItemId[listing.mlItemId] ?? 0,
           nfEmitidaNaoEntregue: manual.nfEmitidaNaoEntregue,
           ajusteManual: manual.ajusteManual,
         },
-        snapshotSource,
+        snapshotSource: { kind: "sales" },
       };
     }
     return map;
-  }, [listings, manualByMlItemId, salesByMlItemId, catalogSnapshotByMlItemId]);
+  }, [listings, manualByMlItemId, salesByMlItemId]);
 
   const filteredListings = useMemo(
     () =>
@@ -542,14 +493,6 @@ export function InventoryStockReportDialog({
     [listings, listingStatesByMlItemId, productsBySku, mergeGroups],
   );
 
-  const catalogItemIds = useMemo(
-    () =>
-      listings
-        .filter((listing) => listing.catalogListing)
-        .map((listing) => listing.mlItemId),
-    [listings],
-  );
-
   const fetchSalesAdjustment = useCallback(async () => {
     if (!snapshotDateInput || listings.length === 0) return;
 
@@ -560,9 +503,6 @@ export function InventoryStockReportDialog({
         snapshot: snapshotDateInput,
         itemIds: listings.map((l) => l.mlItemId).join(","),
       });
-      if (catalogItemIds.length > 0) {
-        params.set("catalogItemIds", catalogItemIds.join(","));
-      }
       if (includeCancelledSales) {
         params.set("includeCancelled", "true");
       }
@@ -579,17 +519,15 @@ export function InventoryStockReportDialog({
 
       const data = (await res.json()) as SalesAdjustmentResponse;
       setSalesByMlItemId(data.salesByMlItemId ?? {});
-      setCatalogSnapshotByMlItemId(data.catalogSnapshotByMlItemId ?? {});
       setSalesPeriod(data.period ?? null);
     } catch (e) {
       setSalesError(e instanceof Error ? e.message : "Erro ao buscar vendas");
       setSalesByMlItemId({});
-      setCatalogSnapshotByMlItemId({});
       setSalesPeriod(null);
     } finally {
       setSalesLoading(false);
     }
-  }, [snapshotDateInput, listings, catalogItemIds, includeCancelledSales]);
+  }, [snapshotDateInput, listings, includeCancelledSales]);
 
   useEffect(() => {
     void fetchSalesAdjustment();
@@ -692,8 +630,7 @@ export function InventoryStockReportDialog({
           <SheetTitle>Saldo em estoque</SheetTitle>
           <SheetDescription>
             Estime o saldo em uma data passada: estoque de hoje + vendas ML
-            depois da data (ou snapshot de catálogo). Nada é salvo no
-            sistema.
+            depois da data. Nada é salvo no sistema.
           </SheetDescription>
         </SheetHeader>
 
@@ -765,7 +702,7 @@ export function InventoryStockReportDialog({
           {salesLoading ? (
             <p className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
               <Loader2 className="size-4 animate-spin" aria-hidden />
-              Buscando vendas ML e snapshots de catálogo…
+              Buscando vendas ML…
             </p>
           ) : null}
           {salesError ? (
@@ -809,11 +746,10 @@ export function InventoryStockReportDialog({
             {showExtras ? (
               <div className="mt-3 space-y-3">
                 <p className="text-xs text-[var(--muted-foreground)]">
-                  Estimativa: estoque de hoje + vendas ML depois da data escolhida.
-                  Não inclui entradas Full/galpão automáticas — use Ajuste manual.
-                  Para catálogo com snapshot, galpão e a caminho usam o estoque
-                  atual. A memória de cálculo completa por produto está na
-                  prévia do relatório, mais abaixo.
+                  Estimativa: estoque de hoje + vendas ML depois da data escolhida
+                  (próprio e catálogo). Não inclui entradas Full/galpão
+                  automáticas — use Ajuste manual. A memória de cálculo completa
+                  por produto está na prévia do relatório, mais abaixo.
                 </p>
                 {salesPeriod ? (
                   <p className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 text-xs text-[var(--muted-foreground)]">
@@ -877,8 +813,6 @@ export function InventoryStockReportDialog({
                           const audit = listingAuditBreakdown(listing, state);
                           const currentUnits = inventoryBaseUnits(listing);
                           const included = audit.total > 0;
-                          const usesCatalogSnapshot =
-                            audit.mlStockSource === "catalog_snapshot";
                           const zeroBase =
                             currentUnits === 0 && !hasManualAdjustments(manual);
 
@@ -900,21 +834,12 @@ export function InventoryStockReportDialog({
                                       {listing.title}
                                     </p>
                                   </div>
-                                  {usesCatalogSnapshot ? (
-                                    <Badge
-                                      variant="outline"
-                                      className="text-[10px]"
-                                    >
-                                      ML via snapshot
-                                    </Badge>
-                                  ) : (
-                                    <Badge
-                                      variant="secondary"
-                                      className="text-[10px]"
-                                    >
-                                      Estimado por vendas
-                                    </Badge>
-                                  )}
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-[10px]"
+                                  >
+                                    Estimado por vendas
+                                  </Badge>
                                   {included ? (
                                     <Badge
                                       variant="default"
@@ -936,13 +861,7 @@ export function InventoryStockReportDialog({
                                 {currentUnits}
                               </td>
                               <td className="px-3 py-2 tabular-nums">
-                                {usesCatalogSnapshot ? (
-                                  <span className="text-[var(--muted-foreground)]">
-                                    —
-                                  </span>
-                                ) : (
-                                  audit.salesAfterSnapshot
-                                )}
+                                {audit.salesAfterSnapshot}
                               </td>
                               <td className="px-3 py-2">
                                 <FormInput

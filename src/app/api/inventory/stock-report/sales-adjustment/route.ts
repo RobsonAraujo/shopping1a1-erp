@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stockPlanningConfig } from "@/config/stock-planning";
-import { loadCatalogMlStockAtOrBefore } from "@/lib/inventory/catalog-snapshot-stock";
 import { fetchUnitsSoldForItemsInDateRangeBatched } from "@/lib/mercadolibre/api";
 import {
   parseStockReportSnapshotDateInput,
   stockReportSalesAdjustmentRange,
 } from "@/lib/inventory/inventory-stock-report";
-import { prisma } from "@/lib/db";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
 
@@ -22,9 +20,6 @@ export async function GET(request: NextRequest) {
 
   const snapshotParam = request.nextUrl.searchParams.get("snapshot");
   const itemIds = parseItemIds(request.nextUrl.searchParams.get("itemIds"));
-  const catalogItemIdsFromClient = parseItemIds(
-    request.nextUrl.searchParams.get("catalogItemIds"),
-  );
 
   if (!snapshotParam) {
     return NextResponse.json(
@@ -45,53 +40,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       period: null,
       salesByMlItemId: {},
-      catalogSnapshotByMlItemId: {},
       dateField: stockPlanningConfig.salesWindowDateField,
     });
   }
 
   try {
-    const listings = await prisma.listing.findMany({
-      where: { mlItemId: { in: itemIds } },
-      select: { mlItemId: true, catalogListing: true },
-    });
-    const catalogById = Object.fromEntries(
-      listings.map((row) => [row.mlItemId, row.catalogListing === true]),
-    );
-    for (const id of catalogItemIdsFromClient) {
-      catalogById[id] = true;
-    }
-
-    const catalogItemIds = itemIds.filter((id) => catalogById[id] === true);
-    const catalogSnapshots = await loadCatalogMlStockAtOrBefore(
-      catalogItemIds,
-      snapshotDate,
-    );
-
-    const catalogSnapshotByMlItemId: Record<
-      string,
-      { mlStock: number; snapshotAt: string }
-    > = {};
-    for (const [mlItemId, snap] of catalogSnapshots) {
-      catalogSnapshotByMlItemId[mlItemId] = {
-        mlStock: snap.mlStock,
-        snapshotAt: snap.snapshotAt.toISOString(),
-      };
-    }
-
-    const salesItemIds = itemIds.filter((id) => !catalogSnapshots.has(id));
     const period = stockReportSalesAdjustmentRange(snapshotDate);
     const dateField = stockPlanningConfig.salesWindowDateField;
-
     const includeCancelled =
       request.nextUrl.searchParams.get("includeCancelled") === "true";
 
     let salesByMlItemId: Record<string, number> = {};
-    if (period && salesItemIds.length > 0) {
+    if (period && itemIds.length > 0) {
       salesByMlItemId = await fetchUnitsSoldForItemsInDateRangeBatched(
         token,
         userId,
-        salesItemIds,
+        itemIds,
         period.from,
         period.to,
         dateField,
@@ -105,7 +69,6 @@ export async function GET(request: NextRequest) {
         ? { from: period.from.toISOString(), to: period.to.toISOString() }
         : null,
       salesByMlItemId,
-      catalogSnapshotByMlItemId,
       dateField,
       includeCancelled,
     });
