@@ -10,7 +10,14 @@ import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
 
 function parseItemIds(value: string | null): string[] {
   if (!value?.trim()) return [];
-  return [...new Set(value.split(",").map((id) => id.trim()).filter(Boolean))];
+  return [
+    ...new Set(
+      value
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean),
+    ),
+  ];
 }
 
 export async function GET(request: NextRequest) {
