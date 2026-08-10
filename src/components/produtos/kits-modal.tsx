@@ -1,9 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useApiResource } from "@/hooks/use-api-resource";
-import { ImageOff, Pencil, Plus, Trash2, X } from "lucide-react";
+import { ImageOff, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { FormInput } from "@/components/ui/form-input";
@@ -18,6 +18,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { readApiError } from "@/lib/api-client-error";
 import { cn } from "@/lib/utils";
 import type { KitCandidate } from "@/app/api/kits/candidates/route";
@@ -107,7 +115,6 @@ function SkuComboboxField({
 }
 
 export function KitsModal({ open, onClose }: KitsModalProps) {
-  const titleId = useId();
   const [kits, setKits] = useState<KitRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -275,46 +282,23 @@ export function KitsModal({ open, onClose }: KitsModalProps) {
     }
   }
 
-  function handleBackdrop(e: React.MouseEvent<HTMLDivElement>) {
-    if (e.target === e.currentTarget) onClose();
-  }
-
-  if (!open) return null;
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={handleBackdrop}
-      role="presentation"
+    <Sheet
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) onClose();
+      }}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-xl"
-      >
-        <div className="flex items-start justify-between gap-3 border-b border-[var(--border)] p-5">
-          <div>
-            <h2 id={titleId} className="text-lg font-semibold text-[var(--primary)]">
-              Kits sem SKU
-            </h2>
-            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-              Anúncios &quot;kit&quot; do Mercado Livre não têm SKU próprio. Cadastre aqui os
-              SKUs componentes para que Lucratividade calcule o custo/imposto certo.
-            </p>
-          </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={onClose}
-            aria-label="Fechar"
-          >
-            <X className="size-4" aria-hidden />
-          </Button>
-        </div>
+      <SheetContent className="sm:max-w-2xl">
+        <SheetHeader>
+          <SheetTitle>Kits sem SKU</SheetTitle>
+          <p className="text-xs text-[var(--muted-foreground)]">
+            Anúncios &quot;kit&quot; do Mercado Livre não têm SKU próprio. Cadastre aqui os
+            SKUs componentes para que Lucratividade calcule o custo/imposto certo.
+          </p>
+        </SheetHeader>
 
-        <div className="space-y-3 overflow-y-auto p-5">
+        <SheetBody className="space-y-3">
           <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] p-3">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
               Seus anúncios-kit sem cadastro
@@ -504,14 +488,14 @@ export function KitsModal({ open, onClose }: KitsModalProps) {
               ))
             )}
           </ul>
-        </div>
+        </SheetBody>
 
-        <div className="flex justify-end border-t border-[var(--border)] p-4">
+        <SheetFooter>
           <Button type="button" variant="outline" onClick={onClose}>
             Fechar
           </Button>
-        </div>
-      </div>
+        </SheetFooter>
+      </SheetContent>
 
       <AlertDialog
         open={pendingDelete != null}
@@ -536,6 +520,6 @@ export function KitsModal({ open, onClose }: KitsModalProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </Sheet>
   );
 }

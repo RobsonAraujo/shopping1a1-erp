@@ -1,18 +1,22 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Boxes, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { Boxes, Pencil, Plus, RefreshCw, X } from "lucide-react";
 import { KitsModal } from "@/components/produtos/kits-modal";
-import {
-  ItemListSearch,
-  itemListSearchEmptyMessage,
-} from "@/components/item-list-search";
+import { ItemListSearch } from "@/components/item-list-search";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { PlanningInfoTrigger } from "@/components/planning-info-trigger";
+import {
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { ProductsTable } from "@/components/produtos/products-table";
 import {
   MaskedMoneyField,
   MaskedPercentField,
@@ -352,19 +356,17 @@ function ProductFormModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="presentation"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+    <Sheet
+      open
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) onClose();
       }}
     >
-      <div className="fixed inset-0 bg-black/50" aria-hidden />
-      <div className="relative z-10 flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-lg">
-        <div className="border-b border-[var(--border)] px-5 py-4">
-          <h2 className="text-lg font-semibold">{title}</h2>
-        </div>
-        <div className="overflow-y-auto px-5 py-4">
+      <SheetContent className="sm:max-w-2xl">
+        <SheetHeader>
+          <SheetTitle>{title}</SheetTitle>
+        </SheetHeader>
+        <SheetBody>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1 sm:col-span-2">
               <label className="block text-sm font-medium">SKU</label>
@@ -477,17 +479,17 @@ function ProductFormModal({
           {error ? (
             <p className="mt-4 text-sm text-red-700">{error}</p>
           ) : null}
-        </div>
-        <div className="flex justify-end gap-2 border-t border-[var(--border)] px-5 py-4">
+        </SheetBody>
+        <SheetFooter>
           <Button type="button" variant="outline" onClick={onClose}>
             Cancelar
           </Button>
           <Button type="button" disabled={saving} onClick={() => void submit()}>
             {saving ? "Salvando…" : "Salvar"}
           </Button>
-        </div>
-      </div>
-    </div>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -762,153 +764,25 @@ export function ProductsClient() {
         </p>
       ) : null}
 
-      <Card className="overflow-hidden p-0 shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[56rem] text-sm">
-            <thead className="border-b border-[var(--border)] bg-[var(--muted)]/80 text-left text-xs text-[var(--muted-foreground)]">
-              <tr>
-                <th className="px-4 py-3 font-semibold uppercase tracking-wide">
-                  SKU
-                </th>
-                <th className="px-4 py-3 font-semibold uppercase tracking-wide">
-                  NCM
-                </th>
-                <th className="px-4 py-3 text-right font-semibold uppercase tracking-wide">
-                  Custo precificação
-                </th>
-                <th className="px-4 py-3 text-right font-semibold uppercase tracking-wide">
-                  Imposto %
-                </th>
-                <th className="px-4 py-3 text-center font-semibold uppercase tracking-wide">
-                  ST
-                </th>
-                <th className="px-4 py-3 text-center font-semibold uppercase tracking-wide">
-                  Mono
-                </th>
-                <th className="px-4 py-3 text-center font-semibold uppercase tracking-wide">
-                  Import.
-                </th>
-                <th className="px-4 py-3 text-right font-semibold uppercase tracking-wide">
-                  Ações
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-[var(--card)]">
-              {loading ? (
-                <tr>
-                  <td
-                    colSpan={8}
-                    className="px-4 py-10 text-center text-[var(--muted-foreground)]"
-                  >
-                    Carregando…
-                  </td>
-                </tr>
-              ) : filteredProducts.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={8}
-                    className="px-4 py-10 text-center text-[var(--muted-foreground)]"
-                  >
-                    {sortedProducts.length === 0
-                      ? "Nenhum produto cadastrado. Importe SKUs dos anúncios ou crie um novo."
-                      : itemListSearchEmptyMessage(searchQuery, "produto")}
-                  </td>
-                </tr>
-              ) : (
-                filteredProducts.map((product) => (
-                  <tr
-                    key={product.sku}
-                    className="border-t border-[var(--border)] transition-colors hover:bg-[var(--muted)]/25"
-                  >
-                    <td className="px-4 py-3 font-medium">{product.sku}</td>
-                    <td className="px-4 py-3 text-[var(--muted-foreground)]">
-                      {product.ncm ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      <div className="flex items-center justify-end gap-1">
-                        {product.pricingCost !== null
-                          ? formatFinancialMoney(product.pricingCost)
-                          : "—"}
-                        <PlanningInfoTrigger
-                          content={formatPricingCostExplainer(product)}
-                        />
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      <div className="flex items-center justify-end gap-1">
-                        {product.taxPercent !== null
-                          ? formatFinancialPercent(product.taxPercent)
-                          : "—"}
-                        <PlanningInfoTrigger
-                          content={
-                            product.taxPercent !== null &&
-                            product.taxPercentGeneratedAt &&
-                            product.taxPercentYear !== null &&
-                            product.taxPercentMonth !== null
-                              ? `Média % operacional de imposto apurada no relatório tributário de ${taxReportPeriodLabel(product.taxPercentYear, product.taxPercentMonth)} (recalculado em ${DATE_TIME_FORMATTER.format(new Date(product.taxPercentGeneratedAt))}, ${daysSince(product.taxPercentGeneratedAt)} dia(s) atrás). Se houve vendas ou mudanças fiscais recentes, recalcule o relatório tributário para atualizar este valor.`
-                              : "Este SKU ainda não aparece em nenhum relatório tributário calculado. Gere/recalcule o relatório tributário para obter o imposto médio deste produto."
-                          }
-                        />
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <Badge
-                        variant={product.hasIcmsSt ? "secondary" : "muted"}
-                        className="min-w-[2.5rem]"
-                      >
-                        {product.hasIcmsSt ? "Sim" : "Não"}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <Badge
-                        variant={product.isMonophasic ? "secondary" : "muted"}
-                        className="min-w-[2.5rem]"
-                      >
-                        {product.isMonophasic ? "Sim" : "Não"}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <Badge
-                        variant={product.isImported ? "secondary" : "muted"}
-                        className="min-w-[2.5rem]"
-                      >
-                        {product.isImported ? "Sim" : "Não"}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Editar ${product.sku}`}
-                          onClick={() =>
-                            setModal({
-                              mode: "edit",
-                              form: formFromProduct(product),
-                            })
-                          }
-                        >
-                          <Pencil className="size-4" aria-hidden />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Remover ${product.sku}`}
-                          onClick={() => void deleteProduct(product.sku)}
-                        >
-                          <Trash2 className="size-4" aria-hidden />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+      <ProductsTable
+        loading={loading}
+        sortedProducts={sortedProducts}
+        filteredProducts={filteredProducts}
+        searchQuery={searchQuery}
+        formatPricingCostExplainer={formatPricingCostExplainer}
+        taxPercentExplainer={(product) =>
+          product.taxPercent !== null &&
+          product.taxPercentGeneratedAt &&
+          product.taxPercentYear !== null &&
+          product.taxPercentMonth !== null
+            ? `Média % operacional de imposto apurada no relatório tributário de ${taxReportPeriodLabel(product.taxPercentYear, product.taxPercentMonth)} (recalculado em ${DATE_TIME_FORMATTER.format(new Date(product.taxPercentGeneratedAt))}, ${daysSince(product.taxPercentGeneratedAt)} dia(s) atrás). Se houve vendas ou mudanças fiscais recentes, recalcule o relatório tributário para atualizar este valor.`
+            : "Este SKU ainda não aparece em nenhum relatório tributário calculado. Gere/recalcule o relatório tributário para obter o imposto médio deste produto."
+        }
+        onEdit={(product) =>
+          setModal({ mode: "edit", form: formFromProduct(product) })
+        }
+        onDelete={(sku) => void deleteProduct(sku)}
+      />
 
       {modal ? (
         <ProductFormModal
