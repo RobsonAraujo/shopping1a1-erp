@@ -13,6 +13,14 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import { useIsMobile } from "@/hooks/use-is-mobile";
+import {
   localDateToYmd,
   ymdToLocalDate,
 } from "@/components/ui/date-range-picker";
@@ -45,6 +53,7 @@ export function DatePicker({
   disableFuture = true,
 }: DatePickerProps) {
   const [open, setOpen] = React.useState(false);
+  const isMobile = useIsMobile();
   const selected = React.useMemo(
     () => ymdToLocalDate(valueYmd),
     [valueYmd],
@@ -53,6 +62,44 @@ export function DatePicker({
   const buttonId =
     id ??
     (label ? `date-${label.replace(/\s+/g, "-").toLowerCase()}` : undefined);
+
+  const triggerButton = (
+    <Button
+      id={buttonId}
+      type="button"
+      variant="outline"
+      size="sm"
+      disabled={disabled}
+      className={cn(
+        "h-10 w-full justify-start gap-2 font-normal",
+        !selected && "text-[var(--muted-foreground)]",
+        buttonClassName,
+      )}
+    >
+      <CalendarIcon className="size-4 shrink-0 opacity-70" aria-hidden />
+      <span className="truncate">
+        {selected
+          ? format(selected, "dd MMM yyyy", { locale: ptBR })
+          : placeholder}
+      </span>
+    </Button>
+  );
+
+  const calendar = (
+    <Calendar
+      mode="single"
+      locale={ptBR}
+      defaultMonth={selected ?? new Date()}
+      selected={selected}
+      onSelect={(date) => {
+        if (!date) return;
+        onChange(localDateToYmd(date));
+        setOpen(false);
+      }}
+      disabled={disableFuture ? { after: new Date() } : undefined}
+      className="mx-auto"
+    />
+  );
 
   return (
     <div className={cn("space-y-1.5", className)}>
@@ -67,47 +114,28 @@ export function DatePicker({
           {label}
         </label>
       ) : null}
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            id={buttonId}
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={disabled}
-            className={cn(
-              "h-10 w-full justify-start gap-2 font-normal",
-              !selected && "text-[var(--muted-foreground)]",
-              buttonClassName,
-            )}
+      {isMobile ? (
+        <Sheet open={open} onOpenChange={setOpen}>
+          <SheetTrigger asChild>{triggerButton}</SheetTrigger>
+          <SheetContent>
+            <SheetHeader>
+              <SheetTitle>{label ?? "Escolher data"}</SheetTitle>
+            </SheetHeader>
+            <div className="flex justify-center px-4 pb-6">{calendar}</div>
+          </SheetContent>
+        </Sheet>
+      ) : (
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>{triggerButton}</PopoverTrigger>
+          <PopoverContent
+            align="start"
+            className="w-auto max-w-none p-0"
+            data-slot="popover-content"
           >
-            <CalendarIcon className="size-4 shrink-0 opacity-70" aria-hidden />
-            <span className="truncate">
-              {selected
-                ? format(selected, "dd MMM yyyy", { locale: ptBR })
-                : placeholder}
-            </span>
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent
-          align="start"
-          className="w-auto max-w-none p-0"
-          data-slot="popover-content"
-        >
-          <Calendar
-            mode="single"
-            locale={ptBR}
-            defaultMonth={selected ?? new Date()}
-            selected={selected}
-            onSelect={(date) => {
-              if (!date) return;
-              onChange(localDateToYmd(date));
-              setOpen(false);
-            }}
-            disabled={disableFuture ? { after: new Date() } : undefined}
-          />
-        </PopoverContent>
-      </Popover>
+            {calendar}
+          </PopoverContent>
+        </Popover>
+      )}
     </div>
   );
 }

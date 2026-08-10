@@ -35,7 +35,7 @@ export default async function DashboardLayout({
       >
         Pular para o conteúdo
       </a>
-      <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[var(--card)]/85 backdrop-blur-md supports-[backdrop-filter]:bg-[var(--card)]/75">
+      <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[var(--card)]/85 pt-[env(safe-area-inset-top)] backdrop-blur-md supports-[backdrop-filter]:bg-[var(--card)]/75">
         <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6">
           <div className="flex items-center justify-between gap-3">
             <Link
@@ -85,7 +85,7 @@ export default async function DashboardLayout({
       </header>
       <main
         id="main-content"
-        className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 sm:py-10"
+        className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 pb-[max(2rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-10"
       >
         {children}
       </main>

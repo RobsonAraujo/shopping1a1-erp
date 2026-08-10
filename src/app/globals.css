@@ -39,10 +39,23 @@
   --radius-lg: var(--radius);
 }
 
+html {
+  overscroll-behavior-y: contain;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: contain;
+}
+
+/* Alvos de toque não devem exibir o cursor de texto/seleção do navegador ao segurar. */
+button,
+a,
+[role="button"] {
+  -webkit-touch-callout: none;
 }
 
 [role="tablist"] [role="tab"] {
