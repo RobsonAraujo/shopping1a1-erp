@@ -44,6 +44,16 @@ function tableGridStyle(options: {
   };
 }
 
+/**
+ * Largura mínima da tabela = soma dos mínimos de cada coluna do grid. Sem
+ * isso, em telas estreitas o `minmax(...)` comprime as colunas até ficarem
+ * ilegíveis em vez de permitir rolagem horizontal.
+ */
+function tableMinWidth(options: { showSku?: boolean; showOrderSku?: boolean }): string {
+  if (options.showOrderSku) return "47rem";
+  return options.showSku ? "46rem" : "42rem";
+}
+
 const TABLE_ROW_CLASS =
   "grid w-full items-center border-b border-[var(--border)]";
 
@@ -318,54 +328,68 @@ export function VirtualizedTaxReportTransactionTable({
   return (
     <TooltipProvider delayDuration={200}>
       <div className="space-y-4">
-        <div className="overflow-hidden rounded-lg border border-[var(--border)] text-sm">
-          <TransactionTableHeader showSku={showSku} showOrderSku={showOrderSku} />
+        <p className="mb-1.5 text-[11px] text-[var(--muted-foreground)] sm:hidden">
+          → Arraste para o lado para ver mais colunas
+        </p>
+        <div className="relative">
           <div
-            ref={parentRef}
-            className="max-h-[32rem] overflow-x-hidden overflow-y-auto"
+            className="pointer-events-none absolute inset-y-0 right-0 z-30 w-6 bg-gradient-to-l from-[var(--card)] to-transparent sm:hidden"
+            aria-hidden
+          />
+          <div
+            className="overflow-x-auto rounded-lg border border-[var(--border)] text-sm"
+            style={{ WebkitOverflowScrolling: "touch" }}
           >
-            <div
-              className="w-full"
-              style={{
-                height: `${rowVirtualizer.getTotalSize()}px`,
-                position: "relative",
-              }}
-            >
-              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                const row = rows[virtualRow.index];
-                const isSelected =
-                  selectedKey === row.transacao.transactionKey;
-                return (
-                  <div
-                    key={row.transacao.transactionKey}
-                    role="row"
-                    aria-selected={isSelected}
-                    className={cn(
-                      TABLE_ROW_CLASS,
-                      "absolute left-0 cursor-pointer hover:bg-[var(--muted)]/20",
-                      !row.incluidoNaApuracao && "bg-amber-50/50",
-                      isSelected && "bg-[var(--primary)]/10",
-                    )}
-                    style={{
-                      ...tableGridStyle({ showSku, showOrderSku }),
-                      height: `${virtualRow.size}px`,
-                      transform: `translateY(${virtualRow.start}px)`,
-                    }}
-                    onClick={() =>
-                      setSelectedKey(
-                        isSelected ? null : row.transacao.transactionKey,
-                      )
-                    }
-                  >
-                    <TransactionRowCells
-                      row={row}
-                      showSku={showSku}
-                      showOrderSku={showOrderSku}
-                      canonicalSku={canonicalSku}
-                    />
-                  </div>
-                );
-              })}
+            <div style={{ minWidth: tableMinWidth({ showSku, showOrderSku }) }}>
+              <TransactionTableHeader showSku={showSku} showOrderSku={showOrderSku} />
+              <div
+                ref={parentRef}
+                className="max-h-[32rem] overflow-x-hidden overflow-y-auto"
+              >
+                <div
+                  className="w-full"
+                  style={{
+                    height: `${rowVirtualizer.getTotalSize()}px`,
+                    position: "relative",
+                  }}
+                >
+                  {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                    const row = rows[virtualRow.index];
+                    const isSelected =
+                      selectedKey === row.transacao.transactionKey;
+                    return (
+                      <div
+                        key={row.transacao.transactionKey}
+                        role="row"
+                        aria-selected={isSelected}
+                        className={cn(
+                          TABLE_ROW_CLASS,
+                          "absolute left-0 cursor-pointer hover:bg-[var(--muted)]/20",
+                          !row.incluidoNaApuracao && "bg-amber-50/50",
+                          isSelected && "bg-[var(--primary)]/10",
+                        )}
+                        style={{
+                          ...tableGridStyle({ showSku, showOrderSku }),
+                          height: `${virtualRow.size}px`,
+                          transform: `translateY(${virtualRow.start}px)`,
+                        }}
+                        onClick={() =>
+                          setSelectedKey(
+                            isSelected ? null : row.transacao.transactionKey,
+                          )
+                        }
+                      >
+                        <TransactionRowCells
+                          row={row}
+                          showSku={showSku}
+                          showOrderSku={showOrderSku}
+                          canonicalSku={canonicalSku}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
         </div>

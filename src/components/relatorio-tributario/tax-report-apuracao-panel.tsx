@@ -126,41 +126,53 @@ export function TaxReportApuracaoPanel({
             />
           </h2>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[44rem] text-sm">
-            <thead>
-              <tr className="border-b border-[var(--border)] bg-[var(--muted)]/30 text-left text-xs text-[var(--muted-foreground)]">
-                <th className={cn(APURACAO_COL_CLASS, "min-w-[7rem]")}>Imposto</th>
-                <th className={APURACAO_MONEY_COL_CLASS}>Débitos</th>
-                <th className={APURACAO_MONEY_COL_CLASS}>Créditos</th>
-                <th className={APURACAO_MONEY_COL_CLASS}>Líquido</th>
-                <th className={cn(APURACAO_MONEY_COL_CLASS, "min-w-[8.5rem]")}>
-                  <span className="inline-block text-right leading-tight">
-                    A recolher
-                    <span className="block text-[10px] font-normal text-[var(--muted-foreground)]">
-                      (est.)
+        <p className="px-4 pt-2 text-[11px] text-[var(--muted-foreground)] sm:hidden">
+          → Arraste para o lado para ver mais colunas
+        </p>
+        <div className="relative">
+          <div
+            className="pointer-events-none absolute inset-y-0 right-0 z-30 w-6 bg-gradient-to-l from-[var(--card)] to-transparent sm:hidden"
+            aria-hidden
+          />
+          <div
+            className="overflow-x-auto"
+            style={{ WebkitOverflowScrolling: "touch" }}
+          >
+            <table className="w-full min-w-[44rem] text-sm">
+              <thead>
+                <tr className="border-b border-[var(--border)] bg-[var(--muted)]/30 text-left text-xs text-[var(--muted-foreground)]">
+                  <th className={cn(APURACAO_COL_CLASS, "min-w-[7rem]")}>Imposto</th>
+                  <th className={APURACAO_MONEY_COL_CLASS}>Débitos</th>
+                  <th className={APURACAO_MONEY_COL_CLASS}>Créditos</th>
+                  <th className={APURACAO_MONEY_COL_CLASS}>Líquido</th>
+                  <th className={cn(APURACAO_MONEY_COL_CLASS, "min-w-[8.5rem]")}>
+                    <span className="inline-block text-right leading-tight">
+                      A recolher
+                      <span className="block text-[10px] font-normal text-[var(--muted-foreground)]">
+                        (est.)
+                      </span>
                     </span>
-                  </span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <ApuracaoTableRow key={row.imposto} row={row} />
-              ))}
-              <tr className="bg-[var(--primary)]/5 font-semibold">
-                <td className={cn(APURACAO_COL_CLASS, "min-w-[7rem]")}>Total estimado</td>
-                <td className={APURACAO_MONEY_COL_CLASS}>—</td>
-                <td className={APURACAO_MONEY_COL_CLASS}>—</td>
-                <td className={APURACAO_MONEY_COL_CLASS}>
-                  {formatFinancialMoney(apuracao.pisCofinsLiquido + apuracao.icms.liquido)}
-                </td>
-                <td className={cn(APURACAO_MONEY_COL_CLASS, "min-w-[8.5rem]")}>
-                  {formatFinancialMoney(totalARecolher)}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <ApuracaoTableRow key={row.imposto} row={row} />
+                ))}
+                <tr className="bg-[var(--primary)]/5 font-semibold">
+                  <td className={cn(APURACAO_COL_CLASS, "min-w-[7rem]")}>Total estimado</td>
+                  <td className={APURACAO_MONEY_COL_CLASS}>—</td>
+                  <td className={APURACAO_MONEY_COL_CLASS}>—</td>
+                  <td className={APURACAO_MONEY_COL_CLASS}>
+                    {formatFinancialMoney(apuracao.pisCofinsLiquido + apuracao.icms.liquido)}
+                  </td>
+                  <td className={cn(APURACAO_MONEY_COL_CLASS, "min-w-[8.5rem]")}>
+                    {formatFinancialMoney(totalARecolher)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </Card>
 

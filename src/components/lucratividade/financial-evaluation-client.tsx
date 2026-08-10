@@ -1,35 +1,29 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import {
   useCallback,
   useEffect,
-  useId,
   useMemo,
   useRef,
   useState,
 } from "react";
-import {
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
-  Calculator,
-  ExternalLink,
-  RefreshCw,
-} from "lucide-react";
+import { Calculator, ExternalLink, RefreshCw } from "lucide-react";
 import {
   ItemListSearch,
   itemListSearchEmptyMessage,
 } from "@/components/item-list-search";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
-  ListingStatusBadge,
-  listingRowMutedClass,
-} from "@/components/listing-status-badge";
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   ShowPausedListingsSwitch,
   countPausedListings,
@@ -41,14 +35,10 @@ import {
 } from "@/components/financial-cost-input-fields";
 import { PlanningInfoTrigger } from "@/components/planning-info-trigger";
 import {
-  computeFinancialMargin,
-  computeMarginAfterAds,
-  computeMinSalePriceForTargetMargin,
   formatFinancialMoney,
   formatFinancialPercent,
   marginBasisLabel,
   type MarginBasis,
-  type MinSalePriceResult,
 } from "@/lib/financial-margin";
 import { readApiError } from "@/lib/api-client-error";
 import { lastDaysYmdRange, todayYmdLocal } from "@/lib/date-range";
@@ -64,6 +54,16 @@ import {
   type WholesaleReductionSettings,
 } from "@/lib/wholesale-pricing";
 import { WholesaleReductionSettingsCard } from "@/components/lucratividade/wholesale-reduction-settings-card";
+import { FinancialEvaluationTable } from "@/components/lucratividade/financial-evaluation-table";
+import type {
+  SortDir,
+  SortKey,
+} from "@/components/lucratividade/financial-evaluation-table/types";
+import {
+  marginTone,
+  resolveMinPriceSuggestion,
+  type MinPricesApiResponse,
+} from "@/components/lucratividade/financial-evaluation-table/shared";
 import { cn } from "@/lib/utils";
 
 type EvaluationMode = "current" | "period";
@@ -82,9 +82,6 @@ type StreamEvent =
   | { type: "row"; row: FinancialEvaluationRow }
   | ({ type: "complete" } & Omit<ApiResponse, "items">)
   | { type: "error"; message: string };
-
-type SortKey = "product" | "price" | "margin" | "afterAds";
-type SortDir = "asc" | "desc";
 
 const TARGET_MARGIN_STORAGE_KEY = "lucratividade-target-margin";
 const MARGIN_BASIS_STORAGE_KEY = "lucratividade-margin-basis";
@@ -127,305 +124,6 @@ function readStoredMarginBasis(): MarginBasis {
   } catch {
     return "contribution";
   }
-}
-
-type CostOverrides = {
-  productCost: number | null;
-  extraCosts: number | null;
-  taxRatePercent: number | null;
-};
-
-type MinPriceSuggestion = MinSalePriceResult & {
-  refined?: boolean;
-};
-
-function costsMatchRow(
-  costs: CostOverrides,
-  row: FinancialEvaluationRow,
-): boolean {
-  return (
-    costs.productCost === row.productCost &&
-    costs.extraCosts === row.extraCosts &&
-    costs.taxRatePercent === row.taxRatePercent
-  );
-}
-
-function resolveMinPriceSuggestion(
-  row: FinancialEvaluationRow,
-  targetMarginPercent: number,
-  marginBasis: MarginBasis,
-  costs: CostOverrides,
-): MinPriceSuggestion {
-  const serverMatches =
-    costsMatchRow(costs, row) &&
-    row.minSalePriceForTarget &&
-    row.minSalePriceTargetPercent === targetMarginPercent &&
-    row.minSalePriceMarginBasis === marginBasis;
-
-  if (serverMatches && row.minSalePriceForTarget) {
-    return {
-      ...row.minSalePriceForTarget,
-      refined: row.minSalePriceRefined ?? false,
-    };
-  }
-
-  return {
-    ...buildMinPriceSuggestion(row, targetMarginPercent, marginBasis, costs),
-    refined: false,
-  };
-}
-
-function buildMinPriceSuggestion(
-  row: FinancialEvaluationRow,
-  targetMarginPercent: number,
-  marginBasis: MarginBasis,
-  costs: CostOverrides,
-): MinSalePriceResult {
-  if (
-    row.mlFeeAmount === null ||
-    row.shippingCost === null ||
-    !row.breakdown ||
-    row.salePrice <= 0
-  ) {
-    return {
-      minSalePrice: null,
-      currentMarginPercent: null,
-      alreadyMeetsTarget: false,
-      reason: "incomplete",
-    };
-  }
-
-  const breakdown = computeFinancialMargin({
-    salePrice: row.salePrice,
-    mlFeeAmount: row.mlFeeAmount,
-    mlFeeRebate: row.mlFeeRebate ?? 0,
-    shippingCost: row.shippingCost,
-    productCost: costs.productCost,
-    extraCosts: costs.extraCosts,
-    taxRatePercent: costs.taxRatePercent,
-    listingTypeLabel: row.listingTypeLabel,
-  });
-
-  const afterAds =
-    row.adsMetricsAvailable && marginBasis === "afterAds"
-      ? computeMarginAfterAds({
-          marginBreakdown: breakdown,
-          tacosPercent: row.tacosPercent,
-          adsCost: row.adsCost,
-          unitsSold: row.adsUnitsSold,
-        })
-      : null;
-
-  return computeMinSalePriceForTargetMargin({
-    salePrice: row.salePrice,
-    mlFeeAmount: row.mlFeeAmount,
-    mlFeeRebate: row.mlFeeRebate ?? 0,
-    shippingCost: row.shippingCost,
-    productCost: costs.productCost,
-    extraCosts: costs.extraCosts,
-    taxRatePercent: costs.taxRatePercent,
-    targetMarginPercent,
-    marginBasis,
-    tacosPercent: row.tacosPercent,
-    currentContributionMarginPercent: breakdown.marginPercent,
-    currentAfterAdsMarginPercent: afterAds?.marginAfterAdsPercent ?? null,
-  });
-}
-
-function marginTone(margin: number | null | undefined): string {
-  if (margin === null || margin === undefined) {
-    return "text-[var(--muted-foreground)]";
-  }
-  if (margin > 0) return "text-emerald-600";
-  if (margin < 0) return "text-rose-600";
-  return "text-[var(--muted-foreground)]";
-}
-
-const currentSectionClass = "bg-[var(--muted)]/10";
-
-const decisionSectionClass =
-  "border-l border-sky-200/90 bg-sky-50/50 px-2 dark:border-sky-800/80 dark:bg-sky-950/25";
-
-const tableCellPad = "px-3 py-3";
-const tableHeadPad = "px-3 py-2";
-
-function sectionGroupPill(variant: "current" | "decision") {
-  return cn(
-    "inline-block rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide",
-    variant === "current"
-      ? "bg-[var(--muted)]/40 text-[var(--muted-foreground)]"
-      : "bg-sky-100 text-sky-900 dark:bg-sky-900/50 dark:text-sky-100",
-  );
-}
-
-function StackedMarginCell({
-  percent,
-  value,
-  sublabel,
-  unavailable,
-}: {
-  percent: number | null;
-  value: number | null;
-  sublabel?: string | null;
-  unavailable?: boolean;
-}) {
-  if (unavailable) {
-    return <span className="text-[var(--muted-foreground)]">—</span>;
-  }
-
-  return (
-    <div className="text-right">
-      <div className={cn("font-semibold", marginTone(percent))}>
-        {formatFinancialPercent(percent)}
-      </div>
-      <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-        {formatFinancialMoney(value)}
-      </div>
-      {sublabel ? (
-        <div className="mt-0.5 text-[10px] text-[var(--muted-foreground)]">
-          {sublabel}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-type MinPricesApiResponse = {
-  targetMarginPercent: number;
-  marginBasis: MarginBasis;
-  patches: Array<{
-    mlItemId: string;
-    minSalePriceForTarget: MinSalePriceResult | null;
-    minSalePriceTargetPercent: number | null;
-    minSalePriceMarginBasis: MarginBasis | null;
-    minSalePriceRefined: boolean;
-  }>;
-};
-
-function MinPriceCellSkeleton() {
-  return (
-    <div
-      className="ml-auto h-4 w-16 animate-pulse rounded bg-sky-200/80 dark:bg-sky-800/50"
-      aria-hidden
-    />
-  );
-}
-
-function MinPriceTableCell({
-  row,
-  targetMarginPercent,
-  marginBasis,
-  refining,
-  showProportionalWhileStale,
-}: {
-  row: FinancialEvaluationRow;
-  targetMarginPercent: number;
-  marginBasis: MarginBasis;
-  refining?: boolean;
-  showProportionalWhileStale?: boolean;
-}) {
-  const suggestion = useMemo(
-    () =>
-      resolveMinPriceSuggestion(row, targetMarginPercent, marginBasis, {
-        productCost: row.productCost,
-        extraCosts: row.extraCosts,
-        taxRatePercent: row.taxRatePercent,
-      }),
-    [row, targetMarginPercent, marginBasis],
-  );
-
-  if (refining) {
-    return <MinPriceCellSkeleton />;
-  }
-
-  const isProportionalFallback =
-    showProportionalWhileStale && !suggestion.refined;
-
-  if (suggestion.reason === "missing_product_cost") {
-    return (
-      <span
-        className="text-xs text-[var(--muted-foreground)]"
-        title="Preencha o custo do produto"
-      >
-        Sem custo
-      </span>
-    );
-  }
-
-  if (
-    suggestion.reason === "incomplete" ||
-    suggestion.reason === "impossible"
-  ) {
-    return <span className="text-[var(--muted-foreground)]">—</span>;
-  }
-
-  const meetsOrBeatsTarget = suggestion.alreadyMeetsTarget;
-  const needsHigherPrice =
-    suggestion.minSalePrice !== null &&
-    suggestion.minSalePrice > row.salePrice + 0.005;
-
-  return (
-    <span
-      className={cn(
-        "font-medium tabular-nums",
-        meetsOrBeatsTarget && !needsHigherPrice
-          ? "text-emerald-600"
-          : "text-amber-700 dark:text-amber-500",
-      )}
-      title={`Mínimo para ${formatFinancialPercent(targetMarginPercent)} de ${marginBasisLabel(marginBasis)} · atual ${formatFinancialMoney(row.salePrice)} (${formatFinancialPercent(suggestion.currentMarginPercent)})${suggestion.refined ? " · taxa e frete ML no preço sugerido" : isProportionalFallback ? " · estimativa proporcional (clique em Atualizar)" : " · estimativa proporcional"}`}
-    >
-      {formatFinancialMoney(suggestion.minSalePrice)}
-      {isProportionalFallback ? (
-        <span className="ml-1 text-[10px] font-normal text-[var(--muted-foreground)]">
-          ~
-        </span>
-      ) : null}
-    </span>
-  );
-}
-
-function SortableTh({
-  label,
-  sortKey,
-  activeKey,
-  activeDir,
-  onSort,
-  className,
-  title,
-  align = "left",
-}: {
-  label: string;
-  sortKey: SortKey;
-  activeKey: SortKey;
-  activeDir: SortDir;
-  onSort: (key: SortKey) => void;
-  className?: string;
-  title?: string;
-  align?: "left" | "right";
-}) {
-  const active = activeKey === sortKey;
-  const Icon = !active
-    ? ArrowUpDown
-    : activeDir === "asc"
-      ? ArrowUp
-      : ArrowDown;
-
-  return (
-    <th className={cn(className, "cursor-pointer")} title={title}>
-      <button
-        type="button"
-        className={cn(
-          "inline-flex cursor-pointer items-center gap-1 font-medium hover:text-[var(--foreground)]",
-          align === "right" && "ml-auto flex-row-reverse",
-          active && "text-[var(--foreground)]",
-        )}
-        onClick={() => onSort(sortKey)}
-      >
-        {label}
-        <Icon className="size-3.5 shrink-0 opacity-70" aria-hidden />
-      </button>
-    </th>
-  );
 }
 
 export function FinancialEvaluationClient() {
@@ -1199,215 +897,19 @@ export function FinancialEvaluationClient() {
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[880px] table-fixed border-collapse text-sm">
-                  <colgroup>
-                    <col className="w-[34%]" />
-                    <col className="w-[7%]" />
-                    <col className="w-[9%]" />
-                    <col className="w-[11%]" />
-                    <col className="w-[11%]" />
-                    <col className="w-[9%]" />
-                  </colgroup>
-                  <thead>
-                    <tr className="text-left text-[var(--muted-foreground)]">
-                      <th colSpan={3} className={cn(tableHeadPad, "pt-2")} />
-                      <th
-                        colSpan={2}
-                        className={cn(
-                          currentSectionClass,
-                          tableHeadPad,
-                          "pt-2 pb-1 text-center",
-                        )}
-                      >
-                        <span className={sectionGroupPill("current")}>
-                          {isPeriodMode ? "No período" : "Situação atual"}
-                        </span>
-                      </th>
-                      <th
-                        colSpan={1}
-                        className={cn(
-                          decisionSectionClass,
-                          tableHeadPad,
-                          "pt-2 pb-1 text-center",
-                        )}
-                      >
-                        <span className={sectionGroupPill("decision")}>
-                          Decidir
-                        </span>
-                      </th>
-                    </tr>
-                    <tr className="border-b border-[var(--border)] text-left text-[var(--muted-foreground)]">
-                      <SortableTh
-                        label="Produto"
-                        sortKey="product"
-                        activeKey={sortKey}
-                        activeDir={sortDir}
-                        onSort={toggleSort}
-                        className={cn(tableHeadPad)}
-                      />
-                      <th className={cn(tableHeadPad, "font-medium")}>Tipo</th>
-                      <SortableTh
-                        label="Preço"
-                        sortKey="price"
-                        activeKey={sortKey}
-                        activeDir={sortDir}
-                        onSort={toggleSort}
-                        className={cn(tableHeadPad, "text-right")}
-                        align="right"
-                        title={
-                          isPeriodMode
-                            ? "Preço médio ponderado das vendas no período"
-                            : undefined
-                        }
-                      />
-                      <SortableTh
-                        label="Margem"
-                        sortKey="margin"
-                        activeKey={sortKey}
-                        activeDir={sortDir}
-                        onSort={toggleSort}
-                        className={cn(
-                          currentSectionClass,
-                          tableHeadPad,
-                          "text-right",
-                        )}
-                        align="right"
-                        title="Margem de contribuição (% em destaque, R$ abaixo)"
-                      />
-                      <SortableTh
-                        label="Pós ADS"
-                        sortKey="afterAds"
-                        activeKey={sortKey}
-                        activeDir={sortDir}
-                        onSort={toggleSort}
-                        className={cn(
-                          currentSectionClass,
-                          tableHeadPad,
-                          "text-right",
-                        )}
-                        align="right"
-                        title={`Margem de contribuição menos TACOS (${tacosPeriodLabel})`}
-                      />
-                      <th
-                        className={cn(
-                          decisionSectionClass,
-                          tableHeadPad,
-                          "font-medium text-right",
-                        )}
-                        title={`Preço mínimo para ${formatFinancialPercent(targetMarginPercent)} (${marginBasisLabel(marginBasis)})`}
-                      >
-                        P/ meta
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedItems.map((row) => {
-                      const marginValue = row.breakdown?.marginValue ?? null;
-                      const marginPercent =
-                        row.breakdown?.marginPercent ?? null;
-                      const afterAdsPercent = row.marginAfterAdsPercent;
-                      const afterAdsValue = row.marginAfterAdsValue;
-                      const tacosSublabel =
-                        row.adsMetricsAvailable &&
-                        row.tacosPercent != null &&
-                        row.tacosPercent > 0
-                          ? `TACOS ${formatFinancialPercent(row.tacosPercent)}`
-                          : null;
-                      return (
-                        <tr
-                          key={row.mlItemId}
-                          className={cn(
-                            "cursor-pointer border-b border-[var(--border)] transition-colors hover:bg-[var(--muted)]/30",
-                            listingRowMutedClass(row.status, 0, 0),
-                          )}
-                          onClick={() => setSelectedId(row.mlItemId)}
-                        >
-                          <td className={tableCellPad}>
-                            <div className="flex items-center gap-3">
-                              {row.imageUrl ? (
-                                <Image
-                                  src={row.imageUrl}
-                                  alt={row.title}
-                                  width={40}
-                                  height={40}
-                                  className="size-10 rounded-md object-cover"
-                                />
-                              ) : (
-                                <div className="size-10 rounded-md bg-[var(--muted)]" />
-                              )}
-                              <div className="min-w-0">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <p className="truncate font-medium">
-                                    {row.sku ?? row.title}
-                                  </p>
-                                  <ListingStatusBadge
-                                    status={row.status}
-                                    mlStock={0}
-                                    warehouseStock={0}
-                                  />
-                                  {row.taxRatePercent === null &&
-                                  row.productCost !== null ? (
-                                    <Badge
-                                      variant="warning"
-                                      title="Imposto não considerado na margem — sem alíquota no relatório tributário. Recalcule em Relatório tributário."
-                                    >
-                                      Sem alíquota
-                                    </Badge>
-                                  ) : null}
-                                </div>
-                                <p className="truncate text-xs text-[var(--muted-foreground)]">
-                                  {row.mlItemId}
-                                </p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className={tableCellPad}>
-                            {row.listingTypeLabel ?? "—"}
-                          </td>
-                          <td className={cn(tableCellPad, "text-right")}>
-                            <div>{formatFinancialMoney(row.salePrice)}</div>
-                            {row.hasPromotion && row.regularPrice != null ? (
-                              <div className="text-xs text-[var(--muted-foreground)] line-through">
-                                {formatFinancialMoney(row.regularPrice)}
-                              </div>
-                            ) : null}
-                          </td>
-                          <td className={cn(currentSectionClass, tableCellPad)}>
-                            <StackedMarginCell
-                              percent={marginPercent}
-                              value={marginValue}
-                            />
-                          </td>
-                          <td className={cn(currentSectionClass, tableCellPad)}>
-                            <StackedMarginCell
-                              percent={afterAdsPercent}
-                              value={afterAdsValue}
-                              sublabel={tacosSublabel}
-                              unavailable={!row.adsMetricsAvailable}
-                            />
-                          </td>
-                          <td
-                            className={cn(
-                              decisionSectionClass,
-                              tableCellPad,
-                              "text-right",
-                            )}
-                          >
-                            <MinPriceTableCell
-                              row={row}
-                              targetMarginPercent={targetMarginPercent}
-                              marginBasis={marginBasis}
-                              refining={refiningMinPrices && !isPeriodMode}
-                              showProportionalWhileStale={minPriceStale}
-                            />
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <FinancialEvaluationTable
+                sortedItems={sortedItems}
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={toggleSort}
+                isPeriodMode={isPeriodMode}
+                targetMarginPercent={targetMarginPercent}
+                marginBasis={marginBasis}
+                refiningMinPrices={refiningMinPrices}
+                minPriceStale={minPriceStale}
+                tacosPeriodLabel={tacosPeriodLabel}
+                onSelect={setSelectedId}
+              />
             </>
           ) : null}
         </CardContent>
@@ -1806,18 +1308,18 @@ function WholesalePricesSection({
         </p>
       </div>
 
-      {pendingLevels ? (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-          <div
-            className="fixed inset-0 bg-black/50"
-            aria-hidden
-            onClick={() => !applying && setPendingLevels(null)}
-          />
-          <div className="relative z-10 w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-lg">
-            <h3 className="text-base font-semibold text-[var(--foreground)]">
-              Aplicar no Mercado Livre
-            </h3>
-            <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+      <Sheet
+        open={pendingLevels !== null}
+        onOpenChange={(next) => {
+          if (!next && !applying) setPendingLevels(null);
+        }}
+      >
+        <SheetContent className="sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>Aplicar no Mercado Livre</SheetTitle>
+          </SheetHeader>
+          <SheetBody>
+            <p className="text-sm text-[var(--muted-foreground)]">
               Confirme os preços líquidos por quantidade que serão enviados para{" "}
               <span className="font-medium text-[var(--foreground)]">
                 {row.sku ? ` · SKU ${row.sku}` : row.mlItemId}
@@ -1850,7 +1352,7 @@ function WholesalePricesSection({
                 O preço sugerido do nível 1 será enviado na âncora ML (1 un.).
               </p>
             ) : null}
-            {pendingLevels.length === 3 ? (
+            {pendingLevels?.length === 3 ? (
               <p className="mt-3 text-xs text-[var(--muted-foreground)]">
                 Serão enviados{" "}
                 <span className="font-medium text-[var(--foreground)]">
@@ -1859,26 +1361,26 @@ function WholesalePricesSection({
                 : âncora (nível 1) + 2 faixas de desconto.
               </p>
             ) : null}
-            <div className="mt-4 flex flex-wrap justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={applying}
-                onClick={() => setPendingLevels(null)}
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="button"
-                disabled={applying}
-                onClick={() => void applyToMl(pendingLevels)}
-              >
-                {applying ? "Aplicando…" : "Confirmar"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+          </SheetBody>
+          <SheetFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={applying}
+              onClick={() => setPendingLevels(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={applying || !pendingLevels}
+              onClick={() => pendingLevels && void applyToMl(pendingLevels)}
+            >
+              {applying ? "Aplicando…" : "Confirmar"}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </details>
   );
 }
@@ -1900,46 +1402,20 @@ function FinancialDetailModal({
   wholesaleReductions: WholesaleReductionSettings;
   onClose: () => void;
 }) {
-  const labelId = useId();
-
-  const handleBackdrop = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.target === e.currentTarget) onClose();
-    },
-    [onClose],
-  );
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="presentation"
-      onClick={handleBackdrop}
+    <Sheet
+      open
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
     >
-      <div className="fixed inset-0 bg-black/50" aria-hidden />
-      <div
-        className="relative z-10 flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-lg"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={labelId}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="overflow-y-auto p-6">
-          <div className="flex flex-wrap items-start justify-between gap-3">
+      <SheetContent className="sm:max-w-2xl">
+        <SheetHeader>
+          <div className="flex flex-wrap items-start justify-between gap-3 pr-6">
             <div>
-              <h2
-                id={labelId}
-                className="text-lg font-semibold text-[var(--primary)]"
-              >
+              <SheetTitle className="text-lg text-[var(--primary)]">
                 {row.sku ?? row.title}
-              </h2>
+              </SheetTitle>
               <p className="mt-1 text-sm text-[var(--muted-foreground)]">
                 {row.mlItemId} · {row.listingTypeLabel ?? "Tipo desconhecido"}
                 {row.hasPromotion ? " · em promoção" : ""}
@@ -1963,7 +1439,8 @@ function FinancialDetailModal({
               <ExternalLink className="size-3.5" aria-hidden />
             </Link>
           </div>
-
+        </SheetHeader>
+        <SheetBody>
           {row.errors.length > 0 ? (
             <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
               {row.errors.join(" ")}
@@ -2127,14 +1604,13 @@ function FinancialDetailModal({
               </div>
             </div>
           </div>
-
-          <div className="mt-6 flex flex-wrap justify-end gap-2">
-            <Button type="button" variant="outline" onClick={onClose}>
-              Fechar
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
+        </SheetBody>
+        <SheetFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Fechar
+          </Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }

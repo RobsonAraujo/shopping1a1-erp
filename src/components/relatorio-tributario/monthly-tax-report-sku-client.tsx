@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { FormInput } from "@/components/ui/form-input";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { VirtualizedTaxReportTransactionTable } from "@/components/relatorio-tributario/tax-report-transaction-table";
 import { ItemListSearch } from "@/components/item-list-search";
@@ -238,12 +239,13 @@ export function MonthlyTaxReportSkuClient({
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-sm font-semibold">Vendas do SKU</h2>
             <div className="flex flex-wrap items-center gap-2">
-              <input
-                className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
+              <FormInput
+                aria-label="Filtrar UF"
                 placeholder="Filtrar UF"
                 value={filterUf}
                 onChange={(e) => setFilterUf(e.target.value)}
                 maxLength={2}
+                className="w-32"
               />
               <Button
                 type="button"

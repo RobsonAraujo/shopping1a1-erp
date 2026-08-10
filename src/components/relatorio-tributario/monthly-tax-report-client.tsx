@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { ChevronRight, RefreshCw, Scale, Wallet } from "lucide-react";
+import { RefreshCw, Scale, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FormSelect } from "@/components/ui/form-select";
@@ -17,18 +16,13 @@ import {
   type TaxReportProgressState,
 } from "@/components/relatorio-tributario/tax-report-generation-overlay";
 import { TaxReportHeaderWithTip } from "@/components/relatorio-tributario/tax-report-transaction-table";
-import {
-  ItemListSearch,
-  itemListSearchEmptyMessage,
-} from "@/components/item-list-search";
+import { TaxReportSkuTable } from "@/components/relatorio-tributario/tax-report-sku-table";
+import { ItemListSearch } from "@/components/item-list-search";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { readApiError } from "@/lib/api-client-error";
 import { useSSEStream } from "@/hooks/use-sse-stream";
 import { lastDaysYmdRange, todayYmdLocal } from "@/lib/date-range";
-import {
-  formatFinancialMoney,
-  formatFinancialPercent,
-} from "@/lib/financial-margin";
+import { formatFinancialMoney } from "@/lib/financial-margin";
 import { filterByItemListSearch } from "@/lib/item-list-search";
 import { getZonedYearMonth } from "@/lib/mercadolibre/revenue-periods";
 import {
@@ -36,11 +30,7 @@ import {
   taxReportSkuPath,
   taxReportSkuPeriodPath,
 } from "@/lib/tax-report/routes";
-import {
-  skuImpostoOperacionalMedio,
-  skuImpostoOperacionalPercentual,
-  margemOperacionalConsolidado,
-} from "@/lib/tax-report/imposto-operacional";
+import { margemOperacionalConsolidado } from "@/lib/tax-report/imposto-operacional";
 import type { TaxReportPayload } from "@/lib/tax-report/types";
 import { cn } from "@/lib/utils";
 
@@ -558,91 +548,12 @@ export function MonthlyTaxReportClient() {
                 entityPlural="SKUs"
                 className="mb-3"
               />
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[52rem] text-sm">
-                  <thead>
-                    <tr className="border-b border-[var(--border)] text-left text-xs text-[var(--muted-foreground)]">
-                      <th className="py-2 pr-3">SKU</th>
-                      <th className="py-2 pr-3 text-right">Vendas</th>
-                      <th className="py-2 pr-3 text-right">Unidades</th>
-                      <th className="py-2 pr-3 text-right">Receita</th>
-                      <th className="py-2 pr-3 text-right">
-                        <TaxReportHeaderWithTip
-                          label="Imp. oper. médio"
-                          tip="Média de PIS/COFINS + ICMS por venda."
-                        />
-                      </th>
-                      <th className="py-2 pr-3 text-right">
-                        <TaxReportHeaderWithTip
-                          label="% oper."
-                          tip="Imposto operacional total do SKU sobre a receita."
-                        />
-                      </th>
-                      <th className="py-2 w-8" aria-hidden />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredSkuRows.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={7}
-                          className="py-8 text-center text-sm text-[var(--muted-foreground)]"
-                        >
-                          {itemListSearchEmptyMessage(searchQuery, "SKU")}
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredSkuRows.map((row) => (
-                        <tr
-                          key={row.sku}
-                          className="border-b border-[var(--border)] hover:bg-[var(--muted)]/20"
-                        >
-                          <td className="py-2 pr-3 font-medium">
-                            <Link
-                              href={skuPathFor(row.sku)}
-                              className="inline-flex flex-col gap-0.5 text-[var(--primary)] hover:underline"
-                            >
-                              <span>{row.sku}</span>
-                              {(row.skuAliases?.length ?? 0) > 0 ? (
-                                <span className="text-[10px] font-normal text-[var(--muted-foreground)]">
-                                  SKU Associados: {row.skuAliases?.join(", ")}
-                                </span>
-                              ) : null}
-                            </Link>
-                          </td>
-                          <td className="py-2 pr-3 text-right tabular-nums">
-                            {row.quantidadeVendas}
-                          </td>
-                          <td className="py-2 pr-3 text-right tabular-nums">
-                            {row.unidadesVendidas}
-                          </td>
-                          <td className="py-2 pr-3 text-right tabular-nums">
-                            {formatFinancialMoney(row.receitaTotal)}
-                          </td>
-                          <td className="py-2 pr-3 text-right tabular-nums">
-                            {formatFinancialMoney(
-                              skuImpostoOperacionalMedio(row),
-                            )}
-                          </td>
-                          <td className="py-2 pr-3 text-right tabular-nums">
-                            {formatFinancialPercent(
-                              skuImpostoOperacionalPercentual(row),
-                            )}
-                          </td>
-                          <td className="py-2 text-[var(--muted-foreground)]">
-                            <Link
-                              href={skuPathFor(row.sku)}
-                              aria-label={`Ver vendas de ${row.sku}`}
-                            >
-                              <ChevronRight className="size-4" />
-                            </Link>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              <TaxReportSkuTable
+                rows={filteredSkuRows}
+                searchQuery={searchQuery}
+                totalCount={report.porSku.length}
+                skuPathFor={skuPathFor}
+              />
             </Card>
           </>
         ) : null}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Download, Pencil, Plus, Trash2, Truck } from "lucide-react";
 import { FullShipmentImportOverlay } from "@/components/envios-full/full-shipment-import-overlay";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,15 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DatePicker } from "@/components/ui/date-picker";
 import { FormSelect } from "@/components/ui/form-select";
+import {
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 import { readApiError } from "@/lib/api-client-error";
 import {
   computeCostPerUnit,
@@ -712,51 +721,25 @@ function ShipmentModal({
   onChange: (form: ShipmentFormState) => void;
   onSave: () => void;
 }) {
-  const labelId = useId();
-  const descId = useId();
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="presentation"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+    <Sheet
+      open={true}
+      onOpenChange={(next) => {
+        if (!next) onClose();
       }}
     >
-      <div className="fixed inset-0 bg-black/50" aria-hidden />
-      <div
-        className={cn(
-          "relative z-10 w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-lg",
-        )}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={labelId}
-        aria-describedby={descId}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2
-          id={labelId}
-          className="text-lg font-semibold text-[var(--primary)]"
-        >
-          {editing ? "Editar envio Full" : "Registrar envio Full"}
-        </h2>
-        <p
-          id={descId}
-          className="mt-2 text-sm leading-relaxed text-[var(--muted-foreground)]"
-        >
-          Informe quanto pagou na coleta e quantas unidades foram enviadas no
-          total para calcular o custo por unidade.
-        </p>
-
-        <div className="mt-4 space-y-4">
+      <SheetContent className="sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>
+            {editing ? "Editar envio Full" : "Registrar envio Full"}
+          </SheetTitle>
+          <SheetDescription>
+            Informe quanto pagou na coleta e quantas unidades foram enviadas
+            no total para calcular o custo por unidade.
+          </SheetDescription>
+        </SheetHeader>
+        <SheetBody>
+        <div className="space-y-4">
           <div>
             <DatePicker
               id="shipment-date"
@@ -837,8 +820,8 @@ function ShipmentModal({
             {error}
           </p>
         ) : null}
-
-        <div className="mt-6 flex flex-wrap justify-end gap-2">
+        </SheetBody>
+        <SheetFooter>
           <Button
             type="button"
             variant="outline"
@@ -850,8 +833,8 @@ function ShipmentModal({
           <Button type="button" onClick={onSave} disabled={saving}>
             {saving ? "Salvando…" : "Salvar"}
           </Button>
-        </div>
-      </div>
-    </div>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }

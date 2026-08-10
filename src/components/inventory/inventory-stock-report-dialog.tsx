@@ -17,7 +17,6 @@ import {
   Loader2,
   PackagePlus,
   SlidersHorizontal,
-  X,
 } from "lucide-react";
 import type { InventoryRow } from "@/components/inventory/inventory-stock-table";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +25,15 @@ import { Card } from "@/components/ui/card";
 import { DatePicker } from "@/components/ui/date-picker";
 import { FormInput } from "@/components/ui/form-input";
 import { FormSelect } from "@/components/ui/form-select";
+import {
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
@@ -595,21 +603,6 @@ export function InventoryStockReportDialog({
     }));
   }, [snapshotDate, subtitleEdited]);
 
-  const handleBackdrop = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.target === e.currentTarget) onClose();
-    },
-    [onClose],
-  );
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   function updateManual(
     mlItemId: string,
     field: keyof ManualListingAdjustments,
@@ -688,44 +681,23 @@ export function InventoryStockReportDialog({
     : [];
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="presentation"
-      onClick={handleBackdrop}
+    <Sheet
+      open={true}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
     >
-      <div className="fixed inset-0 bg-black/50" aria-hidden />
-      <div
-        className="relative z-10 flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-lg"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] px-6 py-4">
-          <div>
-            <h2
-              id={titleId}
-              className="text-lg font-semibold text-[var(--primary)]"
-            >
-              Saldo em estoque
-            </h2>
-            <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-              Estime o saldo em uma data passada: estoque de hoje + vendas ML
-              depois da data (ou snapshot de catálogo). Nada é salvo no sistema.
-            </p>
-          </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={onClose}
-            aria-label="Fechar"
-          >
-            <X className="size-4" />
-          </Button>
-        </div>
+      <SheetContent className="sm:max-w-6xl">
+        <SheetHeader>
+          <SheetTitle>Saldo em estoque</SheetTitle>
+          <SheetDescription>
+            Estime o saldo em uma data passada: estoque de hoje + vendas ML
+            depois da data (ou snapshot de catálogo). Nada é salvo no
+            sistema.
+          </SheetDescription>
+        </SheetHeader>
 
-        <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
+        <SheetBody className="space-y-6">
           <div className="flex items-start gap-2.5 rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3 text-xs leading-relaxed text-[var(--muted-foreground)]">
             <Info className="mt-0.5 size-4 shrink-0 text-[var(--primary)]" aria-hidden />
             <p>
@@ -1284,9 +1256,9 @@ export function InventoryStockReportDialog({
               </table>
             </div>
           </section>
-        </div>
+        </SheetBody>
 
-        <div className="flex flex-wrap justify-end gap-2 border-t border-[var(--border)] px-6 py-4">
+        <SheetFooter>
           <Button type="button" variant="outline" onClick={onClose}>
             Cancelar
           </Button>
@@ -1311,9 +1283,9 @@ export function InventoryStockReportDialog({
             <FileDown className="size-4" />
             Baixar PDF
           </Button>
-        </div>
-      </div>
-    </div>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }
 

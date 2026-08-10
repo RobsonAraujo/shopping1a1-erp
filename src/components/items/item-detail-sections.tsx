@@ -507,13 +507,17 @@ export function ItemDetailVariationsSection({
           {variations.map((v) => (
             <li
               key={v.id}
-              className="flex items-center justify-between gap-4 px-4 py-3 text-sm first:rounded-t-lg last:rounded-b-lg"
+              className="flex flex-col gap-1 px-4 py-3 text-sm first:rounded-t-lg last:rounded-b-lg sm:flex-row sm:items-center sm:justify-between sm:gap-4"
             >
-              <span className="text-[var(--foreground)]">{v.label}</span>
-              <span className="font-mono text-xs text-[var(--muted-foreground)]">
-                {v.id}
+              <span className="min-w-0 break-words text-[var(--foreground)]">
+                {v.label}
               </span>
-              <span className="tabular-nums font-semibold">{v.qty}</span>
+              <span className="flex items-center justify-between gap-4 sm:contents">
+                <span className="font-mono text-xs text-[var(--muted-foreground)]">
+                  {v.id}
+                </span>
+                <span className="tabular-nums font-semibold">{v.qty}</span>
+              </span>
             </li>
           ))}
         </ul>

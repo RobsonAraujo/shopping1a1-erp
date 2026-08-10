@@ -260,7 +260,9 @@ function MemoriaComponentRow({
   const isLoss = invertColor ? delta < 0 : delta > 0;
   return (
     <tr className="border-t border-[var(--border)]">
-      <td className="px-3 py-2 text-xs text-[var(--muted-foreground)]">{label}</td>
+      <td className="sticky left-0 z-10 bg-[var(--background)] px-3 py-2 text-xs text-[var(--muted-foreground)]">
+        {label}
+      </td>
       <td className="px-3 py-2 text-right text-xs tabular-nums">
         {formatFinancialMoney(component.atual)}
       </td>
@@ -329,7 +331,9 @@ function MemoriaCalculoPanel({
             <table className="w-full min-w-[36rem] text-sm">
               <thead>
                 <tr className="bg-[var(--muted)]/30 text-left text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
-                  <th className="px-3 py-2">UF</th>
+                  <th className="sticky left-0 z-10 bg-[var(--muted)]/30 px-3 py-2">
+                    UF
+                  </th>
                   <th className="px-3 py-2">Operação</th>
                   <th className="px-3 py-2 text-right">Alíq. interest.</th>
                   <th className="px-3 py-2 text-right">Alíq. interna dest.</th>
@@ -340,7 +344,7 @@ function MemoriaCalculoPanel({
               <tbody>
                 {skuUfRows.map((r) => (
                   <tr key={r.uf} className="border-t border-[var(--border)]">
-                    <td className="px-3 py-2 text-xs font-medium">
+                    <td className="sticky left-0 z-10 bg-[var(--background)] px-3 py-2 text-xs font-medium">
                       {r.uf}
                       {r.contribuinteMisto ? (
                         <span
@@ -377,7 +381,9 @@ function MemoriaCalculoPanel({
           <table className="w-full min-w-[32rem] text-sm">
             <thead>
               <tr className="bg-[var(--muted)]/30 text-left text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
-                <th className="px-3 py-2">Componente</th>
+                <th className="sticky left-0 z-10 bg-[var(--muted)]/30 px-3 py-2">
+                  Componente
+                </th>
                 <th className="px-3 py-2 text-right">Atual</th>
                 <th className="px-3 py-2 text-right">Cenário</th>
                 <th className="px-3 py-2 text-right">Diferença</th>
@@ -407,7 +413,9 @@ function MemoriaCalculoPanel({
                 component={row.pisCofinsLiquido}
               />
               <tr className="border-t border-[var(--border)] bg-[var(--primary)]/5 font-semibold">
-                <td className="px-3 py-2 text-xs">Imposto operacional total</td>
+                <td className="sticky left-0 z-10 bg-[var(--primary)]/5 px-3 py-2 text-xs">
+                  Imposto operacional total
+                </td>
                 <td className="px-3 py-2 text-right text-xs tabular-nums">
                   {formatFinancialMoney(row.atual)}
                 </td>
@@ -420,7 +428,7 @@ function MemoriaCalculoPanel({
                 </td>
               </tr>
               <tr className="border-t border-[var(--border)]">
-                <td className="px-3 py-2 text-xs text-[var(--muted-foreground)]">
+                <td className="sticky left-0 z-10 bg-[var(--background)] px-3 py-2 text-xs text-[var(--muted-foreground)]">
                   % médio sobre a receita
                 </td>
                 <td className="px-3 py-2 text-right text-xs tabular-nums">
@@ -500,11 +508,16 @@ function ResultTable({
           />
         </div>
       ) : null}
+      <p className="px-4 pt-2 text-[11px] text-[var(--muted-foreground)] sm:hidden">
+        → Arraste para o lado para ver mais colunas
+      </p>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[36rem] text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] bg-[var(--muted)]/30 text-left text-xs text-[var(--muted-foreground)]">
-              <th className="px-4 py-2.5">{keyLabel}</th>
+              <th className="sticky left-0 z-10 bg-[var(--muted)]/30 px-4 py-2.5">
+                {keyLabel}
+              </th>
               <th className="px-4 py-2.5 text-right">Imposto atual</th>
               <th className="px-4 py-2.5 text-right">
                 % médio atual
@@ -546,7 +559,7 @@ function ResultTable({
                     )}
                     onClick={expandable ? () => toggleExpand(row.key) : undefined}
                   >
-                    <td className="px-4 py-2.5 font-medium">
+                    <td className="sticky left-0 z-10 bg-[var(--background)] px-4 py-2.5 font-medium">
                       <span className="inline-flex items-center gap-1">
                         {expandable ? (
                           isExpanded ? (
@@ -1090,7 +1103,7 @@ export function BranchSimulationClient() {
               placeholder="Nome do cenário para salvar"
               value={scenarioName}
               onChange={(e) => setScenarioName(e.target.value)}
-              className="h-9 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm shadow-sm"
+              className="h-11 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm shadow-sm sm:h-10 sm:flex-none"
             />
             <Button
               type="button"
@@ -1206,11 +1219,17 @@ export function BranchSimulationClient() {
         </Button>
 
         {comparisonResult && comparisonResult.length > 0 ? (
-          <div className="mt-4 overflow-x-auto rounded-lg border border-[var(--border)]">
+          <>
+            <p className="mb-1.5 mt-4 text-[11px] text-[var(--muted-foreground)] sm:hidden">
+              → Arraste para o lado para ver mais colunas
+            </p>
+            <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
             <table className="w-full min-w-[32rem] text-sm">
               <thead>
                 <tr className="bg-[var(--muted)]/30 text-left text-xs text-[var(--muted-foreground)]">
-                  <th className="px-3 py-2">UF</th>
+                  <th className="sticky left-0 z-10 bg-[var(--muted)]/30 px-3 py-2">
+                    UF
+                  </th>
                   <th className="px-3 py-2 text-right">Imposto atual</th>
                   <th className="px-3 py-2 text-right">Imposto cenário</th>
                   <th className="px-3 py-2 text-right">Economia</th>
@@ -1220,7 +1239,7 @@ export function BranchSimulationClient() {
               <tbody>
                 {comparisonResult.map((entry, index) => (
                   <tr key={entry.uf} className="border-t border-[var(--border)]">
-                    <td className="px-3 py-2 font-medium">
+                    <td className="sticky left-0 z-10 bg-[var(--background)] px-3 py-2 font-medium">
                       {entry.uf}
                       {index === 0 ? (
                         <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
@@ -1264,7 +1283,8 @@ export function BranchSimulationClient() {
                 ))}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         ) : null}
       </Card>
 

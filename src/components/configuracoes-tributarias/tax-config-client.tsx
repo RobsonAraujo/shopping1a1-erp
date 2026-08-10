@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Building2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { FormInput } from "@/components/ui/form-input";
 import { FormSelect } from "@/components/ui/form-select";
 import { Switch } from "@/components/ui/switch";
 import { readApiError } from "@/lib/api-client-error";
@@ -11,6 +12,7 @@ import { BRAZILIAN_UF_OPTIONS } from "@/lib/tax-report/brazilian-ufs";
 import type { IcmsRateRow, TaxCompanyConfig } from "@/lib/tax-report/types";
 import type { CbsIbsVigenciaRow } from "@/lib/tax-report/calculators/cbs-ibs";
 import { cn } from "@/lib/utils";
+import { IcmsRatesTable } from "./icms-rates-table";
 
 type TaxConfigResponse = {
   company: TaxCompanyConfig;
@@ -209,36 +211,28 @@ export function TaxConfigClient() {
                   options={BRAZILIAN_UF_OPTIONS}
                   triggerClassName="w-full"
                 />
-                <label className="text-sm">
-                  <span className="mb-1.5 block text-xs font-medium text-[var(--muted-foreground)]">
-                    PIS %
-                  </span>
-                  <input
-                    className="flex h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm shadow-sm"
-                    value={draft.pisRate}
-                    onChange={(e) =>
-                      setDraft((current) => ({
-                        ...current,
-                        pisRate: e.target.value,
-                      }))
-                    }
-                  />
-                </label>
-                <label className="text-sm">
-                  <span className="mb-1.5 block text-xs font-medium text-[var(--muted-foreground)]">
-                    COFINS %
-                  </span>
-                  <input
-                    className="flex h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm shadow-sm"
-                    value={draft.cofinsRate}
-                    onChange={(e) =>
-                      setDraft((current) => ({
-                        ...current,
-                        cofinsRate: e.target.value,
-                      }))
-                    }
-                  />
-                </label>
+                <FormInput
+                  id="tax-config-pis-rate"
+                  label="PIS %"
+                  value={draft.pisRate}
+                  onChange={(e) =>
+                    setDraft((current) => ({
+                      ...current,
+                      pisRate: e.target.value,
+                    }))
+                  }
+                />
+                <FormInput
+                  id="tax-config-cofins-rate"
+                  label="COFINS %"
+                  value={draft.cofinsRate}
+                  onChange={(e) =>
+                    setDraft((current) => ({
+                      ...current,
+                      cofinsRate: e.target.value,
+                    }))
+                  }
+                />
                 <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2.5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -332,27 +326,12 @@ export function TaxConfigClient() {
           Valores iniciais devem ser validados com CONFAZ/RICMS. Alíquota total =
           base + FCP.
         </p>
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[32rem] text-sm">
-            <thead>
-              <tr className="border-b border-[var(--border)] text-left text-xs text-[var(--muted-foreground)]">
-                <th className="py-2 pr-3">UF</th>
-                <th className="py-2 pr-3">Base %</th>
-                <th className="py-2 pr-3">FCP %</th>
-                <th className="py-2">Ação</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data?.icmsRates.map((row) => (
-                <IcmsRateRowEditor
-                  key={row.uf}
-                  row={row}
-                  saving={saving}
-                  onSave={saveIcmsRow}
-                />
-              ))}
-            </tbody>
-          </table>
+        <div className="mt-4">
+          <IcmsRatesTable
+            rows={data?.icmsRates ?? []}
+            saving={saving}
+            onSave={saveIcmsRow}
+          />
         </div>
       </Card>
 
@@ -373,103 +352,5 @@ export function TaxConfigClient() {
         </ul>
       </Card>
     </div>
-  );
-}
-
-function IcmsRateRowEditor({
-  row,
-  saving,
-  onSave,
-}: {
-  row: IcmsRateRow;
-  saving: boolean;
-  onSave: (row: IcmsRateRow) => Promise<void>;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [base, setBase] = useState(String(row.aliquotaBase * 100));
-  const [fcp, setFcp] = useState(String(row.fcp * 100));
-
-  function startEditing() {
-    setBase(String(row.aliquotaBase * 100));
-    setFcp(String(row.fcp * 100));
-    setEditing(true);
-  }
-
-  if (!editing) {
-    return (
-      <tr className="border-b border-[var(--border)]">
-        <td className="py-2 pr-3 font-medium">{row.uf}</td>
-        <td className="py-2 pr-3 tabular-nums">
-          {(row.aliquotaBase * 100).toFixed(2)}%
-        </td>
-        <td className="py-2 pr-3 tabular-nums">
-          {(row.fcp * 100).toFixed(2)}%
-        </td>
-        <td className="py-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="gap-1.5"
-            disabled={saving}
-            onClick={startEditing}
-          >
-            <Pencil className="size-3.5" aria-hidden />
-            Editar
-          </Button>
-        </td>
-      </tr>
-    );
-  }
-
-  return (
-    <tr className="border-b border-[var(--border)] bg-[var(--muted)]/10">
-      <td className="py-2 pr-3 font-medium">{row.uf}</td>
-      <td className="py-2 pr-3">
-        <input
-          className="w-20 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-sm"
-          value={base}
-          onChange={(e) => setBase(e.target.value)}
-        />
-      </td>
-      <td className="py-2 pr-3">
-        <input
-          className="w-20 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-sm"
-          value={fcp}
-          onChange={(e) => setFcp(e.target.value)}
-        />
-      </td>
-      <td className="py-2">
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            size="sm"
-            disabled={saving}
-            onClick={() =>
-              void onSave({
-                uf: row.uf,
-                aliquotaBase: Number(base.replace(",", ".")) / 100,
-                fcp: Number(fcp.replace(",", ".")) / 100,
-              }).then(() => setEditing(false))
-            }
-          >
-            Salvar
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={saving}
-            onClick={() => {
-              setBase(String(row.aliquotaBase * 100));
-              setFcp(String(row.fcp * 100));
-              setEditing(false);
-            }}
-          >
-            Cancelar
-          </Button>
-        </div>
-      </td>
-    </tr>
   );
 }

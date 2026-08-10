@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useId, useState } from "react";
-import { Eraser, Pencil, Plus, Square, X } from "lucide-react";
+import { useState } from "react";
+import { Eraser, Pencil, Plus, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { FormInput } from "@/components/ui/form-input";
@@ -11,6 +11,15 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -64,7 +73,6 @@ export function TaxFixedCostsModal({
   onChanged,
   onError,
 }: TaxFixedCostsModalProps) {
-  const titleId = useId();
   const [newName, setNewName] = useState("");
   const [newAmount, setNewAmount] = useState<number | null>(null);
   const [newRecurring, setNewRecurring] = useState(true);
@@ -79,24 +87,6 @@ export function TaxFixedCostsModal({
     | { type: "end-item"; item: TaxFixedCostItemRow }
     | null
   >(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
-  const handleBackdrop = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.target === e.currentTarget) onClose();
-    },
-    [onClose],
-  );
-
-  if (!open) return null;
 
   async function addItem() {
     const name = newName.trim();
@@ -254,244 +244,228 @@ export function TaxFixedCostsModal({
   );
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={handleBackdrop}
-      role="presentation"
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className="flex max-h-[90vh] w-full max-w-xl flex-col rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-xl"
+    <>
+      <Sheet
+        open={open}
+        onOpenChange={(next) => {
+          if (!next) onClose();
+        }}
       >
-        <div className="flex items-start justify-between gap-3 border-b border-[var(--border)] p-5">
-          <div>
-            <h2 id={titleId} className="text-lg font-semibold text-[var(--primary)]">
-              Custos fixos (crédito PIS/COFINS)
-            </h2>
-            <p className="mt-1 text-sm font-medium text-[var(--foreground)]">
+        <SheetContent className="sm:max-w-xl">
+          <SheetHeader>
+            <SheetTitle>Custos fixos (crédito PIS/COFINS)</SheetTitle>
+            <SheetDescription>
               Editando: {monthLabel}
-            </p>
-            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+              <br />
               Gastos como aluguel geram crédito de 9,25% de PIS/COFINS.
-            </p>
-          </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={onClose}
-            aria-label="Fechar"
-          >
-            <X className="size-4" aria-hidden />
-          </Button>
-        </div>
+            </SheetDescription>
+          </SheetHeader>
 
-        <div className="space-y-3 overflow-y-auto p-5">
-          <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] p-3">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-              Novo gasto fixo — {monthLabel}
-            </p>
-            <div className="flex flex-wrap items-end gap-3">
-              <FormInput
-                label="Nome"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="Ex.: Aluguel"
-                disabled={busy}
-                className="min-w-[10rem] flex-1"
-              />
-              <MaskedMoneyField
-                id="new-fixed-cost-amount"
-                label={`Valor em ${monthLabel}`}
-                value={newAmount}
-                onValueChange={setNewAmount}
-              />
-              <div className="flex items-center gap-2 pb-2">
-                <Switch
-                  id="new-fixed-cost-recurring"
-                  checked={newRecurring}
-                  onCheckedChange={setNewRecurring}
+          <SheetBody className="space-y-3">
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] p-3">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                Novo gasto fixo — {monthLabel}
+              </p>
+              <div className="flex flex-wrap items-end gap-3">
+                <FormInput
+                  label="Nome"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Ex.: Aluguel"
                   disabled={busy}
+                  className="min-w-[10rem] flex-1"
                 />
-                <label
-                  htmlFor="new-fixed-cost-recurring"
-                  className="text-sm text-[var(--foreground)]"
-                >
-                  Repete todo mês
-                </label>
-              </div>
-              <Button type="button" size="sm" onClick={() => void addItem()} disabled={busy}>
-                <Plus className="size-4" aria-hidden />
-                Adicionar
-              </Button>
-            </div>
-          </div>
-
-          {error ? (
-            <p className="text-sm text-rose-600" role="alert">
-              {error}
-            </p>
-          ) : null}
-
-          <ul className="space-y-2">
-            {visibleItems.length === 0 ? (
-              <li className="rounded-lg border border-dashed border-[var(--border)] p-4 text-center text-sm text-[var(--muted-foreground)]">
-                Nenhum gasto fixo cadastrado.
-              </li>
-            ) : (
-              visibleItems.map((item) => {
-                const isEditing = editingId === item.id;
-                return (
-                  <li
-                    key={item.id}
-                    className="rounded-lg border border-[var(--border)] p-3"
+                <MaskedMoneyField
+                  id="new-fixed-cost-amount"
+                  label={`Valor em ${monthLabel}`}
+                  value={newAmount}
+                  onValueChange={setNewAmount}
+                />
+                <div className="flex items-center gap-2 pb-2">
+                  <Switch
+                    id="new-fixed-cost-recurring"
+                    checked={newRecurring}
+                    onCheckedChange={setNewRecurring}
+                    disabled={busy}
+                  />
+                  <label
+                    htmlFor="new-fixed-cost-recurring"
+                    className="text-sm text-[var(--foreground)]"
                   >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                        {isEditing ? (
-                          <FormInput
-                            value={editingName}
-                            onChange={(e) => setEditingName(e.target.value)}
-                            disabled={busy}
-                            className="flex-1"
-                          />
-                        ) : (
-                          <span className="truncate text-sm font-medium">
-                            {item.name}
-                          </span>
-                        )}
-                        <Badge variant={item.recurring ? "secondary" : "outline"}>
-                          {item.recurring ? "Recorrente" : "Só este mês"}
-                        </Badge>
-                        {item.amount != null && !item.isExplicit ? (
-                          <Badge variant="muted">Herdado</Badge>
-                        ) : null}
-                        {item.status === "excluded_this_month" ? (
-                          <Badge variant="warning">Removido este mês</Badge>
-                        ) : null}
-                      </div>
-                      <div className="flex shrink-0 gap-1">
-                        {isEditing ? (
-                          <>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              disabled={busy}
-                              onClick={cancelEdit}
-                            >
-                              Cancelar
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="secondary"
-                              disabled={busy}
-                              onClick={() => void saveEdits(item.id)}
-                            >
-                              Salvar
-                            </Button>
-                          </>
-                        ) : (
-                          <Button
-                            type="button"
-                            size="icon-sm"
-                            variant="ghost"
-                            disabled={busy}
-                            aria-label={`Editar ${item.name}`}
-                            onClick={() => {
-                              setEditingId(item.id);
-                              setEditingName(item.name);
-                              setEditingAmount(item.amount);
-                              setEditingRecurring(item.recurring);
-                            }}
-                          >
-                            <Pencil className="size-4" aria-hidden />
-                          </Button>
-                        )}
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              type="button"
-                              size="icon-sm"
-                              variant="ghost"
-                              disabled={busy}
-                              aria-label={`Remover valor de ${item.name} em ${monthLabel}`}
-                              onClick={() =>
-                                setPendingAction({ type: "remove-month", item })
-                              }
-                            >
-                              <Eraser className="size-4 text-amber-600" aria-hidden />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            Remover valor deste mês ({monthLabel}) — os outros
-                            meses não são afetados.
-                          </TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              type="button"
-                              size="icon-sm"
-                              variant="ghost"
-                              disabled={busy}
-                              aria-label={`Encerrar ${item.name}`}
-                              onClick={() =>
-                                setPendingAction({ type: "end-item", item })
-                              }
-                            >
-                              <Square className="size-4 text-rose-600" aria-hidden />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            Encerrar gasto fixo a partir de {monthLabel} — meses
-                            anteriores continuam normais.
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
-                    </div>
+                    Repete todo mês
+                  </label>
+                </div>
+                <Button type="button" size="sm" onClick={() => void addItem()} disabled={busy}>
+                  <Plus className="size-4" aria-hidden />
+                  Adicionar
+                </Button>
+              </div>
+            </div>
 
-                    <div className="mt-3 flex flex-wrap items-end gap-3">
-                      <MaskedMoneyField
-                        id={`amount-${item.id}`}
-                        label={`Valor em ${monthLabel}`}
-                        value={isEditing ? editingAmount : item.amount}
-                        onValueChange={setEditingAmount}
-                        readOnly={!isEditing}
-                      />
-                      {isEditing ? (
-                        <div className="flex items-center gap-2 pb-2">
-                          <Switch
-                            id={`recurring-${item.id}`}
-                            checked={editingRecurring}
-                            onCheckedChange={setEditingRecurring}
-                            disabled={busy}
-                          />
-                          <label
-                            htmlFor={`recurring-${item.id}`}
-                            className="text-xs text-[var(--muted-foreground)]"
-                          >
-                            Repete todo mês
-                          </label>
+            {error ? (
+              <p className="text-sm text-rose-600" role="alert">
+                {error}
+              </p>
+            ) : null}
+
+            <ul className="space-y-2">
+              {visibleItems.length === 0 ? (
+                <li className="rounded-lg border border-dashed border-[var(--border)] p-4 text-center text-sm text-[var(--muted-foreground)]">
+                  Nenhum gasto fixo cadastrado.
+                </li>
+              ) : (
+                visibleItems.map((item) => {
+                  const isEditing = editingId === item.id;
+                  return (
+                    <li
+                      key={item.id}
+                      className="rounded-lg border border-[var(--border)] p-3"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                          {isEditing ? (
+                            <FormInput
+                              value={editingName}
+                              onChange={(e) => setEditingName(e.target.value)}
+                              disabled={busy}
+                              className="flex-1"
+                            />
+                          ) : (
+                            <span className="truncate text-sm font-medium">
+                              {item.name}
+                            </span>
+                          )}
+                          <Badge variant={item.recurring ? "secondary" : "outline"}>
+                            {item.recurring ? "Recorrente" : "Só este mês"}
+                          </Badge>
+                          {item.amount != null && !item.isExplicit ? (
+                            <Badge variant="muted">Herdado</Badge>
+                          ) : null}
+                          {item.status === "excluded_this_month" ? (
+                            <Badge variant="warning">Removido este mês</Badge>
+                          ) : null}
                         </div>
-                      ) : null}
-                    </div>
-                  </li>
-                );
-              })
-            )}
-          </ul>
-        </div>
+                        <div className="flex shrink-0 gap-1">
+                          {isEditing ? (
+                            <>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                disabled={busy}
+                                onClick={cancelEdit}
+                              >
+                                Cancelar
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="secondary"
+                                disabled={busy}
+                                onClick={() => void saveEdits(item.id)}
+                              >
+                                Salvar
+                              </Button>
+                            </>
+                          ) : (
+                            <Button
+                              type="button"
+                              size="icon-sm"
+                              variant="ghost"
+                              disabled={busy}
+                              aria-label={`Editar ${item.name}`}
+                              onClick={() => {
+                                setEditingId(item.id);
+                                setEditingName(item.name);
+                                setEditingAmount(item.amount);
+                                setEditingRecurring(item.recurring);
+                              }}
+                            >
+                              <Pencil className="size-4" aria-hidden />
+                            </Button>
+                          )}
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                size="icon-sm"
+                                variant="ghost"
+                                disabled={busy}
+                                aria-label={`Remover valor de ${item.name} em ${monthLabel}`}
+                                onClick={() =>
+                                  setPendingAction({ type: "remove-month", item })
+                                }
+                              >
+                                <Eraser className="size-4 text-amber-600" aria-hidden />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              Remover valor deste mês ({monthLabel}) — os outros
+                              meses não são afetados.
+                            </TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                size="icon-sm"
+                                variant="ghost"
+                                disabled={busy}
+                                aria-label={`Encerrar ${item.name}`}
+                                onClick={() =>
+                                  setPendingAction({ type: "end-item", item })
+                                }
+                              >
+                                <Square className="size-4 text-rose-600" aria-hidden />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              Encerrar gasto fixo a partir de {monthLabel} — meses
+                              anteriores continuam normais.
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
+                      </div>
 
-        <div className="flex justify-end border-t border-[var(--border)] p-4">
-          <Button type="button" variant="outline" onClick={onClose}>
-            Fechar
-          </Button>
-        </div>
-      </div>
+                      <div className="mt-3 flex flex-wrap items-end gap-3">
+                        <MaskedMoneyField
+                          id={`amount-${item.id}`}
+                          label={`Valor em ${monthLabel}`}
+                          value={isEditing ? editingAmount : item.amount}
+                          onValueChange={setEditingAmount}
+                          readOnly={!isEditing}
+                        />
+                        {isEditing ? (
+                          <div className="flex items-center gap-2 pb-2">
+                            <Switch
+                              id={`recurring-${item.id}`}
+                              checked={editingRecurring}
+                              onCheckedChange={setEditingRecurring}
+                              disabled={busy}
+                            />
+                            <label
+                              htmlFor={`recurring-${item.id}`}
+                              className="text-xs text-[var(--muted-foreground)]"
+                            >
+                              Repete todo mês
+                            </label>
+                          </div>
+                        ) : null}
+                      </div>
+                    </li>
+                  );
+                })
+              )}
+            </ul>
+          </SheetBody>
+
+          <SheetFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Fechar
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       <AlertDialog
         open={pendingAction != null}
@@ -525,6 +499,6 @@ export function TaxFixedCostsModal({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   );
 }

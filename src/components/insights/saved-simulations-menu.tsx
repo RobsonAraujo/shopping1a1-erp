@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useId, useState } from "react";
-import { Check, ChevronDown, Save, Trash2, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, ChevronDown, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -9,6 +9,24 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { FormInput } from "@/components/ui/form-input";
+import {
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { readApiError } from "@/lib/api-client-error";
 import { cn } from "@/lib/utils";
 import type { RevenueSimulationPayload } from "@/lib/insights/types";
@@ -57,73 +75,35 @@ function SaveNameModal({
   onCancel,
   onConfirm,
 }: NameModalProps) {
-  const titleId = useId();
   const [name, setName] = useState(defaultName);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onCancel]);
-
-  const handleBackdrop = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.target === e.currentTarget) onCancel();
-    },
-    [onCancel],
-  );
-
   const trimmed = name.trim();
 
   return (
-    <div
-      className="fixed inset-0 z-[150] flex items-center justify-center bg-black/40 p-4"
-      onClick={handleBackdrop}
-      role="presentation"
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className="w-full max-w-sm rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-xl"
-      >
-        <div className="flex items-start justify-between gap-3">
-          <h2 id={titleId} className="text-base font-semibold text-[var(--primary)]">
-            {title}
-          </h2>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={onCancel}
-            aria-label="Fechar"
-          >
-            <X className="size-4" aria-hidden />
-          </Button>
-        </div>
+    <Sheet open onOpenChange={(next) => { if (!next) onCancel(); }}>
+      <SheetContent>
+        <SheetHeader>
+          <SheetTitle>{title}</SheetTitle>
+        </SheetHeader>
+        <SheetBody>
+          <FormInput
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Ex.: Cenário conservador Q3"
+            label="Nome da simulação"
+            inputClassName="border-[var(--primary)]/40 focus:ring-[var(--primary)]/40"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && trimmed) onConfirm(trimmed);
+            }}
+          />
 
-        <FormInput
-          autoFocus
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Ex.: Cenário conservador Q3"
-          label="Nome da simulação"
-          className="mt-4"
-          inputClassName="border-[var(--primary)]/40 focus:ring-[var(--primary)]/40"
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && trimmed) onConfirm(trimmed);
-          }}
-        />
-
-        {error && (
-          <p className="mt-2 text-sm text-rose-600" role="alert">
-            {error}
-          </p>
-        )}
-
-        <div className="mt-5 flex justify-end gap-2">
+          {error && (
+            <p className="mt-2 text-sm text-rose-600" role="alert">
+              {error}
+            </p>
+          )}
+        </SheetBody>
+        <SheetFooter>
           <Button type="button" variant="outline" onClick={onCancel} disabled={busy}>
             Cancelar
           </Button>
@@ -134,9 +114,9 @@ function SaveNameModal({
           >
             Salvar
           </Button>
-        </div>
-      </div>
-    </div>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -148,70 +128,30 @@ type ConfirmDeleteModalProps = {
 };
 
 function ConfirmDeleteModal({ name, busy, onCancel, onConfirm }: ConfirmDeleteModalProps) {
-  const titleId = useId();
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onCancel]);
-
-  const handleBackdrop = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.target === e.currentTarget) onCancel();
-    },
-    [onCancel],
-  );
-
   return (
-    <div
-      className="fixed inset-0 z-[150] flex items-center justify-center bg-black/40 p-4"
-      onClick={handleBackdrop}
-      role="presentation"
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className="w-full max-w-sm rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-xl"
-      >
-        <div className="flex items-start justify-between gap-3">
-          <h2 id={titleId} className="text-base font-semibold text-rose-600">
-            Excluir simulação
-          </h2>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={onCancel}
-            aria-label="Fechar"
-          >
-            <X className="size-4" aria-hidden />
-          </Button>
-        </div>
-
-        <p className="mt-3 text-sm text-[var(--muted-foreground)]">
-          Excluir <span className="font-medium text-[var(--foreground)]">&quot;{name}&quot;</span>?
-          Essa ação não pode ser desfeita.
-        </p>
-
-        <div className="mt-5 flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={onCancel} disabled={busy}>
+    <AlertDialog open onOpenChange={(next) => { if (!next) onCancel(); }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle className="text-rose-600">Excluir simulação</AlertDialogTitle>
+          <AlertDialogDescription>
+            Excluir <span className="font-medium text-[var(--foreground)]">&quot;{name}&quot;</span>?
+            Essa ação não pode ser desfeita.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={onCancel} disabled={busy}>
             Cancelar
-          </Button>
-          <Button
-            type="button"
+          </AlertDialogCancel>
+          <AlertDialogAction
             variant="destructive"
             disabled={busy}
             onClick={onConfirm}
           >
             Excluir
-          </Button>
-        </div>
-      </div>
-    </div>
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 

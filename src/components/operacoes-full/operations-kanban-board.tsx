@@ -55,13 +55,13 @@ export function OperationsKanbanBoard({
         </div>
       ) : null}
 
-      <div className="flex gap-3 overflow-x-auto pb-2">
+      <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 sm:snap-none">
         {columns.map((status) => {
           const columnCards = cardsByStatus.get(status) ?? [];
           return (
             <section
               key={status}
-              className="flex w-72 shrink-0 flex-col rounded-xl border border-[var(--border)] bg-[var(--muted)]/15"
+              className="flex w-[85vw] shrink-0 snap-center flex-col rounded-xl border border-[var(--border)] bg-[var(--muted)]/15 sm:w-72 sm:snap-align-none"
             >
               <header className="border-b border-[var(--border)] px-3 py-2.5">
                 <div className="flex items-center justify-between gap-2">

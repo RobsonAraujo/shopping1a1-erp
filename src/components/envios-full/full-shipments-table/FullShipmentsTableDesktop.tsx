@@ -1,0 +1,159 @@
+"use client";
+
+import { Pencil, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { formatFinancialMoney } from "@/lib/financial-margin";
+import {
+  formatShipmentDate,
+  sourceLabel,
+} from "@/components/envios-full/full-shipments-table/shared";
+import type { FullShipmentsTableProps } from "@/components/envios-full/full-shipments-table/types";
+
+export function FullShipmentsTableDesktop({
+  shipments,
+  loading,
+  viewMonthName,
+  viewYear,
+  onEdit,
+  onDelete,
+}: FullShipmentsTableProps) {
+  return (
+    <Card className="overflow-hidden p-0 shadow-sm">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[56rem] text-left text-sm">
+          <thead className="border-b border-[var(--border)] bg-[var(--muted)]/80">
+            <tr>
+              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                Envio ML
+              </th>
+              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                Data
+              </th>
+              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                Produtos
+              </th>
+              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                Custo total
+              </th>
+              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                Unidades
+              </th>
+              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                Custo/un.
+              </th>
+              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                Origem
+              </th>
+              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                Ações
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {shipments.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={8}
+                  className="px-4 py-12 text-center text-[var(--muted-foreground)]"
+                >
+                  {loading
+                    ? "Carregando envios…"
+                    : `Nenhum envio em ${viewMonthName}/${viewYear}. Importe do faturamento ML ou registre manualmente.`}
+                </td>
+              </tr>
+            ) : (
+              shipments.map((shipment) => {
+                const needsUnits = shipment.totalUnits === 0;
+                const needsCost =
+                  shipment.source === "ml_billing" && shipment.totalCost === 0;
+                const inboundLabel = shipment.mlInboundId
+                  ? shipment.mlInboundId.startsWith("unassigned-")
+                    ? "—"
+                    : `N.º ${shipment.mlInboundId}`
+                  : "—";
+                return (
+                  <tr
+                    key={shipment.id}
+                    className="border-b border-[var(--border)] transition-colors last:border-0 hover:bg-[var(--muted)]/40"
+                  >
+                    <td className="px-4 py-3.5 tabular-nums font-medium">
+                      {inboundLabel}
+                    </td>
+                    <td className="px-4 py-3.5 tabular-nums">
+                      {formatShipmentDate(shipment.shippedAt)}
+                    </td>
+                    <td className="px-4 py-3.5 tabular-nums">
+                      {shipment.productCount && shipment.productCount > 0
+                        ? shipment.productCount
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-3.5 tabular-nums">
+                      <span className="inline-flex flex-wrap items-center gap-2">
+                        {formatFinancialMoney(shipment.totalCost)}
+                        {needsCost ? (
+                          <Badge
+                            variant="warning"
+                            className="h-5 px-1.5 text-[10px]"
+                          >
+                            Custo pendente
+                          </Badge>
+                        ) : null}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3.5 tabular-nums">
+                      <span className="inline-flex items-center gap-2">
+                        {needsUnits ? "—" : shipment.totalUnits}
+                        {needsUnits ? (
+                          <Badge
+                            variant="warning"
+                            className="h-5 px-1.5 text-[10px]"
+                          >
+                            Completar unidades
+                          </Badge>
+                        ) : null}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3.5 tabular-nums font-medium">
+                      {needsUnits
+                        ? "—"
+                        : `${formatFinancialMoney(shipment.costPerUnit)}/un.`}
+                    </td>
+                    <td className="px-4 py-3.5 text-[var(--muted-foreground)]">
+                      {sourceLabel(shipment.source)}
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5"
+                          onClick={() => onEdit(shipment)}
+                        >
+                          <Pencil className="size-3.5" aria-hidden />
+                          Editar
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon-sm"
+                          title="Excluir envio"
+                          aria-label="Excluir envio"
+                          onClick={() => onDelete(shipment)}
+                        >
+                          <Trash2 className="size-4" aria-hidden />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}

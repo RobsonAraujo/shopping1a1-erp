@@ -2,14 +2,7 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import {
-  Fragment,
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useState,
-} from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { HelpCircle, ImageOff, Pencil, Settings } from "lucide-react";
 import {
   ListingStatusBadge,
@@ -24,6 +17,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FormSelect } from "@/components/ui/form-select";
+import {
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 import {
   Tooltip,
   TooltipContent,
@@ -526,26 +528,9 @@ function WarehouseEditModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const labelId = useId();
-  const descId = useId();
   const [value, setValue] = useState(String(row.warehouseStock));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const handleBackdrop = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.target === e.currentTarget) onClose();
-    },
-    [onClose],
-  );
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
 
   async function submit() {
     const n = parseInt(value, 10);
@@ -578,71 +563,57 @@ function WarehouseEditModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="presentation"
-      onClick={handleBackdrop}
+    <Sheet
+      open={true}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
     >
-      <div className="fixed inset-0 bg-black/50" aria-hidden />
-      <div
-        className={cn(
-          "relative z-10 w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-lg",
-        )}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={labelId}
-        aria-describedby={descId}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2
-          id={labelId}
-          className="text-lg font-semibold text-[var(--primary)]"
-        >
-          Estoque no galpão
-        </h2>
-        <p
-          id={descId}
-          className="mt-2 text-sm leading-relaxed text-[var(--muted-foreground)]"
-        >
-          Ajuste apenas a quantidade física no galpão. O estoque no Mercado
-          Livre vem da API do ML e não é alterado aqui.
-        </p>
-        <div className="mt-3">
-          <p className="text-sm font-semibold text-[var(--foreground)]">
-            {row.sku ?? "Sem SKU"}
-          </p>
-          <p
-            className="text-xs text-[var(--muted-foreground)] line-clamp-2"
-            title={row.title}
+      <SheetContent className="sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>Estoque no galpão</SheetTitle>
+          <SheetDescription>
+            Ajuste apenas a quantidade física no galpão. O estoque no Mercado
+            Livre vem da API do ML e não é alterado aqui.
+          </SheetDescription>
+        </SheetHeader>
+        <SheetBody>
+          <div>
+            <p className="text-sm font-semibold text-[var(--foreground)]">
+              {row.sku ?? "Sem SKU"}
+            </p>
+            <p
+              className="text-xs text-[var(--muted-foreground)] line-clamp-2"
+              title={row.title}
+            >
+              {row.title}
+            </p>
+          </div>
+
+          <label
+            htmlFor="warehouse-qty"
+            className="mt-4 block text-sm font-medium text-[var(--foreground)]"
           >
-            {row.title}
-          </p>
-        </div>
+            Quantidade no galpão
+          </label>
+          <input
+            id="warehouse-qty"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            step={1}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm tabular-nums text-[var(--foreground)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+          />
 
-        <label
-          htmlFor="warehouse-qty"
-          className="mt-4 block text-sm font-medium text-[var(--foreground)]"
-        >
-          Quantidade no galpão
-        </label>
-        <input
-          id="warehouse-qty"
-          type="number"
-          inputMode="numeric"
-          min={0}
-          step={1}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm tabular-nums text-[var(--foreground)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
-        />
-
-        {error ? (
-          <p className="mt-2 text-sm text-red-600" role="alert">
-            {error}
-          </p>
-        ) : null}
-
-        <div className="mt-6 flex flex-wrap justify-end gap-2">
+          {error ? (
+            <p className="mt-2 text-sm text-red-600" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </SheetBody>
+        <SheetFooter>
           <Button
             type="button"
             variant="outline"
@@ -654,9 +625,9 @@ function WarehouseEditModal({
           <Button type="button" onClick={() => void submit()} disabled={saving}>
             {saving ? "Salvando…" : "Confirmar"}
           </Button>
-        </div>
-      </div>
-    </div>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -669,8 +640,6 @@ function LeadTimeSettingsModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const labelId = useId();
-  const descId = useId();
   const initial = leadTimeToForm(row.leadTimeDays);
   const [value, setValue] = useState(initial.value);
   const [unit, setUnit] = useState<"weeks" | "days">(initial.unit);
@@ -682,21 +651,6 @@ function LeadTimeSettingsModal({
     setValue(i.value);
     setUnit(i.unit);
   }, [row.mlItemId, row.leadTimeDays]);
-
-  const handleBackdrop = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.target === e.currentTarget) onClose();
-    },
-    [onClose],
-  );
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
 
   async function submit() {
     const trimmed = value.trim();
@@ -745,110 +699,97 @@ function LeadTimeSettingsModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="presentation"
-      onClick={handleBackdrop}
+    <Sheet
+      open={true}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
     >
-      <div className="fixed inset-0 bg-black/50" aria-hidden />
-      <div
-        className={cn(
-          "relative z-10 w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-lg",
-        )}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={labelId}
-        aria-describedby={descId}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2
-          id={labelId}
-          className="text-lg font-semibold text-[var(--primary)]"
-        >
-          Configurações do anúncio
-        </h2>
-        <p
-          id={descId}
-          className="mt-2 text-sm leading-relaxed text-[var(--muted-foreground)]"
-        >
-          Ajuste o tempo entre decidir a compra e o produto chegar no galpão.
-        </p>
-        <div className="mt-3">
-          <p className="text-sm font-semibold text-[var(--foreground)]">
-            {row.sku ?? "Sem SKU"}
-          </p>
-          <p
-            className="text-xs text-[var(--muted-foreground)] line-clamp-2"
-            title={row.title}
-          >
-            {row.title}
-          </p>
-        </div>
-
-        <div className="mt-4 space-y-2">
-          <div className="flex items-center gap-2">
-            <label
-              htmlFor="lead-time-value"
-              className="text-sm font-medium text-[var(--foreground)]"
+      <SheetContent className="sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>Configurações do anúncio</SheetTitle>
+          <SheetDescription>
+            Ajuste o tempo entre decidir a compra e o produto chegar no
+            galpão.
+          </SheetDescription>
+        </SheetHeader>
+        <SheetBody>
+          <div>
+            <p className="text-sm font-semibold text-[var(--foreground)]">
+              {row.sku ?? "Sem SKU"}
+            </p>
+            <p
+              className="text-xs text-[var(--muted-foreground)] line-clamp-2"
+              title={row.title}
             >
-              Prazo até o galpão
-            </label>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  className="inline-flex cursor-pointer rounded text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-                  aria-label="O que é este prazo?"
-                >
-                  <HelpCircle className="size-4" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="max-w-xs">
-                Tempo desde que você decide comprar até a mercadoria chegar no
-                galpão. O valor é salvo em dias (se escolher semanas,
-                convertemos automaticamente).
-              </TooltipContent>
-            </Tooltip>
+              {row.title}
+            </p>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <input
-              id="lead-time-value"
-              type="number"
-              inputMode="numeric"
-              min={0}
-              step={1}
-              placeholder="Ex.: 2"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm tabular-nums text-[var(--foreground)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
-            />
-            <FormSelect
-              id="lead-time-unit"
-              aria-label="Unidade do prazo"
-              value={unit}
-              onValueChange={(value) =>
-                setUnit(value === "weeks" ? "weeks" : "days")
-              }
-              options={[
-                { value: "weeks", label: "Semanas" },
-                { value: "days", label: "Dias" },
-              ]}
-              triggerClassName="w-[8.5rem]"
-            />
+
+          <div className="mt-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <label
+                htmlFor="lead-time-value"
+                className="text-sm font-medium text-[var(--foreground)]"
+              >
+                Prazo até o galpão
+              </label>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex cursor-pointer rounded text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                    aria-label="O que é este prazo?"
+                  >
+                    <HelpCircle className="size-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs">
+                  Tempo desde que você decide comprar até a mercadoria chegar
+                  no galpão. O valor é salvo em dias (se escolher semanas,
+                  convertemos automaticamente).
+                </TooltipContent>
+              </Tooltip>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <input
+                id="lead-time-value"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                step={1}
+                placeholder="Ex.: 2"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm tabular-nums text-[var(--foreground)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+              />
+              <FormSelect
+                id="lead-time-unit"
+                aria-label="Unidade do prazo"
+                value={unit}
+                onValueChange={(value) =>
+                  setUnit(value === "weeks" ? "weeks" : "days")
+                }
+                options={[
+                  { value: "weeks", label: "Semanas" },
+                  { value: "days", label: "Dias" },
+                ]}
+                triggerClassName="w-[8.5rem]"
+              />
+            </div>
+            <p className="text-xs text-[var(--muted-foreground)]">
+              Informe em semanas ou em dias; o sistema grava em dias para
+              cálculos futuros. Deixe em branco para remover o prazo.
+            </p>
           </div>
-          <p className="text-xs text-[var(--muted-foreground)]">
-            Informe em semanas ou em dias; o sistema grava em dias para cálculos
-            futuros. Deixe em branco para remover o prazo.
-          </p>
-        </div>
 
-        {error ? (
-          <p className="mt-2 text-sm text-red-600" role="alert">
-            {error}
-          </p>
-        ) : null}
-
-        <div className="mt-6 flex flex-wrap justify-end gap-2">
+          {error ? (
+            <p className="mt-2 text-sm text-red-600" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </SheetBody>
+        <SheetFooter>
           <Button
             type="button"
             variant="outline"
@@ -860,8 +801,8 @@ function LeadTimeSettingsModal({
           <Button type="button" onClick={() => void submit()} disabled={saving}>
             {saving ? "Salvando…" : "Confirmar"}
           </Button>
-        </div>
-      </div>
-    </div>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }

@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { filterByItemListSearch } from "@/lib/item-list-search";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-is-mobile";
 
 type ReportItem = {
   mlItemId: string;
@@ -79,6 +80,7 @@ function itemMlStatus(row: ReportItem): string {
 }
 
 export function CatalogCompetitionReportClient() {
+  const isMobile = useIsMobile();
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -244,6 +246,57 @@ export function CatalogCompetitionReportClient() {
             <p className="text-sm text-[var(--muted-foreground)]">
               {itemListSearchEmptyMessage(searchQuery)}
             </p>
+          ) : isMobile ? (
+            <div className="space-y-2">
+              {filteredItems.map((row) => {
+                const mlStatus = itemMlStatus(row);
+                return (
+                  <Link
+                    key={row.mlItemId}
+                    href={`/dashboard/catalog-report/${row.mlItemId}`}
+                    className={cn(
+                      "flex items-center gap-2.5 rounded-lg border border-[var(--border)] px-3 py-2.5 active:bg-[var(--muted)]/40",
+                      listingRowMutedClass(mlStatus, 0, 0),
+                    )}
+                  >
+                    <span className="relative inline-flex size-11 shrink-0 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--muted)]">
+                      {row.imageUrlSnapshot ? (
+                        <Image
+                          src={row.imageUrlSnapshot}
+                          alt={row.titleSnapshot ?? ""}
+                          fill
+                          sizes="44px"
+                          className="object-contain"
+                        />
+                      ) : null}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="truncate font-medium text-[var(--primary)]">
+                          {row.skuSnapshot ?? "Sem SKU"}
+                        </div>
+                        <ListingStatusBadge
+                          status={mlStatus}
+                          mlStock={0}
+                          warehouseStock={0}
+                        />
+                      </div>
+                      <div className="truncate text-xs text-[var(--muted-foreground)]">
+                        {row.titleSnapshot ?? "Sem título sincronizado"}
+                      </div>
+                      <div className="font-mono text-[11px] text-[var(--muted-foreground)]">
+                        {row.mlItemId}
+                      </div>
+                      <div className="mt-1">
+                        <span className={statusBadgeClass(row.catalogStatus)}>
+                          {statusLabel(row.catalogStatus)}
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[40rem] text-left text-sm">
