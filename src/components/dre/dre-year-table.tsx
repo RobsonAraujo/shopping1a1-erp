@@ -1,15 +1,17 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { NumericFormat } from "react-number-format";
-import { AlertCircle, Pencil, RefreshCw } from "lucide-react";
+import { AlertCircle, ChevronLeft, ChevronRight, Pencil, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FormSelect } from "@/components/ui/form-select";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useIsMobile } from "@/hooks/use-is-mobile";
 import {
   formatFinancialMoney,
   formatFinancialPercent,
@@ -516,6 +518,228 @@ function getYearTotalForRow(
   }
 }
 
+/** Mobile: em vez de "mês" (índice em data.months), a seleção pode ser "total" (coluna Total do ano). */
+type DreMobileSelection = number | "total";
+
+function DreMobileRow({
+  row,
+  isAlt,
+  selection,
+  data,
+  onFixedCostChange,
+  onOperationalCostChange,
+  onInvestmentCostChange,
+}: {
+  row: DreTableRow;
+  isAlt: boolean;
+  selection: DreMobileSelection;
+  data: DreYearView;
+  onFixedCostChange: DreYearTableProps["onFixedCostChange"];
+  onOperationalCostChange: DreYearTableProps["onOperationalCostChange"];
+  onInvestmentCostChange: DreYearTableProps["onInvestmentCostChange"];
+}) {
+  const colored = isColoredRow(row);
+  const bg = rowBackgroundClass(row);
+  const showPercentRow = row.type === "static" && row.showPercent;
+  const isTotal = selection === "total";
+  const month = isTotal ? null : data.months[selection];
+
+  const valueNode = isTotal ? (
+    <div
+      className={cn(
+        "whitespace-nowrap text-right text-[13px] font-bold tabular-nums leading-tight",
+        colored ? "text-white" : "",
+      )}
+    >
+      {formatFinancialMoney(getYearTotalForRow(row, data).amount)}
+    </div>
+  ) : (
+    renderValueCell(
+      row,
+      month!,
+      onFixedCostChange,
+      onOperationalCostChange,
+      onInvestmentCostChange,
+    )
+  );
+
+  const percent = isTotal
+    ? getYearTotalForRow(row, data).percent
+    : getCellValue(row, month!).percent;
+
+  return (
+    <div
+      className={cn(
+        "flex items-start justify-between gap-3 rounded-lg px-3 py-2.5",
+        colored ? bg : isAlt ? "bg-[var(--muted)]/25" : "bg-transparent",
+      )}
+    >
+      <div className="min-w-0 flex-1">{renderLabelCell(row)}</div>
+      <div className="shrink-0 text-right">
+        {valueNode}
+        {showPercentRow ? (
+          <div className="mt-0.5">{renderPercentCell(percent, colored)}</div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function DreYearTableMobile({
+  data,
+  showDetails,
+  syncingMonths,
+  onSyncMonth,
+  onFixedCostChange,
+  onOperationalCostChange,
+  onInvestmentCostChange,
+}: DreYearTableProps) {
+  const rows = useMemo(
+    () =>
+      buildDreTableRows(
+        data.costItems,
+        data.operationalCostItems,
+        data.investmentCostItems,
+        showDetails,
+      ),
+    [data.costItems, data.operationalCostItems, data.investmentCostItems, showDetails],
+  );
+
+  const altRowFlags = useMemo(() => {
+    return rows.map((row, index) => {
+      if (isColoredRow(row)) return false;
+      const whiteRowsBefore = rows
+        .slice(0, index)
+        .filter((r) => !isColoredRow(r)).length;
+      return whiteRowsBefore % 2 === 1;
+    });
+  }, [rows]);
+
+  const defaultIndex = useMemo(() => {
+    const currentIdx = data.months.findIndex((m) => m.isCurrentMonth);
+    if (currentIdx >= 0) return currentIdx;
+    return Math.max(0, data.months.length - 1);
+  }, [data.months]);
+
+  const [selection, setSelection] = useState<DreMobileSelection>(defaultIndex);
+
+  const selectedMonth = selection === "total" ? null : data.months[selection];
+  const alertMessages = selectedMonth ? getMonthAlertMessages(selectedMonth) : [];
+
+  const selectOptions = [
+    ...data.months.map((month, index) => ({
+      value: String(index),
+      label: month.label,
+    })),
+    { value: "total", label: `Total ${data.year}` },
+  ];
+
+  function goToOffset(offset: number) {
+    setSelection((prev) => {
+      const base = prev === "total" ? data.months.length : prev;
+      const next = base + offset;
+      if (next < 0) return 0;
+      if (next >= data.months.length) return "total";
+      return next;
+    });
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          aria-label="Período anterior"
+          disabled={selection === 0}
+          onClick={() => goToOffset(-1)}
+        >
+          <ChevronLeft className="size-4" aria-hidden />
+        </Button>
+        <FormSelect
+          value={String(selection)}
+          onValueChange={(value) =>
+            setSelection(value === "total" ? "total" : Number(value))
+          }
+          options={selectOptions}
+          className="flex-1"
+          triggerClassName="w-full"
+          aria-label="Selecionar período"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          aria-label="Próximo período"
+          disabled={selection === "total"}
+          onClick={() => goToOffset(1)}
+        >
+          <ChevronRight className="size-4" aria-hidden />
+        </Button>
+      </div>
+
+      {selectedMonth ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--muted)]/20 px-3 py-2 text-xs text-[var(--muted-foreground)]">
+          <span>Sync: {formatSyncTime(selectedMonth.syncedAt)}</span>
+          {alertMessages.length > 0 ? (
+            <span className="inline-flex items-center gap-1 text-amber-700">
+              <AlertCircle className="size-3.5" aria-hidden />
+              {alertMessages.length} aviso{alertMessages.length === 1 ? "" : "s"}
+            </span>
+          ) : null}
+          {selectedMonth.canSync ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="ml-auto gap-1.5"
+              disabled={syncingMonths.has(selectedMonth.month)}
+              onClick={() => onSyncMonth(selectedMonth.month)}
+            >
+              <RefreshCw
+                className={cn(
+                  "size-3.5",
+                  syncingMonths.has(selectedMonth.month) && "animate-spin",
+                )}
+                aria-hidden
+              />
+              Sincronizar
+            </Button>
+          ) : null}
+        </div>
+      ) : (
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/20 px-3 py-2 text-xs text-[var(--muted-foreground)]">
+          Soma de todos os meses de {data.year}.
+        </div>
+      )}
+
+      {alertMessages.length > 0 ? (
+        <ul className="space-y-1 rounded-lg border border-amber-200 bg-amber-50/50 px-3 py-2 text-xs text-amber-900">
+          {alertMessages.map((message) => (
+            <li key={message}>• {message}</li>
+          ))}
+        </ul>
+      ) : null}
+
+      <div className="divide-y divide-[var(--border)] overflow-hidden rounded-lg border border-[var(--border)] bg-white">
+        {rows.map((row, index) => (
+          <DreMobileRow
+            key={row.id}
+            row={row}
+            isAlt={altRowFlags[index]}
+            selection={selection}
+            data={data}
+            onFixedCostChange={onFixedCostChange}
+            onOperationalCostChange={onOperationalCostChange}
+            onInvestmentCostChange={onInvestmentCostChange}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function MonthHeaderCell({
   year,
   month,
@@ -599,7 +823,15 @@ function MonthHeaderCell({
   );
 }
 
-export function DreYearTable({
+export function DreYearTable(props: DreYearTableProps) {
+  const isMobile = useIsMobile();
+  if (isMobile) {
+    return <DreYearTableMobile {...props} />;
+  }
+  return <DreYearTableDesktop {...props} />;
+}
+
+function DreYearTableDesktop({
   data,
   showDetails,
   syncingMonths,
