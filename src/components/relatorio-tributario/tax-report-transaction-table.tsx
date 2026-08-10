@@ -2,13 +2,14 @@
 
 import { useRef, useState, type CSSProperties } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { AlertTriangle, Info } from "lucide-react";
+import { AlertTriangle, ChevronRight, Info } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useIsMobile } from "@/hooks/use-is-mobile";
 import {
   formatFinancialMoney,
   formatFinancialPercent,
@@ -21,6 +22,7 @@ import { TaxReportCalculationPanel } from "@/components/relatorio-tributario/tax
 import { cn } from "@/lib/utils";
 
 const ROW_HEIGHT = 52;
+const MOBILE_CARD_HEIGHT = 128;
 
 /** 10 colunas — cabe em max-w-7xl sem scroll horizontal. */
 const GRID_COLS_DETAIL =
@@ -290,6 +292,121 @@ function TransactionRowCells({
   );
 }
 
+function TransactionCard({
+  row,
+  isSelected,
+  canonicalSku,
+  onClick,
+}: {
+  row: DetalhamentoTributario;
+  isSelected: boolean;
+  canonicalSku?: string;
+  onClick: () => void;
+}) {
+  const t = row.transacao;
+  const impostoOperacional = impostoOperacionalLinha(row);
+  const impostoOperacionalPercent =
+    impostoOperacional != null
+      ? percentOfSale(impostoOperacional, t.receitaBruta)
+      : null;
+  const margemOperacional = margemOperacionalEstimadaLinha(row);
+  const margemPercent = row.incluidoNaApuracao
+    ? percentOfSale(margemOperacional, t.receitaBruta)
+    : null;
+
+  return (
+    <button
+      type="button"
+      role="row"
+      aria-selected={isSelected}
+      onClick={onClick}
+      className={cn(
+        "w-full space-y-2 rounded-lg border border-[var(--border)] p-3 text-left transition-colors",
+        !row.incluidoNaApuracao && "bg-amber-50/50",
+        isSelected && "border-[var(--primary)]/40 bg-[var(--primary)]/10",
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2 text-xs text-[var(--muted-foreground)]">
+          <span className="whitespace-nowrap">{t.orderDate.slice(0, 10)}</span>
+          <span className="whitespace-nowrap">· {t.ufDestino ?? "—"}</span>
+          <span className="whitespace-nowrap">
+            · {t.tipoDocumento}
+            {t.tipoDocumento === "CNPJ" && t.contribuinteIcms !== null ? (
+              <span
+                className={cn(
+                  "ml-1 inline-block size-1.5 rounded-full align-middle",
+                  t.contribuinteIcms ? "bg-emerald-500" : "bg-[var(--muted-foreground)]",
+                )}
+                aria-hidden
+              />
+            ) : null}
+          </span>
+        </div>
+        <ChevronRight
+          className={cn(
+            "size-4 shrink-0 text-[var(--muted-foreground)] transition-transform",
+            isSelected && "rotate-90",
+          )}
+          aria-hidden
+        />
+      </div>
+
+      {t.sku ? (
+        <p className="truncate text-xs font-medium text-[var(--foreground)]">
+          {t.sku}
+          {canonicalSku && t.sku !== canonicalSku ? (
+            <span className="ml-1 text-[10px] font-normal text-[var(--muted-foreground)]">
+              → {canonicalSku}
+            </span>
+          ) : null}
+        </p>
+      ) : null}
+
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-semibold tabular-nums">
+          {formatFinancialMoney(t.receitaBruta)}
+        </span>
+        <span className="text-xs tabular-nums text-[var(--muted-foreground)]">
+          {t.quantidade} un.
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 border-t border-[var(--border)] pt-2 text-xs">
+        <div>
+          <p className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
+            Imp. oper.
+          </p>
+          <p className="tabular-nums">
+            {formatFinancialPercent(impostoOperacionalPercent)}{" "}
+            <span className="text-[var(--muted-foreground)]">
+              ({formatFinancialMoney(impostoOperacional)})
+            </span>
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
+            Margem oper.
+          </p>
+          <p className="tabular-nums">
+            {formatFinancialPercent(margemPercent)}{" "}
+            <span className="text-[var(--muted-foreground)]">
+              ({formatFinancialMoney(row.incluidoNaApuracao ? margemOperacional : null)})
+            </span>
+          </p>
+        </div>
+      </div>
+
+      {!t.unitCostNf ? (
+        <p className="flex items-center gap-1 text-[10px] text-amber-700">
+          <AlertTriangle className="size-3 shrink-0" aria-hidden />
+          Sem custo NF cadastrado — crédito PIS/COFINS zerado nesta linha.
+        </p>
+      ) : null}
+    </button>
+  );
+}
+
 export function VirtualizedTaxReportTransactionTable({
   rows,
   showSku = false,
@@ -301,13 +418,14 @@ export function VirtualizedTaxReportTransactionTable({
   showOrderSku?: boolean;
   canonicalSku?: string;
 }) {
+  const isMobile = useIsMobile();
   const parentRef = useRef<HTMLDivElement>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: () => (isMobile ? MOBILE_CARD_HEIGHT : ROW_HEIGHT),
     overscan: 8,
   });
 
@@ -328,14 +446,48 @@ export function VirtualizedTaxReportTransactionTable({
   return (
     <TooltipProvider delayDuration={200}>
       <div className="space-y-4">
-        <p className="mb-1.5 text-[11px] text-[var(--muted-foreground)] sm:hidden">
-          → Arraste para o lado para ver mais colunas
-        </p>
-        <div className="relative">
+        {isMobile ? (
           <div
-            className="pointer-events-none absolute inset-y-0 right-0 z-30 w-6 bg-gradient-to-l from-[var(--card)] to-transparent sm:hidden"
-            aria-hidden
-          />
+            ref={parentRef}
+            className="max-h-[36rem] overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--muted)]/10 p-2"
+          >
+            <div
+              className="w-full"
+              style={{
+                height: `${rowVirtualizer.getTotalSize()}px`,
+                position: "relative",
+              }}
+            >
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const row = rows[virtualRow.index];
+                const isSelected =
+                  selectedKey === row.transacao.transactionKey;
+                return (
+                  <div
+                    key={row.transacao.transactionKey}
+                    ref={rowVirtualizer.measureElement}
+                    data-index={virtualRow.index}
+                    className="absolute left-0 top-0 w-full px-1 pb-2"
+                    style={{
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                  >
+                    <TransactionCard
+                      row={row}
+                      isSelected={isSelected}
+                      canonicalSku={canonicalSku}
+                      onClick={() =>
+                        setSelectedKey(
+                          isSelected ? null : row.transacao.transactionKey,
+                        )
+                      }
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
           <div
             className="overflow-x-auto rounded-lg border border-[var(--border)] text-sm"
             style={{ WebkitOverflowScrolling: "touch" }}
@@ -392,7 +544,7 @@ export function VirtualizedTaxReportTransactionTable({
               </div>
             </div>
           </div>
-        </div>
+        )}
         <p className="text-xs text-[var(--muted-foreground)]">
           {rows.length} venda(s) · clique em uma linha para ver a memória de
           cálculo

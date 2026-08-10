@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { TaxReportHeaderWithTip } from "@/components/relatorio-tributario/tax-report-transaction-table";
+import { useIsMobile } from "@/hooks/use-is-mobile";
 import { formatFinancialMoney, formatFinancialPercent } from "@/lib/financial-margin";
 import type { ApuracaoConsolidada } from "@/lib/tax-report/types";
 import { cn } from "@/lib/utils";
@@ -57,6 +58,61 @@ function ApuracaoTableRow({
   );
 }
 
+function ApuracaoCard({
+  row,
+  highlight,
+}: {
+  row: ApuracaoRow;
+  highlight?: boolean;
+}) {
+  return (
+    <li
+      className={cn(
+        "rounded-lg border border-[var(--border)] p-3",
+        highlight && "border-[var(--primary)]/30 bg-[var(--primary)]/5",
+      )}
+    >
+      <p className={cn("text-sm", highlight ? "font-semibold" : "font-medium")}>
+        {row.tip ? (
+          <TaxReportHeaderWithTip label={row.imposto} tip={row.tip} align="left" />
+        ) : (
+          row.imposto
+        )}
+      </p>
+      <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+        <div>
+          <p className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
+            Débitos
+          </p>
+          <p className="tabular-nums">{formatFinancialMoney(row.debito)}</p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
+            Créditos
+          </p>
+          <p className="tabular-nums">
+            {row.credito > 0 ? formatFinancialMoney(row.credito) : "—"}
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
+            Líquido
+          </p>
+          <p className="tabular-nums">{formatFinancialMoney(row.liquido)}</p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
+            A recolher (est.)
+          </p>
+          <p className="font-medium tabular-nums">
+            {formatFinancialMoney(row.aRecolher)}
+          </p>
+        </div>
+      </div>
+    </li>
+  );
+}
+
 export function TaxReportApuracaoPanel({
   apuracao,
   faturamento,
@@ -65,6 +121,7 @@ export function TaxReportApuracaoPanel({
   faturamento: number;
 }) {
   const [difalOpen, setDifalOpen] = useState(false);
+  const isMobile = useIsMobile();
 
   const rows: ApuracaoRow[] = [
     {
@@ -126,18 +183,24 @@ export function TaxReportApuracaoPanel({
             />
           </h2>
         </div>
-        <p className="px-4 pt-2 text-[11px] text-[var(--muted-foreground)] sm:hidden">
-          → Arraste para o lado para ver mais colunas
-        </p>
-        <div className="relative">
-          <div
-            className="pointer-events-none absolute inset-y-0 right-0 z-30 w-6 bg-gradient-to-l from-[var(--card)] to-transparent sm:hidden"
-            aria-hidden
-          />
-          <div
-            className="overflow-x-auto"
-            style={{ WebkitOverflowScrolling: "touch" }}
-          >
+        {isMobile ? (
+          <ul className="space-y-2 p-3">
+            {rows.map((row) => (
+              <ApuracaoCard key={row.imposto} row={row} />
+            ))}
+            <ApuracaoCard
+              row={{
+                imposto: "Total estimado",
+                debito: 0,
+                credito: 0,
+                liquido: apuracao.pisCofinsLiquido + apuracao.icms.liquido,
+                aRecolher: totalARecolher,
+              }}
+              highlight
+            />
+          </ul>
+        ) : (
+          <div className="overflow-x-auto">
             <table className="w-full min-w-[44rem] text-sm">
               <thead>
                 <tr className="border-b border-[var(--border)] bg-[var(--muted)]/30 text-left text-xs text-[var(--muted-foreground)]">
@@ -173,7 +236,7 @@ export function TaxReportApuracaoPanel({
               </tbody>
             </table>
           </div>
-        </div>
+        )}
       </Card>
 
       {difalUfs.length > 0 ? (
