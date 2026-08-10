@@ -143,7 +143,7 @@ export function DreCostItemsModal({
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder="Ex.: Embalagens"
-              className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
+              className="h-11 flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-base sm:h-10 sm:text-sm"
               disabled={busy}
             />
             <Button type="button" size="sm" onClick={() => void addItem()} disabled={busy}>
@@ -174,7 +174,7 @@ export function DreCostItemsModal({
                       type="text"
                       value={editingName}
                       onChange={(e) => setEditingName(e.target.value)}
-                      className="flex-1 rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-sm"
+                      className="h-11 flex-1 rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-base sm:h-9 sm:text-sm"
                       disabled={busy}
                     />
                   ) : (

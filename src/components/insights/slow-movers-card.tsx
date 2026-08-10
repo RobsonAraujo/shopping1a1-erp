@@ -23,7 +23,7 @@ export function SlowMoversCard({ allRows }: { allRows: SlowMoverRow[] }) {
           max={365}
           value={threshold}
           onChange={(e) => setThreshold(Math.max(1, Number(e.target.value)))}
-          className="w-20 rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
+          className="h-10 w-20 rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-base focus:outline-none focus:ring-1 focus:ring-[var(--primary)] sm:h-8 sm:text-sm"
         />
         <span className="text-sm text-[var(--muted-foreground)]">dias</span>
       </div>

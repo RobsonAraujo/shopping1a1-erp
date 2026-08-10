@@ -1103,7 +1103,7 @@ export function BranchSimulationClient() {
               placeholder="Nome do cenário para salvar"
               value={scenarioName}
               onChange={(e) => setScenarioName(e.target.value)}
-              className="h-11 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm shadow-sm sm:h-10 sm:flex-none"
+              className="h-11 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-base shadow-sm sm:h-10 sm:flex-none sm:text-sm"
             />
             <Button
               type="button"

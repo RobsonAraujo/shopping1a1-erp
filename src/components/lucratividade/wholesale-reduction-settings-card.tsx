@@ -70,7 +70,7 @@ const levelRows: LevelConfig[] = [
 ];
 
 const fieldInputClassName =
-  "w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-center text-sm font-semibold tabular-nums shadow-sm focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]/30";
+  "h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-center text-base font-semibold tabular-nums shadow-sm focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]/30 sm:h-10 sm:text-sm";
 
 function settingsToEditDraft(settings: WholesaleReductionSettings): EditDraft {
   return {

@@ -247,7 +247,7 @@ function WarehouseEditModal({
             step={1}
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm tabular-nums text-[var(--foreground)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+            className="mt-1.5 h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-base tabular-nums text-[var(--foreground)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] sm:h-10 sm:text-sm"
           />
 
           {error ? (
@@ -404,7 +404,7 @@ function LeadTimeSettingsModal({
                 placeholder="Ex.: 2"
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
-                className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm tabular-nums text-[var(--foreground)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+                className="h-11 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-base tabular-nums text-[var(--foreground)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] sm:h-10 sm:text-sm"
               />
               <FormSelect
                 id="lead-time-unit"

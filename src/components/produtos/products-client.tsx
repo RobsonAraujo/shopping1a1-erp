@@ -281,7 +281,7 @@ function ProductSkuAliasesEditor({ canonicalSku }: { canonicalSku: string }) {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder="SKU antigo ou alternativo"
-          className="min-w-[12rem] flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
+          className="h-11 min-w-[12rem] flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-base sm:h-10 sm:text-sm"
           disabled={saving}
         />
         <Button
@@ -374,7 +374,7 @@ function ProductFormModal({
                 value={form.sku}
                 disabled={isEdit}
                 onChange={(e) => setForm((f) => ({ ...f, sku: e.target.value }))}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm disabled:opacity-60"
+                className="h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-base disabled:opacity-60 sm:h-10 sm:text-sm"
               />
             </div>
             <div className="space-y-1 sm:col-span-2">
@@ -382,7 +382,7 @@ function ProductFormModal({
               <input
                 value={form.ncm}
                 onChange={(e) => setForm((f) => ({ ...f, ncm: e.target.value }))}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
+                className="h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-base sm:h-10 sm:text-sm"
               />
             </div>
             <MaskedMoneyField

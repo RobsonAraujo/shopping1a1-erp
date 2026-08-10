@@ -5,7 +5,7 @@ import { useId } from "react";
 import { cn } from "@/lib/utils";
 
 const inputClassName =
-  "w-full rounded-lg border border-[var(--border)] bg-[var(--background)] py-2 pl-9 pr-9 text-sm text-[var(--foreground)] shadow-sm placeholder:text-[var(--muted-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]";
+  "h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] py-2 pl-9 pr-9 text-base text-[var(--foreground)] shadow-sm placeholder:text-[var(--muted-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] sm:h-10 sm:text-sm";
 
 type ItemListSearchProps = {
   value: string;

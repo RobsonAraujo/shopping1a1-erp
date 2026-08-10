@@ -127,7 +127,7 @@ export function PurchaseCoverageBufferControl({
                 e.currentTarget.blur();
               }
             }}
-            className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm tabular-nums text-[var(--foreground)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+            className="h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-base tabular-nums text-[var(--foreground)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] sm:h-10 sm:text-sm"
           />
         </div>
       </CardContent>

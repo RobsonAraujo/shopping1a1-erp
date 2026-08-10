@@ -633,7 +633,7 @@ function ShipmentModal({
               step="0.01"
               value={form.totalCost}
               onChange={(e) => onChange({ ...form, totalCost: e.target.value })}
-              className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm tabular-nums text-[var(--foreground)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+              className="mt-1.5 h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-base tabular-nums text-[var(--foreground)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] sm:h-10 sm:text-sm"
             />
           </div>
 
@@ -654,7 +654,7 @@ function ShipmentModal({
               onChange={(e) =>
                 onChange({ ...form, totalUnits: e.target.value })
               }
-              className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm tabular-nums text-[var(--foreground)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+              className="mt-1.5 h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-base tabular-nums text-[var(--foreground)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] sm:h-10 sm:text-sm"
             />
           </div>
 
