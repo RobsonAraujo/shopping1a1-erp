@@ -95,6 +95,34 @@ describe("classifyMlBillingEntry", () => {
     assert.equal(classifyMlBillingEntry("PADS", "", ""), "ads");
   });
 
+  it("classifies CVAF as affiliateFee (not saleFee)", () => {
+    assert.equal(classifyMlBillingEntry("CVAF", "", ""), "affiliateFee");
+    assert.equal(
+      classifyMlBillingEntry("XYZ", "cargo por venta con afiliados", "CHARGE"),
+      "affiliateFee",
+    );
+    assert.equal(
+      classifyMlBillingEntry("BVAF", "estorno afiliados", "BONUS"),
+      "affiliateFee",
+    );
+  });
+
+  it("classifies CESM as minhaPagina (not skip)", () => {
+    assert.equal(classifyMlBillingEntry("CESM", "", ""), "minhaPagina");
+    assert.equal(
+      classifyMlBillingEntry(
+        "XYZ",
+        "tarifa de manutencao do eshop",
+        "CHARGE",
+      ),
+      "minhaPagina",
+    );
+    assert.equal(
+      classifyMlBillingEntry("XYZ", "tarifa de manutencao da minha pagina", ""),
+      "minhaPagina",
+    );
+  });
+
   it("classifies cancelled sales by subType or label", () => {
     assert.equal(classifyMlBillingEntry("CXC", "", ""), "cancelled");
     assert.equal(classifyMlBillingEntry("XYZ", "venda cancelada", ""), "cancelled");
@@ -164,7 +192,6 @@ describe("classifyMlBillingEntry", () => {
 
   it("skips known no-op subtypes", () => {
     assert.equal(classifyMlBillingEntry("CFONPN", "", ""), "skip");
-    assert.equal(classifyMlBillingEntry("CESM", "", ""), "skip");
   });
 
   it("returns unmapped for unknown entries", () => {
@@ -191,6 +218,11 @@ describe("applyBillingLineAmount", () => {
 
   it("subtracts a regular ads charge like other cost categories", () => {
     assert.equal(applyBillingLineAmount("ads", 100, 10, false), 90);
+  });
+
+  it("subtracts minhaPagina and affiliateFee like other costs", () => {
+    assert.equal(applyBillingLineAmount("minhaPagina", 0, 99, false), -99);
+    assert.equal(applyBillingLineAmount("affiliateFee", 0, 20.46, false), -20.46);
   });
 
   it("leaves current unchanged for skip category", () => {

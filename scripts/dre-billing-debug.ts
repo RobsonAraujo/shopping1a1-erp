@@ -199,6 +199,8 @@ async function main() {
     ["Vendas canceladas", mergedSummary.cancelledSales, detailsAgg?.cancelledSalesMl ?? null],
     ["Devolução parcial", mergedSummary.partialReturns, detailsAgg?.partialReturnsMl ?? null],
     ["Campanhas ADS", mergedSummary.adsCost, detailsAgg?.adsCost ?? null],
+    ["Minha Página", mergedSummary.minhaPagina, detailsAgg?.minhaPaginaMl ?? null],
+    ["Comissão Afiliados", mergedSummary.affiliateFee, detailsAgg?.affiliateFeeMl ?? null],
     ["Full - Envios", mergedSummary.fullShipping, null],
     ["Full - Armazenamento", mergedSummary.fullStorage, null],
     ["Full - Inconformidades", mergedSummary.fullNonCompliance, null],

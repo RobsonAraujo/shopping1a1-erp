@@ -203,6 +203,8 @@ export function mapBillingSummaryToDreLines(
     fullStorage: aggregated.fullStorageMl,
     fullNonCompliance: aggregated.fullNonComplianceMl,
     adsCost: aggregated.adsCost,
+    minhaPagina: aggregated.minhaPaginaMl,
+    affiliateFee: aggregated.affiliateFeeMl,
   };
 }
 
@@ -218,7 +220,9 @@ export function isBillingSummaryEmpty(
     mapped.fullShipping !== 0 ||
     mapped.fullStorage !== 0 ||
     mapped.fullNonCompliance !== 0 ||
-    mapped.adsCost !== 0;
+    mapped.adsCost !== 0 ||
+    mapped.minhaPagina !== 0 ||
+    mapped.affiliateFee !== 0;
 
   return !hasRevenue && !hasCosts;
 }

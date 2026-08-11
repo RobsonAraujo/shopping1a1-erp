@@ -607,6 +607,8 @@ export async function buildDreMonthSnapshot(
   let fullShippingMl = 0;
   let fullStorageMl = 0;
   let fullNonComplianceMl = 0;
+  let minhaPaginaMl = 0;
+  let affiliateFeeMl = 0;
   let saleFeeBreakdown: DreLineBreakdownItem[] | undefined;
   let sellerShippingBreakdown: DreLineBreakdownItem[] | undefined;
   let billingSource: DreMonthSnapshotPayload["billingSource"] = "fallback";
@@ -624,6 +626,8 @@ export async function buildDreMonthSnapshot(
     fullShippingMl = billing!.fullShipping;
     fullStorageMl = billing!.fullStorage;
     fullNonComplianceMl = billing!.fullNonCompliance;
+    minhaPaginaMl = billing!.minhaPagina;
+    affiliateFeeMl = billing!.affiliateFee;
     if (billing!.detailsUsed) {
       syncWarnings.push(
         "Custos ML carregados do detalhamento de faturamento (/group/ML/details).",
@@ -655,6 +659,8 @@ export async function buildDreMonthSnapshot(
       fullShippingMl = billing!.fullShipping;
       fullStorageMl = billing!.fullStorage;
       fullNonComplianceMl = billing!.fullNonCompliance;
+      minhaPaginaMl = billing!.minhaPagina;
+      affiliateFeeMl = billing!.affiliateFee;
       saleFeeBreakdown = fallback.saleFeeBreakdown;
       sellerShippingBreakdown = fallback.sellerShippingBreakdown;
       syncWarnings.push(
@@ -804,6 +810,8 @@ export async function buildDreMonthSnapshot(
     fullShippingMl,
     fullStorageMl,
     fullNonComplianceMl,
+    minhaPaginaMl,
+    affiliateFeeMl,
     adsCost,
     billingSource,
     isPartial,
@@ -866,6 +874,8 @@ export function emptyDreMonthSnapshotPayload(): DreMonthSnapshotPayload {
     fullShippingMl: 0,
     fullStorageMl: 0,
     fullNonComplianceMl: 0,
+    minhaPaginaMl: 0,
+    affiliateFeeMl: 0,
     adsCost: 0,
     billingSource: "fallback",
     isPartial: false,
@@ -950,6 +960,8 @@ export function snapshotPayloadToLines(
     fullShippingMl: payload.fullShippingMl,
     fullStorageMl: payload.fullStorageMl,
     fullNonComplianceMl: payload.fullNonComplianceMl,
+    minhaPaginaMl: payload.minhaPaginaMl,
+    affiliateFeeMl: payload.affiliateFeeMl,
   };
 }
 
@@ -1059,6 +1071,8 @@ export function parseSnapshotPayload(raw: unknown): DreMonthSnapshotPayload | nu
     fullShippingMl: num("fullShippingMl"),
     fullStorageMl: num("fullStorageMl"),
     fullNonComplianceMl: num("fullNonComplianceMl"),
+    minhaPaginaMl: num("minhaPaginaMl"),
+    affiliateFeeMl: num("affiliateFeeMl"),
     adsCost: num("adsCost"),
     billingSource:
       p.billingSource === "billing" ? "billing" : "fallback",

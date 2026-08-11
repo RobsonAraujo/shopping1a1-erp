@@ -65,6 +65,22 @@ describe("aggregateMlBillingDetails", () => {
           transaction_detail: "Bonificação tarifa",
         },
       },
+      {
+        charge_info: {
+          detail_amount: 93.73,
+          detail_type: "CHARGE",
+          detail_sub_type: "CVAF",
+          transaction_detail: "cargo por venta con afiliados",
+        },
+      },
+      {
+        charge_info: {
+          detail_amount: 99,
+          detail_type: "CHARGE",
+          detail_sub_type: "CESM",
+          transaction_detail: "Tarifa de manutenção do eShop",
+        },
+      },
     ]);
 
     assert.equal(agg.saleFeeMl, round(-15945.07 -890.58 + 609.52));
@@ -72,6 +88,8 @@ describe("aggregateMlBillingDetails", () => {
     assert.equal(agg.fullShippingMl, -775.62);
     assert.equal(agg.fullNonComplianceMl, -228);
     assert.equal(agg.adsCost, 3143.3);
+    assert.equal(agg.affiliateFeeMl, -93.73);
+    assert.equal(agg.minhaPaginaMl, -99);
   });
 });
 
@@ -85,6 +103,8 @@ describe("mapBillingSummaryToDreLines", () => {
           { label: "Tarifa de envio extra ou intermunicipal", amount: 2778.27, type: "CFFE" },
           { label: "Custo do serviço de coleta Full", amount: 775.62, type: "CFCBI" },
           { label: "Campanhas de publicidade - Product Ads", amount: 3143.3, type: "PADS" },
+          { label: "CVAF", amount: 107.29, type: "CVAF" },
+          { label: "Tarifa de manutenção do eShop", amount: 163, type: "CESM" },
         ],
         bonuses: [{ label: "BVVML", amount: 609.52, type: "BVVML" }],
       },
@@ -94,6 +114,8 @@ describe("mapBillingSummaryToDreLines", () => {
     assert.equal(mapped.sellerShipping, -2778.27);
     assert.equal(mapped.fullShipping, -775.62);
     assert.equal(mapped.adsCost, 3143.3);
+    assert.equal(mapped.affiliateFee, -107.29);
+    assert.equal(mapped.minhaPagina, -163);
   });
 });
 
@@ -111,6 +133,8 @@ describe("mergeBillingLines", () => {
         fullShippingMl: -770,
         fullStorageMl: -100,
         fullNonComplianceMl: -228,
+        minhaPaginaMl: -99,
+        affiliateFeeMl: -20.46,
         unmappedCharges: 0,
         chargeCount: 10,
         bySubType: {},
@@ -126,12 +150,16 @@ describe("mergeBillingLines", () => {
         fullStorage: 0,
         fullNonCompliance: 0,
         adsCost: 0,
+        minhaPagina: 0,
+        affiliateFee: 0,
       },
       { fullShipping: 0, fullStorage: 0, fullNonCompliance: 0 },
     );
 
     assert.equal(merged.saleFee, -19000);
     assert.equal(merged.fullNonCompliance, -228);
+    assert.equal(merged.minhaPagina, -99);
+    assert.equal(merged.affiliateFee, -20.46);
   });
 });
 

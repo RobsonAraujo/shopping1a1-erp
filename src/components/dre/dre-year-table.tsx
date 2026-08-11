@@ -439,7 +439,7 @@ function DreInlineMoneyCell({
               onClick={(e) => e.stopPropagation()}
               onDoubleClick={(e) => e.stopPropagation()}
             >
-              <div className="flex animate-in items-center justify-end gap-1 rounded-md border border-[var(--primary)]/40 bg-[var(--background)] p-1 shadow-lg ring-2 ring-[var(--primary)]/30 duration-200 fade-in-0 zoom-in-95">
+              <div className="flex animate-in items-center justify-end gap-1 rounded-md border border-[var(--primary)]/40 bg-[var(--background)] p-1 shadow-lg ring-2 ring-[var(--primary)]/30 duration-300 fade-in-0">
                 <NumericFormat
                   getInputRef={inputRef}
                   value={draft ?? ""}
@@ -517,9 +517,8 @@ function DreInlineMoneyCell({
         className={cn(
           "whitespace-nowrap text-[12.5px] font-bold tabular-nums leading-tight",
           muted && "text-[var(--muted-foreground)]",
-          (!disabled || onAudit) && "rounded-sm hover:bg-black/[0.04]",
-          !disabled && (onAudit ? "cursor-pointer" : "cursor-text"),
-          disabled && onAudit && "cursor-pointer",
+          (!disabled || onAudit) &&
+            "cursor-pointer rounded-sm hover:bg-black/[0.04]",
           onAudit &&
             "underline decoration-dotted decoration-1 underline-offset-2",
         )}

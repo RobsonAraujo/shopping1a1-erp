@@ -274,6 +274,17 @@ Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templ
 - **Código já tenant-ready?** **não** — `patchDreMonthLine(year, month, …)` sem `organizationId`
 - **Ação futura na migração:** escopar `patchDreMonthLine` / sync / cost-values por `organizationId`
 
+### DRE — Minha Página e Comissão Afiliados (fatura ML) — 2026-08-11
+
+- **Tabelas novas/alteradas:** nenhuma (campos novos no JSON de `dre_month_snapshots.payload`: `minhaPaginaMl`, `affiliateFeeMl`)
+- **Precisa `organizationId`?** **sim** — mesmo snapshot DRE global
+- **APIs afetadas:** sync `POST /api/dre/sync` (mapeia `CESM`/`CVAF` da fatura); `PATCH /api/dre/lines` (linhas editáveis)
+- **Assume singleton?** **sim** — `@@unique([year, month])`
+- **Cron/background:** nenhum
+- **Dados globais vs por org:** valores vêm da fatura do seller ML da sessão, mas persistem no snapshot único
+- **Código já tenant-ready?** **não** — classificador/sync sem `organizationId`
+- **Ação futura na migração:** escopar sync e snapshot por org; classificador permanece puro
+
 ### Produtos e pricing — baseline
 
 - **Tabelas:** `products`, `company_tax_settings`

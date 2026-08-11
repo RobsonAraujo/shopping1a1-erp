@@ -11,6 +11,8 @@ export type DreLineAmounts = {
   fullShippingMl: number;
   fullStorageMl: number;
   fullNonComplianceMl: number;
+  minhaPaginaMl: number;
+  affiliateFeeMl: number;
 };
 
 export type DreBillingSource = "billing" | "fallback";
@@ -83,6 +85,8 @@ export const DRE_EDITABLE_LINE_KEYS = [
   "fullShippingMl",
   "fullStorageMl",
   "fullNonComplianceMl",
+  "minhaPaginaMl",
+  "affiliateFeeMl",
   "adsCost",
 ] as const;
 
@@ -127,6 +131,8 @@ const OPERATIONAL_LINE_KEYS: (keyof DreLineAmounts)[] = [
   "fullShippingMl",
   "fullStorageMl",
   "fullNonComplianceMl",
+  "minhaPaginaMl",
+  "affiliateFeeMl",
 ];
 
 export function percentOfRevenue(
@@ -262,6 +268,8 @@ export function sumYearLineAmounts(
     fullShippingMl: 0,
     fullStorageMl: 0,
     fullNonComplianceMl: 0,
+    minhaPaginaMl: 0,
+    affiliateFeeMl: 0,
   };
   for (const month of months) {
     for (const key of OPERATIONAL_LINE_KEYS) {

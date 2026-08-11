@@ -11,6 +11,10 @@ export type MlBillingDreLines = {
   fullStorage: number;
   fullNonCompliance: number;
   adsCost: number;
+  /** Tarifa de manutenção da Minha Página (CESM). */
+  minhaPagina: number;
+  /** Comissão paga a afiliados (CVAF). */
+  affiliateFee: number;
 };
 
 export function normalizeBillingLabel(label: string | undefined): string {
@@ -118,6 +122,8 @@ export type MlBillingLineCategory =
   | "fullStorage"
   | "fullNonCompliance"
   | "ads"
+  | "minhaPagina"
+  | "affiliateFee"
   | "cancelled"
   | "partialReturn"
   | "skip";
@@ -133,6 +139,26 @@ export function classifyMlBillingEntry(
   const isBonus = dt === "BONUS";
 
   if (type === "PADS") return "ads";
+
+  // Comissão de afiliados (CVAF) — antes do genérico CV*, senão cai em Tarifa ML.
+  if (
+    type === "CVAF" ||
+    type === "BVAF" ||
+    /afiliad/.test(label)
+  ) {
+    return "affiliateFee";
+  }
+
+  // Minha Página / eShop (CESM) — antes era skip.
+  if (
+    type === "CESM" ||
+    type === "BESM" ||
+    /minha pagina|manutencao.*(eshop|pagina)|tarifa de manutencao do eshop/.test(
+      label,
+    )
+  ) {
+    return "minhaPagina";
+  }
 
   // Sub-tipo estruturado do ML é mais confiável que o texto do label —
   // checar primeiro para não deixar um label genérico de Full ("Full",
@@ -201,7 +227,7 @@ export function classifyMlBillingEntry(
     return "partialReturn";
   }
 
-  if (type === "CFONPN" || type === "CESM" || type === "CCMP") {
+  if (type === "CFONPN" || type === "CCMP") {
     return "skip";
   }
 
@@ -228,7 +254,9 @@ export function applyBillingLineAmount(
     category === "fullStorage" ||
     category === "fullNonCompliance" ||
     category === "cancelled" ||
-    category === "ads"
+    category === "ads" ||
+    category === "minhaPagina" ||
+    category === "affiliateFee"
   ) {
     return isBonus
       ? addBillingBonus(current, abs)

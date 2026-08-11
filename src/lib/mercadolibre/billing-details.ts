@@ -60,6 +60,8 @@ export type MlDetailsAggregation = {
   fullShippingMl: number;
   fullStorageMl: number;
   fullNonComplianceMl: number;
+  minhaPaginaMl: number;
+  affiliateFeeMl: number;
   unmappedCharges: number;
   chargeCount: number;
   bySubType: Record<string, number>;
@@ -142,6 +144,8 @@ function emptyAggregation(): MlDetailsAggregation {
     fullShippingMl: 0,
     fullStorageMl: 0,
     fullNonComplianceMl: 0,
+    minhaPaginaMl: 0,
+    affiliateFeeMl: 0,
     unmappedCharges: 0,
     chargeCount: 0,
     bySubType: {},
@@ -219,6 +223,22 @@ function applyCategory(
       agg.fullNonComplianceMl = applyBillingLineAmount(
         category,
         agg.fullNonComplianceMl,
+        amount,
+        isBonus,
+      );
+      break;
+    case "minhaPagina":
+      agg.minhaPaginaMl = applyBillingLineAmount(
+        category,
+        agg.minhaPaginaMl,
+        amount,
+        isBonus,
+      );
+      break;
+    case "affiliateFee":
+      agg.affiliateFeeMl = applyBillingLineAmount(
+        category,
+        agg.affiliateFeeMl,
         amount,
         isBonus,
       );
@@ -408,5 +428,7 @@ export function mergeBillingLines(
       full.fullNonCompliance,
     ),
     adsCost: pick(details?.adsCost ?? 0, summary.adsCost),
+    minhaPagina: pick(details?.minhaPaginaMl ?? 0, summary.minhaPagina),
+    affiliateFee: pick(details?.affiliateFeeMl ?? 0, summary.affiliateFee),
   };
 }

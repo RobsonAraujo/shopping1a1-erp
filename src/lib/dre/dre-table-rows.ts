@@ -24,6 +24,8 @@ export type DreStaticRowId =
   | "fullStorageMl"
   | "fullNonComplianceMl"
   | "adsCost"
+  | "minhaPaginaMl"
+  | "affiliateFeeMl"
   | "margemContribuicao"
   | "totalCustoFixo"
   | "lucroOperacionalAntesInvestimentos"
@@ -93,7 +95,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     id: "totalCustoOperacional",
     kind: "custo-total",
     label: "(-) Custos Variáveis",
-    methodology: "Soma de todas as linhas abaixo (Canceladas, Tarifa ML, Custo produto, Imposto, Frete vendedor, Full envios/armazém/inconformidades, Campanhas ADS) mais os custos operacionais manuais cadastrados. Inclui também devoluções parciais reembolsadas pelo ML, sem linha própria na tabela.",
+    methodology: "Soma de todas as linhas abaixo (Canceladas, Tarifa ML, Custo produto, Imposto, Frete vendedor, Full envios/armazém/inconformidades, Campanhas ADS, Minha Página, Comissão Afiliados) mais os custos operacionais manuais cadastrados. Inclui também devoluções parciais reembolsadas pelo ML, sem linha própria na tabela.",
   },
   {
     type: "static",
@@ -183,6 +185,26 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     source: "ads",
     indent: true,
     methodology: "Gasto com campanhas de Product Ads no mês, obtido da API de métricas de anúncios do Mercado Livre (ou da fatura ML como contingência, quando a API de métricas falha).",
+  },
+  {
+    type: "static",
+    id: "minhaPaginaMl",
+    kind: "custo-detail",
+    label: "Minha Página",
+    source: "ml",
+    indent: true,
+    lineKey: "minhaPaginaMl",
+    methodology: "Tarifa de manutenção da Minha Página (eShop) cobrada na fatura ML (código CESM).",
+  },
+  {
+    type: "static",
+    id: "affiliateFeeMl",
+    kind: "custo-detail",
+    label: "Comissão Afiliados",
+    source: "ml",
+    indent: true,
+    lineKey: "affiliateFeeMl",
+    methodology: "Comissão paga a afiliados por vendas geradas, conforme a fatura ML (código CVAF).",
   },
   {
     type: "static",

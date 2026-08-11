@@ -19,6 +19,8 @@ const BASE_LINES = {
   fullShippingMl: 0,
   fullStorageMl: 0,
   fullNonComplianceMl: 0,
+  minhaPaginaMl: 0,
+  affiliateFeeMl: 0,
 };
 
 describe("computeDreTotals", () => {
@@ -35,6 +37,8 @@ describe("computeDreTotals", () => {
         fullShippingMl: -500,
         fullStorageMl: -200,
         fullNonComplianceMl: -50,
+        minhaPaginaMl: 0,
+        affiliateFeeMl: 0,
       },
       4400,
       [{ costItemId: "rent", amount: 3000 }],
@@ -176,5 +180,32 @@ describe("mapBillingSummaryToDreLines", () => {
     assert.equal(mapped.sellerShipping, -8930.39);
     assert.equal(mapped.cancelledSales, -2034.7);
     assert.equal(mapped.partialReturns, 120);
+  });
+
+  it("maps CESM and CVAF into dedicated DRE lines (not saleFee)", () => {
+    const mapped = mapBillingSummaryToDreLines({
+      bill_includes: {
+        charges: [
+          { label: "Tarifa de venda", amount: 100, type: "CV" },
+          { label: "CVAF", amount: 93.73, type: "CVAF" },
+          {
+            label: "Tarifa de manutenção do eShop",
+            amount: 99,
+            type: "CESM",
+          },
+          {
+            label: "Campanhas de publicidade - Product Ads",
+            amount: 50,
+            type: "PADS",
+          },
+        ],
+        bonuses: [],
+      },
+    });
+
+    assert.equal(mapped.saleFee, -100);
+    assert.equal(mapped.affiliateFee, -93.73);
+    assert.equal(mapped.minhaPagina, -99);
+    assert.equal(mapped.adsCost, 50);
   });
 });
