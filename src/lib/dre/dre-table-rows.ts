@@ -40,6 +40,7 @@ export type DreTableRow =
       indent?: boolean;
       lineKey?: keyof DreLineAmounts;
       showPercent?: boolean;
+      methodology?: string;
     }
   | {
       type: "fixed-cost";
@@ -75,6 +76,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     id: "totalEntrada",
     kind: "entrada-total",
     label: "(+) Total de Entrada",
+    methodology: "Igual ao Faturamento ML: soma do valor de venda de todos os pedidos pagos no mês, já incluindo o valor bruto das vendas canceladas (abatido depois em Custos Variáveis).",
   },
   {
     type: "static",
@@ -84,12 +86,14 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     source: "ml",
     indent: true,
     lineKey: "revenueMl",
+    methodology: "Soma do valor de venda (revenue) de todos os pedidos pagos no mês, pela data de faturamento configurada, mais o valor bruto das vendas canceladas do mês (obtido da fatura ML ou, quando indisponível, do valor absoluto da linha \"Canceladas ML\").",
   },
   {
     type: "static",
     id: "totalCustoOperacional",
     kind: "custo-total",
     label: "(-) Custos Variáveis",
+    methodology: "Soma de todas as linhas abaixo (Canceladas, Tarifa ML, Devolução, Custo produto, Imposto, Frete vendedor, Full envios/armazém/inconformidades, Campanhas ADS) mais os custos operacionais manuais cadastrados.",
   },
   {
     type: "static",
@@ -99,6 +103,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     source: "ml",
     indent: true,
     lineKey: "cancelledSalesMl",
+    methodology: "Valor bruto das vendas canceladas no mês, conforme a fatura ML (ou estimado pelos pedidos cancelados quando a fatura não está disponível). Lançado como custo para abater o Faturamento ML, que já soma essas vendas de volta.",
   },
   {
     type: "static",
@@ -108,6 +113,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     source: "ml",
     indent: true,
     lineKey: "saleFeeMl",
+    methodology: "Tarifas de venda cobradas pelo Mercado Livre no mês, conforme a fatura ML. Quando a fatura não está disponível/alinhada ao mês civil, é estimada por anúncio (categoria, tipo de anúncio e preço de cada pedido pago).",
   },
   {
     type: "static",
@@ -117,6 +123,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     source: "ml",
     indent: true,
     lineKey: "partialReturnsMl",
+    methodology: "Valor de devoluções parciais reembolsadas pelo Mercado Livre no mês (bônus/estornos da fatura ML).",
   },
   {
     type: "static",
@@ -126,6 +133,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     source: "erp",
     indent: true,
     lineKey: "productCostErp",
+    methodology: "Para cada pedido pago no mês: quantidade vendida × custo unitário do produto (custo de compra, já com ST quando aplicável, + IPI), conforme cadastro de produtos do ERP — sem incluir custos extras. Somado para todos os pedidos do mês (inclui o custo dos itens de kits, quando aplicável).",
   },
   {
     type: "static",
@@ -135,6 +143,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     source: "erp",
     indent: true,
     lineKey: "taxErp",
+    methodology: "Para cada pedido pago no mês: valor de venda × % de imposto (ICMS/ST) apurado no relatório tributário do produto naquele mês. Somado para todos os pedidos do mês.",
   },
   {
     type: "static",
@@ -144,6 +153,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     source: "ml",
     indent: true,
     lineKey: "sellerShippingMl",
+    methodology: "Custo de frete pago pelo vendedor no mês, conforme a fatura ML. Quando a fatura não está disponível/alinhada ao mês civil, é estimado por pedido a partir do custo de envio de cada anúncio.",
   },
   {
     type: "static",
@@ -153,6 +163,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     source: "ml",
     indent: true,
     lineKey: "fullShippingMl",
+    methodology: "Custo de envios do Mercado Envios Full no mês, conforme a fatura ML.",
   },
   {
     type: "static",
@@ -162,6 +173,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     source: "ml",
     indent: true,
     lineKey: "fullStorageMl",
+    methodology: "Custo de armazenamento no Full no mês, conforme a fatura ML.",
   },
   {
     type: "static",
@@ -171,6 +183,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     source: "ml",
     indent: true,
     lineKey: "fullNonComplianceMl",
+    methodology: "Multas por inconformidade no Full no mês, conforme a fatura ML.",
   },
   {
     type: "static",
@@ -179,6 +192,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     label: "Campanhas ADS",
     source: "ads",
     indent: true,
+    methodology: "Gasto com campanhas de Product Ads no mês, obtido da API de métricas de anúncios do Mercado Livre (ou da fatura ML como contingência, quando a API de métricas falha).",
   },
   {
     type: "static",
@@ -186,12 +200,14 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     kind: "resultado",
     label: "(=) Margem de Contribuição",
     showPercent: true,
+    methodology: "Total de Entrada + Custos Variáveis (os custos variáveis já entram como valores negativos, então isso equivale a Faturamento − custos variáveis).",
   },
   {
     type: "static",
     id: "totalCustoFixo",
     kind: "custo-total",
     label: "(-) Custo fixo",
+    methodology: "Soma dos custos fixos cadastrados manualmente para o mês (aluguel, sistemas, etc. — ver botão \"Custos fixos\").",
   },
   {
     type: "static",
@@ -199,12 +215,14 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     kind: "resultado",
     label: "(=) Lucro Operacional Antes dos Investimentos",
     showPercent: true,
+    methodology: "Margem de Contribuição − Custo fixo.",
   },
   {
     type: "static",
     id: "totalInvestimento",
     kind: "custo-total",
     label: "(-) Investimentos",
+    methodology: "Soma dos investimentos cadastrados manualmente para o mês (marketing institucional, CAPEX, etc. — ver botão \"Investimentos\").",
   },
   {
     type: "static",
@@ -212,6 +230,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     kind: "resultado",
     label: "(=) Lucro Operacional",
     showPercent: true,
+    methodology: "Lucro Operacional Antes dos Investimentos − Investimentos.",
   },
 ];
 
@@ -282,6 +301,20 @@ export function buildDreTableRows(
     rows.push(row);
   }
   return rows;
+}
+
+export function getRowMethodology(row: DreTableRow): string | undefined {
+  if (row.type === "static") return row.methodology;
+  if (row.type === "fixed-cost") {
+    return `Valor de custo fixo informado manualmente por você para "${row.label}" neste mês (herdado do mês anterior quando não editado).`;
+  }
+  if (row.type === "operational-cost") {
+    return `Valor de custo operacional informado manualmente por você para "${row.label}" neste mês (herdado do mês anterior quando não editado).`;
+  }
+  if (row.type === "investment-cost") {
+    return `Valor de investimento informado manualmente por você para "${row.label}" neste mês (herdado do mês anterior quando não editado).`;
+  }
+  return undefined;
 }
 
 /** Linhas de grupo/resultado ficam com fundo verde ou vermelho — só essas. */

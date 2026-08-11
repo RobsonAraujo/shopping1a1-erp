@@ -6,6 +6,8 @@ import {
   type DreComputedTotals,
   type DreLineAmounts,
   type DreMonthSnapshotPayload,
+  type DreProductCostBreakdownItem,
+  type DreTaxBreakdownItem,
 } from "@/lib/dre/dre-calculations";
 import { prisma } from "@/lib/db";
 import {
@@ -43,6 +45,8 @@ export type DreMonthView = {
   syncWarnings: string[];
   lines: DreLineAmounts | null;
   cancelledIncludeOverlay: DreCancelledIncludeOverlay | null;
+  productCostBreakdown: DreProductCostBreakdownItem[] | null;
+  taxBreakdown: DreTaxBreakdownItem[] | null;
   adsCost: number | null;
   fixedCostValues: Record<string, number | null>;
   fixedCostOverrides: Record<string, number | null>;
@@ -247,6 +251,8 @@ export async function loadDreYearView(year: number): Promise<DreYearView> {
       syncWarnings: payload?.syncWarnings ?? [],
       lines,
       cancelledIncludeOverlay: payload?.cancelledIncludeOverlay ?? null,
+      productCostBreakdown: payload?.productCostBreakdown ?? null,
+      taxBreakdown: payload?.taxBreakdown ?? null,
       adsCost: payload?.adsCost ?? null,
       fixedCostValues,
       fixedCostOverrides,

@@ -4,8 +4,12 @@ import { prisma } from "@/lib/db";
 import { logServerError } from "@/lib/server-public-error";
 import {
   computeDreTotals,
+  mergeProductCostBreakdowns,
+  mergeTaxBreakdowns,
   type DreCancelledIncludeOverlay,
   type DreMonthSnapshotPayload,
+  type DreProductCostBreakdownItem,
+  type DreTaxBreakdownItem,
 } from "@/lib/dre/dre-calculations";
 import { loadProductsMapBySku } from "@/lib/product-data";
 import { loadProductTaxFromLatestReport } from "@/lib/product-tax-from-report";
@@ -50,6 +54,8 @@ async function computeErpCostsFromOrderLines(
   incompleteProductCostCount: number;
   missingTaxCount: number;
   taxFromDifferentPeriodCount: number;
+  breakdown: DreProductCostBreakdownItem[];
+  taxBreakdown: DreTaxBreakdownItem[];
 }> {
   const itemIds = [...new Set(orderLines.map((line) => line.itemId))];
   const items = await fetchItemsByIdsBatched(accessToken, itemIds);
@@ -83,6 +89,71 @@ async function computeErpCostsFromOrderLines(
   const missingItems = new Set<string>();
   const missingTaxItems = new Set<string>();
   const differentPeriodTaxItems = new Set<string>();
+  const breakdownByKey = new Map<string, DreProductCostBreakdownItem>();
+  const taxBreakdownByKey = new Map<string, DreTaxBreakdownItem>();
+
+  function addToBreakdown(
+    key: string,
+    sku: string | null,
+    title: string,
+    quantity: number,
+    cost: number,
+    missingCost: boolean,
+  ) {
+    const existing = breakdownByKey.get(key);
+    if (existing) {
+      existing.quantity += quantity;
+      existing.totalCost = roundMoney(existing.totalCost + cost);
+      existing.unitCost =
+        existing.quantity > 0
+          ? roundMoney(existing.totalCost / existing.quantity)
+          : 0;
+      existing.missingCost = existing.missingCost || missingCost;
+      return;
+    }
+    breakdownByKey.set(key, {
+      key,
+      sku,
+      title,
+      quantity,
+      unitCost: quantity > 0 ? roundMoney(cost / quantity) : 0,
+      totalCost: roundMoney(cost),
+      missingCost,
+    });
+  }
+
+  function addToTaxBreakdown(
+    key: string,
+    sku: string | null,
+    title: string,
+    quantity: number,
+    revenue: number,
+    tax: number,
+    missingTax: boolean,
+  ) {
+    const existing = taxBreakdownByKey.get(key);
+    if (existing) {
+      existing.quantity += quantity;
+      existing.revenue = roundMoney(existing.revenue + revenue);
+      existing.totalTax = roundMoney(existing.totalTax + tax);
+      existing.taxPercent =
+        existing.revenue > 0
+          ? roundMoney((existing.totalTax / existing.revenue) * 100)
+          : null;
+      existing.missingTax = existing.missingTax || missingTax;
+      return;
+    }
+    taxBreakdownByKey.set(key, {
+      key,
+      sku,
+      title,
+      quantity,
+      revenue: roundMoney(revenue),
+      taxPercent: revenue > 0 ? roundMoney((tax / revenue) * 100) : null,
+      totalTax: roundMoney(tax),
+      missingTax,
+    });
+  }
 
   for (const line of orderLines) {
     const sku = skuByItemId.get(line.itemId);
@@ -92,12 +163,35 @@ async function computeErpCostsFromOrderLines(
       ? (taxFromReport.bySku.get(normalizedSku) ?? null)
       : null;
     const taxPercent = taxEntry?.taxPercent ?? null;
+    const item = itemById.get(line.itemId);
+    const title = item?.title ?? line.itemId;
 
     if (pricing) {
-      productCostErp +=
-        line.quantity * (pricing.pricingCost + pricing.extraCosts);
+      const cost = line.quantity * pricing.pricingCost;
+      productCostErp += cost;
+      addToBreakdown(normalizedSku, sku ?? null, title, line.quantity, cost, false);
       if (taxPercent !== null && taxPercent > 0 && line.revenue > 0) {
-        taxErp += line.revenue * (taxPercent / 100);
+        const tax = line.revenue * (taxPercent / 100);
+        taxErp += tax;
+        addToTaxBreakdown(
+          normalizedSku,
+          sku ?? null,
+          title,
+          line.quantity,
+          line.revenue,
+          tax,
+          false,
+        );
+      } else {
+        addToTaxBreakdown(
+          normalizedSku,
+          sku ?? null,
+          title,
+          line.quantity,
+          line.revenue,
+          0,
+          taxEntry === null,
+        );
       }
       if (taxEntry === null) {
         missingTaxItems.add(line.itemId);
@@ -107,7 +201,6 @@ async function computeErpCostsFromOrderLines(
       continue;
     }
 
-    const item = itemById.get(line.itemId);
     const kitComponents = item ? kitsByMlItemId.get(item.id) : undefined;
     if (!normalizedSku && item && isKitItem(item) && kitComponents) {
       const resolved = resolveKitPricing(
@@ -116,16 +209,61 @@ async function computeErpCostsFromOrderLines(
         taxPercentBySku,
       );
       if (resolved.missingSkus.length === 0) {
-        productCostErp += line.quantity * (resolved.productCost + resolved.extraCosts);
+        const cost = line.quantity * resolved.productCost;
+        productCostErp += cost;
+        addToBreakdown(
+          `kit:${item.id}`,
+          null,
+          title,
+          line.quantity,
+          cost,
+          false,
+        );
         if (resolved.taxRatePercent !== null && line.revenue > 0) {
-          taxErp += line.revenue * (resolved.taxRatePercent / 100);
+          const tax = line.revenue * (resolved.taxRatePercent / 100);
+          taxErp += tax;
+          addToTaxBreakdown(
+            `kit:${item.id}`,
+            null,
+            title,
+            line.quantity,
+            line.revenue,
+            tax,
+            false,
+          );
         } else {
+          addToTaxBreakdown(
+            `kit:${item.id}`,
+            null,
+            title,
+            line.quantity,
+            line.revenue,
+            0,
+            true,
+          );
           missingTaxItems.add(line.itemId);
         }
         continue;
       }
     }
 
+    addToBreakdown(
+      `missing:${line.itemId}`,
+      sku ?? null,
+      title,
+      line.quantity,
+      0,
+      true,
+    );
+    addToTaxBreakdown(
+      `missing:${line.itemId}`,
+      sku ?? null,
+      title,
+      line.quantity,
+      line.revenue,
+      0,
+      true,
+    );
     missingItems.add(line.itemId);
   }
 
@@ -137,6 +275,12 @@ async function computeErpCostsFromOrderLines(
     incompleteProductCostCount,
     missingTaxCount: missingTaxItems.size,
     taxFromDifferentPeriodCount: differentPeriodTaxItems.size,
+    breakdown: [...breakdownByKey.values()].sort(
+      (a, b) => b.totalCost - a.totalCost,
+    ),
+    taxBreakdown: [...taxBreakdownByKey.values()].sort(
+      (a, b) => b.totalTax - a.totalTax,
+    ),
   };
 }
 
@@ -440,6 +584,8 @@ export async function buildDreMonthSnapshot(
   }
 
   let cancelledIncludeOverlay: DreCancelledIncludeOverlay | undefined;
+  let cancelledBreakdown: DreProductCostBreakdownItem[] = [];
+  let cancelledTaxBreakdown: DreTaxBreakdownItem[] = [];
   try {
     const cancelledLines = await fetchCancelledOrderLinesInDateRange(
       accessToken,
@@ -464,6 +610,8 @@ export async function buildDreMonthSnapshot(
         productCostErp: cancelledErpCosts.productCostErp,
         taxErp: cancelledErpCosts.taxErp,
       };
+      cancelledBreakdown = cancelledErpCosts.breakdown;
+      cancelledTaxBreakdown = cancelledErpCosts.taxBreakdown;
     }
   } catch (error) {
     logServerError("dre-month-data cancelled overlay", error);
@@ -486,6 +634,14 @@ export async function buildDreMonthSnapshot(
     incompleteProductCostCount: erpCosts.incompleteProductCostCount,
     syncWarnings,
     cancelledIncludeOverlay,
+    productCostBreakdown: mergeProductCostBreakdowns([
+      erpCosts.breakdown,
+      cancelledBreakdown,
+    ]),
+    taxBreakdown: mergeTaxBreakdowns([
+      erpCosts.taxBreakdown,
+      cancelledTaxBreakdown,
+    ]),
   };
 }
 
@@ -555,6 +711,46 @@ export function parseSnapshotPayload(raw: unknown): DreMonthSnapshotPayload | nu
         }
       : undefined;
 
+  const breakdownRaw = p.productCostBreakdown;
+  const productCostBreakdown = Array.isArray(breakdownRaw)
+    ? breakdownRaw
+        .filter(
+          (item): item is Record<string, unknown> =>
+            Boolean(item) && typeof item === "object",
+        )
+        .map((item) => ({
+          key: typeof item.key === "string" ? item.key : String(item.sku ?? ""),
+          sku: typeof item.sku === "string" ? item.sku : null,
+          title: typeof item.title === "string" ? item.title : "",
+          quantity: numFrom(item.quantity),
+          unitCost: numFrom(item.unitCost),
+          totalCost: numFrom(item.totalCost),
+          missingCost: Boolean(item.missingCost),
+        }))
+    : undefined;
+
+  const taxBreakdownRaw = p.taxBreakdown;
+  const taxBreakdown = Array.isArray(taxBreakdownRaw)
+    ? taxBreakdownRaw
+        .filter(
+          (item): item is Record<string, unknown> =>
+            Boolean(item) && typeof item === "object",
+        )
+        .map((item) => ({
+          key: typeof item.key === "string" ? item.key : String(item.sku ?? ""),
+          sku: typeof item.sku === "string" ? item.sku : null,
+          title: typeof item.title === "string" ? item.title : "",
+          quantity: numFrom(item.quantity),
+          revenue: numFrom(item.revenue),
+          taxPercent:
+            item.taxPercent === null || item.taxPercent === undefined
+              ? null
+              : numFrom(item.taxPercent),
+          totalTax: numFrom(item.totalTax),
+          missingTax: Boolean(item.missingTax),
+        }))
+    : undefined;
+
   return {
     revenueMl: num("revenueMl"),
     cancelledSalesMl: num("cancelledSalesMl"),
@@ -575,5 +771,7 @@ export function parseSnapshotPayload(raw: unknown): DreMonthSnapshotPayload | nu
       ? p.syncWarnings.filter((w): w is string => typeof w === "string")
       : [],
     cancelledIncludeOverlay,
+    productCostBreakdown,
+    taxBreakdown,
   };
 }

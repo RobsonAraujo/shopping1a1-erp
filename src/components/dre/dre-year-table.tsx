@@ -16,11 +16,18 @@ import {
   formatFinancialMoney,
   formatFinancialPercent,
 } from "@/lib/financial-margin";
+import { DreProductCostAuditModal } from "@/components/dre/dre-product-cost-audit-modal";
+import { DreTaxAuditModal } from "@/components/dre/dre-tax-audit-modal";
 import type { DreMonthView, DreYearView } from "@/lib/dre/dre-year-data";
+import {
+  getYearProductCostBreakdown,
+  getYearTaxBreakdown,
+} from "@/lib/dre/dre-calculations";
 import {
   buildDreTableRows,
   dreMonthShortLabel,
   getCellValue,
+  getRowMethodology,
   isColoredRow,
   rowBackgroundClass,
   rowLabelClass,
@@ -303,6 +310,45 @@ function DreManualCostCell({
   );
 }
 
+type AuditKind = "productCost" | "tax";
+type AuditTarget = { kind: AuditKind; period: number | "year" } | null;
+
+/** true quando algum mês do alvo de auditoria tem lançamentos mas não tem o detalhamento salvo (sincronizado antes desta funcionalidade). */
+function auditTargetNeedsResync(data: DreYearView, target: AuditTarget): boolean {
+  if (target === null) return false;
+  const months =
+    target.period === "year"
+      ? data.months
+      : data.months.filter((m) => m.month === target.period);
+  return months.some((m) =>
+    target.kind === "productCost"
+      ? m.lines !== null && m.productCostBreakdown === null
+      : m.lines !== null && m.taxBreakdown === null,
+  );
+}
+
+/** Tooltip de auditoria: explica como o valor da célula foi calculado. */
+function ValueMethodologyTooltip({
+  text,
+  children,
+}: {
+  text: string | undefined;
+  children: ReactNode;
+}) {
+  if (!text) return <>{children}</>;
+
+  return (
+    <Tooltip delayDuration={2000}>
+      <TooltipTrigger asChild>
+        <div className="cursor-help">{children}</div>
+      </TooltipTrigger>
+      <TooltipContent side="left" align="center" className="max-w-[20rem] text-left">
+        {text}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function renderLabelCell(row: DreTableRow) {
   const source =
     row.type === "fixed-cost" ||
@@ -349,19 +395,22 @@ function renderValueCell(
   onFixedCostChange: DreYearTableProps["onFixedCostChange"],
   onOperationalCostChange: DreYearTableProps["onOperationalCostChange"],
   onInvestmentCostChange: DreYearTableProps["onInvestmentCostChange"],
+  onAuditClick?: (kind: AuditKind, month: number) => void,
 ) {
   if (row.type === "fixed-cost") {
     const stored = month.fixedCostValues[row.costItemId];
     const override = month.fixedCostOverrides[row.costItemId];
     return (
-      <DreManualCostCell
-        value={stored}
-        override={override}
-        label={`${row.label} (${month.label})`}
-        onCommit={(amount) =>
-          onFixedCostChange(row.costItemId, month.month, amount)
-        }
-      />
+      <ValueMethodologyTooltip text={getRowMethodology(row)}>
+        <DreManualCostCell
+          value={stored}
+          override={override}
+          label={`${row.label} (${month.label})`}
+          onCommit={(amount) =>
+            onFixedCostChange(row.costItemId, month.month, amount)
+          }
+        />
+      </ValueMethodologyTooltip>
     );
   }
 
@@ -369,14 +418,16 @@ function renderValueCell(
     const stored = month.operationalCostValues[row.costItemId];
     const override = month.operationalCostOverrides[row.costItemId];
     return (
-      <DreManualCostCell
-        value={stored}
-        override={override}
-        label={`${row.label} (${month.label})`}
-        onCommit={(amount) =>
-          onOperationalCostChange(row.costItemId, month.month, amount)
-        }
-      />
+      <ValueMethodologyTooltip text={getRowMethodology(row)}>
+        <DreManualCostCell
+          value={stored}
+          override={override}
+          label={`${row.label} (${month.label})`}
+          onCommit={(amount) =>
+            onOperationalCostChange(row.costItemId, month.month, amount)
+          }
+        />
+      </ValueMethodologyTooltip>
     );
   }
 
@@ -384,31 +435,57 @@ function renderValueCell(
     const stored = month.investmentCostValues[row.costItemId];
     const override = month.investmentCostOverrides[row.costItemId];
     return (
-      <DreManualCostCell
-        value={stored}
-        override={override}
-        label={`${row.label} (${month.label})`}
-        onCommit={(amount) =>
-          onInvestmentCostChange(row.costItemId, month.month, amount)
-        }
-      />
+      <ValueMethodologyTooltip text={getRowMethodology(row)}>
+        <DreManualCostCell
+          value={stored}
+          override={override}
+          label={`${row.label} (${month.label})`}
+          onCommit={(amount) =>
+            onInvestmentCostChange(row.costItemId, month.month, amount)
+          }
+        />
+      </ValueMethodologyTooltip>
     );
   }
 
   const { amount } = getCellValue(row, month);
   const colored = isColoredRow(row);
+  const methodology = getRowMethodology(row);
 
   const moneyLabel = formatFinancialMoney(amount);
+  const valueClassName = cn(
+    "whitespace-nowrap text-right text-[12.5px] font-bold tabular-nums leading-tight",
+    colored ? "text-white" : "",
+  );
+
+  const auditKind: AuditKind | null =
+    row.id === "productCostErp"
+      ? "productCost"
+      : row.id === "taxErp"
+        ? "tax"
+        : null;
+
+  if (auditKind && onAuditClick) {
+    return (
+      <ValueMethodologyTooltip text={methodology}>
+        <button
+          type="button"
+          onClick={() => onAuditClick(auditKind, month.month)}
+          className={cn(
+            valueClassName,
+            "w-full cursor-pointer underline decoration-dotted decoration-1 underline-offset-2 hover:opacity-80",
+          )}
+        >
+          {moneyLabel}
+        </button>
+      </ValueMethodologyTooltip>
+    );
+  }
 
   return (
-    <div
-      className={cn(
-        "whitespace-nowrap text-right text-[12.5px] font-bold tabular-nums leading-tight",
-        colored ? "text-white" : "",
-      )}
-    >
-      {moneyLabel}
-    </div>
+    <ValueMethodologyTooltip text={methodology}>
+      <div className={valueClassName}>{moneyLabel}</div>
+    </ValueMethodologyTooltip>
   );
 }
 
@@ -529,6 +606,7 @@ function DreMobileRow({
   onFixedCostChange,
   onOperationalCostChange,
   onInvestmentCostChange,
+  onAuditClick,
 }: {
   row: DreTableRow;
   isAlt: boolean;
@@ -537,22 +615,46 @@ function DreMobileRow({
   onFixedCostChange: DreYearTableProps["onFixedCostChange"];
   onOperationalCostChange: DreYearTableProps["onOperationalCostChange"];
   onInvestmentCostChange: DreYearTableProps["onInvestmentCostChange"];
+  onAuditClick: (kind: AuditKind, period: number | "year") => void;
 }) {
   const colored = isColoredRow(row);
   const bg = rowBackgroundClass(row);
   const showPercentRow = row.type === "static" && row.showPercent;
   const isTotal = selection === "total";
   const month = isTotal ? null : data.months[selection];
+  const auditKind: AuditKind | null =
+    row.type === "static"
+      ? row.id === "productCostErp"
+        ? "productCost"
+        : row.id === "taxErp"
+          ? "tax"
+          : null
+      : null;
 
   const valueNode = isTotal ? (
-    <div
-      className={cn(
-        "whitespace-nowrap text-right text-[13px] font-bold tabular-nums leading-tight",
-        colored ? "text-white" : "",
+    <ValueMethodologyTooltip text={getRowMethodology(row)}>
+      {auditKind ? (
+        <button
+          type="button"
+          onClick={() => onAuditClick(auditKind, "year")}
+          className={cn(
+            "w-full cursor-pointer whitespace-nowrap text-right text-[13px] font-bold tabular-nums leading-tight underline decoration-dotted decoration-1 underline-offset-2 hover:opacity-80",
+            colored ? "text-white" : "",
+          )}
+        >
+          {formatFinancialMoney(getYearTotalForRow(row, data).amount)}
+        </button>
+      ) : (
+        <div
+          className={cn(
+            "whitespace-nowrap text-right text-[13px] font-bold tabular-nums leading-tight",
+            colored ? "text-white" : "",
+          )}
+        >
+          {formatFinancialMoney(getYearTotalForRow(row, data).amount)}
+        </div>
       )}
-    >
-      {formatFinancialMoney(getYearTotalForRow(row, data).amount)}
-    </div>
+    </ValueMethodologyTooltip>
   ) : (
     renderValueCell(
       row,
@@ -560,6 +662,7 @@ function DreMobileRow({
       onFixedCostChange,
       onOperationalCostChange,
       onInvestmentCostChange,
+      (kind, m) => onAuditClick(kind, m),
     )
   );
 
@@ -622,6 +725,29 @@ function DreYearTableMobile({
   }, [data.months]);
 
   const [selection, setSelection] = useState<DreMobileSelection>(defaultIndex);
+  const [auditTarget, setAuditTarget] = useState<AuditTarget>(null);
+
+  const productCostAuditItems =
+    auditTarget === null || auditTarget.kind !== "productCost"
+      ? []
+      : auditTarget.period === "year"
+        ? getYearProductCostBreakdown(data.months)
+        : (data.months.find((m) => m.month === auditTarget.period)
+            ?.productCostBreakdown ?? []);
+  const taxAuditItems =
+    auditTarget === null || auditTarget.kind !== "tax"
+      ? []
+      : auditTarget.period === "year"
+        ? getYearTaxBreakdown(data.months)
+        : (data.months.find((m) => m.month === auditTarget.period)
+            ?.taxBreakdown ?? []);
+  const auditTitle =
+    auditTarget === null
+      ? ""
+      : auditTarget.period === "year"
+        ? `Ano ${data.year}`
+        : (data.months.find((m) => m.month === auditTarget.period)?.label ??
+          `Mês ${auditTarget.period}`);
 
   const selectedMonth = selection === "total" ? null : data.months[selection];
   const alertMessages = selectedMonth ? getMonthAlertMessages(selectedMonth) : [];
@@ -733,9 +859,24 @@ function DreYearTableMobile({
             onFixedCostChange={onFixedCostChange}
             onOperationalCostChange={onOperationalCostChange}
             onInvestmentCostChange={onInvestmentCostChange}
+            onAuditClick={(kind, period) => setAuditTarget({ kind, period })}
           />
         ))}
       </div>
+      <DreProductCostAuditModal
+        open={auditTarget !== null && auditTarget.kind === "productCost"}
+        title={auditTitle}
+        items={productCostAuditItems}
+        needsResync={auditTargetNeedsResync(data, auditTarget)}
+        onClose={() => setAuditTarget(null)}
+      />
+      <DreTaxAuditModal
+        open={auditTarget !== null && auditTarget.kind === "tax"}
+        title={auditTitle}
+        items={taxAuditItems}
+        needsResync={auditTargetNeedsResync(data, auditTarget)}
+        onClose={() => setAuditTarget(null)}
+      />
     </div>
   );
 }
@@ -841,6 +982,29 @@ function DreYearTableDesktop({
   onInvestmentCostChange,
 }: DreYearTableProps) {
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
+  const [auditTarget, setAuditTarget] = useState<AuditTarget>(null);
+
+  const productCostAuditItems =
+    auditTarget === null || auditTarget.kind !== "productCost"
+      ? []
+      : auditTarget.period === "year"
+        ? getYearProductCostBreakdown(data.months)
+        : (data.months.find((m) => m.month === auditTarget.period)
+            ?.productCostBreakdown ?? []);
+  const taxAuditItems =
+    auditTarget === null || auditTarget.kind !== "tax"
+      ? []
+      : auditTarget.period === "year"
+        ? getYearTaxBreakdown(data.months)
+        : (data.months.find((m) => m.month === auditTarget.period)
+            ?.taxBreakdown ?? []);
+  const auditTitle =
+    auditTarget === null
+      ? ""
+      : auditTarget.period === "year"
+        ? `Ano ${data.year}`
+        : (data.months.find((m) => m.month === auditTarget.period)?.label ??
+          `Mês ${auditTarget.period}`);
 
   const rows = buildDreTableRows(
     data.costItems,
@@ -953,6 +1117,7 @@ function DreYearTableDesktop({
                           onFixedCostChange,
                           onOperationalCostChange,
                           onInvestmentCostChange,
+                          (kind, m) => setAuditTarget({ kind, period: m }),
                         )}
                       </td>
                     ))}
@@ -964,16 +1129,43 @@ function DreYearTableDesktop({
                       )}
                       style={cellStyle}
                     >
-                      <div
-                        className={cn(
-                          "whitespace-nowrap text-right text-[12.5px] font-bold tabular-nums leading-tight",
-                          isColoredRow(row) ? "text-white" : "",
+                      <ValueMethodologyTooltip text={getRowMethodology(row)}>
+                        {row.type === "static" &&
+                        (row.id === "productCostErp" ||
+                          row.id === "taxErp") ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setAuditTarget({
+                                kind:
+                                  row.id === "productCostErp"
+                                    ? "productCost"
+                                    : "tax",
+                                period: "year",
+                              })
+                            }
+                            className={cn(
+                              "w-full cursor-pointer whitespace-nowrap text-right text-[12.5px] font-bold tabular-nums leading-tight underline decoration-dotted decoration-1 underline-offset-2 hover:opacity-80",
+                              isColoredRow(row) ? "text-white" : "",
+                            )}
+                          >
+                            {formatFinancialMoney(
+                              getYearTotalForRow(row, data).amount,
+                            )}
+                          </button>
+                        ) : (
+                          <div
+                            className={cn(
+                              "whitespace-nowrap text-right text-[12.5px] font-bold tabular-nums leading-tight",
+                              isColoredRow(row) ? "text-white" : "",
+                            )}
+                          >
+                            {formatFinancialMoney(
+                              getYearTotalForRow(row, data).amount,
+                            )}
+                          </div>
                         )}
-                      >
-                        {formatFinancialMoney(
-                          getYearTotalForRow(row, data).amount,
-                        )}
-                      </div>
+                      </ValueMethodologyTooltip>
                     </td>
                   </tr>
                   {showPercentRow ? (
@@ -1024,6 +1216,20 @@ function DreYearTableDesktop({
           </tbody>
         </table>
       </div>
+      <DreProductCostAuditModal
+        open={auditTarget !== null && auditTarget.kind === "productCost"}
+        title={auditTitle}
+        items={productCostAuditItems}
+        needsResync={auditTargetNeedsResync(data, auditTarget)}
+        onClose={() => setAuditTarget(null)}
+      />
+      <DreTaxAuditModal
+        open={auditTarget !== null && auditTarget.kind === "tax"}
+        title={auditTitle}
+        items={taxAuditItems}
+        needsResync={auditTargetNeedsResync(data, auditTarget)}
+        onClose={() => setAuditTarget(null)}
+      />
     </TooltipProvider>
   );
 }

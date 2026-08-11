@@ -22,6 +22,29 @@ export type DreCancelledIncludeOverlay = {
   taxErp: number;
 };
 
+/** Auditoria do Custo produto: quantidade vendida e custo por SKU/anúncio no mês. */
+export type DreProductCostBreakdownItem = {
+  key: string;
+  sku: string | null;
+  title: string;
+  quantity: number;
+  unitCost: number;
+  totalCost: number;
+  missingCost: boolean;
+};
+
+/** Auditoria do Imposto ML: faturamento, % de imposto aplicado e imposto total por SKU/anúncio no mês. */
+export type DreTaxBreakdownItem = {
+  key: string;
+  sku: string | null;
+  title: string;
+  quantity: number;
+  revenue: number;
+  taxPercent: number | null;
+  totalTax: number;
+  missingTax: boolean;
+};
+
 export type DreMonthSnapshotPayload = DreLineAmounts & {
   adsCost: number;
   billingSource: DreBillingSource;
@@ -29,6 +52,8 @@ export type DreMonthSnapshotPayload = DreLineAmounts & {
   incompleteProductCostCount: number;
   syncWarnings: string[];
   cancelledIncludeOverlay?: DreCancelledIncludeOverlay;
+  productCostBreakdown?: DreProductCostBreakdownItem[];
+  taxBreakdown?: DreTaxBreakdownItem[];
 };
 
 export type DreManualCostInput = {
@@ -209,4 +234,73 @@ export function sumYearLineAmounts(
     out.revenueMl = roundMoney(out.revenueMl + (month.revenueMl ?? 0));
   }
   return out;
+}
+
+/** Combina listas de auditoria do Custo produto (ex.: pedidos pagos + cancelados, ou vários meses), somando por SKU/anúncio. */
+export function mergeProductCostBreakdowns(
+  lists: DreProductCostBreakdownItem[][],
+): DreProductCostBreakdownItem[] {
+  const byKey = new Map<string, DreProductCostBreakdownItem>();
+  for (const list of lists) {
+    for (const item of list) {
+      const existing = byKey.get(item.key);
+      if (!existing) {
+        byKey.set(item.key, { ...item });
+        continue;
+      }
+      existing.quantity += item.quantity;
+      existing.totalCost = roundMoney(existing.totalCost + item.totalCost);
+      existing.unitCost =
+        existing.quantity > 0
+          ? roundMoney(existing.totalCost / existing.quantity)
+          : 0;
+      existing.missingCost = existing.missingCost || item.missingCost;
+    }
+  }
+  return [...byKey.values()].sort((a, b) => b.totalCost - a.totalCost);
+}
+
+/** Junta a auditoria do Custo produto de todos os meses do ano em uma única lista por SKU/anúncio. */
+export function getYearProductCostBreakdown(
+  months: Array<{ productCostBreakdown: DreProductCostBreakdownItem[] | null }>,
+): DreProductCostBreakdownItem[] {
+  const lists = months
+    .map((month) => month.productCostBreakdown)
+    .filter((list): list is DreProductCostBreakdownItem[] => list !== null);
+  return mergeProductCostBreakdowns(lists);
+}
+
+/** Combina listas de auditoria do Imposto ML (ex.: pedidos pagos + cancelados, ou vários meses), somando por SKU/anúncio. */
+export function mergeTaxBreakdowns(
+  lists: DreTaxBreakdownItem[][],
+): DreTaxBreakdownItem[] {
+  const byKey = new Map<string, DreTaxBreakdownItem>();
+  for (const list of lists) {
+    for (const item of list) {
+      const existing = byKey.get(item.key);
+      if (!existing) {
+        byKey.set(item.key, { ...item });
+        continue;
+      }
+      existing.quantity += item.quantity;
+      existing.revenue = roundMoney(existing.revenue + item.revenue);
+      existing.totalTax = roundMoney(existing.totalTax + item.totalTax);
+      existing.taxPercent =
+        existing.revenue > 0
+          ? roundMoney((existing.totalTax / existing.revenue) * 100)
+          : null;
+      existing.missingTax = existing.missingTax || item.missingTax;
+    }
+  }
+  return [...byKey.values()].sort((a, b) => b.totalTax - a.totalTax);
+}
+
+/** Junta a auditoria do Imposto ML de todos os meses do ano em uma única lista por SKU/anúncio. */
+export function getYearTaxBreakdown(
+  months: Array<{ taxBreakdown: DreTaxBreakdownItem[] | null }>,
+): DreTaxBreakdownItem[] {
+  const lists = months
+    .map((month) => month.taxBreakdown)
+    .filter((list): list is DreTaxBreakdownItem[] => list !== null);
+  return mergeTaxBreakdowns(lists);
 }
