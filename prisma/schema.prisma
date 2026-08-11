@@ -176,6 +176,17 @@ model WarehouseStock {
   @@map("warehouse_stock")
 }
 
+/// Faixas de custo Flex por distância (tabela pré-existente, capturada aqui para alinhar com o schema).
+model FlexDistanceTier {
+  id          String   @id
+  name        String
+  carrierCost Decimal  @map("carrier_cost") @db.Decimal(18, 2)
+  mlBonus     Decimal  @map("ml_bonus") @db.Decimal(18, 2)
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("flex_distance_tiers")
+}
+
 enum TaxRegime {
   LUCRO_REAL      @map("lucro_real")
   LUCRO_PRESUMIDO @map("lucro_presumido")
