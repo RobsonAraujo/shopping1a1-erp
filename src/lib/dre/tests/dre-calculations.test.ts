@@ -5,6 +5,7 @@ import {
   applyManualLineEdit,
   applyRestoreLineFromSync,
   computeDreTotals,
+  mergePreservedManualLines,
   percentOfRevenue,
   sumYearLineAmounts,
   withSyncLineBaseline,
@@ -262,5 +263,39 @@ describe("manual line edit / restore from sync", () => {
   it("returns null when restoring without baseline", () => {
     const payload = emptyPayload({ revenueMl: 500 });
     assert.equal(applyRestoreLineFromSync(payload, "revenueMl"), null);
+  });
+});
+
+describe("mergePreservedManualLines", () => {
+  it("keeps selected manual values and refreshes baseline from sync", () => {
+    const previous = applyManualLineEdit(
+      withSyncLineBaseline(emptyPayload({ revenueMl: 1000, saleFeeMl: -100 })),
+      "revenueMl",
+      1200,
+    );
+    const previousBoth = applyManualLineEdit(previous, "saleFeeMl", -40);
+    const fresh = emptyPayload({ revenueMl: 1500, saleFeeMl: -110 });
+
+    const merged = mergePreservedManualLines(fresh, previousBoth, [
+      "revenueMl",
+    ]);
+
+    assert.equal(merged.revenueMl, 1200);
+    assert.equal(merged.saleFeeMl, -110);
+    assert.equal(merged.syncedLineBaseline?.revenueMl, 1500);
+    assert.equal(merged.syncedLineBaseline?.saleFeeMl, -110);
+    assert.deepEqual(merged.manuallyEditedLineKeys, ["revenueMl"]);
+  });
+
+  it("clears all manual marks when preserveKeys is empty", () => {
+    const previous = applyManualLineEdit(
+      withSyncLineBaseline(emptyPayload({ revenueMl: 1000 })),
+      "revenueMl",
+      1200,
+    );
+    const fresh = emptyPayload({ revenueMl: 1500 });
+    const merged = mergePreservedManualLines(fresh, previous, []);
+    assert.equal(merged.revenueMl, 1500);
+    assert.deepEqual(merged.manuallyEditedLineKeys, []);
   });
 });

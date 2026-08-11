@@ -296,6 +296,17 @@ Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templ
 - **Código já tenant-ready?** **não** — `patchDreMonthLine` / `restoreDreMonthLine` sem `organizationId`
 - **Ação futura na migração:** escopar patch/restore/sync por `organizationId`
 
+### DRE — sync com preservação seletiva de ajustes — 2026-08-11
+
+- **Tabelas novas/alteradas:** nenhuma (reusa payload JSON)
+- **Precisa `organizationId`?** **sim** — snapshot DRE global
+- **APIs afetadas:** `POST /api/dre/sync` (`preserveLineKeys?: DreEditableLineKey[]`)
+- **Assume singleton?** **sim** — `@@unique([year, month])`
+- **Cron/background:** nenhum
+- **Dados globais vs por org:** sync e merge de overrides no snapshot único
+- **Código já tenant-ready?** **não** — `persistDreMonthSnapshot` / sync sem `organizationId`
+- **Ação futura na migração:** escopar sync/persist por `organizationId`
+
 ### Produtos e pricing — baseline
 
 - **Tabelas:** `products`, `company_tax_settings`

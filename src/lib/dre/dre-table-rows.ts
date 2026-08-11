@@ -514,3 +514,13 @@ export function dreMonthShortLabel(month: number): string {
   if (month < 1 || month > 12) return String(month);
   return DRE_MONTH_SHORT[month - 1];
 }
+
+/** Rótulo amigável de uma linha editável do DRE (para UI de sync/ajustes). */
+export function dreEditableLineLabel(
+  lineKey: string,
+): string {
+  const row = DRE_STATIC_ROWS.find(
+    (r) => r.id === lineKey || r.lineKey === lineKey,
+  );
+  return row?.label ?? lineKey;
+}

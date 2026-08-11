@@ -137,6 +137,53 @@ export function withSyncLineBaseline(
   };
 }
 
+/**
+ * Após um sync fresco, reaplica valores manuais escolhidos pelo usuário.
+ * O baseline passa a ser o valor recém-sincronizado (para “restaurar” depois).
+ */
+export function mergePreservedManualLines(
+  fresh: DreMonthSnapshotPayload,
+  previous: DreMonthSnapshotPayload | null | undefined,
+  preserveKeys: readonly DreEditableLineKey[],
+): DreMonthSnapshotPayload {
+  const baseline = buildSyncedLineBaseline(fresh);
+  if (!previous || preserveKeys.length === 0) {
+    return {
+      ...fresh,
+      syncedLineBaseline: baseline,
+      manuallyEditedLineKeys: [],
+    };
+  }
+
+  const prevEdited = new Set(previous.manuallyEditedLineKeys ?? []);
+  const next: DreMonthSnapshotPayload = {
+    ...fresh,
+    syncedLineBaseline: baseline,
+  };
+  const edited: DreEditableLineKey[] = [];
+
+  for (const key of preserveKeys) {
+    if (!prevEdited.has(key)) continue;
+    const amount = getEditableLineAmount(previous, key);
+    next[key] = amount;
+    if (!amountsMatch(amount, baseline[key])) {
+      edited.push(key);
+    }
+  }
+
+  next.manuallyEditedLineKeys = edited;
+
+  if (
+    edited.includes("revenueMl") ||
+    edited.includes("productCostErp") ||
+    edited.includes("taxErp")
+  ) {
+    delete next.cancelledIncludeOverlay;
+  }
+
+  return next;
+}
+
 function amountsMatch(a: number, b: number): boolean {
   return Math.abs(a - b) < 0.000_001;
 }

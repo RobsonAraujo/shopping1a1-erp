@@ -25,7 +25,10 @@ import {
 } from "@/lib/financial-margin";
 import type { DreEditableLineKey } from "@/lib/dre/dre-calculations";
 import { downloadDreYearCsv } from "@/lib/dre/dre-export-csv";
-import { dreMonthShortLabel } from "@/lib/dre/dre-table-rows";
+import {
+  dreEditableLineLabel,
+  dreMonthShortLabel,
+} from "@/lib/dre/dre-table-rows";
 import type { DreYearView } from "@/lib/dre/dre-year-data";
 import {
   getZonedYearMonth,
@@ -37,6 +40,45 @@ type SyncConfirmState =
   | { mode: "month"; month: number }
   | { mode: "all" }
   | null;
+
+type SyncAdjustmentItem = {
+  id: string;
+  month: number;
+  monthLabel: string;
+  lineKey: DreEditableLineKey;
+  lineLabel: string;
+  amount: number;
+};
+
+function collectSyncAdjustments(
+  data: DreYearView,
+  scope: SyncConfirmState,
+): SyncAdjustmentItem[] {
+  if (!scope) return [];
+  const months =
+    scope.mode === "month"
+      ? data.months.filter((m) => m.month === scope.month)
+      : data.months.filter((m) => isDreMonthSyncable(data.year, m.month));
+
+  const items: SyncAdjustmentItem[] = [];
+  for (const month of months) {
+    for (const lineKey of month.manuallyEditedLineKeys) {
+      const amount =
+        lineKey === "adsCost"
+          ? -Math.max(0, month.adsCost ?? 0)
+          : (month.lines?.[lineKey] ?? 0);
+      items.push({
+        id: `${month.month}:${lineKey}`,
+        month: month.month,
+        monthLabel: month.label,
+        lineKey,
+        lineLabel: dreEditableLineLabel(lineKey),
+        amount,
+      });
+    }
+  }
+  return items;
+}
 
 export function DreClient() {
   const currentYear = useMemo(() => getZonedYearMonth().year, []);
@@ -54,6 +96,9 @@ export function DreClient() {
   const [syncingMonths, setSyncingMonths] = useState<Set<number>>(new Set());
   const [syncingAll, setSyncingAll] = useState(false);
   const [syncConfirm, setSyncConfirm] = useState<SyncConfirmState>(null);
+  const [preserveAdjustmentIds, setPreserveAdjustmentIds] = useState<
+    Set<string>
+  >(new Set());
 
   const yearOptions = useMemo(
     () =>
@@ -63,6 +108,21 @@ export function DreClient() {
       })),
     [currentYear],
   );
+
+  const syncAdjustments = useMemo(
+    () => (data && syncConfirm ? collectSyncAdjustments(data, syncConfirm) : []),
+    [data, syncConfirm],
+  );
+
+  useEffect(() => {
+    if (!syncConfirm) {
+      setPreserveAdjustmentIds(new Set());
+      return;
+    }
+    if (!data) return;
+    const items = collectSyncAdjustments(data, syncConfirm);
+    setPreserveAdjustmentIds(new Set(items.map((item) => item.id)));
+  }, [syncConfirm, data]);
 
   const loadYear = useCallback(async (targetYear: number) => {
     setLoading(true);
@@ -90,7 +150,10 @@ export function DreClient() {
   }, [year]);
 
   const syncMonth = useCallback(
-    async (month: number): Promise<boolean> => {
+    async (
+      month: number,
+      preserveLineKeys: DreEditableLineKey[] = [],
+    ): Promise<boolean> => {
       if (!isDreMonthSyncable(year, month)) {
         return true;
       }
@@ -100,7 +163,7 @@ export function DreClient() {
         const res = await fetch("/api/dre/sync", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ year, month }),
+          body: JSON.stringify({ year, month, preserveLineKeys }),
         });
         if (!res.ok) {
           setError(await readApiError(res, "dre_sync_failed"));
@@ -142,25 +205,33 @@ export function DreClient() {
     [year, monthHasSnapshot, syncMonth],
   );
 
-  const syncAllMonths = useCallback(async () => {
-    setSyncingAll(true);
-    setError(null);
-    const failures: number[] = [];
-    try {
-      for (let month = 1; month <= 12; month += 1) {
-        if (!isDreMonthSyncable(year, month)) continue;
-        const ok = await syncMonth(month);
-        if (!ok) failures.push(month);
+  const syncAllMonths = useCallback(
+    async (
+      preserveByMonth: Map<number, DreEditableLineKey[]> = new Map(),
+    ) => {
+      setSyncingAll(true);
+      setError(null);
+      const failures: number[] = [];
+      try {
+        for (let month = 1; month <= 12; month += 1) {
+          if (!isDreMonthSyncable(year, month)) continue;
+          const ok = await syncMonth(
+            month,
+            preserveByMonth.get(month) ?? [],
+          );
+          if (!ok) failures.push(month);
+        }
+        if (failures.length > 0) {
+          setError(
+            `Sincronização interrompida no mês ${failures[0]}. Corrija o erro e tente novamente.`,
+          );
+        }
+      } finally {
+        setSyncingAll(false);
       }
-      if (failures.length > 0) {
-        setError(
-          `Sincronização interrompida no mês ${failures[0]}. Corrija o erro e tente novamente.`,
-        );
-      }
-    } finally {
-      setSyncingAll(false);
-    }
-  }, [syncMonth, year]);
+    },
+    [syncMonth, year],
+  );
 
   const requestSyncAll = useCallback(() => {
     const anyExisting = Boolean(
@@ -177,16 +248,44 @@ export function DreClient() {
     void syncAllMonths();
   }, [data, year, syncAllMonths]);
 
-  const confirmSyncOverwrite = useCallback(() => {
-    const pending = syncConfirm;
-    setSyncConfirm(null);
-    if (!pending) return;
-    if (pending.mode === "month") {
-      void syncMonth(pending.month);
-      return;
+  const buildPreserveByMonth = useCallback(() => {
+    const map = new Map<number, DreEditableLineKey[]>();
+    for (const item of syncAdjustments) {
+      if (!preserveAdjustmentIds.has(item.id)) continue;
+      const list = map.get(item.month) ?? [];
+      list.push(item.lineKey);
+      map.set(item.month, list);
     }
-    void syncAllMonths();
-  }, [syncConfirm, syncMonth, syncAllMonths]);
+    return map;
+  }, [syncAdjustments, preserveAdjustmentIds]);
+
+  const confirmSyncOverwrite = useCallback(
+    (preserveSelected: boolean) => {
+      const pending = syncConfirm;
+      setSyncConfirm(null);
+      if (!pending) return;
+
+      if (pending.mode === "month") {
+        const keys = preserveSelected
+          ? (buildPreserveByMonth().get(pending.month) ?? [])
+          : [];
+        void syncMonth(pending.month, keys);
+        return;
+      }
+
+      void syncAllMonths(preserveSelected ? buildPreserveByMonth() : new Map());
+    },
+    [syncConfirm, syncMonth, syncAllMonths, buildPreserveByMonth],
+  );
+
+  const togglePreserveAdjustment = useCallback((id: string) => {
+    setPreserveAdjustmentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   const handleManualCostChange = useCallback(
     async (costItemId: string, month: number, amount: number | null) => {
@@ -599,29 +698,125 @@ export function DreClient() {
             if (!open) setSyncConfirm(null);
           }}
         >
-          <AlertDialogContent>
+          <AlertDialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
             <AlertDialogHeader>
               <AlertDialogTitle>
                 {syncConfirm?.mode === "all"
-                  ? "Substituir valores sincronizados?"
-                  : `Substituir valores de ${syncConfirmMonthLabel}?`}
+                  ? "Sincronizar todos os meses?"
+                  : `Sincronizar ${syncConfirmMonthLabel}?`}
               </AlertDialogTitle>
               <AlertDialogDescription>
-                {syncConfirm?.mode === "all"
-                  ? "Já existem valores salvos em um ou mais meses. A sincronização vai buscar os dados importados novamente e substituir os valores atuais das linhas (incluindo edições manuais nessas linhas)."
-                  : "Já existem valores salvos para este mês. A sincronização vai buscar os dados importados novamente e substituir os valores atuais das linhas (incluindo edições manuais nessas linhas)."}{" "}
+                {syncAdjustments.length > 0
+                  ? "Há valores ajustados manualmente. Escolha o que deseja manter; o restante será atualizado com os dados importados."
+                  : syncConfirm?.mode === "all"
+                    ? "Já existem valores salvos. A sincronização busca os dados novamente e substitui as linhas importadas."
+                    : "Já existem valores salvos neste mês. A sincronização busca os dados novamente e substitui as linhas importadas."}{" "}
                 Custos fixos, operacionais e investimentos cadastrados não são
                 apagados.
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction
-                variant="destructive"
-                onClick={confirmSyncOverwrite}
-              >
-                Substituir e sincronizar
-              </AlertDialogAction>
+
+            {syncAdjustments.length > 0 ? (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() =>
+                      setPreserveAdjustmentIds(
+                        new Set(syncAdjustments.map((item) => item.id)),
+                      )
+                    }
+                  >
+                    Manter todos
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => setPreserveAdjustmentIds(new Set())}
+                  >
+                    Não manter nenhum
+                  </Button>
+                </div>
+                <ul className="max-h-56 space-y-1.5 overflow-y-auto rounded-lg border border-[var(--border)] p-2">
+                  {syncAdjustments.map((item) => {
+                    const checked = preserveAdjustmentIds.has(item.id);
+                    return (
+                      <li key={item.id}>
+                        <label
+                          className={cn(
+                            "flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors hover:bg-[var(--muted)]/50",
+                            checked && "bg-[var(--accent)]/60",
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            className="size-4 accent-[var(--primary)]"
+                            checked={checked}
+                            onChange={() => togglePreserveAdjustment(item.id)}
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="font-medium text-[var(--foreground)]">
+                              {item.lineLabel}
+                            </span>
+                            {syncConfirm?.mode === "all" ? (
+                              <span className="text-[var(--muted-foreground)]">
+                                {" "}
+                                · {item.monthLabel}
+                              </span>
+                            ) : null}
+                          </span>
+                          <span className="shrink-0 tabular-nums text-[var(--muted-foreground)]">
+                            {formatFinancialMoney(item.amount)}
+                          </span>
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  {preserveAdjustmentIds.size === 0
+                    ? "Nenhum ajuste será mantido — todos os valores importados serão atualizados."
+                    : `${preserveAdjustmentIds.size} de ${syncAdjustments.length} ajuste(s) serão mantidos.`}
+                </p>
+              </div>
+            ) : null}
+
+            <AlertDialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
+              <AlertDialogCancel className="w-full sm:w-full">
+                Cancelar
+              </AlertDialogCancel>
+              {syncAdjustments.length > 0 ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    className="w-full"
+                    onClick={() => confirmSyncOverwrite(false)}
+                  >
+                    Atualizar todos (sem manter)
+                  </Button>
+                  <Button
+                    type="button"
+                    className="w-full"
+                    onClick={() => confirmSyncOverwrite(true)}
+                  >
+                    Sincronizar mantendo selecionados
+                  </Button>
+                </>
+              ) : (
+                <AlertDialogAction
+                  variant="destructive"
+                  className="w-full"
+                  onClick={() => confirmSyncOverwrite(false)}
+                >
+                  Substituir e sincronizar
+                </AlertDialogAction>
+              )}
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

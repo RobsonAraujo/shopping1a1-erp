@@ -7,9 +7,9 @@ import {
   applyRestoreLineFromSync,
   computeDreTotals,
   isDreEditableLineKey,
+  mergePreservedManualLines,
   mergeProductCostBreakdowns,
   mergeTaxBreakdowns,
-  withSyncLineBaseline,
   type DreCancelledIncludeOverlay,
   type DreEditableLineKey,
   type DreLineBreakdownItem,
@@ -856,20 +856,32 @@ export async function persistDreMonthSnapshot(
   year: number,
   month: number,
   payload: DreMonthSnapshotPayload,
+  preserveLineKeys: readonly DreEditableLineKey[] = [],
 ): Promise<Date> {
   const syncedAt = new Date();
-  const withBaseline = withSyncLineBaseline(payload);
+
+  const existing = await prisma.dreMonthSnapshot.findUnique({
+    where: { year_month: { year, month } },
+    select: { payload: true },
+  });
+  const previous = existing ? parseSnapshotPayload(existing.payload) : null;
+  const merged = mergePreservedManualLines(
+    payload,
+    previous,
+    preserveLineKeys,
+  );
+
   await prisma.dreMonthSnapshot.upsert({
     where: { year_month: { year, month } },
     create: {
       year,
       month,
       syncedAt,
-      payload: withBaseline as object,
+      payload: merged as object,
     },
     update: {
       syncedAt,
-      payload: withBaseline as object,
+      payload: merged as object,
     },
   });
   return syncedAt;

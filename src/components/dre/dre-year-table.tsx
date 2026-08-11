@@ -376,8 +376,9 @@ function DreInlineMoneyCell({
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const focusedOnceRef = useRef(false);
 
-  const EDITOR_MIN_WIDTH_PX = 260;
+  const EDITOR_MIN_WIDTH_PX = 320;
   const VIEWPORT_PAD_PX = 16;
+  const EDITOR_PANEL_HEIGHT_PX = 148;
 
   function placeEditorPanel() {
     const anchor = anchorRef.current;
@@ -390,20 +391,20 @@ function DreInlineMoneyCell({
       vw - VIEWPORT_PAD_PX * 2,
     );
 
-    // Prefere alinhar à direita da célula; se não couber à esquerda (meses
-    // iniciais / sticky), empurra para dentro da viewport.
     let left = rect.right - width;
     left = Math.max(
       VIEWPORT_PAD_PX,
       Math.min(left, vw - width - VIEWPORT_PAD_PX),
     );
 
-    // Centro vertical da célula (painel via portal no body — fixed real).
-    const halfH = 22;
-    let top = rect.top + rect.height / 2;
+    // Prefere abrir abaixo da célula; sobe se não couber.
+    let top = rect.bottom + 8;
+    if (top + EDITOR_PANEL_HEIGHT_PX > vh - VIEWPORT_PAD_PX) {
+      top = rect.top - EDITOR_PANEL_HEIGHT_PX - 8;
+    }
     top = Math.max(
-      VIEWPORT_PAD_PX + halfH,
-      Math.min(top, vh - VIEWPORT_PAD_PX - halfH),
+      VIEWPORT_PAD_PX,
+      Math.min(top, vh - EDITOR_PANEL_HEIGHT_PX - VIEWPORT_PAD_PX),
     );
 
     setPanelStyle({
@@ -411,7 +412,6 @@ function DreInlineMoneyCell({
       left,
       top,
       width,
-      transform: "translateY(-50%)",
       zIndex: 60,
     });
   }
@@ -540,8 +540,8 @@ function DreInlineMoneyCell({
       aria-label={`Editar ${label}`}
       className={
         isMobile
-          ? "h-14 w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-4 text-center text-2xl font-bold tabular-nums outline-none transition-[border-color,box-shadow] duration-150 focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/30"
-          : "h-8 min-w-0 flex-1 rounded border border-[var(--border)] bg-white px-2 py-1 text-right text-sm font-bold tabular-nums outline-none transition-[border-color,box-shadow] duration-150 focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/40"
+          ? "h-16 w-full rounded-2xl border-0 bg-[var(--muted)]/50 px-4 text-center text-3xl font-bold tabular-nums outline-none ring-1 ring-[var(--border)] transition-[box-shadow,ring-color] duration-150 focus:bg-[var(--background)] focus:ring-2 focus:ring-[var(--primary)]/50"
+          : "h-12 w-full rounded-lg border-0 bg-[var(--muted)]/40 px-3 text-right text-xl font-bold tabular-nums outline-none ring-1 ring-[var(--border)] transition-[box-shadow,ring-color] duration-150 focus:bg-white focus:ring-2 focus:ring-[var(--primary)]/40"
       }
     />
   );
@@ -555,11 +555,11 @@ function DreInlineMoneyCell({
         }}
       >
         <SheetContent hideClose className="gap-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
-          <SheetHeader className="border-b-0 pb-2">
-            <SheetTitle>Editar valor</SheetTitle>
-            <SheetDescription>{label}</SheetDescription>
+          <SheetHeader className="border-b-0 pb-1 pt-1">
+            <SheetTitle className="text-base">Editar valor</SheetTitle>
+            <SheetDescription className="text-sm">{label}</SheetDescription>
           </SheetHeader>
-          <SheetBody className="space-y-4 pt-1">
+          <SheetBody className="space-y-5 pt-2">
             {moneyInput}
             {onAudit ? (
               <button
@@ -587,18 +587,18 @@ function DreInlineMoneyCell({
               </button>
             ) : null}
           </SheetBody>
-          <SheetFooter className="grid grid-cols-2 gap-2 sm:flex">
+          <SheetFooter className="grid grid-cols-2 gap-2 border-t-0 pt-0 sm:flex">
             <Button
               type="button"
               variant="outline"
-              className="h-12 text-base font-semibold"
+              className="h-12 rounded-xl text-base font-semibold"
               onClick={() => cancelEditing()}
             >
               Cancelar
             </Button>
             <Button
               type="button"
-              className="h-12 text-base font-semibold"
+              className="h-12 rounded-xl text-base font-semibold"
               onClick={() => commit(draft)}
             >
               Aplicar
@@ -622,32 +622,35 @@ function DreInlineMoneyCell({
             >
               <div
                 className={cn(
-                  "flex items-center justify-end gap-1 rounded-md border border-[var(--primary)]/40 bg-[var(--background)] p-1 shadow-lg ring-2 ring-[var(--primary)]/30 transition-[opacity,transform] duration-300 ease-out",
+                  "rounded-xl border border-[var(--border)] bg-[var(--background)] p-3 shadow-xl ring-1 ring-black/5 transition-[opacity,transform] duration-200 ease-out",
                   panelEntered
                     ? "scale-100 opacity-100"
-                    : "scale-90 opacity-0",
+                    : "scale-95 opacity-0",
                 )}
               >
+                <p className="mb-2 truncate text-xs font-medium text-[var(--muted-foreground)]">
+                  {label}
+                </p>
                 {moneyInput}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 shrink-0 px-2 text-[11px] font-semibold"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => cancelEditing()}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-8 shrink-0 px-2.5 text-[11px] font-semibold"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => commit(draft)}
-                >
-                  Aplicar
-                </Button>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 text-sm font-semibold"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => cancelEditing()}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="button"
+                    className="h-10 text-sm font-semibold"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => commit(draft)}
+                  >
+                    Aplicar
+                  </Button>
+                </div>
               </div>
             </div>,
             document.body,
