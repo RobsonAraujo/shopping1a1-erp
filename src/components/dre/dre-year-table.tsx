@@ -18,10 +18,13 @@ import {
 } from "@/lib/financial-margin";
 import { DreProductCostAuditModal } from "@/components/dre/dre-product-cost-audit-modal";
 import { DreTaxAuditModal } from "@/components/dre/dre-tax-audit-modal";
+import { DreLineAuditModal } from "@/components/dre/dre-line-audit-modal";
 import type { DreMonthView, DreYearView } from "@/lib/dre/dre-year-data";
 import {
+  getYearLineBreakdown,
   getYearProductCostBreakdown,
   getYearTaxBreakdown,
+  type DreLineBreakdownItem,
 } from "@/lib/dre/dre-calculations";
 import {
   buildDreTableRows,
@@ -32,6 +35,7 @@ import {
   rowBackgroundClass,
   rowLabelClass,
   valueToneClass,
+  type DreStaticRowId,
   type DreTableRow,
 } from "@/lib/dre/dre-table-rows";
 import { reportsConfig } from "@/config/reports";
@@ -310,8 +314,158 @@ function DreManualCostCell({
   );
 }
 
-type AuditKind = "productCost" | "tax";
+type AuditKind =
+  | "productCost"
+  | "tax"
+  | "revenue"
+  | "cancelledSales"
+  | "saleFee"
+  | "sellerShipping"
+  | "adsCost"
+  | "partialReturns"
+  | "fullShipping"
+  | "fullStorage"
+  | "fullNonCompliance";
 type AuditTarget = { kind: AuditKind; period: number | "year" } | null;
+
+/** Linhas estáticas do DRE que abrem auditoria ao clicar no valor. */
+const ROW_ID_TO_AUDIT_KIND: Partial<Record<DreStaticRowId, AuditKind>> = {
+  productCostErp: "productCost",
+  taxErp: "tax",
+  revenueMl: "revenue",
+  cancelledSalesMl: "cancelledSales",
+  saleFeeMl: "saleFee",
+  sellerShippingMl: "sellerShipping",
+  adsCost: "adsCost",
+  partialReturnsMl: "partialReturns",
+  fullShippingMl: "fullShipping",
+  fullStorageMl: "fullStorage",
+  fullNonComplianceMl: "fullNonCompliance",
+};
+
+function getAuditKindForRow(row: DreTableRow): AuditKind | null {
+  return row.type === "static" ? (ROW_ID_TO_AUDIT_KIND[row.id] ?? null) : null;
+}
+
+/** Textos do modal de auditoria genérica, por tipo de linha (exceto Custo produto/Imposto ML, que têm modal próprio). */
+const LINE_AUDIT_TEXT: Partial<
+  Record<AuditKind, { rowLabel: string; amountLabel: string; description: string }>
+> = {
+  revenue: {
+    rowLabel: "Faturamento ML",
+    amountLabel: "Faturamento",
+    description:
+      "Soma do valor de venda de cada pedido pago no mês, por anúncio/SKU (inclui as vendas canceladas somadas de volta ao faturamento).",
+  },
+  cancelledSales: {
+    rowLabel: "Canceladas ML",
+    amountLabel: "Valor cancelado",
+    description:
+      "Soma do valor bruto de cada pedido cancelado no mês, por anúncio/SKU.",
+  },
+  saleFee: {
+    rowLabel: "Tarifa ML",
+    amountLabel: "Tarifa",
+    description:
+      "Tarifa de venda cobrada pelo Mercado Livre, por anúncio/SKU — disponível apenas quando estimada pelos pedidos (mês sem fatura consolidada alinhada ao período civil).",
+  },
+  sellerShipping: {
+    rowLabel: "Frete vendedor",
+    amountLabel: "Frete",
+    description:
+      "Custo de frete pago pelo vendedor, por anúncio/SKU — disponível apenas quando estimado pelos pedidos (mês sem fatura consolidada alinhada ao período civil).",
+  },
+  adsCost: {
+    rowLabel: "Campanhas ADS",
+    amountLabel: "Gasto ADS",
+    description:
+      "Gasto com campanhas de Product Ads no mês, por anúncio.",
+  },
+  partialReturns: {
+    rowLabel: "Devolução ML",
+    amountLabel: "Devolução",
+    description:
+      "Valor de devoluções parciais reembolsadas pelo Mercado Livre no mês.",
+  },
+  fullShipping: {
+    rowLabel: "Full envios",
+    amountLabel: "Full envios",
+    description: "Custo de envios do Mercado Envios Full no mês.",
+  },
+  fullStorage: {
+    rowLabel: "Full armazém",
+    amountLabel: "Full armazém",
+    description: "Custo de armazenamento no Full no mês.",
+  },
+  fullNonCompliance: {
+    rowLabel: "Full inconform.",
+    amountLabel: "Full inconform.",
+    description: "Multas por inconformidade no Full no mês.",
+  },
+};
+
+const LINE_BREAKDOWN_FIELD: Partial<
+  Record<AuditKind, keyof DreMonthView>
+> = {
+  revenue: "revenueBreakdown",
+  cancelledSales: "cancelledSalesBreakdown",
+  saleFee: "saleFeeBreakdown",
+  sellerShipping: "sellerShippingBreakdown",
+  adsCost: "adsCostBreakdown",
+};
+
+const AGGREGATE_ONLY_KINDS = new Set<AuditKind>([
+  "partialReturns",
+  "fullShipping",
+  "fullStorage",
+  "fullNonCompliance",
+]);
+
+type LineAuditState = {
+  items: DreLineBreakdownItem[];
+  unavailable: boolean;
+  needsResync: boolean;
+};
+
+/** Resolve itens/estado do modal de auditoria genérica para as linhas que não são Custo produto/Imposto ML. */
+function resolveLineAuditState(
+  data: DreYearView,
+  target: AuditTarget,
+): LineAuditState {
+  if (target === null || target.kind === "productCost" || target.kind === "tax") {
+    return { items: [], unavailable: false, needsResync: false };
+  }
+
+  const months =
+    target.period === "year"
+      ? data.months
+      : data.months.filter((m) => m.month === target.period);
+  const relevantMonths = months.filter((m) => m.lines !== null);
+
+  if (AGGREGATE_ONLY_KINDS.has(target.kind)) {
+    return { items: [], unavailable: true, needsResync: false };
+  }
+
+  const field = LINE_BREAKDOWN_FIELD[target.kind];
+  if (!field) return { items: [], unavailable: false, needsResync: false };
+
+  const items = getYearLineBreakdown(
+    months.map((m) => (m[field] as DreLineBreakdownItem[] | null) ?? null),
+  );
+
+  if (target.kind === "saleFee" || target.kind === "sellerShipping") {
+    const billingOnly =
+      relevantMonths.length > 0 &&
+      relevantMonths.every((m) => m.billingSource === "billing");
+    const anyFallbackMissing = relevantMonths.some(
+      (m) => m.billingSource === "fallback" && m[field] === null,
+    );
+    return { items, unavailable: billingOnly, needsResync: anyFallbackMissing };
+  }
+
+  const needsResync = relevantMonths.some((m) => m[field] === null);
+  return { items, unavailable: false, needsResync };
+}
 
 /** true quando algum mês do alvo de auditoria tem lançamentos mas não tem o detalhamento salvo (sincronizado antes desta funcionalidade). */
 function auditTargetNeedsResync(data: DreYearView, target: AuditTarget): boolean {
@@ -458,12 +612,7 @@ function renderValueCell(
     colored ? "text-white" : "",
   );
 
-  const auditKind: AuditKind | null =
-    row.id === "productCostErp"
-      ? "productCost"
-      : row.id === "taxErp"
-        ? "tax"
-        : null;
+  const auditKind = getAuditKindForRow(row);
 
   if (auditKind && onAuditClick) {
     return (
@@ -622,14 +771,7 @@ function DreMobileRow({
   const showPercentRow = row.type === "static" && row.showPercent;
   const isTotal = selection === "total";
   const month = isTotal ? null : data.months[selection];
-  const auditKind: AuditKind | null =
-    row.type === "static"
-      ? row.id === "productCostErp"
-        ? "productCost"
-        : row.id === "taxErp"
-          ? "tax"
-          : null
-      : null;
+  const auditKind = getAuditKindForRow(row);
 
   const valueNode = isTotal ? (
     <ValueMethodologyTooltip text={getRowMethodology(row)}>
@@ -748,6 +890,9 @@ function DreYearTableMobile({
         ? `Ano ${data.year}`
         : (data.months.find((m) => m.month === auditTarget.period)?.label ??
           `Mês ${auditTarget.period}`);
+  const lineAuditState = resolveLineAuditState(data, auditTarget);
+  const lineAuditText =
+    auditTarget !== null ? LINE_AUDIT_TEXT[auditTarget.kind] : undefined;
 
   const selectedMonth = selection === "total" ? null : data.months[selection];
   const alertMessages = selectedMonth ? getMonthAlertMessages(selectedMonth) : [];
@@ -875,6 +1020,21 @@ function DreYearTableMobile({
         title={auditTitle}
         items={taxAuditItems}
         needsResync={auditTargetNeedsResync(data, auditTarget)}
+        onClose={() => setAuditTarget(null)}
+      />
+      <DreLineAuditModal
+        open={
+          auditTarget !== null &&
+          auditTarget.kind !== "productCost" &&
+          auditTarget.kind !== "tax"
+        }
+        title={auditTitle}
+        rowLabel={lineAuditText?.rowLabel ?? ""}
+        amountLabel={lineAuditText?.amountLabel ?? "Valor"}
+        description={lineAuditText?.description ?? ""}
+        items={lineAuditState.items}
+        unavailable={lineAuditState.unavailable}
+        needsResync={lineAuditState.needsResync}
         onClose={() => setAuditTarget(null)}
       />
     </div>
@@ -1005,6 +1165,9 @@ function DreYearTableDesktop({
         ? `Ano ${data.year}`
         : (data.months.find((m) => m.month === auditTarget.period)?.label ??
           `Mês ${auditTarget.period}`);
+  const lineAuditState = resolveLineAuditState(data, auditTarget);
+  const lineAuditText =
+    auditTarget !== null ? LINE_AUDIT_TEXT[auditTarget.kind] : undefined;
 
   const rows = buildDreTableRows(
     data.costItems,
@@ -1130,17 +1293,12 @@ function DreYearTableDesktop({
                       style={cellStyle}
                     >
                       <ValueMethodologyTooltip text={getRowMethodology(row)}>
-                        {row.type === "static" &&
-                        (row.id === "productCostErp" ||
-                          row.id === "taxErp") ? (
+                        {getAuditKindForRow(row) ? (
                           <button
                             type="button"
                             onClick={() =>
                               setAuditTarget({
-                                kind:
-                                  row.id === "productCostErp"
-                                    ? "productCost"
-                                    : "tax",
+                                kind: getAuditKindForRow(row)!,
                                 period: "year",
                               })
                             }
@@ -1228,6 +1386,21 @@ function DreYearTableDesktop({
         title={auditTitle}
         items={taxAuditItems}
         needsResync={auditTargetNeedsResync(data, auditTarget)}
+        onClose={() => setAuditTarget(null)}
+      />
+      <DreLineAuditModal
+        open={
+          auditTarget !== null &&
+          auditTarget.kind !== "productCost" &&
+          auditTarget.kind !== "tax"
+        }
+        title={auditTitle}
+        rowLabel={lineAuditText?.rowLabel ?? ""}
+        amountLabel={lineAuditText?.amountLabel ?? "Valor"}
+        description={lineAuditText?.description ?? ""}
+        items={lineAuditState.items}
+        unavailable={lineAuditState.unavailable}
+        needsResync={lineAuditState.needsResync}
         onClose={() => setAuditTarget(null)}
       />
     </TooltipProvider>

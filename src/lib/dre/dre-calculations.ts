@@ -45,6 +45,15 @@ export type DreTaxBreakdownItem = {
   missingTax: boolean;
 };
 
+/** Auditoria genérica (quantidade + valor) por SKU/anúncio, usada por linhas mais simples (faturamento, canceladas, tarifas, frete, ADS). */
+export type DreLineBreakdownItem = {
+  key: string;
+  sku: string | null;
+  title: string;
+  quantity: number | null;
+  amount: number;
+};
+
 export type DreMonthSnapshotPayload = DreLineAmounts & {
   adsCost: number;
   billingSource: DreBillingSource;
@@ -54,6 +63,11 @@ export type DreMonthSnapshotPayload = DreLineAmounts & {
   cancelledIncludeOverlay?: DreCancelledIncludeOverlay;
   productCostBreakdown?: DreProductCostBreakdownItem[];
   taxBreakdown?: DreTaxBreakdownItem[];
+  revenueBreakdown?: DreLineBreakdownItem[];
+  cancelledSalesBreakdown?: DreLineBreakdownItem[];
+  saleFeeBreakdown?: DreLineBreakdownItem[];
+  sellerShippingBreakdown?: DreLineBreakdownItem[];
+  adsCostBreakdown?: DreLineBreakdownItem[];
 };
 
 export type DreManualCostInput = {
@@ -303,4 +317,36 @@ export function getYearTaxBreakdown(
     .map((month) => month.taxBreakdown)
     .filter((list): list is DreTaxBreakdownItem[] => list !== null);
   return mergeTaxBreakdowns(lists);
+}
+
+/** Combina listas de auditoria genérica (ex.: pedidos pagos + cancelados, ou vários meses), somando por SKU/anúncio. */
+export function mergeLineBreakdowns(
+  lists: DreLineBreakdownItem[][],
+): DreLineBreakdownItem[] {
+  const byKey = new Map<string, DreLineBreakdownItem>();
+  for (const list of lists) {
+    for (const item of list) {
+      const existing = byKey.get(item.key);
+      if (!existing) {
+        byKey.set(item.key, { ...item });
+        continue;
+      }
+      existing.quantity =
+        existing.quantity === null && item.quantity === null
+          ? null
+          : (existing.quantity ?? 0) + (item.quantity ?? 0);
+      existing.amount = roundMoney(existing.amount + item.amount);
+    }
+  }
+  return [...byKey.values()].sort((a, b) => b.amount - a.amount);
+}
+
+/** Junta uma auditoria genérica de todos os meses do ano em uma única lista por SKU/anúncio. */
+export function getYearLineBreakdown(
+  lists: Array<DreLineBreakdownItem[] | null>,
+): DreLineBreakdownItem[] {
+  const nonNull = lists.filter(
+    (list): list is DreLineBreakdownItem[] => list !== null,
+  );
+  return mergeLineBreakdowns(nonNull);
 }

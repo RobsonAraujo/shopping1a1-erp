@@ -5,6 +5,7 @@ import {
   type DreCancelledIncludeOverlay,
   type DreComputedTotals,
   type DreLineAmounts,
+  type DreLineBreakdownItem,
   type DreMonthSnapshotPayload,
   type DreProductCostBreakdownItem,
   type DreTaxBreakdownItem,
@@ -47,6 +48,11 @@ export type DreMonthView = {
   cancelledIncludeOverlay: DreCancelledIncludeOverlay | null;
   productCostBreakdown: DreProductCostBreakdownItem[] | null;
   taxBreakdown: DreTaxBreakdownItem[] | null;
+  revenueBreakdown: DreLineBreakdownItem[] | null;
+  cancelledSalesBreakdown: DreLineBreakdownItem[] | null;
+  saleFeeBreakdown: DreLineBreakdownItem[] | null;
+  sellerShippingBreakdown: DreLineBreakdownItem[] | null;
+  adsCostBreakdown: DreLineBreakdownItem[] | null;
   adsCost: number | null;
   fixedCostValues: Record<string, number | null>;
   fixedCostOverrides: Record<string, number | null>;
@@ -253,6 +259,11 @@ export async function loadDreYearView(year: number): Promise<DreYearView> {
       cancelledIncludeOverlay: payload?.cancelledIncludeOverlay ?? null,
       productCostBreakdown: payload?.productCostBreakdown ?? null,
       taxBreakdown: payload?.taxBreakdown ?? null,
+      revenueBreakdown: payload?.revenueBreakdown ?? null,
+      cancelledSalesBreakdown: payload?.cancelledSalesBreakdown ?? null,
+      saleFeeBreakdown: payload?.saleFeeBreakdown ?? null,
+      sellerShippingBreakdown: payload?.sellerShippingBreakdown ?? null,
+      adsCostBreakdown: payload?.adsCostBreakdown ?? null,
       adsCost: payload?.adsCost ?? null,
       fixedCostValues,
       fixedCostOverrides,

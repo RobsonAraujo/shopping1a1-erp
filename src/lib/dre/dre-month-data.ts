@@ -7,6 +7,7 @@ import {
   mergeProductCostBreakdowns,
   mergeTaxBreakdowns,
   type DreCancelledIncludeOverlay,
+  type DreLineBreakdownItem,
   type DreMonthSnapshotPayload,
   type DreProductCostBreakdownItem,
   type DreTaxBreakdownItem,
@@ -32,7 +33,11 @@ import {
   fetchListingSaleFee,
   siteIdFromItemId,
 } from "@/lib/mercadolibre/listing-fees";
-import { fetchTotalAdsCostForMonth } from "@/lib/mercadolibre/product-ads-metrics";
+import {
+  fetchPadsAdvertiserId,
+  fetchProductAdsMetricsByItem,
+  getProductAdsDateRangeForMonth,
+} from "@/lib/mercadolibre/product-ads-metrics";
 import {
   formatCalendarRangeYmd,
   getCalendarMonthRange,
@@ -56,6 +61,7 @@ async function computeErpCostsFromOrderLines(
   taxFromDifferentPeriodCount: number;
   breakdown: DreProductCostBreakdownItem[];
   taxBreakdown: DreTaxBreakdownItem[];
+  revenueBreakdown: DreLineBreakdownItem[];
 }> {
   const itemIds = [...new Set(orderLines.map((line) => line.itemId))];
   const items = await fetchItemsByIdsBatched(accessToken, itemIds);
@@ -91,6 +97,29 @@ async function computeErpCostsFromOrderLines(
   const differentPeriodTaxItems = new Set<string>();
   const breakdownByKey = new Map<string, DreProductCostBreakdownItem>();
   const taxBreakdownByKey = new Map<string, DreTaxBreakdownItem>();
+  const revenueBreakdownByKey = new Map<string, DreLineBreakdownItem>();
+
+  function addToRevenueBreakdown(
+    key: string,
+    sku: string | null,
+    title: string,
+    quantity: number,
+    amount: number,
+  ) {
+    const existing = revenueBreakdownByKey.get(key);
+    if (existing) {
+      existing.quantity = (existing.quantity ?? 0) + quantity;
+      existing.amount = roundMoney(existing.amount + amount);
+      return;
+    }
+    revenueBreakdownByKey.set(key, {
+      key,
+      sku,
+      title,
+      quantity,
+      amount: roundMoney(amount),
+    });
+  }
 
   function addToBreakdown(
     key: string,
@@ -165,6 +194,14 @@ async function computeErpCostsFromOrderLines(
     const taxPercent = taxEntry?.taxPercent ?? null;
     const item = itemById.get(line.itemId);
     const title = item?.title ?? line.itemId;
+
+    addToRevenueBreakdown(
+      normalizedSku || `item:${line.itemId}`,
+      sku ?? null,
+      title,
+      line.quantity,
+      line.revenue,
+    );
 
     if (pricing) {
       const cost = line.quantity * pricing.pricingCost;
@@ -281,6 +318,9 @@ async function computeErpCostsFromOrderLines(
     taxBreakdown: [...taxBreakdownByKey.values()].sort(
       (a, b) => b.totalTax - a.totalTax,
     ),
+    revenueBreakdown: [...revenueBreakdownByKey.values()].sort(
+      (a, b) => b.amount - a.amount,
+    ),
   };
 }
 
@@ -298,6 +338,8 @@ async function estimateMlCostsFallback(
   fullShippingMl: number;
   fullStorageMl: number;
   fullNonComplianceMl: number;
+  saleFeeBreakdown: DreLineBreakdownItem[];
+  sellerShippingBreakdown: DreLineBreakdownItem[];
 }> {
   const cancelledRevenue = await fetchCancelledOrderRevenueInDateRange(
     accessToken,
@@ -310,16 +352,40 @@ async function estimateMlCostsFallback(
   const itemIds = [...new Set(orderLines.map((line) => line.itemId))];
   const items = await fetchItemsByIdsBatched(accessToken, itemIds);
   const itemById = new Map(items.map((item) => [item.id, item]));
+  const skuByItemId = new Map(items.map((item) => [item.id, getItemSku(item)]));
 
   const feeCache = new Map<string, number>();
   const shippingCache = new Map<string, number>();
 
   let saleFeeTotal = 0;
   let shippingTotal = 0;
+  const saleFeeBreakdownByKey = new Map<string, DreLineBreakdownItem>();
+  const sellerShippingBreakdownByKey = new Map<string, DreLineBreakdownItem>();
+
+  function addToLineBreakdown(
+    map: Map<string, DreLineBreakdownItem>,
+    key: string,
+    sku: string | null,
+    title: string,
+    quantity: number,
+    amount: number,
+  ) {
+    const existing = map.get(key);
+    if (existing) {
+      existing.quantity = (existing.quantity ?? 0) + quantity;
+      existing.amount = roundMoney(existing.amount + amount);
+      return;
+    }
+    map.set(key, { key, sku, title, quantity, amount: roundMoney(amount) });
+  }
 
   for (const line of orderLines) {
     const item = itemById.get(line.itemId);
     if (!item || line.quantity <= 0) continue;
+
+    const sku = skuByItemId.get(line.itemId) ?? null;
+    const key = sku ? normalizeProductSku(sku) : `item:${line.itemId}`;
+    const title = item.title ?? line.itemId;
 
     const unitPrice =
       line.quantity > 0 ? line.revenue / line.quantity : item.price;
@@ -345,7 +411,16 @@ async function estimateMlCostsFallback(
       }
       feeCache.set(feeKey, unitFee);
     }
-    saleFeeTotal += unitFee * line.quantity;
+    const feeAmount = unitFee * line.quantity;
+    saleFeeTotal += feeAmount;
+    addToLineBreakdown(
+      saleFeeBreakdownByKey,
+      key,
+      sku,
+      title,
+      line.quantity,
+      -feeAmount,
+    );
 
     const shipKey = line.itemId;
     let unitShip = shippingCache.get(shipKey);
@@ -363,7 +438,16 @@ async function estimateMlCostsFallback(
       }
       shippingCache.set(shipKey, unitShip);
     }
-    shippingTotal += unitShip * line.quantity;
+    const shipAmount = unitShip * line.quantity;
+    shippingTotal += shipAmount;
+    addToLineBreakdown(
+      sellerShippingBreakdownByKey,
+      key,
+      sku,
+      title,
+      line.quantity,
+      -shipAmount,
+    );
   }
 
   return {
@@ -374,6 +458,12 @@ async function estimateMlCostsFallback(
     fullShippingMl: 0,
     fullStorageMl: 0,
     fullNonComplianceMl: 0,
+    saleFeeBreakdown: [...saleFeeBreakdownByKey.values()].sort(
+      (a, b) => a.amount - b.amount,
+    ),
+    sellerShippingBreakdown: [...sellerShippingBreakdownByKey.values()].sort(
+      (a, b) => a.amount - b.amount,
+    ),
   };
 }
 
@@ -450,12 +540,48 @@ export async function buildDreMonthSnapshot(
   const revenueMl = ordersRevenueMl;
 
   let adsCost = 0;
+  let adsCostBreakdown: DreLineBreakdownItem[] | undefined;
   try {
-    adsCost = await fetchTotalAdsCostForMonth(accessToken, year, month);
+    const advertiserId = await fetchPadsAdvertiserId(accessToken);
+    if (advertiserId !== null) {
+      const { dateFrom, dateTo } = getProductAdsDateRangeForMonth(year, month);
+      const adsMetrics = await fetchProductAdsMetricsByItem(accessToken, {
+        advertiserId,
+        siteId: "MLB",
+        dateFrom,
+        dateTo,
+      });
+      adsCost = roundMoney(
+        [...adsMetrics.values()].reduce((sum, row) => sum + row.cost, 0),
+      );
+      const adsItemIds = [...adsMetrics.keys()].filter(
+        (id) => (adsMetrics.get(id)?.cost ?? 0) !== 0,
+      );
+      const adsItems = await fetchItemsByIdsBatched(accessToken, adsItemIds);
+      const adsItemById = new Map(adsItems.map((item) => [item.id, item]));
+      const adsSkuByItemId = new Map(
+        adsItems.map((item) => [item.id, getItemSku(item)]),
+      );
+      adsCostBreakdown = adsItemIds
+        .map((itemId) => {
+          const metrics = adsMetrics.get(itemId)!;
+          const sku = adsSkuByItemId.get(itemId) ?? null;
+          const title = adsItemById.get(itemId)?.title ?? itemId;
+          return {
+            key: sku ? normalizeProductSku(sku) : `item:${itemId}`,
+            sku,
+            title,
+            quantity: metrics.unitsQuantity,
+            amount: roundMoney(-metrics.cost),
+          };
+        })
+        .sort((a, b) => a.amount - b.amount);
+    }
   } catch (error) {
     logServerError("dre-month-data ads", error);
     if (billing && billing.adsCost > 0 && billingAlignsWithCivil) {
       adsCost = billing.adsCost;
+      adsCostBreakdown = undefined;
     } else {
       syncWarnings.push(
         "Não foi possível carregar o gasto com campanhas ADS neste mês.",
@@ -478,6 +604,8 @@ export async function buildDreMonthSnapshot(
   let fullShippingMl = 0;
   let fullStorageMl = 0;
   let fullNonComplianceMl = 0;
+  let saleFeeBreakdown: DreLineBreakdownItem[] | undefined;
+  let sellerShippingBreakdown: DreLineBreakdownItem[] | undefined;
   let billingSource: DreMonthSnapshotPayload["billingSource"] = "fallback";
   let isPartial = isCurrentCalendarMonth(year, month);
 
@@ -524,6 +652,8 @@ export async function buildDreMonthSnapshot(
       fullShippingMl = billing!.fullShipping;
       fullStorageMl = billing!.fullStorage;
       fullNonComplianceMl = billing!.fullNonCompliance;
+      saleFeeBreakdown = fallback.saleFeeBreakdown;
+      sellerShippingBreakdown = fallback.sellerShippingBreakdown;
       syncWarnings.push(
         "Custos Full (envios, armazenamento, inconformidades) da fatura ML do ciclo próximo a este mês.",
       );
@@ -559,6 +689,8 @@ export async function buildDreMonthSnapshot(
       fullShippingMl = fallback.fullShippingMl;
       fullStorageMl = fallback.fullStorageMl;
       fullNonComplianceMl = fallback.fullNonComplianceMl;
+      saleFeeBreakdown = fallback.saleFeeBreakdown;
+      sellerShippingBreakdown = fallback.sellerShippingBreakdown;
     } catch (error) {
       logServerError("dre-month-data ml-fallback", error);
       syncWarnings.push(
@@ -586,6 +718,7 @@ export async function buildDreMonthSnapshot(
   let cancelledIncludeOverlay: DreCancelledIncludeOverlay | undefined;
   let cancelledBreakdown: DreProductCostBreakdownItem[] = [];
   let cancelledTaxBreakdown: DreTaxBreakdownItem[] = [];
+  let cancelledOrderRevenueBreakdown: DreLineBreakdownItem[] = [];
   try {
     const cancelledLines = await fetchCancelledOrderLinesInDateRange(
       accessToken,
@@ -612,6 +745,7 @@ export async function buildDreMonthSnapshot(
       };
       cancelledBreakdown = cancelledErpCosts.breakdown;
       cancelledTaxBreakdown = cancelledErpCosts.taxBreakdown;
+      cancelledOrderRevenueBreakdown = cancelledErpCosts.revenueBreakdown;
     }
   } catch (error) {
     logServerError("dre-month-data cancelled overlay", error);
@@ -642,6 +776,16 @@ export async function buildDreMonthSnapshot(
       erpCosts.taxBreakdown,
       cancelledTaxBreakdown,
     ]),
+    revenueBreakdown: erpCosts.revenueBreakdown,
+    cancelledSalesBreakdown: cancelledOrderRevenueBreakdown
+      .map((item) => ({
+        ...item,
+        amount: roundMoney(-item.amount),
+      }))
+      .sort((a, b) => a.amount - b.amount),
+    saleFeeBreakdown,
+    sellerShippingBreakdown,
+    adsCostBreakdown,
   };
 }
 
@@ -751,6 +895,34 @@ export function parseSnapshotPayload(raw: unknown): DreMonthSnapshotPayload | nu
         }))
     : undefined;
 
+  const parseLineBreakdown = (
+    raw: unknown,
+  ): DreLineBreakdownItem[] | undefined =>
+    Array.isArray(raw)
+      ? raw
+          .filter(
+            (item): item is Record<string, unknown> =>
+              Boolean(item) && typeof item === "object",
+          )
+          .map((item) => ({
+            key:
+              typeof item.key === "string" ? item.key : String(item.sku ?? ""),
+            sku: typeof item.sku === "string" ? item.sku : null,
+            title: typeof item.title === "string" ? item.title : "",
+            quantity:
+              item.quantity === null || item.quantity === undefined
+                ? null
+                : numFrom(item.quantity),
+            amount: numFrom(item.amount),
+          }))
+      : undefined;
+
+  const revenueBreakdown = parseLineBreakdown(p.revenueBreakdown);
+  const cancelledSalesBreakdown = parseLineBreakdown(p.cancelledSalesBreakdown);
+  const saleFeeBreakdown = parseLineBreakdown(p.saleFeeBreakdown);
+  const sellerShippingBreakdown = parseLineBreakdown(p.sellerShippingBreakdown);
+  const adsCostBreakdown = parseLineBreakdown(p.adsCostBreakdown);
+
   return {
     revenueMl: num("revenueMl"),
     cancelledSalesMl: num("cancelledSalesMl"),
@@ -773,5 +945,10 @@ export function parseSnapshotPayload(raw: unknown): DreMonthSnapshotPayload | nu
     cancelledIncludeOverlay,
     productCostBreakdown,
     taxBreakdown,
+    revenueBreakdown,
+    cancelledSalesBreakdown,
+    saleFeeBreakdown,
+    sellerShippingBreakdown,
+    adsCostBreakdown,
   };
 }
