@@ -165,7 +165,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     source: "ml",
     indent: true,
     lineKey: "fullShippingMl",
-    methodology: "Custo de envios do Mercado Envios Full no mês, conforme a fatura ML.",
+    methodology: "Custo de coleta/envios Full no mês civil. Preferência: envios do Relatório Full (import Fulfillment + fatura). Se o mês ainda não tinha import, o sync do DRE importa pelo mesmo fluxo e grava em full_shipments. Sem envios, usa total consolidado da fatura.",
   },
   {
     type: "static",
@@ -185,7 +185,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     source: "ml",
     indent: true,
     lineKey: "fullNonComplianceMl",
-    methodology: "Multas por inconformidade no Full no mês, conforme a fatura ML.",
+    methodology: "Multas por inconformidade no Full. Mesma fonte de Full envios: Relatório Full (com auto-import no sync do DRE se necessário); senão fatura ML.",
   },
   {
     type: "static",

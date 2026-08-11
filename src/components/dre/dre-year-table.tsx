@@ -15,7 +15,6 @@ import {
   AlertCircle,
   ChevronLeft,
   ChevronRight,
-  Info,
   RefreshCw,
   Undo2,
 } from "lucide-react";
@@ -303,49 +302,6 @@ function MonthAlertsTooltip({
         </ul>
         <p className="border-t border-[var(--border)] pt-2 text-[10px] text-[var(--muted-foreground)]">
           Última sync: {formatSyncTime(month.syncedAt)}
-        </p>
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-function FullReportMissingTooltip({
-  month,
-  colored,
-}: {
-  month: DreMonthView;
-  colored: boolean;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "inline-flex size-4 shrink-0 items-center justify-center rounded-sm opacity-80 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]",
-            colored
-              ? "text-white/80 hover:text-white"
-              : "text-amber-500/80 hover:text-amber-600",
-          )}
-          aria-label={`Relatório Full não importado para ${month.label}`}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <Info className="size-3" aria-hidden />
-        </button>
-      </TooltipTrigger>
-      <TooltipContent
-        side="top"
-        align="center"
-        className="max-w-[18rem] space-y-1.5 text-left"
-      >
-        <p className="font-semibold text-[var(--foreground)]">
-          Relatório Full pendente — {month.label}
-        </p>
-        <p className="text-[11px] leading-snug text-[var(--muted-foreground)]">
-          Envios/inconformidade ainda não foram importados em Relatório Full.
-          O valor atual vem da fatura consolidada (pode ser impreciso). Importe
-          em Relatório Full e sincronize o mês no DRE para o valor mais
-          confiável.
         </p>
       </TooltipContent>
     </Tooltip>
@@ -1148,11 +1104,6 @@ function renderValueCell(
 
   const editableKey = getEditableLineKey(row);
   const auditKind = getAuditKindForRow(row);
-  const needsFullReportAlert =
-    row.type === "static" &&
-    (row.id === "fullShippingMl" || row.id === "fullNonComplianceMl") &&
-    month.lines !== null &&
-    !month.fullReportSourced;
   const isAdjusted =
     editableKey !== null &&
     month.manuallyEditedLineKeys.includes(editableKey);
@@ -1165,9 +1116,6 @@ function renderValueCell(
   if (editableKey && canEditMonth) {
     return (
       <div className={cn(valueClassName, "inline-flex items-center justify-center gap-1.5")}>
-        {needsFullReportAlert ? (
-          <FullReportMissingTooltip month={month} colored={colored} />
-        ) : null}
         <DreInlineMoneyCell
           displayAmount={amount}
           label={`${row.label} (${month.label})`}
@@ -1196,9 +1144,6 @@ function renderValueCell(
   const auditable = Boolean(auditKind && onAuditClick);
   return (
     <div className={cn(valueClassName, "inline-flex items-center justify-center gap-1.5")}>
-      {needsFullReportAlert ? (
-        <FullReportMissingTooltip month={month} colored={colored} />
-      ) : null}
       <div
         role={auditable ? "button" : undefined}
         tabIndex={auditable ? 0 : undefined}

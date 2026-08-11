@@ -329,6 +329,17 @@ Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templ
 - **Código já tenant-ready?** **não**
 - **Ação futura na migração:** escopar sync/billing por org + seller
 
+### DRE — auto-import Full no sync — 2026-08-11
+
+- **Tabelas novas/alteradas:** escreve `full_shipments` quando o mês ainda não tem import
+- **Precisa `organizationId`?** **sim** — envios Full e snapshot DRE globais do deployment
+- **APIs afetadas:** `POST /api/dre/sync` → `importFullCollectChargesFromBilling` (mesmo fluxo de `POST /api/full-shipments/import-ml`)
+- **Assume singleton?** **sim** — `full_shipments` sem `organizationId`
+- **Cron/background:** nenhum
+- **Dados globais vs por org:** import Full e DRE no mesmo banco single-tenant
+- **Código já tenant-ready?** **não**
+- **Ação futura na migração:** escopar `full_shipments` + sync DRE por `organizationId`
+
 ### Produtos e pricing — baseline
 
 - **Tabelas:** `products`, `company_tax_settings`
