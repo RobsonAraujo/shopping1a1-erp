@@ -58,6 +58,7 @@ import {
   dreMonthShortLabel,
   getCellValue,
   isColoredRow,
+  isDetailRow,
   rowBackgroundClass,
   rowLabelClass,
   valueToneClass,
@@ -104,6 +105,108 @@ const SELECTED_MONTH_CELL_CLASS = "relative";
  */
 const DIM_CLASS =
   "pointer-events-none opacity-40 transition-opacity duration-150";
+
+/** Transição de abrir/fechar linhas de detalhe (Ocultar / Mostrar detalhes). */
+const DETAILS_REVEAL_EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
+const DETAILS_REVEAL_MS = 320;
+
+function buildDetailIndexMap(rows: DreTableRow[]): Map<string, number> {
+  const map = new Map<string, number>();
+  let i = 0;
+  for (const row of rows) {
+    if (isDetailRow(row)) {
+      map.set(row.id, i);
+      i += 1;
+    }
+  }
+  return map;
+}
+
+function detailRevealStyle(
+  detailIndex: number,
+  detailCount: number,
+  open: boolean,
+): CSSProperties {
+  const capped = Math.min(Math.max(detailCount - 1, 0), 14);
+  const delayMs = open
+    ? Math.min(detailIndex, capped) * 22
+    : Math.min(capped - detailIndex, capped) * 16;
+  return {
+    transitionDuration: `${DETAILS_REVEAL_MS}ms`,
+    transitionTimingFunction: DETAILS_REVEAL_EASE,
+    transitionDelay: `${Math.max(0, delayMs)}ms`,
+  };
+}
+
+function altRowFlagsForView(
+  rows: DreTableRow[],
+  showDetails: boolean,
+): boolean[] {
+  return rows.map((row, index) => {
+    if (isColoredRow(row)) return false;
+    if (!showDetails && isDetailRow(row)) return false;
+    const whiteRowsBefore = rows
+      .slice(0, index)
+      .filter(
+        (r) => !isColoredRow(r) && (showDetails || !isDetailRow(r)),
+      ).length;
+    return whiteRowsBefore % 2 === 1;
+  });
+}
+
+function DetailAnimatedCell({
+  isDetail,
+  open,
+  detailIndex,
+  detailCount,
+  children,
+  className,
+  style,
+  contentClassName,
+}: {
+  isDetail: boolean;
+  open: boolean;
+  detailIndex: number;
+  detailCount: number;
+  children: ReactNode;
+  className?: string;
+  style?: CSSProperties;
+  contentClassName: string;
+}) {
+  if (!isDetail) {
+    return (
+      <td className={className} style={style}>
+        {children}
+      </td>
+    );
+  }
+
+  const reveal = detailRevealStyle(detailIndex, detailCount, open);
+  return (
+    <td
+      className={cn(className, "p-0")}
+      style={open ? style : undefined}
+    >
+      <div
+        className={cn(
+          "grid transition-[grid-template-rows] motion-reduce:transition-none motion-reduce:delay-0",
+          open ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+        )}
+        style={reveal}
+      >
+        <div
+          className={cn(
+            "overflow-hidden transition-opacity motion-reduce:transition-none motion-reduce:delay-0",
+            open ? "opacity-100" : "opacity-0",
+          )}
+          style={reveal}
+        >
+          <div className={contentClassName}>{children}</div>
+        </div>
+      </div>
+    </td>
+  );
+}
 
 type DreYearTableProps = {
   data: DreYearView;
@@ -1373,20 +1476,18 @@ function DreYearTableMobile({
         data.costItems,
         data.operationalCostItems,
         data.investmentCostItems,
-        showDetails,
+        true,
       ),
-    [data.costItems, data.operationalCostItems, data.investmentCostItems, showDetails],
+    [data.costItems, data.operationalCostItems, data.investmentCostItems],
   );
 
-  const altRowFlags = useMemo(() => {
-    return rows.map((row, index) => {
-      if (isColoredRow(row)) return false;
-      const whiteRowsBefore = rows
-        .slice(0, index)
-        .filter((r) => !isColoredRow(r)).length;
-      return whiteRowsBefore % 2 === 1;
-    });
-  }, [rows]);
+  const detailIndexById = useMemo(() => buildDetailIndexMap(rows), [rows]);
+  const detailCount = detailIndexById.size;
+
+  const altRowFlags = useMemo(
+    () => altRowFlagsForView(rows, showDetails),
+    [rows, showDetails],
+  );
 
   const defaultIndex = useMemo(() => {
     const currentIdx = data.months.findIndex((m) => m.isCurrentMonth);
@@ -1549,21 +1650,51 @@ function DreYearTableMobile({
       ) : null}
 
       <div className="divide-y divide-[var(--border)] overflow-hidden rounded-lg border border-[var(--border)] bg-white">
-        {rows.map((row, index) => (
-          <DreMobileRow
-            key={row.id}
-            row={row}
-            isAlt={altRowFlags[index]}
-            selection={selection}
-            data={data}
-            onLineChange={onLineChange}
-            onLineRestore={onLineRestore}
-            onFixedCostChange={onFixedCostChange}
-            onOperationalCostChange={onOperationalCostChange}
-            onInvestmentCostChange={onInvestmentCostChange}
-            onAuditClick={(kind, period) => setAuditTarget({ kind, period })}
-          />
-        ))}
+        {rows.map((row, index) => {
+          const detail = isDetailRow(row);
+          const rowNode = (
+            <DreMobileRow
+              row={row}
+              isAlt={altRowFlags[index]}
+              selection={selection}
+              data={data}
+              onLineChange={onLineChange}
+              onLineRestore={onLineRestore}
+              onFixedCostChange={onFixedCostChange}
+              onOperationalCostChange={onOperationalCostChange}
+              onInvestmentCostChange={onInvestmentCostChange}
+              onAuditClick={(kind, period) => setAuditTarget({ kind, period })}
+            />
+          );
+
+          if (!detail) {
+            return <Fragment key={row.id}>{rowNode}</Fragment>;
+          }
+
+          const detailIndex = detailIndexById.get(row.id) ?? 0;
+          return (
+            <div
+              key={row.id}
+              className={cn(
+                "grid transition-[grid-template-rows] motion-reduce:transition-none motion-reduce:delay-0",
+                showDetails ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+                !showDetails && "![border-top-width:0px]",
+              )}
+              style={detailRevealStyle(detailIndex, detailCount, showDetails)}
+              aria-hidden={!showDetails}
+            >
+              <div
+                className={cn(
+                  "overflow-hidden transition-opacity motion-reduce:transition-none motion-reduce:delay-0",
+                  showDetails ? "opacity-100" : "opacity-0",
+                )}
+                style={detailRevealStyle(detailIndex, detailCount, showDetails)}
+              >
+                {rowNode}
+              </div>
+            </div>
+          );
+        })}
       </div>
       <DreProductCostAuditModal
         open={auditTarget !== null && auditTarget.kind === "productCost"}
@@ -1763,28 +1894,40 @@ function DreYearTableDesktop({
     data.costItems,
     data.operationalCostItems,
     data.investmentCostItems,
-    showDetails,
+    true,
   );
+  const detailIndexById = buildDetailIndexMap(rows);
+  const detailCount = detailIndexById.size;
 
-  // Zebra striping só entre as linhas "brancas" (detalhe) — as linhas de
-  // grupo/resultado (verde/vermelho) ficam de fora da contagem.
-  const altRowFlags = rows.map((row, index) => {
-    if (isColoredRow(row)) return false;
-    const whiteRowsBefore = rows
-      .slice(0, index)
-      .filter((r) => !isColoredRow(r)).length;
-    return whiteRowsBefore % 2 === 1;
-  });
+  // Zebra striping só entre as linhas "brancas" visíveis — detalhes colapsados
+  // não entram na contagem.
+  const altRowFlags = altRowFlagsForView(rows, showDetails);
 
   return (
     <TooltipProvider delayDuration={200}>
       <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-white shadow-sm">
         {onToggleDetails ? (
           <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--muted)]/25 px-3 py-2">
-            <p className="text-[11px] text-[var(--muted-foreground)]">
-              {showDetails
-                ? "Exibindo linhas detalhadas (custos, tarifas, fretes…)."
-                : "Detalhes ocultos — só totais e resultados."}
+            <p className="relative min-h-[1.1rem] flex-1 text-[11px] text-[var(--muted-foreground)]">
+              <span className="invisible" aria-hidden>
+                Exibindo linhas detalhadas (custos, tarifas, fretes…).
+              </span>
+              <span
+                className={cn(
+                  "absolute inset-0 transition-opacity duration-300 ease-out motion-reduce:transition-none",
+                  showDetails ? "opacity-100" : "opacity-0",
+                )}
+              >
+                Exibindo linhas detalhadas (custos, tarifas, fretes…).
+              </span>
+              <span
+                className={cn(
+                  "absolute inset-0 transition-opacity duration-300 ease-out motion-reduce:transition-none",
+                  showDetails ? "opacity-0" : "opacity-100",
+                )}
+              >
+                Detalhes ocultos — só totais e resultados.
+              </span>
             </p>
             <Button
               type="button"
@@ -1854,6 +1997,8 @@ function DreYearTableDesktop({
               const bg = rowBackgroundClass(row);
               const showPercentRow = row.type === "static" && row.showPercent;
               const isAlt = altRowFlags[index];
+              const detail = isDetailRow(row);
+              const detailIndex = detailIndexById.get(row.id) ?? 0;
               // Linhas com percentual logo abaixo não desenham borda inferior —
               // a separação já é feita pela borda da própria linha de percentual.
               const dividerStyle = showPercentRow
@@ -1867,27 +2012,44 @@ function DreYearTableDesktop({
 
               return (
                 <Fragment key={row.id}>
-                  <tr className={rowClassName}>
-                    <td
+                  <tr
+                    className={cn(
+                      rowClassName,
+                      detail && !showDetails && "pointer-events-none",
+                    )}
+                    aria-hidden={detail && !showDetails ? true : undefined}
+                  >
+                    <DetailAnimatedCell
+                      isDetail={detail}
+                      open={showDetails}
+                      detailIndex={detailIndex}
+                      detailCount={detailCount}
                       className={cn(
-                        "sticky left-0 z-10 px-3 py-2",
+                        "sticky left-0 z-10",
+                        !detail && "px-3 py-2",
                         rowClassName,
                         (isEditing || columnFocusMonth !== null) && DIM_CLASS,
                       )}
+                      contentClassName="px-3 py-2"
                       style={cellStyle}
                     >
                       {renderLabelCell(row)}
-                    </td>
+                    </DetailAnimatedCell>
                     {data.months.map((month) => {
                       const editingThis = isEditingThisCell(
                         month.month,
                         row.id,
                       );
                       return (
-                        <td
+                        <DetailAnimatedCell
                           key={month.month}
+                          isDetail={detail}
+                          open={showDetails}
+                          detailIndex={detailIndex}
+                          detailCount={detailCount}
                           className={cn(
-                            "px-1.5 py-2 text-center align-middle",
+                            !detail && "px-1.5 py-2",
+                            "text-center align-middle",
                             editingThis
                               ? cn(
                                   "relative z-30",
@@ -1903,6 +2065,7 @@ function DreYearTableDesktop({
                                     )
                                   : columnFocusMonth !== null && DIM_CLASS,
                           )}
+                          contentClassName="px-1.5 py-2 text-center align-middle"
                           style={cellStyle}
                         >
                           {renderValueCell(
@@ -1920,15 +2083,21 @@ function DreYearTableDesktop({
                               ),
                             onLineRestore,
                           )}
-                        </td>
+                        </DetailAnimatedCell>
                       );
                     })}
-                    <td
+                    <DetailAnimatedCell
+                      isDetail={detail}
+                      open={showDetails}
+                      detailIndex={detailIndex}
+                      detailCount={detailCount}
                       className={cn(
-                        "px-2 py-2 text-center align-middle",
+                        !detail && "px-2 py-2",
+                        "text-center align-middle",
                         rowClassName,
                         (isEditing || columnFocusMonth !== null) && DIM_CLASS,
                       )}
+                      contentClassName="px-2 py-2 text-center align-middle"
                       style={cellStyle}
                     >
                       <div
@@ -1978,7 +2147,7 @@ function DreYearTableDesktop({
                           )}
                         </div>
                       </div>
-                    </td>
+                    </DetailAnimatedCell>
                   </tr>
                   {showPercentRow ? (
                     <tr key={`${row.id}-percent`} className={bg}>
