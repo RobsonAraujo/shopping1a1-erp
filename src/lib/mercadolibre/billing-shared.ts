@@ -21,6 +21,12 @@ export function normalizeBillingLabel(label: string | undefined): string {
   return (label ?? "").toLowerCase().normalize("NFD").replace(/\p{M}/gu, "");
 }
 
+/** True para `BONUS` e variantes da API (`BONUS_ON_BILL`, `BONUS_PART_ON_CREDIT_NOTE`, …). */
+export function isBillingBonusType(detailType: string | undefined): boolean {
+  const t = (detailType ?? "").toUpperCase();
+  return t === "BONUS" || t.startsWith("BONUS_");
+}
+
 function matchAny(text: string, patterns: RegExp[]): boolean {
   return patterns.some((pattern) => pattern.test(text));
 }
@@ -136,7 +142,7 @@ export function classifyMlBillingEntry(
 ): MlBillingLineCategory | "unmapped" {
   const type = subType.toUpperCase();
   const dt = detailType.toUpperCase();
-  const isBonus = dt === "BONUS";
+  const isBonus = isBillingBonusType(dt);
 
   if (type === "PADS") return "ads";
 
@@ -185,7 +191,8 @@ export function classifyMlBillingEntry(
   if (
     type.startsWith("CV") ||
     type === "COM" ||
-    (/tarifa de venda|cargo por venda|comiss/.test(label) && !isBonus)
+    (/tarifa de venda|cargo por venda|cargo por venta|comiss/.test(label) &&
+      !isBonus)
   ) {
     return "saleFee";
   }
@@ -210,15 +217,24 @@ export function classifyMlBillingEntry(
     if (type === "BFFE" || /envio|frete/.test(label)) {
       return "sellerShipping";
     }
+    // Bonificação de tarifa de venda (BXD/"bonificación del cargo por venta"
+    // ou BV*) — não confundir com devolução parcial.
     if (
-      type.startsWith("BV") &&
+      (type.startsWith("BV") || type === "BXD") &&
       (type.includes("VML") ||
         type.includes("VPRC") ||
         type.includes("VFNU") ||
         type.includes("VFN") ||
-        /tarifa|venda|comiss/.test(label))
+        /tarifa|venda|venta|comiss|cargo por v/.test(label))
     ) {
       return "saleFee";
+    }
+    if (/devol|reembol|parcial|partial/.test(label)) {
+      return "partialReturn";
+    }
+    // BXD/BV genérico sem label claro: não assumir devolução parcial.
+    if (type === "BXD" || type.startsWith("BV") || type.startsWith("BF")) {
+      return "unmapped";
     }
     return "partialReturn";
   }

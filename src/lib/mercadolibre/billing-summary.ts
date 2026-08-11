@@ -8,6 +8,7 @@ import {
   addBillingBonus,
   billingPeriodKey,
   classifyFullChargeLabel,
+  isBillingBonusType,
   normalizeBillingLabel,
   subtractBillingCost,
   type MlBillingDreLines,
@@ -313,7 +314,7 @@ async function fetchFullBillingTotals(
         if (!Number.isFinite(amount) || amount === 0) continue;
 
         const detailType = (row.charge_info?.detail_type ?? "").toUpperCase();
-        const isBonus = detailType === "BONUS";
+        const isBonus = isBillingBonusType(detailType);
         const label = normalizeBillingLabel(row.charge_info?.transaction_detail);
         // fulfillment_info.type é estruturado e sempre presente neste
         // endpoint dedicado ao Full — mais confiável que o texto do label,

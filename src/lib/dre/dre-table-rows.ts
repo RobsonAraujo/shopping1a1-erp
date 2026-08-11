@@ -115,7 +115,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     source: "ml",
     indent: true,
     lineKey: "partialReturnsMl",
-    methodology: "Reembolsos parciais (devoluções parciais) cobrados/creditados na fatura ML no mês. Entram nos custos variáveis; quando a fatura não está disponível, o valor fica zerado (não há estimativa por pedido).",
+    methodology: "Reembolsos/devoluções parciais da fatura ML no mês (bonificações com esse label). Quando a fatura do ciclo não alinha ao mês civil, o valor ainda vem da fatura (não há estimativa por pedido). Se o mês nunca teve esse tipo de lançamento na fatura, fica zerado — sincronize de novo após atualizações do DRE.",
   },
   {
     type: "static",

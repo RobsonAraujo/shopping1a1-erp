@@ -2,6 +2,7 @@ import { roundMoney } from "@/lib/financial-margin";
 import {
   applyBillingLineAmount,
   classifyMlBillingEntry,
+  isBillingBonusType,
   normalizeBillingLabel,
   type MlBillingDreLines,
 } from "./billing-shared";
@@ -263,7 +264,7 @@ export function aggregateMlBillingDetails(
     const detailType = (info.detail_type ?? "").toUpperCase();
     const subType = (info.detail_sub_type ?? "UNKNOWN").toUpperCase();
     const label = normalizeBillingLabel(info.transaction_detail);
-    const isBonus = detailType === "BONUS";
+    const isBonus = isBillingBonusType(detailType);
     const signed = isBonus ? Math.abs(amount) : -Math.abs(amount);
 
     agg.bySubType[subType] = roundMoney((agg.bySubType[subType] ?? 0) + signed);

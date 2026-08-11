@@ -658,7 +658,9 @@ export async function buildDreMonthSnapshot(
       saleFeeMl = fallback.saleFeeMl;
       sellerShippingMl = fallback.sellerShippingMl;
       cancelledSalesMl = fallback.cancelledSalesMl;
-      partialReturnsMl = fallback.partialReturnsMl;
+      // Devoluções parciais não têm estimativa por pedido — manter da fatura
+      // (mesmo padrão de Full / Minha Página / Afiliados).
+      partialReturnsMl = billing!.partialReturns;
       fullShippingMl = billing!.fullShipping;
       fullStorageMl = billing!.fullStorage;
       fullNonComplianceMl = billing!.fullNonCompliance;
@@ -667,13 +669,20 @@ export async function buildDreMonthSnapshot(
       saleFeeBreakdown = fallback.saleFeeBreakdown;
       sellerShippingBreakdown = fallback.sellerShippingBreakdown;
       syncWarnings.push(
-        "Custos Full (envios, armazenamento, inconformidades) da fatura ML do ciclo próximo a este mês.",
+        "Custos Full (envios, armazenamento, inconformidades) e devoluções parciais da fatura ML do ciclo próximo a este mês.",
       );
     } catch (error) {
       logServerError("dre-month-data ml-fallback", error);
       syncWarnings.push(
         "Não foi possível estimar tarifas e frete do Mercado Livre.",
       );
+      // Mesmo com falha no fallback de pedidos, preserve o que a fatura trouxe.
+      partialReturnsMl = billing!.partialReturns;
+      fullShippingMl = billing!.fullShipping;
+      fullStorageMl = billing!.fullStorage;
+      fullNonComplianceMl = billing!.fullNonCompliance;
+      minhaPaginaMl = billing!.minhaPagina;
+      affiliateFeeMl = billing!.affiliateFee;
     }
   } else {
     if (billing !== null && revenueMl > 0) {

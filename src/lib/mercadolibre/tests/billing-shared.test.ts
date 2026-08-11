@@ -172,6 +172,32 @@ describe("classifyMlBillingEntry", () => {
     );
   });
 
+  it("classifies BONUS_ON_BILL the same as BONUS", () => {
+    assert.equal(
+      classifyMlBillingEntry("BXD", "devolução parcial", "BONUS_ON_BILL"),
+      "partialReturn",
+    );
+  });
+
+  it("classifies BXD sale-fee bonuses as saleFee (not partialReturn)", () => {
+    assert.equal(
+      classifyMlBillingEntry(
+        "BXD",
+        "bonificação do cargo por venda",
+        "BONUS",
+      ),
+      "saleFee",
+    );
+    assert.equal(
+      classifyMlBillingEntry(
+        "BXD",
+        "bonificacion del cargo por venta",
+        "BONUS",
+      ),
+      "saleFee",
+    );
+  });
+
   it("classifies bonus shipping refunds as sellerShipping", () => {
     assert.equal(
       classifyMlBillingEntry("BFFE", "estorno de frete", "BONUS"),
