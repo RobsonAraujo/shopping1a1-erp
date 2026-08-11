@@ -15,8 +15,6 @@ import {
   Truck,
   Warehouse,
 } from "lucide-react";
-import { DRE_DISCLAIMER_MENU } from "@/lib/dre-disclaimer";
-
 export type DashboardNavBadge = {
   label: string;
   variant: "secondary" | "warning";
@@ -137,9 +135,9 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
       {
         href: "/dashboard/dre",
         label: "DRE",
-        description: DRE_DISCLAIMER_MENU,
+        description:
+          "Demonstrativo de resultado mensal — ML, custos, impostos e ADS",
         icon: LineChart,
-        title: DRE_DISCLAIMER_MENU,
       },
       {
         href: "/dashboard/relatorio-tributario",
