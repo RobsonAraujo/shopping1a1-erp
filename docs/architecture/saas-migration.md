@@ -96,7 +96,7 @@ Detalhes dos modelos: [tenant-data-model.md](tenant-data-model.md).
 |---------------|---------|
 | **Referência global** (compartilhável) | `CbsIbsVigencia`, `TaxpayerVerificationCache` |
 | **Referência editável** (hoje global; pode virar override por org) | `IcmsInternalRate` |
-| **Por tenant** (hoje sem coluna — precisa `organizationId`) | `Product`, `CompanyTaxSettings`, `Listing`, `WarehouseStock`, `ReplenishmentCycle`, `CatalogCompetitionSnapshot`, `StockAttentionAcknowledgement`, `DreCostItem`, `DreCostMonthValue`, `DreMonthSnapshot`, `CatalogCompetitionPollRun` |
+| **Por tenant** (hoje sem coluna — precisa `organizationId`) | `Product`, `CompanyTaxSettings`, `Listing`, `WarehouseStock`, `ReplenishmentCycle`, `CatalogCompetitionSnapshot`, `StockAttentionAcknowledgement`, `DreCostItem`, `DreCostMonthValue`, `DreMonthSnapshot`, `DreProductCostLeveling`, `CatalogCompetitionPollRun` |
 | **Parcial ML** (seller como proxy) | `TaxReportMonthSnapshot`, `MlSellerCredentials`, `PushSubscription` |
 
 ---
@@ -167,6 +167,17 @@ Detalhes dos modelos: [tenant-data-model.md](tenant-data-model.md).
 ## Registro de features
 
 Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templates/feature-saas-impact.md).
+
+### DRE — nivelamento de custo de produto por período — 2026-08-11
+
+- **Tabelas novas/alteradas:** nova `dre_product_cost_levelings` (`DreProductCostLeveling`: SKU FK → `Product`, intervalo inclusivo de meses, campos NF/ST/IPI); `Product` ganha relação `dreCostLevelings`
+- **Precisa `organizationId`?** **sim** — hoje global por deployment (mesmo padrão de `DreCostItem` / `Product`)
+- **APIs afetadas:** novas `GET/POST /api/dre/product-cost-leveling` e `PATCH/DELETE /api/dre/product-cost-leveling/[id]`; sync DRE (`computeErpCostsFromOrderLines`) aplica override de `pricingCost` só no cálculo de `productCostErp` / breakdown
+- **Assume singleton?** **sim** — sem `organizationId`; um conjunto de nivelamentos por deployment
+- **Cron/background:** nenhum
+- **Dados globais vs por org:** nivelamentos e snapshot DRE únicos do deployment; **não** altera Meus produtos, Lucratividade, Estoque nem relatório tributário
+- **Código já tenant-ready?** parcial — CRUD/`loadLevelingPricingBySkuForMonth`/`applyLevelingPricingToMap` são funções explícitas sem singleton; falta escopo por `organizationId`
+- **Ação futura na migração:** adicionar `organizationId` em `DreProductCostLeveling` junto com `Product`/`DreMonthSnapshot`; filtrar queries e validar SKU da mesma org
 
 ### Cadastro manual de kits do Mercado Livre (anúncios sem SKU) — 2026-08-08
 

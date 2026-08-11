@@ -65,9 +65,9 @@ export function DreProductCostAuditModal({
         <SheetHeader>
           <SheetTitle>Auditoria — Custo produto</SheetTitle>
           <SheetDescription>
-            {title}. Para cada anúncio: quantidade vendida × custo unitário
-            cadastrado no ERP (já com ST quando aplicável, sem custos
-            extras).
+            {title}. Quantidade × custo unitário. Quando o SKU foi nivelado só
+            em parte do mês, a auditoria separa: vendas no período nivelado e
+            vendas com o custo do cadastro.
           </SheetDescription>
         </SheetHeader>
         <SheetBody className="flex flex-1 flex-col overflow-hidden">
@@ -157,7 +157,15 @@ export function DreProductCostAuditModal({
                                   <p className="text-[11px] text-amber-700">
                                     Sem custo cadastrado no ERP
                                   </p>
-                                ) : null}
+                                ) : item.leveled ? (
+                                  <p className="text-[11px] font-medium text-sky-800">
+                                    Custo nivelado (DRE) · {item.quantity} un.
+                                  </p>
+                                ) : (
+                                  <p className="text-[11px] text-[var(--muted-foreground)]">
+                                    Custo do cadastro · {item.quantity} un.
+                                  </p>
+                                )}
                               </div>
                             </div>
                           </td>

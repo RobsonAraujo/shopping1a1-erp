@@ -35,7 +35,25 @@ export type DreProductCostBreakdownItem = {
   unitCost: number;
   totalCost: number;
   missingCost: boolean;
+  /** true quando o custo unitário veio de um nivelamento DRE no período. */
+  leveled?: boolean;
 };
+
+/** Separa na auditoria vendas niveladas vs custo do cadastro (mesmo SKU no mês). */
+export function productCostAuditKey(
+  baseKey: string,
+  leveled: boolean,
+): string {
+  const bare = baseKey.replace(/::(leveled|cadastro)$/, "");
+  return `${bare}${leveled ? "::leveled" : "::cadastro"}`;
+}
+
+export function normalizeProductCostAuditMergeKey(
+  item: Pick<DreProductCostBreakdownItem, "key" | "leveled">,
+): string {
+  if (/::(leveled|cadastro)$/.test(item.key)) return item.key;
+  return productCostAuditKey(item.key, Boolean(item.leveled));
+}
 
 /** Auditoria do Imposto ML: faturamento, % de imposto aplicado e imposto total por SKU/anúncio no mês. */
 export type DreTaxBreakdownItem = {
@@ -469,16 +487,23 @@ export function sumYearLineAmounts(
   return out;
 }
 
-/** Combina listas de auditoria do Custo produto (ex.: pedidos pagos + cancelados, ou vários meses), somando por SKU/anúncio. */
+/** Combina listas de auditoria do Custo produto (ex.: pedidos pagos + cancelados, ou vários meses), somando por SKU/anúncio + origem do custo (nivelado vs cadastro). */
 export function mergeProductCostBreakdowns(
   lists: DreProductCostBreakdownItem[][],
 ): DreProductCostBreakdownItem[] {
   const byKey = new Map<string, DreProductCostBreakdownItem>();
   for (const list of lists) {
     for (const item of list) {
-      const existing = byKey.get(item.key);
+      const mergeKey = normalizeProductCostAuditMergeKey(item);
+      const leveled =
+        item.leveled === true || mergeKey.endsWith("::leveled");
+      const existing = byKey.get(mergeKey);
       if (!existing) {
-        byKey.set(item.key, { ...item });
+        byKey.set(mergeKey, {
+          ...item,
+          key: mergeKey,
+          leveled: leveled || undefined,
+        });
         continue;
       }
       existing.quantity += item.quantity;
@@ -488,9 +513,17 @@ export function mergeProductCostBreakdowns(
           ? roundMoney(existing.totalCost / existing.quantity)
           : 0;
       existing.missingCost = existing.missingCost || item.missingCost;
+      existing.leveled = leveled || undefined;
     }
   }
-  return [...byKey.values()].sort((a, b) => b.totalCost - a.totalCost);
+  return [...byKey.values()].sort((a, b) => {
+    const skuCmp = (a.sku ?? a.title).localeCompare(b.sku ?? b.title, "pt-BR");
+    if (skuCmp !== 0) return skuCmp;
+    if (Boolean(a.leveled) !== Boolean(b.leveled)) {
+      return a.leveled ? -1 : 1;
+    }
+    return b.totalCost - a.totalCost;
+  });
 }
 
 /** Junta a auditoria do Custo produto de todos os meses do ano em uma única lista por SKU/anúncio. */

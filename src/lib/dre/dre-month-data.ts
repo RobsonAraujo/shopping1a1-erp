@@ -10,6 +10,7 @@ import {
   mergePreservedManualLines,
   mergeProductCostBreakdowns,
   mergeTaxBreakdowns,
+  productCostAuditKey,
   type DreCancelledIncludeOverlay,
   type DreEditableLineKey,
   type DreLineBreakdownItem,
@@ -23,6 +24,10 @@ import { roundMoney } from "@/lib/financial-margin";
 import { getItemSku, isKitItem } from "@/lib/mercadolibre/item-sku";
 import { loadKitsByMlItemId, resolveKitPricing } from "@/lib/kit-data";
 import { normalizeProductSku } from "@/lib/product-pricing";
+import {
+  applyLevelingsForOrderDate,
+  loadLevelingsOverlappingMonth,
+} from "@/lib/dre/dre-product-cost-leveling";
 import {
   fetchCancelledOrderLinesInDateRange,
   fetchPaidOrdersByPeriod,
@@ -47,6 +52,8 @@ import {
   fetchPadsAdvertiserId,
   fetchProductAdsMetricsByItem,
   getProductAdsDateRangeForMonth,
+  isProductAdsLookbackLimitError,
+  isProductAdsMetricsRangeAvailable,
 } from "@/lib/mercadolibre/product-ads-metrics";
 import {
   formatCalendarRangeYmd,
@@ -107,7 +114,12 @@ export type BuildDreMonthSnapshotOptions = {
 async function computeErpCostsFromOrderLines(
   accessToken: string,
   sellerId: number,
-  orderLines: Array<{ itemId: string; quantity: number; revenue: number }>,
+  orderLines: Array<{
+    itemId: string;
+    quantity: number;
+    revenue: number;
+    orderDateYmd?: string | null;
+  }>,
   year: number,
   month: number,
 ): Promise<{
@@ -138,9 +150,10 @@ async function computeErpCostsFromOrderLines(
     .filter((sku): sku is string => Boolean(sku))
     .map((sku) => normalizeProductSku(sku))
     .concat(kitComponentSkus);
-  const [pricingBySku, taxFromReport] = await Promise.all([
+  const [pricingBySkuBase, taxFromReport, levelings] = await Promise.all([
     loadProductsMapBySku(skus),
     loadProductTaxFromLatestReport(sellerId, undefined, { year, month }),
+    loadLevelingsOverlappingMonth(year, month),
   ]);
   const taxPercentBySku = new Map(
     [...taxFromReport.bySku].map(([sku, entry]) => [sku, entry.taxPercent]),
@@ -179,13 +192,15 @@ async function computeErpCostsFromOrderLines(
   }
 
   function addToBreakdown(
-    key: string,
+    baseKey: string,
     sku: string | null,
     title: string,
     quantity: number,
     cost: number,
     missingCost: boolean,
+    leveled = false,
   ) {
+    const key = productCostAuditKey(baseKey, leveled);
     const existing = breakdownByKey.get(key);
     if (existing) {
       existing.quantity += quantity;
@@ -195,6 +210,7 @@ async function computeErpCostsFromOrderLines(
           ? roundMoney(existing.totalCost / existing.quantity)
           : 0;
       existing.missingCost = existing.missingCost || missingCost;
+      existing.leveled = leveled || undefined;
       return;
     }
     breakdownByKey.set(key, {
@@ -205,6 +221,7 @@ async function computeErpCostsFromOrderLines(
       unitCost: quantity > 0 ? roundMoney(cost / quantity) : 0,
       totalCost: roundMoney(cost),
       missingCost,
+      leveled: leveled || undefined,
     });
   }
 
@@ -244,6 +261,13 @@ async function computeErpCostsFromOrderLines(
   for (const line of orderLines) {
     const sku = skuByItemId.get(line.itemId);
     const normalizedSku = sku ? normalizeProductSku(sku) : "";
+    const { pricing: pricingBySku, leveledSkus } = applyLevelingsForOrderDate(
+      pricingBySkuBase,
+      levelings,
+      line.orderDateYmd ?? null,
+      year,
+      month,
+    );
     const pricing = normalizedSku ? pricingBySku.get(normalizedSku) : undefined;
     const taxEntry = normalizedSku
       ? (taxFromReport.bySku.get(normalizedSku) ?? null)
@@ -263,7 +287,15 @@ async function computeErpCostsFromOrderLines(
     if (pricing) {
       const cost = line.quantity * pricing.pricingCost;
       productCostErp += cost;
-      addToBreakdown(normalizedSku, sku ?? null, title, line.quantity, cost, false);
+      addToBreakdown(
+        normalizedSku,
+        sku ?? null,
+        title,
+        line.quantity,
+        cost,
+        false,
+        leveledSkus.has(normalizedSku),
+      );
       if (taxPercent !== null && taxPercent > 0 && line.revenue > 0) {
         const tax = line.revenue * (taxPercent / 100);
         taxErp += tax;
@@ -305,6 +337,9 @@ async function computeErpCostsFromOrderLines(
       if (resolved.missingSkus.length === 0) {
         const cost = line.quantity * resolved.productCost;
         productCostErp += cost;
+        const kitLeveled = kitComponents.some((c) =>
+          leveledSkus.has(normalizeProductSku(c.sku)),
+        );
         addToBreakdown(
           `kit:${item.id}`,
           null,
@@ -312,6 +347,7 @@ async function computeErpCostsFromOrderLines(
           line.quantity,
           cost,
           false,
+          kitLeveled,
         );
         if (resolved.taxRatePercent !== null && line.revenue > 0) {
           const tax = line.revenue * (resolved.taxRatePercent / 100);
@@ -674,6 +710,17 @@ export async function buildDreMonthSnapshot(
             year,
             month,
           );
+          if (!isProductAdsMetricsRangeAvailable(dateFrom)) {
+            if (billing && billing.adsCost > 0 && billingAlignsWithCivil) {
+              adsCost = billing.adsCost;
+              adsCostBreakdown = undefined;
+            } else {
+              syncWarnings.push(
+                "Campanhas ADS: a API do ML só cobre os últimos 90 dias; neste mês o detalhe por anúncio não está disponível.",
+              );
+            }
+            return { adsCost, adsCostBreakdown };
+          }
           const adsMetrics = await fetchProductAdsMetricsByItem(accessToken, {
             advertiserId,
             siteId: "MLB",
@@ -707,10 +754,17 @@ export async function buildDreMonthSnapshot(
             .sort((a, b) => a.amount - b.amount);
         }
       } catch (error) {
-        logServerError("dre-month-data ads", error);
+        const lookbackLimited = isProductAdsLookbackLimitError(error);
+        if (!lookbackLimited) {
+          logServerError("dre-month-data ads", error);
+        }
         if (billing && billing.adsCost > 0 && billingAlignsWithCivil) {
           adsCost = billing.adsCost;
           adsCostBreakdown = undefined;
+        } else if (lookbackLimited) {
+          syncWarnings.push(
+            "Campanhas ADS: a API do ML só cobre os últimos 90 dias; neste mês o detalhe por anúncio não está disponível.",
+          );
         } else {
           syncWarnings.push(
             "Não foi possível carregar o gasto com campanhas ADS neste mês.",
@@ -1271,6 +1325,7 @@ export function parseSnapshotPayload(raw: unknown): DreMonthSnapshotPayload | nu
           unitCost: numFrom(item.unitCost),
           totalCost: numFrom(item.totalCost),
           missingCost: Boolean(item.missingCost),
+          leveled: item.leveled ? true : undefined,
         }))
     : undefined;
 

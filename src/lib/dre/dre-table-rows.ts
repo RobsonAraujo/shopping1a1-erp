@@ -157,7 +157,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     source: "erp",
     indent: true,
     lineKey: "productCostErp",
-    methodology: "Para cada pedido pago no mês: quantidade vendida × custo unitário do produto (custo de compra, já com ST quando aplicável, + IPI), conforme cadastro de produtos do ERP — sem incluir custos extras. Somado para todos os pedidos do mês (inclui o custo dos itens de kits, quando aplicável).",
+    methodology: "Para cada pedido pago no mês: quantidade vendida × custo unitário do produto (custo de compra, já com ST quando aplicável, + IPI), conforme cadastro de produtos do ERP — ou o custo nivelado no DRE quando houver nivelamento para o SKU na data do pedido — sem incluir custos extras. Somado para todos os pedidos do mês (inclui o custo dos itens de kits, quando aplicável).",
   },
   {
     type: "static",

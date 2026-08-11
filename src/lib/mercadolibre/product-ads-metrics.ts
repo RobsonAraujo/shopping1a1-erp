@@ -4,8 +4,14 @@ import { getMercadoLibreConfig } from "./config";
 
 export const PRODUCT_ADS_PERIOD_DAYS = 7;
 
+/** Janela máxima da API Product Ads (`/product_ads/ads/search`). */
+export const PRODUCT_ADS_METRICS_MAX_LOOKBACK_DAYS = 90;
+
 const ADS_SEARCH_METRICS =
   "cost,acos,total_amount,organic_units_amount,units_quantity,direct_amount,indirect_amount,advertising_items_quantity";
+
+const ADS_LOOKBACK_LIMIT_RE =
+  /date greater than 90 days|maior que 90 dias/i;
 
 export type ItemAdMetrics = {
   itemId: string;
@@ -78,6 +84,36 @@ export function getProductAdsDateRangeForMonth(
     : formatYmd({ year, month, day: daysInMonth });
 
   return { dateFrom, dateTo };
+}
+
+/**
+ * A API de Product Ads não aceita `date_from` com mais de 90 dias.
+ * Meses antigos devem cair no fallback (fatura / zero), sem erro.
+ */
+export function isProductAdsMetricsRangeAvailable(
+  dateFrom: string,
+  now: Date = new Date(),
+  maxLookbackDays: number = PRODUCT_ADS_METRICS_MAX_LOOKBACK_DAYS,
+): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateFrom.trim());
+  if (!match) return false;
+  const from = new Date(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+  );
+  if (Number.isNaN(from.getTime())) return false;
+  const cutoff = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() - maxLookbackDays,
+  );
+  return from >= cutoff;
+}
+
+export function isProductAdsLookbackLimitError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return ADS_LOOKBACK_LIMIT_RE.test(message);
 }
 
 export function getProductAdsDateRange(

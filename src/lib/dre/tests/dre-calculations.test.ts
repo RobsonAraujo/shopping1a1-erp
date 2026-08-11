@@ -6,7 +6,9 @@ import {
   applyRestoreLineFromSync,
   computeDreTotals,
   mergePreservedManualLines,
+  mergeProductCostBreakdowns,
   percentOfRevenue,
+  productCostAuditKey,
   sumYearLineAmounts,
   withSyncLineBaseline,
   type DreMonthSnapshotPayload,
@@ -301,5 +303,41 @@ describe("mergePreservedManualLines", () => {
     const merged = mergePreservedManualLines(fresh, previous, []);
     assert.equal(merged.revenueMl, 1500);
     assert.deepEqual(merged.manuallyEditedLineKeys, []);
+  });
+});
+
+describe("mergeProductCostBreakdowns", () => {
+  it("keeps leveled and cadastro rows for the same SKU separate", () => {
+    const merged = mergeProductCostBreakdowns([
+      [
+        {
+          key: productCostAuditKey("SKU-A", true),
+          sku: "SKU-A",
+          title: "Produto A",
+          quantity: 10,
+          unitCost: 41,
+          totalCost: 410,
+          missingCost: false,
+          leveled: true,
+        },
+        {
+          key: productCostAuditKey("SKU-A", false),
+          sku: "SKU-A",
+          title: "Produto A",
+          quantity: 5,
+          unitCost: 50,
+          totalCost: 250,
+          missingCost: false,
+        },
+      ],
+    ]);
+
+    assert.equal(merged.length, 2);
+    const leveled = merged.find((row) => row.leveled);
+    const cadastro = merged.find((row) => !row.leveled);
+    assert.equal(leveled?.quantity, 10);
+    assert.equal(leveled?.unitCost, 41);
+    assert.equal(cadastro?.quantity, 5);
+    assert.equal(cadastro?.unitCost, 50);
   });
 });

@@ -212,6 +212,8 @@ export type PaidOrderLine = {
   itemId: string;
   quantity: number;
   revenue: number;
+  /** Data do pedido em YYYY-MM-DD (date_closed/date_created conforme janela). */
+  orderDateYmd?: string | null;
 };
 
 export async function fetchOrdersInDateRange(
@@ -269,17 +271,32 @@ export async function fetchOrdersInDateRange(
   return orders;
 }
 
+function orderDateYmdFromOrder(order: {
+  date_closed?: string;
+  date_created?: string;
+}): string | null {
+  const raw = order.date_closed || order.date_created;
+  if (!raw) return null;
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return null;
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 export function paidOrderLinesFromOrders(orders: OrderSearchOrder[]): PaidOrderLine[] {
   const lines: PaidOrderLine[] = [];
   for (const order of orders) {
     if (order.status === "cancelled") continue;
+    const orderDateYmd = orderDateYmdFromOrder(order);
     for (const line of order.order_items ?? []) {
       const itemId = listingIdFromOrderLine(line);
       if (!itemId) continue;
       const quantity = quantityFromOrderLine(line);
       const revenue = revenueFromOrderLine(line);
       if (quantity <= 0 && revenue <= 0) continue;
-      lines.push({ itemId, quantity, revenue });
+      lines.push({ itemId, quantity, revenue, orderDateYmd });
     }
   }
   return lines;
@@ -347,6 +364,7 @@ export async function fetchCancelledOrderLinesInDateRange(
   });
   const lines: PaidOrderLine[] = [];
   for (const order of orders) {
+    const orderDateYmd = orderDateYmdFromOrder(order);
     for (const line of order.order_items ?? []) {
       const itemId = listingIdFromOrderLine(line);
       if (!itemId) continue;
@@ -354,6 +372,7 @@ export async function fetchCancelledOrderLinesInDateRange(
         itemId,
         quantity: quantityFromOrderLine(line),
         revenue: revenueFromOrderLine(line),
+        orderDateYmd,
       });
     }
   }

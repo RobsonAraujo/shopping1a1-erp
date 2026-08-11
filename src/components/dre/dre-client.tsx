@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download, Info, Plus, RefreshCw, X } from "lucide-react";
+import { Download, Info, Plus, RefreshCw, Scale, X } from "lucide-react";
 import { DreCostItemsModal } from "@/components/dre/dre-fixed-costs-modal";
+import { DreProductCostLevelingModal } from "@/components/dre/dre-product-cost-leveling-modal";
 import { DreSyncOverlay } from "@/components/dre/dre-sync-overlay";
 import { DreYearTable } from "@/components/dre/dre-year-table";
 import {
@@ -112,6 +113,7 @@ export function DreClient() {
     useState(false);
   const [investmentCostsModalOpen, setInvestmentCostsModalOpen] =
     useState(false);
+  const [levelingModalOpen, setLevelingModalOpen] = useState(false);
   const [syncingMonths, setSyncingMonths] = useState<Set<number>>(new Set());
   const [syncingMonthMessages, setSyncingMonthMessages] = useState<
     Record<number, string>
@@ -389,6 +391,52 @@ export function DreClient() {
     void syncAllMonths();
   }, [data, year, syncAllMonths]);
 
+  /** Re-sync após nivelamento: atualiza Custo produto sem preservar edições manuais dessa linha. */
+  const syncAffectedMonths = useCallback(
+    async (months: number[]) => {
+      const unique = [...new Set(months)]
+        .filter((month) => isDreMonthSyncable(year, month))
+        .sort((a, b) => a - b);
+      if (unique.length === 0) return;
+
+      setSyncingAll(true);
+      setError(null);
+      const failures: number[] = [];
+      try {
+        let cursor = 0;
+        async function worker() {
+          while (cursor < unique.length) {
+            const month = unique[cursor];
+            cursor += 1;
+            const preserve = (
+              data?.months.find((m) => m.month === month)
+                ?.manuallyEditedLineKeys ?? []
+            ).filter((key) => key !== "productCostErp");
+            const ok = await syncMonth(month, preserve);
+            if (!ok) failures.push(month);
+          }
+        }
+        const workers = Array.from(
+          {
+            length: Math.min(SYNC_ALL_CONCURRENCY, Math.max(unique.length, 1)),
+          },
+          () => worker(),
+        );
+        await Promise.all(workers);
+        if (failures.length > 0) {
+          setError(
+            `Falha ao sincronizar ${failures.length} mês(es) afetados pelo nivelamento.`,
+          );
+        } else {
+          await loadYear(year);
+        }
+      } finally {
+        setSyncingAll(false);
+      }
+    },
+    [year, data, syncMonth, loadYear],
+  );
+
   const buildPreserveByMonth = useCallback(() => {
     const map = new Map<number, DreEditableLineKey[]>();
     for (const item of syncAdjustments) {
@@ -591,6 +639,17 @@ export function DreClient() {
             >
               <Plus className="size-3.5" aria-hidden />
               Investimentos
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="h-8 gap-1 text-xs font-medium"
+              onClick={() => setLevelingModalOpen(true)}
+              title="Nivelar custo de produto por SKU e período (somente DRE)"
+            >
+              <Scale className="size-3.5" aria-hidden />
+              Nivelar custos
             </Button>
             <Button
               type="button"
@@ -849,6 +908,15 @@ export function DreClient() {
           onClose={() => setInvestmentCostsModalOpen(false)}
           onChanged={() => void loadYear(year)}
           onError={setError}
+        />
+        <DreProductCostLevelingModal
+          open={levelingModalOpen}
+          year={year}
+          onClose={() => setLevelingModalOpen(false)}
+          onError={setError}
+          onSyncAffectedMonths={(months) => {
+            void syncAffectedMonths(months);
+          }}
         />
 
         <AlertDialog

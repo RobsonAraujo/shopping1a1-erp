@@ -4,6 +4,8 @@ import {
   computeTacosPercent,
   getProductAdsDateRangeForMonth,
   getProductAdsDateRange,
+  isProductAdsLookbackLimitError,
+  isProductAdsMetricsRangeAvailable,
   PRODUCT_ADS_PERIOD_DAYS,
 } from "../product-ads-metrics";
 
@@ -38,6 +40,41 @@ describe("getProductAdsDateRangeForMonth", () => {
     );
     assert.equal(dateFrom.slice(0, 7), dateTo.slice(0, 7));
     assert.ok(dateTo <= dateFrom.slice(0, 8) + "31");
+  });
+});
+
+describe("isProductAdsMetricsRangeAvailable", () => {
+  it("accepts ranges within the 90-day lookback", () => {
+    const now = new Date(2026, 7, 11); // Aug 11, 2026
+    assert.equal(
+      isProductAdsMetricsRangeAvailable("2026-06-01", now),
+      true,
+    );
+  });
+
+  it("rejects ranges older than 90 days", () => {
+    const now = new Date(2026, 7, 11);
+    assert.equal(
+      isProductAdsMetricsRangeAvailable("2026-01-01", now),
+      false,
+    );
+  });
+});
+
+describe("isProductAdsLookbackLimitError", () => {
+  it("detects the ML validation message", () => {
+    assert.equal(
+      isProductAdsLookbackLimitError(
+        new Error(
+          'product_ads/ads/search failed: 400 {"cause":[{"description":"You cannot request metrics with a date greater than 90 days"}]}',
+        ),
+      ),
+      true,
+    );
+    assert.equal(
+      isProductAdsLookbackLimitError(new Error("network down")),
+      false,
+    );
   });
 });
 

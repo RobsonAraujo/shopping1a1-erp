@@ -6,6 +6,7 @@ import {
   fetchPadsAdvertiserId,
   fetchProductAdsMetricsByItem,
   getProductAdsDateRangeForMonth,
+  isProductAdsMetricsRangeAvailable,
   type ItemAdMetrics,
 } from "@/lib/mercadolibre/product-ads-metrics";
 import { getCalendarMonthRange } from "@/lib/mercadolibre/revenue-periods";
@@ -233,16 +234,18 @@ export async function generateMonthlyTaxReport(input: {
         input.year,
         input.month,
       );
-      const itemIdsWithSales = [...receitaTotalByItem.keys()].filter(Boolean);
-      adsMetricsByItem = await fetchProductAdsMetricsByItem(input.accessToken, {
-        advertiserId,
-        siteId: "MLB",
-        dateFrom,
-        dateTo,
-        itemIds: itemIdsWithSales.length > 0 && itemIdsWithSales.length <= 150
-          ? itemIdsWithSales
-          : undefined,
-      });
+      if (isProductAdsMetricsRangeAvailable(dateFrom)) {
+        const itemIdsWithSales = [...receitaTotalByItem.keys()].filter(Boolean);
+        adsMetricsByItem = await fetchProductAdsMetricsByItem(input.accessToken, {
+          advertiserId,
+          siteId: "MLB",
+          dateFrom,
+          dateTo,
+          itemIds: itemIdsWithSales.length > 0 && itemIdsWithSales.length <= 150
+            ? itemIdsWithSales
+            : undefined,
+        });
+      }
     }
   } catch (err) {
     console.error(

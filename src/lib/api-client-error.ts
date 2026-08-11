@@ -6,6 +6,12 @@ const API_ERROR_MESSAGES: Record<string, string> = {
   dre_cost_item_create_failed: "Não foi possível criar o custo fixo.",
   dre_cost_item_update_failed: "Não foi possível atualizar o custo fixo.",
   dre_cost_item_delete_failed: "Não foi possível remover o custo fixo.",
+  dre_product_cost_leveling_failed:
+    "Não foi possível carregar os nivelamentos de custo.",
+  dre_product_cost_leveling_save_failed:
+    "Não foi possível salvar o nivelamento de custo.",
+  dre_product_cost_leveling_delete_failed:
+    "Não foi possível excluir o nivelamento de custo.",
   products_load_failed: "Não foi possível carregar os produtos.",
   product_create_failed: "Não foi possível criar o produto.",
   product_update_failed: "Não foi possível atualizar o produto.",
@@ -37,7 +43,10 @@ export async function readApiError(
   fallback: string,
 ): Promise<string> {
   try {
-    const json = (await response.json()) as { error?: string };
+    const json = (await response.json()) as { error?: string; message?: string };
+    if (json.message?.trim()) {
+      return json.message.trim();
+    }
     if (json.error?.trim()) {
       return formatApiErrorMessage(json.error.trim());
     }
