@@ -57,6 +57,8 @@ export type MlDetailsAggregation = {
   sellerShippingMl: number;
   cancelledSalesMl: number;
   partialReturnsMl: number;
+  returnFeeMl: number;
+  specialFeesMl: number;
   adsCost: number;
   fullShippingMl: number;
   fullStorageMl: number;
@@ -141,6 +143,8 @@ function emptyAggregation(): MlDetailsAggregation {
     sellerShippingMl: 0,
     cancelledSalesMl: 0,
     partialReturnsMl: 0,
+    returnFeeMl: 0,
+    specialFeesMl: 0,
     adsCost: 0,
     fullShippingMl: 0,
     fullStorageMl: 0,
@@ -197,6 +201,22 @@ function applyCategory(
       agg.partialReturnsMl = applyBillingLineAmount(
         category,
         agg.partialReturnsMl,
+        amount,
+        isBonus,
+      );
+      break;
+    case "returnFee":
+      agg.returnFeeMl = applyBillingLineAmount(
+        category,
+        agg.returnFeeMl,
+        amount,
+        isBonus,
+      );
+      break;
+    case "specialFee":
+      agg.specialFeesMl = applyBillingLineAmount(
+        category,
+        agg.specialFeesMl,
         amount,
         isBonus,
       );
@@ -394,6 +414,68 @@ export async function fetchMlBillingDetailsAggregation(
   return aggregateMlBillingDetails(entries);
 }
 
+function entryOrderIds(entry: MlDetailEntry): number[] {
+  const ids: number[] = [];
+  if (typeof entry.order_id === "number" && Number.isFinite(entry.order_id)) {
+    ids.push(entry.order_id);
+  }
+  for (const sale of entry.sales_info ?? []) {
+    if (typeof sale.order_id === "number" && Number.isFinite(sale.order_id)) {
+      ids.push(sale.order_id);
+    }
+  }
+  return ids;
+}
+
+/** Mantém lançamentos ligados a pedidos do mês civil (details não trazem data). */
+export function filterBillingDetailsByOrderIds(
+  entries: MlBillingDetailEntry[],
+  orderIds: ReadonlySet<number>,
+): MlBillingDetailEntry[] {
+  if (orderIds.size === 0) return [];
+  return entries.filter((entry) =>
+    entryOrderIds(entry).some((id) => orderIds.has(id)),
+  );
+}
+
+/**
+ * Agrega tarifas/frete/devolução/especiais dos /details dos períodos que
+ * cobrem o mês civil, filtrando pelos order_ids dos pedidos pagos do mês.
+ * Usado quando a fatura (key YYYY-MM-01) não alinha ao calendário civil.
+ */
+export async function aggregateBillingDetailsForCivilMonthOrders(
+  accessToken: string,
+  year: number,
+  month: number,
+  orderIds: ReadonlySet<number>,
+): Promise<MlDetailsAggregation | null> {
+  if (orderIds.size === 0) return null;
+
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const nextYear = month === 12 ? year + 1 : year;
+  const prevMonth = month === 1 ? 12 : month - 1;
+  const prevYear = month === 1 ? year - 1 : year;
+
+  const keys = [
+    `${prevYear}-${String(prevMonth).padStart(2, "0")}-01`,
+    `${year}-${String(month).padStart(2, "0")}-01`,
+    `${nextYear}-${String(nextMonth).padStart(2, "0")}-01`,
+  ];
+
+  const matched: MlBillingDetailEntry[] = [];
+  for (const key of keys) {
+    try {
+      const entries = await fetchAllMlBillingDetails(accessToken, key);
+      matched.push(...filterBillingDetailsByOrderIds(entries, orderIds));
+    } catch {
+      // Período ausente / rate-limit: segue com o que já tiver.
+    }
+  }
+
+  if (matched.length === 0) return null;
+  return aggregateMlBillingDetails(matched);
+}
+
 /**
  * Escolhe entre total do summary e do /details.
  *
@@ -445,6 +527,8 @@ export function listBillingMergeDivergences(
     ["Frete vendedor", details.sellerShippingMl, summary.sellerShipping],
     ["Canceladas", details.cancelledSalesMl, summary.cancelledSales],
     ["Devoluções parciais", details.partialReturnsMl, summary.partialReturns],
+    ["Tarifa de devolução", details.returnFeeMl, summary.returnFee],
+    ["Tarifas especiais", details.specialFeesMl, summary.specialFees],
     ["ADS (fatura)", details.adsCost, summary.adsCost],
     ["Minha Página", details.minhaPaginaMl, summary.minhaPagina],
     ["Comissão Afiliados", details.affiliateFeeMl, summary.affiliateFee],
@@ -495,6 +579,8 @@ export function mergeBillingLines(
       details?.partialReturnsMl ?? 0,
       summary.partialReturns,
     ),
+    returnFee: pick(details?.returnFeeMl ?? 0, summary.returnFee),
+    specialFees: pick(details?.specialFeesMl ?? 0, summary.specialFees),
     fullShipping: pick(details?.fullShippingMl ?? 0, full.fullShipping),
     fullStorage: pick(details?.fullStorageMl ?? 0, full.fullStorage),
     fullNonCompliance: pick(

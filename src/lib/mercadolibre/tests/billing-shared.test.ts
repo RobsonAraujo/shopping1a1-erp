@@ -220,6 +220,53 @@ describe("classifyMlBillingEntry", () => {
     assert.equal(classifyMlBillingEntry("CFONPN", "", ""), "skip");
   });
 
+  it("classifies return shipping fees as returnFee (not partialReturn credit)", () => {
+    assert.equal(
+      classifyMlBillingEntry(
+        "CXDED",
+        "tarifa de devolucao por envio externo ou intermunicipal",
+        "CHARGE",
+      ),
+      "returnFee",
+    );
+    assert.equal(
+      classifyMlBillingEntry("CDSDB", "tarifa pela devolucao", "CHARGE"),
+      "returnFee",
+    );
+    assert.equal(
+      classifyMlBillingEntry(
+        "BXDED",
+        "cancelamento da tarifa de devolucao por envio externo ou intermunicipal",
+        "BONUS",
+      ),
+      "returnFee",
+    );
+  });
+
+  it("classifies DIFAL / CDLIT as specialFee", () => {
+    assert.equal(
+      classifyMlBillingEntry(
+        "CDIFAL",
+        "cobranca do diferencial de aliquota interestadual (icms-difal)",
+        "CHARGE",
+      ),
+      "specialFee",
+    );
+    assert.equal(classifyMlBillingEntry("CDLIT", "", "CHARGE"), "specialFee");
+    assert.equal(classifyMlBillingEntry("BDLIT", "", "BONUS"), "specialFee");
+  });
+
+  it("classifies CFBA (armazenamento prolongado) as fullStorage", () => {
+    assert.equal(
+      classifyMlBillingEntry(
+        "CFBA",
+        "custo de armazenamento prolongado no full",
+        "CHARGE",
+      ),
+      "fullStorage",
+    );
+  });
+
   it("returns unmapped for unknown entries", () => {
     assert.equal(classifyMlBillingEntry("ZZZ999", "coisa aleatória", ""), "unmapped");
   });
@@ -249,6 +296,12 @@ describe("applyBillingLineAmount", () => {
   it("subtracts minhaPagina and affiliateFee like other costs", () => {
     assert.equal(applyBillingLineAmount("minhaPagina", 0, 99, false), -99);
     assert.equal(applyBillingLineAmount("affiliateFee", 0, 20.46, false), -20.46);
+  });
+
+  it("subtracts returnFee and specialFee like other costs", () => {
+    assert.equal(applyBillingLineAmount("returnFee", 0, 27, false), -27);
+    assert.equal(applyBillingLineAmount("specialFee", 0, 747.77, false), -747.77);
+    assert.equal(applyBillingLineAmount("returnFee", -27, 9.64, true), -17.36);
   });
 
   it("leaves current unchanged for skip category", () => {

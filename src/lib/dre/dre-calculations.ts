@@ -5,6 +5,8 @@ export type DreLineAmounts = {
   cancelledSalesMl: number;
   saleFeeMl: number;
   partialReturnsMl: number;
+  returnFeeMl: number;
+  specialFeesMl: number;
   productCostErp: number;
   taxErp: number;
   sellerShippingMl: number;
@@ -62,6 +64,8 @@ export const DRE_EDITABLE_LINE_KEYS = [
   "cancelledSalesMl",
   "saleFeeMl",
   "partialReturnsMl",
+  "returnFeeMl",
+  "specialFeesMl",
   "productCostErp",
   "taxErp",
   "sellerShippingMl",
@@ -306,6 +310,8 @@ const OPERATIONAL_LINE_KEYS: (keyof DreLineAmounts)[] = [
   "cancelledSalesMl",
   "saleFeeMl",
   "partialReturnsMl",
+  "returnFeeMl",
+  "specialFeesMl",
   "productCostErp",
   "taxErp",
   "sellerShippingMl",
@@ -443,6 +449,8 @@ export function sumYearLineAmounts(
     cancelledSalesMl: 0,
     saleFeeMl: 0,
     partialReturnsMl: 0,
+    returnFeeMl: 0,
+    specialFeesMl: 0,
     productCostErp: 0,
     taxErp: 0,
     sellerShippingMl: 0,

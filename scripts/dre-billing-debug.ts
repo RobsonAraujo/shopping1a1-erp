@@ -199,6 +199,8 @@ async function main() {
     ["Frete vendedor", mergedSummary.sellerShipping, detailsAgg?.sellerShippingMl ?? null],
     ["Vendas canceladas", mergedSummary.cancelledSales, detailsAgg?.cancelledSalesMl ?? null],
     ["Devolução parcial", mergedSummary.partialReturns, detailsAgg?.partialReturnsMl ?? null],
+    ["Tarifa de devolução", mergedSummary.returnFee, detailsAgg?.returnFeeMl ?? null],
+    ["Tarifas especiais", mergedSummary.specialFees, detailsAgg?.specialFeesMl ?? null],
     ["Campanhas ADS", mergedSummary.adsCost, detailsAgg?.adsCost ?? null],
     ["Minha Página", mergedSummary.minhaPagina, detailsAgg?.minhaPaginaMl ?? null],
     ["Comissão Afiliados", mergedSummary.affiliateFee, detailsAgg?.affiliateFeeMl ?? null],

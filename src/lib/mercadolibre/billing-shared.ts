@@ -7,6 +7,10 @@ export type MlBillingDreLines = {
   sellerShipping: number;
   cancelledSales: number;
   partialReturns: number;
+  /** Tarifas de devolução (CXDED/CDSDB) — custo do seller, não reembolso. */
+  returnFee: number;
+  /** Tarifas especiais (CDIFAL/CDLIT etc.). */
+  specialFees: number;
   fullShipping: number;
   fullStorage: number;
   fullNonCompliance: number;
@@ -132,6 +136,8 @@ export type MlBillingLineCategory =
   | "affiliateFee"
   | "cancelled"
   | "partialReturn"
+  | "returnFee"
+  | "specialFee"
   | "skip";
 
 /** Classifica subtipo/label da API de faturamento MLB para linhas do DRE. */
@@ -166,12 +172,44 @@ export function classifyMlBillingEntry(
     return "minhaPagina";
   }
 
+  // Tarifas de devolução (custo do seller) — ANTES do genérico /devol/
+  // que mandava CXDED/CDSDB para partialReturn como crédito errado.
+  if (
+    type === "CXDED" ||
+    type === "CDSDB" ||
+    type === "BXDED" ||
+    type === "BDSDB" ||
+    (/tarifa de devolucao|tarifa pela devolucao|cancelamento da tarifa de devolucao/.test(
+      label,
+    ) &&
+      !/parcial|partial|reembolso parcial/.test(label))
+  ) {
+    return "returnFee";
+  }
+
+  // Tarifas especiais: DIFAL, CDLIT etc.
+  if (
+    type === "CDIFAL" ||
+    type === "BDIFAL" ||
+    type === "CDLIT" ||
+    type === "BDLIT" ||
+    /difal|diferencial de aliquota|tarifas especiais/.test(label)
+  ) {
+    return "specialFee";
+  }
+
   // Sub-tipo estruturado do ML é mais confiável que o texto do label —
   // checar primeiro para não deixar um label genérico de Full ("Full",
   // "Fulfillment") mascarar uma cobrança de armazenagem/inconformidade
   // cujo sub-tipo já identifica exatamente a categoria.
   if (type === "CFCBI" || type.startsWith("CFCB")) return "fullShipping";
-  if (type === "CFWA" || type === "CFWARE") return "fullStorage";
+  if (
+    type === "CFWA" ||
+    type === "CFWARE" ||
+    type === "CFBA"
+  ) {
+    return "fullStorage";
+  }
   if (type === "CFPB") return "fullNonCompliance";
 
   const fullFromLabel = classifyFullChargeLabel(label);
@@ -191,7 +229,9 @@ export function classifyMlBillingEntry(
   if (
     type.startsWith("CV") ||
     type === "COM" ||
-    (/tarifa de venda|cargo por venda|cargo por venta|comiss/.test(label) &&
+    (/tarifa de venda|cargo por venda|cargo por venta|comiss|custo por vender|custo por cobrar|taxa de recebimento/.test(
+      label,
+    ) &&
       !isBonus)
   ) {
     return "saleFee";
@@ -212,20 +252,28 @@ export function classifyMlBillingEntry(
     (type.startsWith("BV") ||
       type.startsWith("BF") ||
       type === "BXD" ||
-      /devol|reembol|parcial|bonific|bonus|credito|estorno/.test(label))
+      /devol|reembol|parcial|bonific|bonus|credito|estorno|campanha comercial|reputac/.test(
+        label,
+      ))
   ) {
-    if (type === "BFFE" || /envio|frete/.test(label)) {
+    // Desconto por reputação / estorno de frete.
+    if (
+      type === "BFFE" ||
+      type === "BFFI" ||
+      /envio|frete|reputac/.test(label)
+    ) {
       return "sellerShipping";
     }
-    // Bonificação de tarifa de venda (BXD/"bonificación del cargo por venta"
-    // ou BV*) — não confundir com devolução parcial.
+    // Bonificação de tarifa de venda / desconto por campanha comercial.
     if (
       (type.startsWith("BV") || type === "BXD") &&
       (type.includes("VML") ||
         type.includes("VPRC") ||
         type.includes("VFNU") ||
         type.includes("VFN") ||
-        /tarifa|venda|venta|comiss|cargo por v/.test(label))
+        /tarifa|venda|venta|comiss|cargo por v|campanha comercial|custo por vender|custo por cobrar|taxa de recebimento/.test(
+          label,
+        ))
     ) {
       return "saleFee";
     }
@@ -239,11 +287,13 @@ export function classifyMlBillingEntry(
     return "partialReturn";
   }
 
+  // Reembolso/devolução parcial (crédito) — não confundir com tarifa de devolução.
   if (/devol|reembol|parcial|partial/.test(label)) {
     return "partialReturn";
   }
 
-  if (type === "CFONPN" || type === "CCMP") {
+  // Taxa de parcelamento (pago pelo comprador, pass-through) — não é custo do seller.
+  if (type === "CFONPN" || type === "BFONPN" || type === "CCMP") {
     return "skip";
   }
 
@@ -260,7 +310,12 @@ export function applyBillingLineAmount(
   if (category === "partialReturn") {
     return addBillingBonus(current, abs);
   }
-  if (category === "saleFee" || category === "sellerShipping") {
+  if (
+    category === "saleFee" ||
+    category === "sellerShipping" ||
+    category === "returnFee" ||
+    category === "specialFee"
+  ) {
     return isBonus
       ? addBillingBonus(current, abs)
       : subtractBillingCost(current, abs);

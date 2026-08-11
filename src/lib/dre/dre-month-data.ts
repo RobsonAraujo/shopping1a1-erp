@@ -25,13 +25,15 @@ import { loadKitsByMlItemId, resolveKitPricing } from "@/lib/kit-data";
 import { normalizeProductSku } from "@/lib/product-pricing";
 import {
   fetchCancelledOrderLinesInDateRange,
-  fetchPaidOrderLinesInDateRange,
+  fetchPaidOrdersByPeriod,
   fetchItemsByIdsBatched,
+  paidOrderLinesFromOrders,
 } from "@/lib/mercadolibre/api";
 import {
   fetchMlBillingSummaryForMonth,
   isBillingSummaryEmpty,
 } from "@/lib/mercadolibre/billing-summary";
+import { aggregateBillingDetailsForCivilMonthOrders } from "@/lib/mercadolibre/billing-details";
 import {
   createFullBillingDetailsCache,
   type FullBillingDetailsCache,
@@ -579,20 +581,26 @@ async function fetchOrderDataForRange(
   range: CalendarDateRange,
 ) {
   const dateField = stockPlanningConfig.salesWindowDateField;
-  // Uma única paginação de pedidos pagos — metrics e lines saem do mesmo scrape.
-  const orderLines = await fetchPaidOrderLinesInDateRange(
+  // Uma única paginação de pedidos pagos — lines + orderIds saem do mesmo scrape.
+  const orders = await fetchPaidOrdersByPeriod(
     accessToken,
     sellerId,
     range.from,
     range.to,
     dateField,
   );
+  const orderLines = paidOrderLinesFromOrders(orders);
+  const orderIds = new Set<number>();
+  for (const order of orders) {
+    const id = Number(order.id);
+    if (Number.isFinite(id) && id > 0) orderIds.add(id);
+  }
 
   const revenueMl = roundMoney(
     orderLines.reduce((sum, line) => sum + line.revenue, 0),
   );
 
-  return { orderLines, revenueMl };
+  return { orderLines, revenueMl, orderIds };
 }
 
 export async function buildDreMonthSnapshot(
@@ -633,7 +641,7 @@ export async function buildDreMonthSnapshot(
   ]);
 
   const billing = billingResult;
-  const { orderLines, revenueMl: ordersRevenueMl } = orderResult;
+  const { orderLines, revenueMl: ordersRevenueMl, orderIds } = orderResult;
   const revenueMl = ordersRevenueMl;
 
   const billingAlignsWithCivil =
@@ -728,6 +736,8 @@ export async function buildDreMonthSnapshot(
   let sellerShippingMl = 0;
   let cancelledSalesMl = 0;
   let partialReturnsMl = 0;
+  let returnFeeMl = 0;
+  let specialFeesMl = 0;
   let fullShippingMl = 0;
   let fullStorageMl = 0;
   let fullNonComplianceMl = 0;
@@ -747,6 +757,8 @@ export async function buildDreMonthSnapshot(
     sellerShippingMl = billing!.sellerShipping;
     cancelledSalesMl = billing!.cancelledSales;
     partialReturnsMl = billing!.partialReturns;
+    returnFeeMl = billing!.returnFee;
+    specialFeesMl = billing!.specialFees;
     fullShippingMl = billing!.fullShipping;
     fullStorageMl = billing!.fullStorage;
     fullNonComplianceMl = billing!.fullNonCompliance;
@@ -777,40 +789,78 @@ export async function buildDreMonthSnapshot(
     }
   } else if (billingHasMappedLines && !billingAlignsWithCivil) {
     billingSource = "fallback";
+    let usedCivilDetails = false;
     try {
-      const fallback = await estimateMlCostsFallback(
+      const civil = await aggregateBillingDetailsForCivilMonthOrders(
         accessToken,
-        sellerId,
-        calendarRange.from,
-        calendarRange.to,
-        orderLines,
+        year,
+        month,
+        orderIds,
       );
-      saleFeeMl = fallback.saleFeeMl;
-      sellerShippingMl = fallback.sellerShippingMl;
-      cancelledSalesMl = fallback.cancelledSalesMl;
-      partialReturnsMl = billing!.partialReturns;
-      fullShippingMl = billing!.fullShipping;
-      fullStorageMl = billing!.fullStorage;
-      fullNonComplianceMl = billing!.fullNonCompliance;
-      minhaPaginaMl = billing!.minhaPagina;
-      affiliateFeeMl = billing!.affiliateFee;
-      saleFeeBreakdown = fallback.saleFeeBreakdown;
-      sellerShippingBreakdown = fallback.sellerShippingBreakdown;
-      syncWarnings.push(
-        "Custos Full (envios, armazenamento, inconformidades) e devoluções parciais da fatura ML do ciclo próximo a este mês.",
-      );
+      if (
+        civil &&
+        (civil.saleFeeMl !== 0 ||
+          civil.sellerShippingMl !== 0 ||
+          civil.returnFeeMl !== 0 ||
+          civil.specialFeesMl !== 0)
+      ) {
+        saleFeeMl = civil.saleFeeMl;
+        sellerShippingMl = civil.sellerShippingMl;
+        returnFeeMl = civil.returnFeeMl;
+        specialFeesMl = civil.specialFeesMl;
+        if (civil.cancelledSalesMl !== 0) {
+          cancelledSalesMl = civil.cancelledSalesMl;
+        }
+        usedCivilDetails = true;
+        billingSource = "billing";
+        syncWarnings.push(
+          "Tarifa ML / frete / devolução / especiais agregados dos detalhes da fatura pelos pedidos do mês civil (ciclo ML não alinha ao calendário).",
+        );
+      }
     } catch (error) {
-      logServerError("dre-month-data ml-fallback", error);
-      syncWarnings.push(
-        "Não foi possível estimar tarifas e frete do Mercado Livre.",
-      );
-      partialReturnsMl = billing!.partialReturns;
-      fullShippingMl = billing!.fullShipping;
-      fullStorageMl = billing!.fullStorage;
-      fullNonComplianceMl = billing!.fullNonCompliance;
-      minhaPaginaMl = billing!.minhaPagina;
-      affiliateFeeMl = billing!.affiliateFee;
+      logServerError("dre-month-data civil-billing-details", error);
     }
+
+    if (!usedCivilDetails) {
+      try {
+        const fallback = await estimateMlCostsFallback(
+          accessToken,
+          sellerId,
+          calendarRange.from,
+          calendarRange.to,
+          orderLines,
+        );
+        saleFeeMl = fallback.saleFeeMl;
+        sellerShippingMl = fallback.sellerShippingMl;
+        cancelledSalesMl = fallback.cancelledSalesMl;
+        saleFeeBreakdown = fallback.saleFeeBreakdown;
+        sellerShippingBreakdown = fallback.sellerShippingBreakdown;
+        syncWarnings.push(
+          "Não foi possível agregar a fatura por pedidos do mês; tarifas/frete estimados pelos pedidos.",
+        );
+      } catch (error) {
+        logServerError("dre-month-data ml-fallback", error);
+        syncWarnings.push(
+          "Não foi possível estimar tarifas e frete do Mercado Livre.",
+        );
+      }
+    } else if (cancelledSalesMl === 0) {
+      cancelledSalesMl = billing!.cancelledSales;
+    }
+
+    partialReturnsMl = billing!.partialReturns;
+    if (!usedCivilDetails) {
+      returnFeeMl = billing!.returnFee;
+      specialFeesMl = billing!.specialFees;
+    }
+    fullShippingMl = billing!.fullShipping;
+    fullStorageMl = billing!.fullStorage;
+    fullNonComplianceMl = billing!.fullNonCompliance;
+    minhaPaginaMl = billing!.minhaPagina;
+    affiliateFeeMl = billing!.affiliateFee;
+    syncWarnings.push(
+      "Custos Full (envios, armazenamento, inconformidades), Minha Página e afiliados da fatura ML do ciclo próximo a este mês.",
+    );
   } else {
     if (billing !== null && revenueMl > 0) {
       syncWarnings.push(
@@ -977,6 +1027,8 @@ export async function buildDreMonthSnapshot(
     cancelledSalesMl,
     saleFeeMl,
     partialReturnsMl,
+    returnFeeMl,
+    specialFeesMl,
     productCostErp: erpCosts.productCostErp,
     taxErp: erpCosts.taxErp,
     sellerShippingMl,
@@ -1054,6 +1106,8 @@ export function emptyDreMonthSnapshotPayload(): DreMonthSnapshotPayload {
     cancelledSalesMl: 0,
     saleFeeMl: 0,
     partialReturnsMl: 0,
+    returnFeeMl: 0,
+    specialFeesMl: 0,
     productCostErp: 0,
     taxErp: 0,
     sellerShippingMl: 0,
@@ -1162,6 +1216,8 @@ export function snapshotPayloadToLines(
     cancelledSalesMl: payload.cancelledSalesMl,
     saleFeeMl: payload.saleFeeMl,
     partialReturnsMl: payload.partialReturnsMl,
+    returnFeeMl: payload.returnFeeMl,
+    specialFeesMl: payload.specialFeesMl,
     productCostErp: payload.productCostErp,
     taxErp: payload.taxErp,
     sellerShippingMl: payload.sellerShippingMl,
@@ -1300,6 +1356,8 @@ export function parseSnapshotPayload(raw: unknown): DreMonthSnapshotPayload | nu
     cancelledSalesMl: num("cancelledSalesMl"),
     saleFeeMl: num("saleFeeMl"),
     partialReturnsMl: num("partialReturnsMl"),
+    returnFeeMl: num("returnFeeMl"),
+    specialFeesMl: num("specialFeesMl"),
     productCostErp: num("productCostErp"),
     taxErp: num("taxErp"),
     sellerShippingMl: num("sellerShippingMl"),

@@ -27,6 +27,8 @@ function emptyYear(): DreYearView {
               cancelledSalesMl: -50,
               saleFeeMl: -100,
               partialReturnsMl: -10,
+              returnFeeMl: 0,
+              specialFeesMl: 0,
               productCostErp: -400,
               taxErp: -80,
               sellerShippingMl: -70,

@@ -17,6 +17,8 @@ export type DreStaticRowId =
   | "cancelledSalesMl"
   | "saleFeeMl"
   | "partialReturnsMl"
+  | "returnFeeMl"
+  | "specialFeesMl"
   | "productCostErp"
   | "taxErp"
   | "sellerShippingMl"
@@ -95,7 +97,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     id: "totalCustoOperacional",
     kind: "custo-total",
     label: "(-) Custos Variáveis",
-    methodology: "Soma de todas as linhas abaixo (Canceladas, Devoluções parciais, Tarifa ML, Custo produto, Imposto, Frete vendedor, Full envios/armazém/inconformidades, Campanhas ADS, Minha Página, Comissão Afiliados) mais os custos operacionais manuais cadastrados.",
+    methodology: "Soma de todas as linhas abaixo (Canceladas, Devoluções parciais, Tarifa de devolução, Tarifa ML, Tarifas especiais, Custo produto, Imposto, Frete vendedor, Full envios/armazém/inconformidades, Campanhas ADS, Minha Página, Comissão Afiliados) mais os custos operacionais manuais cadastrados.",
   },
   {
     type: "static",
@@ -119,13 +121,33 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
   },
   {
     type: "static",
+    id: "returnFeeMl",
+    kind: "custo-detail",
+    label: "Tarifa de devolução",
+    source: "ml",
+    indent: true,
+    lineKey: "returnFeeMl",
+    methodology: "Tarifas cobradas pelo ML em devoluções (CXDED/CDSDB e estornos BXDED/BDSDB), líquidas. Diferente de “Devoluções parciais” (reembolso ao comprador).",
+  },
+  {
+    type: "static",
     id: "saleFeeMl",
     kind: "custo-detail",
     label: "Tarifa ML",
     source: "ml",
     indent: true,
     lineKey: "saleFeeMl",
-    methodology: "Tarifas de venda cobradas pelo Mercado Livre no mês, conforme a fatura ML. Quando a fatura não está disponível/alinhada ao mês civil, é estimada por anúncio (categoria, tipo de anúncio e preço de cada pedido pago).",
+    methodology: "Tarifas de venda líquidas (custo por vender + cobrar + recebimento − descontos/bonificações de campanha). Quando a fatura do ciclo alinha ao mês civil, vem do summary/details; senão, agrega os /details dos pedidos pagos do mês civil (ou estima por anúncio se a fatura falhar).",
+  },
+  {
+    type: "static",
+    id: "specialFeesMl",
+    kind: "custo-detail",
+    label: "Tarifas especiais",
+    source: "ml",
+    indent: true,
+    lineKey: "specialFeesMl",
+    methodology: "Cobranças especiais da fatura ML (ex.: DIFAL/CDIFAL, CDLIT e bonificações relacionadas), líquidas.",
   },
   {
     type: "static",
@@ -155,7 +177,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     source: "ml",
     indent: true,
     lineKey: "sellerShippingMl",
-    methodology: "Custo de frete pago pelo vendedor no mês, conforme a fatura ML. Quando a fatura não está disponível/alinhada ao mês civil, é estimado por pedido a partir do custo de envio de cada anúncio.",
+    methodology: "Custo de frete líquido do vendedor (envio − estornos/descontos de reputação). Mesma regra da Tarifa ML quanto ao alinhamento fatura × mês civil.",
   },
   {
     type: "static",

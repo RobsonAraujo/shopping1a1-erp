@@ -269,7 +269,7 @@ export async function fetchOrdersInDateRange(
   return orders;
 }
 
-function paidOrderLinesFromOrders(orders: OrderSearchOrder[]): PaidOrderLine[] {
+export function paidOrderLinesFromOrders(orders: OrderSearchOrder[]): PaidOrderLine[] {
   const lines: PaidOrderLine[] = [];
   for (const order of orders) {
     if (order.status === "cancelled") continue;

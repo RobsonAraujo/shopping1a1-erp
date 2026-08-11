@@ -340,6 +340,17 @@ Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templ
 - **Código já tenant-ready?** **não**
 - **Ação futura na migração:** escopar `full_shipments` + sync DRE por `organizationId`
 
+### DRE — tarifas especiais, devolução e fatura por mês civil — 2026-08-11
+
+- **Tabelas novas/alteradas:** nenhuma (campos novos no JSON de `dre_month_snapshots.payload`: `returnFeeMl`, `specialFeesMl`)
+- **Precisa `organizationId`?** **sim** — snapshot DRE / fatura ML por seller (hoje single-tenant)
+- **APIs afetadas:** sync DRE (`classifyMlBillingEntry`, `aggregateBillingDetailsForCivilMonthOrders`, `buildDreMonthSnapshot`)
+- **Assume singleton?** **sim** — `dre_month_snapshots` por `year_month`
+- **Cron/background:** nenhum
+- **Dados globais vs por org:** classificação de fatura e snapshot únicos do deployment
+- **Código já tenant-ready?** **não**
+- **Ação futura na migração:** escopar sync/billing e snapshot por `organizationId`
+
 ### Produtos e pricing — baseline
 
 - **Tabelas:** `products`, `company_tax_settings`
