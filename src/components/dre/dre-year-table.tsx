@@ -509,7 +509,7 @@ function DreInlineMoneyCell({
       : `Duplo-clique para editar ${label}`;
 
   return (
-    <div className="inline-flex items-center justify-end gap-1.5">
+    <div className="inline-flex items-center justify-center gap-1.5">
       {leading}
       <span
         role={disabled && !onAudit ? undefined : "button"}
@@ -849,7 +849,7 @@ function renderValueCell(
   const colored = isColoredRow(row);
   const moneyLabel = formatFinancialMoney(amount);
   const valueClassName = cn(
-    "whitespace-nowrap text-right text-[12.5px] font-bold tabular-nums leading-tight",
+    "whitespace-nowrap text-center text-[12.5px] font-bold tabular-nums leading-tight",
     colored ? "text-white" : "",
   );
 
@@ -863,7 +863,7 @@ function renderValueCell(
 
   if (editableKey && canEditMonth) {
     return (
-      <div className={cn(valueClassName, "inline-flex items-center justify-end gap-1.5")}>
+      <div className={cn(valueClassName, "inline-flex items-center justify-center gap-1.5")}>
         {needsFullReportAlert ? (
           <FullReportMissingTooltip month={month} colored={colored} />
         ) : null}
@@ -888,7 +888,7 @@ function renderValueCell(
 
   const auditable = Boolean(auditKind && onAuditClick);
   return (
-    <div className={cn(valueClassName, "inline-flex items-center justify-end gap-1.5")}>
+    <div className={cn(valueClassName, "inline-flex items-center justify-center gap-1.5")}>
       {needsFullReportAlert ? (
         <FullReportMissingTooltip month={month} colored={colored} />
       ) : null}
@@ -933,7 +933,7 @@ function renderPercentCell(percent: number | null, colored: boolean) {
   return (
     <div
       className={cn(
-        "whitespace-nowrap text-right text-[12.5px] font-bold tabular-nums leading-tight",
+        "whitespace-nowrap text-center text-[12.5px] font-bold tabular-nums leading-tight",
         colored ? "text-white" : valueToneClass(percent),
       )}
     >
@@ -1069,7 +1069,7 @@ function DreMobileRow({
   const valueNode = isTotal ? (
     <div
       className={cn(
-        "inline-flex w-full items-center justify-end gap-1.5",
+        "inline-flex w-full items-center justify-center gap-1.5",
         colored ? "text-white" : "",
       )}
     >
@@ -1077,7 +1077,7 @@ function DreMobileRow({
         role={auditKind ? "button" : undefined}
         tabIndex={auditKind ? 0 : undefined}
         className={cn(
-          "whitespace-nowrap text-right text-[13px] font-bold tabular-nums leading-tight",
+          "whitespace-nowrap text-center text-[13px] font-bold tabular-nums leading-tight",
           auditKind &&
             "cursor-pointer rounded-sm underline decoration-dotted decoration-1 underline-offset-2 hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]",
         )}
@@ -1637,7 +1637,7 @@ function DreYearTableDesktop({
                         <td
                           key={month.month}
                           className={cn(
-                            "px-1.5 py-2 align-middle",
+                            "px-1.5 py-2 text-center align-middle",
                             editingThis
                               ? cn(
                                   "relative z-30",
@@ -1674,7 +1674,7 @@ function DreYearTableDesktop({
                     })}
                     <td
                       className={cn(
-                        "px-2 py-2 align-middle",
+                        "px-2 py-2 text-center align-middle",
                         rowClassName,
                         (isEditing || columnFocusMonth !== null) && DIM_CLASS,
                       )}
@@ -1682,7 +1682,7 @@ function DreYearTableDesktop({
                     >
                       <div
                         className={cn(
-                          "inline-flex w-full items-center justify-end gap-1.5",
+                          "inline-flex w-full items-center justify-center gap-1.5",
                           isColoredRow(row) ? "text-white" : "",
                         )}
                       >
@@ -1690,7 +1690,7 @@ function DreYearTableDesktop({
                           role={yearAuditKind ? "button" : undefined}
                           tabIndex={yearAuditKind ? 0 : undefined}
                           className={cn(
-                            "whitespace-nowrap text-right text-[12.5px] font-bold tabular-nums leading-tight",
+                            "whitespace-nowrap text-center text-[12.5px] font-bold tabular-nums leading-tight",
                             yearAuditKind &&
                               "cursor-pointer rounded-sm underline decoration-dotted decoration-1 underline-offset-2 hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]",
                           )}
@@ -1744,7 +1744,7 @@ function DreYearTableDesktop({
                         <td
                           key={month.month}
                           className={cn(
-                            "px-1.5 py-1.5 align-middle",
+                            "px-1.5 py-1.5 text-center align-middle",
                             isEditing
                               ? DIM_CLASS
                               : month.month === columnFocusMonth
@@ -1761,7 +1761,7 @@ function DreYearTableDesktop({
                       ))}
                       <td
                         className={cn(
-                          "px-2 py-1.5 align-middle",
+                          "px-2 py-1.5 text-center align-middle",
                           bg,
                           (isEditing || columnFocusMonth !== null) &&
                             DIM_CLASS,

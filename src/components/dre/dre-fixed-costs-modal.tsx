@@ -151,6 +151,14 @@ export function DreCostItemsModal({
               na tabela do DRE, dê dois cliques na célula do mês para
               informar o valor.
             </p>
+            <p className="mt-1">
+              <span className="font-medium text-[var(--foreground)]">
+                Passo 3:
+              </span>{" "}
+              depois de informado, o valor se replica automaticamente
+              nos meses seguintes. Você pode alterar qualquer mês com
+              dois cliques — só aquele mês muda.
+            </p>
           </div>
           <div className="flex gap-2">
             <input
