@@ -285,6 +285,17 @@ Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templ
 - **Código já tenant-ready?** **não** — classificador/sync sem `organizationId`
 - **Ação futura na migração:** escopar sync e snapshot por org; classificador permanece puro
 
+### DRE — edição manual marcada, devoluções parciais, export CSV — 2026-08-11
+
+- **Tabelas novas/alteradas:** nenhuma (campos JSON no payload: `syncedLineBaseline`, `manuallyEditedLineKeys`; linha UI `partialReturnsMl`)
+- **Precisa `organizationId`?** **sim** — mesmo snapshot DRE global
+- **APIs afetadas:** `PATCH /api/dre/lines` (`action: set|restore`); sync grava baseline; export CSV é client-side
+- **Assume singleton?** **sim** — `@@unique([year, month])`
+- **Cron/background:** nenhum
+- **Dados globais vs por org:** edições/restore no snapshot único do deployment
+- **Código já tenant-ready?** **não** — `patchDreMonthLine` / `restoreDreMonthLine` sem `organizationId`
+- **Ação futura na migração:** escopar patch/restore/sync por `organizationId`
+
 ### Produtos e pricing — baseline
 
 - **Tabelas:** `products`, `company_tax_settings`

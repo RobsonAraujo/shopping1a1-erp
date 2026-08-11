@@ -140,7 +140,6 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
         description: DRE_DISCLAIMER_MENU,
         icon: LineChart,
         title: DRE_DISCLAIMER_MENU,
-        badge: { label: "Indisponível", variant: "warning" },
       },
       {
         href: "/dashboard/relatorio-tributario",

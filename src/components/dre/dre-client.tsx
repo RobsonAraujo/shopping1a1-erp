@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Info, Plus, RefreshCw } from "lucide-react";
+import { Download, Info, Plus, RefreshCw, X } from "lucide-react";
 import { DreCostItemsModal } from "@/components/dre/dre-fixed-costs-modal";
 import { DreYearTable } from "@/components/dre/dre-year-table";
 import {
@@ -24,11 +24,14 @@ import {
   formatFinancialPercent,
 } from "@/lib/financial-margin";
 import type { DreEditableLineKey } from "@/lib/dre/dre-calculations";
+import { downloadDreYearCsv } from "@/lib/dre/dre-export-csv";
+import { dreMonthShortLabel } from "@/lib/dre/dre-table-rows";
 import type { DreYearView } from "@/lib/dre/dre-year-data";
 import {
   getZonedYearMonth,
   isDreMonthSyncable,
 } from "@/lib/mercadolibre/revenue-periods";
+import { cn } from "@/lib/utils";
 
 type SyncConfirmState =
   | { mode: "month"; month: number }
@@ -42,6 +45,7 @@ export function DreClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(true);
+  const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
   const [fixedCostsModalOpen, setFixedCostsModalOpen] = useState(false);
   const [operationalCostsModalOpen, setOperationalCostsModalOpen] =
     useState(false);
@@ -80,6 +84,10 @@ export function DreClient() {
   useEffect(() => {
     void loadYear(year);
   }, [year, loadYear]);
+
+  useEffect(() => {
+    setSelectedMonth(null);
+  }, [year]);
 
   const syncMonth = useCallback(
     async (month: number): Promise<boolean> => {
@@ -228,12 +236,53 @@ export function DreClient() {
     [year],
   );
 
+  const handleLineRestore = useCallback(
+    async (lineKey: DreEditableLineKey, month: number) => {
+      setError(null);
+      try {
+        const res = await fetch("/api/dre/lines", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            year,
+            month,
+            lineKey,
+            action: "restore",
+          }),
+        });
+        if (!res.ok) {
+          setError(await readApiError(res, "dre_line_patch_failed"));
+          return;
+        }
+        const json = (await res.json()) as { year?: DreYearView };
+        if (json.year) {
+          setData(json.year);
+        }
+      } catch {
+        setError("Falha de rede ao restaurar o valor.");
+      }
+    },
+    [year],
+  );
+
   const syncedCount = data?.months.filter((m) => m.syncedAt).length ?? 0;
   const syncConfirmMonthLabel =
     syncConfirm?.mode === "month"
       ? (data?.months.find((m) => m.month === syncConfirm.month)?.label ??
         `mês ${syncConfirm.month}`)
       : null;
+
+  const focusMonthView =
+    selectedMonth !== null
+      ? (data?.months.find((m) => m.month === selectedMonth) ?? null)
+      : null;
+  const focusTotals = focusMonthView
+    ? focusMonthView.totals
+    : (data?.yearTotals ?? null);
+  const monthFocused = selectedMonth !== null && focusMonthView !== null;
+  const focusCardClass = monthFocused
+    ? "border-[var(--primary)]/25 bg-[var(--accent)] shadow-sm ring-1 ring-[var(--primary)]/20 transition-[background-color,box-shadow,border-color] duration-200"
+    : "shadow-sm transition-[background-color,box-shadow,border-color] duration-200";
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -288,6 +337,21 @@ export function DreClient() {
             </Button>
             <Button
               type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1 text-xs"
+              disabled={!data || loading}
+              onClick={() => {
+                if (!data) return;
+                downloadDreYearCsv(data, showDetails);
+              }}
+              title="Exportar a grade do DRE (CSV para Excel/Sheets)"
+            >
+              <Download className="size-3.5" aria-hidden />
+              Exportar CSV
+            </Button>
+            <Button
+              type="button"
               variant="default"
               size="sm"
               className="h-8 text-xs"
@@ -303,60 +367,106 @@ export function DreClient() {
           </div>
         </div>
 
-        {data?.yearTotals ? (
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            <Card className="shadow-sm">
-              <CardHeader className="px-3 pb-1 pt-3">
-                <CardTitle className="text-xs font-medium text-[var(--muted-foreground)]">
-                  Faturamento (ano)
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-3 pb-3 text-base font-semibold">
-                {formatFinancialMoney(data.yearTotals.totalEntrada)}
-              </CardContent>
-            </Card>
-            <Card className="shadow-sm">
-              <CardHeader className="px-3 pb-1 pt-3">
-                <CardTitle className="text-xs font-medium text-[var(--muted-foreground)]">
-                  Margem de contribuição
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-3 pb-3 text-base font-semibold">
-                {formatFinancialMoney(data.yearTotals.margemContribuicao)}{" "}
-                <span className="text-xs font-normal text-[var(--muted-foreground)]">
-                  ({formatFinancialPercent(
-                    data.yearTotals.margemContribuicaoPercent,
-                  )}
-                  )
+        {data ? (
+          <div className="space-y-2">
+            {monthFocused ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--primary)]/20 bg-[var(--accent)] px-2.5 py-1 text-[11px] font-semibold tracking-wide text-[var(--primary)]">
+                  Cards focados em {focusMonthView.label}
+                  <button
+                    type="button"
+                    className="inline-flex size-4 items-center justify-center rounded-full text-[var(--primary)] hover:bg-[var(--primary)]/10"
+                    aria-label="Voltar aos totais do ano"
+                    title="Voltar aos totais do ano"
+                    onClick={() => setSelectedMonth(null)}
+                  >
+                    <X className="size-3" aria-hidden />
+                  </button>
                 </span>
-              </CardContent>
-            </Card>
-            <Card className="shadow-sm">
-              <CardHeader className="px-3 pb-1 pt-3">
-                <CardTitle className="text-xs font-medium text-[var(--muted-foreground)]">
-                  Lucro operacional
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-3 pb-3 text-base font-semibold">
-                {formatFinancialMoney(data.yearTotals.lucroOperacional)}{" "}
-                <span className="text-xs font-normal text-[var(--muted-foreground)]">
-                  ({formatFinancialPercent(
-                    data.yearTotals.lucroOperacionalPercent,
-                  )}
-                  )
+                <span className="text-[11px] text-[var(--muted-foreground)]">
+                  Clique de novo no mês na tabela para limpar o foco
                 </span>
-              </CardContent>
-            </Card>
-            <Card className="shadow-sm">
-              <CardHeader className="px-3 pb-1 pt-3">
-                <CardTitle className="text-xs font-medium text-[var(--muted-foreground)]">
-                  Meses sincronizados
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-3 pb-3 text-base font-semibold">
-                {syncedCount} / 12
-              </CardContent>
-            </Card>
+              </div>
+            ) : null}
+            <div
+              key={selectedMonth ?? "year"}
+              className="grid animate-in fade-in-0 zoom-in-[0.99] gap-2 duration-200 sm:grid-cols-2 lg:grid-cols-4"
+            >
+              <Card className={focusCardClass}>
+                <CardHeader className="px-3 pb-1 pt-3">
+                  <CardTitle className="flex items-center gap-1.5 text-xs font-medium text-[var(--muted-foreground)]">
+                    Faturamento
+                    <span
+                      className={cn(
+                        "rounded px-1 py-px text-[10px] font-semibold uppercase tracking-wide",
+                        monthFocused
+                          ? "bg-[var(--primary)]/10 text-[var(--primary)]"
+                          : "bg-[var(--muted)] text-[var(--muted-foreground)]",
+                      )}
+                    >
+                      {monthFocused && selectedMonth !== null
+                        ? dreMonthShortLabel(selectedMonth)
+                        : "ano"}
+                    </span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-3 pb-3 text-base font-semibold tabular-nums">
+                  {formatFinancialMoney(focusTotals?.totalEntrada ?? null)}
+                </CardContent>
+              </Card>
+              <Card className={focusCardClass}>
+                <CardHeader className="px-3 pb-1 pt-3">
+                  <CardTitle className="flex items-center gap-1.5 text-xs font-medium text-[var(--muted-foreground)]">
+                    Margem de contribuição
+                    {monthFocused && selectedMonth !== null ? (
+                      <span className="rounded bg-[var(--primary)]/10 px-1 py-px text-[10px] font-semibold uppercase tracking-wide text-[var(--primary)]">
+                        {dreMonthShortLabel(selectedMonth)}
+                      </span>
+                    ) : null}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-3 pb-3 text-base font-semibold tabular-nums">
+                  {formatFinancialMoney(focusTotals?.margemContribuicao ?? null)}{" "}
+                  <span className="text-xs font-normal text-[var(--muted-foreground)]">
+                    ({formatFinancialPercent(
+                      focusTotals?.margemContribuicaoPercent ?? null,
+                    )}
+                    )
+                  </span>
+                </CardContent>
+              </Card>
+              <Card className={focusCardClass}>
+                <CardHeader className="px-3 pb-1 pt-3">
+                  <CardTitle className="flex items-center gap-1.5 text-xs font-medium text-[var(--muted-foreground)]">
+                    Lucro operacional
+                    {monthFocused && selectedMonth !== null ? (
+                      <span className="rounded bg-[var(--primary)]/10 px-1 py-px text-[10px] font-semibold uppercase tracking-wide text-[var(--primary)]">
+                        {dreMonthShortLabel(selectedMonth)}
+                      </span>
+                    ) : null}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-3 pb-3 text-base font-semibold tabular-nums">
+                  {formatFinancialMoney(focusTotals?.lucroOperacional ?? null)}{" "}
+                  <span className="text-xs font-normal text-[var(--muted-foreground)]">
+                    ({formatFinancialPercent(
+                      focusTotals?.lucroOperacionalPercent ?? null,
+                    )}
+                    )
+                  </span>
+                </CardContent>
+              </Card>
+              <Card className="shadow-sm">
+                <CardHeader className="px-3 pb-1 pt-3">
+                  <CardTitle className="text-xs font-medium text-[var(--muted-foreground)]">
+                    Meses sincronizados
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-3 pb-3 text-base font-semibold">
+                  {syncedCount} / 12
+                </CardContent>
+              </Card>
+            </div>
           </div>
         ) : null}
 
@@ -387,16 +497,18 @@ export function DreClient() {
                 <span className="font-medium text-[var(--foreground)]">
                   Cancelar
                 </span>{" "}
-                (ou Esc) para desistir.
+                (ou Esc) para desistir. Células ajustadas ficam marcadas; use
+                restaurar para voltar ao valor do último sync.
               </li>
               <li>
                 <span className="font-medium text-[var(--foreground)]">
                   Destacar mês:
                 </span>{" "}
-                clique no cabeçalho do mês para focar a coluna. Totais e
-                margens são calculados automaticamente; sincronizar
-                atualiza/substitui os valores importados (custos fixos,
-                operacionais e investimentos cadastrados permanecem).
+                clique no cabeçalho do mês para focar a coluna — os cards do
+                topo passam a mostrar aquele mês. Totais e margens são
+                calculados automaticamente; sincronizar atualiza/substitui os
+                valores importados (custos fixos, operacionais e investimentos
+                cadastrados permanecem).
               </li>
               <li>
                 <span className="font-medium text-[var(--foreground)]">
@@ -427,10 +539,15 @@ export function DreClient() {
             data={data}
             showDetails={showDetails}
             onToggleDetails={() => setShowDetails((v) => !v)}
+            selectedMonth={selectedMonth}
+            onSelectedMonthChange={setSelectedMonth}
             syncingMonths={syncingMonths}
             onSyncMonth={requestSyncMonth}
             onLineChange={(lineKey, month, amount) =>
               void handleLineChange(lineKey, month, amount)
+            }
+            onLineRestore={(lineKey, month) =>
+              void handleLineRestore(lineKey, month)
             }
             onFixedCostChange={(costItemId, month, amount) =>
               void handleManualCostChange(costItemId, month, amount)

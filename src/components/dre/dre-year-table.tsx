@@ -11,9 +11,25 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { NumericFormat } from "react-number-format";
-import { AlertCircle, ChevronLeft, ChevronRight, Info, RefreshCw } from "lucide-react";
+import {
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
+  Info,
+  RefreshCw,
+  Undo2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FormSelect } from "@/components/ui/form-select";
+import {
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Tooltip,
   TooltipContent,
@@ -93,6 +109,8 @@ type DreYearTableProps = {
   data: DreYearView;
   showDetails: boolean;
   onToggleDetails?: () => void;
+  selectedMonth?: number | null;
+  onSelectedMonthChange?: (month: number | null) => void;
   syncingMonths: Set<number>;
   onSyncMonth: (month: number) => void;
   onLineChange: (
@@ -100,6 +118,7 @@ type DreYearTableProps = {
     month: number,
     amount: number,
   ) => void;
+  onLineRestore?: (lineKey: DreEditableLineKey, month: number) => void;
   onFixedCostChange: (
     costItemId: string,
     month: number,
@@ -284,16 +303,49 @@ function sourceOriginLabel(source: string): string {
   }
 }
 
+function AdjustedBadge({
+  onRestore,
+}: {
+  onRestore?: () => void;
+}) {
+  return (
+    <span className="inline-flex items-center gap-0.5">
+      <span
+        className="rounded bg-amber-100 px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-950/60 dark:text-amber-200"
+        title="Valor ajustado manualmente após o último sync"
+      >
+        ajustado
+      </span>
+      {onRestore ? (
+        <button
+          type="button"
+          className="inline-flex size-5 items-center justify-center rounded text-amber-800 hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)] dark:text-amber-200 dark:hover:bg-amber-950/60"
+          title="Restaurar valor do último sync"
+          aria-label="Restaurar valor do último sync"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRestore();
+          }}
+        >
+          <Undo2 className="size-3" aria-hidden />
+        </button>
+      ) : null}
+    </span>
+  );
+}
+
 function DreInlineMoneyCell({
   displayAmount,
   label,
   allowNegative = true,
   disabled = false,
   muted = false,
+  adjusted = false,
   title,
   onCommit,
   onEditingChange,
   onAudit,
+  onRestore,
   leading,
   trailing,
 }: {
@@ -302,15 +354,19 @@ function DreInlineMoneyCell({
   allowNegative?: boolean;
   disabled?: boolean;
   muted?: boolean;
+  /** Célula com valor diferente do último sync. */
+  adjusted?: boolean;
   title?: string;
   onCommit: (amount: number | null) => void;
   /** Notifica o pai ao entrar/sair do modo de edição (para esmaecer o restante do DRE). */
   onEditingChange?: (editing: boolean) => void;
   /** Clique simples abre auditoria (atrasado para não conflitar com duplo-clique de edição). */
   onAudit?: () => void;
+  onRestore?: () => void;
   leading?: ReactNode;
   trailing?: ReactNode;
 }) {
+  const isMobile = useIsMobile();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<number | null>(displayAmount);
   const [panelStyle, setPanelStyle] = useState<CSSProperties | null>(null);
@@ -361,7 +417,7 @@ function DreInlineMoneyCell({
   }
 
   useEffect(() => {
-    if (!editing) return;
+    if (!editing || isMobile) return;
     placeEditorPanel();
     // rAF: layout da célula de foco (z-index/dim) pode mudar no mesmo tick.
     const raf = requestAnimationFrame(() => placeEditorPanel());
@@ -374,10 +430,10 @@ function DreInlineMoneyCell({
       window.removeEventListener("resize", onReposition);
       window.removeEventListener("scroll", onReposition, true);
     };
-  }, [editing]);
+  }, [editing, isMobile]);
 
   useEffect(() => {
-    if (!editing || !panelStyle) {
+    if (!editing || isMobile || !panelStyle) {
       setPanelEntered(false);
       return;
     }
@@ -390,18 +446,26 @@ function DreInlineMoneyCell({
       cancelAnimationFrame(raf1);
       cancelAnimationFrame(raf2);
     };
-  }, [editing, panelStyle !== null]);
+  }, [editing, isMobile, panelStyle !== null]);
 
   useEffect(() => {
     if (!editing) {
       focusedOnceRef.current = false;
       return;
     }
+    if (isMobile) {
+      // Sheet: espera abrir e então foca (teclado nativo).
+      const t = window.setTimeout(() => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      }, 50);
+      return () => window.clearTimeout(t);
+    }
     if (!panelStyle || focusedOnceRef.current) return;
     focusedOnceRef.current = true;
     inputRef.current?.focus();
     inputRef.current?.select();
-  }, [editing, panelStyle]);
+  }, [editing, isMobile, panelStyle]);
 
   useEffect(() => {
     return () => {
@@ -446,7 +510,105 @@ function DreInlineMoneyCell({
     }
   }
 
-  if (editing) {
+  const moneyInput = (
+    <NumericFormat
+      getInputRef={inputRef}
+      value={draft ?? ""}
+      onValueChange={(values) => {
+        setDraft(values.floatValue ?? null);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          cancelEditing();
+        }
+        if (e.key === "Enter") {
+          e.preventDefault();
+          commit(draft);
+        }
+      }}
+      thousandSeparator="."
+      decimalSeparator=","
+      prefix="R$ "
+      decimalScale={2}
+      allowNegative={allowNegative}
+      inputMode="decimal"
+      enterKeyHint="done"
+      autoComplete="off"
+      autoCorrect="off"
+      spellCheck={false}
+      aria-label={`Editar ${label}`}
+      className={
+        isMobile
+          ? "h-14 w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-4 text-center text-2xl font-bold tabular-nums outline-none transition-[border-color,box-shadow] duration-150 focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/30"
+          : "h-8 min-w-0 flex-1 rounded border border-[var(--border)] bg-white px-2 py-1 text-right text-sm font-bold tabular-nums outline-none transition-[border-color,box-shadow] duration-150 focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/40"
+      }
+    />
+  );
+
+  const mobileEditor =
+    editing && isMobile ? (
+      <Sheet
+        open={editing}
+        onOpenChange={(open) => {
+          if (!open) cancelEditing();
+        }}
+      >
+        <SheetContent hideClose className="gap-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <SheetHeader className="border-b-0 pb-2">
+            <SheetTitle>Editar valor</SheetTitle>
+            <SheetDescription>{label}</SheetDescription>
+          </SheetHeader>
+          <SheetBody className="space-y-4 pt-1">
+            {moneyInput}
+            {onAudit ? (
+              <button
+                type="button"
+                className="w-full text-center text-sm font-medium text-[var(--primary)] underline-offset-2 hover:underline"
+                onClick={() => {
+                  cancelEditing();
+                  onAudit();
+                }}
+              >
+                Ver detalhamento
+              </button>
+            ) : null}
+            {adjusted && onRestore ? (
+              <button
+                type="button"
+                className="inline-flex w-full items-center justify-center gap-1.5 text-sm font-medium text-amber-800 dark:text-amber-200"
+                onClick={() => {
+                  cancelEditing();
+                  onRestore();
+                }}
+              >
+                <Undo2 className="size-3.5" aria-hidden />
+                Restaurar valor do sync
+              </button>
+            ) : null}
+          </SheetBody>
+          <SheetFooter className="grid grid-cols-2 gap-2 sm:flex">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-12 text-base font-semibold"
+              onClick={() => cancelEditing()}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              className="h-12 text-base font-semibold"
+              onClick={() => commit(draft)}
+            >
+              Aplicar
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+    ) : null;
+
+  if (editing && !isMobile) {
     // Portal no body: a página do DRE usa `-translate-x-1/2`, o que faz
     // `position:fixed` interno ancorar nesse ancestral (e subir com o scroll).
     const editorPanel =
@@ -466,30 +628,7 @@ function DreInlineMoneyCell({
                     : "scale-90 opacity-0",
                 )}
               >
-                <NumericFormat
-                  getInputRef={inputRef}
-                  value={draft ?? ""}
-                  onValueChange={(values) => {
-                    setDraft(values.floatValue ?? null);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Escape") {
-                      e.preventDefault();
-                      cancelEditing();
-                    }
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      commit(draft);
-                    }
-                  }}
-                  thousandSeparator="."
-                  decimalSeparator=","
-                  prefix="R$ "
-                  decimalScale={2}
-                  allowNegative={allowNegative}
-                  aria-label={`Editar ${label}`}
-                  className="h-8 min-w-0 flex-1 rounded border border-[var(--border)] bg-white px-2 py-1 text-right text-sm font-bold tabular-nums outline-none transition-[border-color,box-shadow] duration-150 focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/40"
-                />
+                {moneyInput}
                 <Button
                   type="button"
                   variant="outline"
@@ -530,12 +669,14 @@ function DreInlineMoneyCell({
     ? onAudit
       ? `Clique para auditar ${label}`
       : undefined
-    : onAudit
-      ? `Clique para auditar · Duplo-clique para editar ${label}`
-      : `Duplo-clique para editar ${label}`;
+    : isMobile
+      ? `Toque para editar ${label}`
+      : onAudit
+        ? `Clique para auditar · Duplo-clique para editar ${label}`
+        : `Duplo-clique para editar ${label}`;
 
   return (
-    <div className="inline-flex items-center justify-center gap-1.5">
+    <div className="inline-flex flex-wrap items-center justify-center gap-1">
       {leading}
       <span
         role={disabled && !onAudit ? undefined : "button"}
@@ -543,15 +684,32 @@ function DreInlineMoneyCell({
         className={cn(
           "whitespace-nowrap text-[12.5px] font-bold tabular-nums leading-tight",
           muted && "text-[var(--muted-foreground)]",
+          adjusted && "text-amber-900 dark:text-amber-200",
           (!disabled || onAudit) &&
             "cursor-pointer rounded-sm hover:bg-black/[0.04]",
           onAudit &&
+            !isMobile &&
             "underline decoration-dotted decoration-1 underline-offset-2",
         )}
-        title={title ?? defaultTitle}
+        title={
+          title ??
+          (adjusted
+            ? `${defaultTitle ?? label} (ajustado manualmente)`
+            : defaultTitle)
+        }
         onClick={(e) => {
-          if (!onAudit) return;
           e.stopPropagation();
+          // Mobile: toque abre edição (ou auditoria se não editável).
+          if (isMobile) {
+            clearClickTimer();
+            if (!disabled) {
+              startEditing();
+              return;
+            }
+            onAudit?.();
+            return;
+          }
+          if (!onAudit) return;
           clearClickTimer();
           clickTimerRef.current = setTimeout(() => {
             clickTimerRef.current = null;
@@ -561,6 +719,7 @@ function DreInlineMoneyCell({
         onDoubleClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
+          if (isMobile) return;
           if (disabled) {
             clearClickTimer();
             return;
@@ -581,7 +740,9 @@ function DreInlineMoneyCell({
       >
         {formatFinancialMoney(displayAmount)}
       </span>
+      {adjusted ? <AdjustedBadge onRestore={onRestore} /> : null}
       {trailing}
+      {mobileEditor}
     </div>
   );
 }
@@ -778,6 +939,7 @@ function renderValueCell(
   onInvestmentCostChange: DreYearTableProps["onInvestmentCostChange"],
   onAuditClick?: (kind: AuditKind, month: number) => void,
   onEditingChange?: (editing: boolean, month: number, rowId: string) => void,
+  onLineRestore?: DreYearTableProps["onLineRestore"],
 ) {
   const canEditMonth = !month.isFutureMonth;
   const notifyEditing = (editing: boolean) =>
@@ -885,6 +1047,14 @@ function renderValueCell(
     (row.id === "fullShippingMl" || row.id === "fullNonComplianceMl") &&
     month.lines !== null &&
     !month.fullReportSourced;
+  const isAdjusted =
+    editableKey !== null &&
+    month.manuallyEditedLineKeys.includes(editableKey);
+  const canRestore =
+    isAdjusted &&
+    editableKey !== null &&
+    month.syncedLineBaselineKeys.includes(editableKey) &&
+    Boolean(onLineRestore);
 
   if (editableKey && canEditMonth) {
     return (
@@ -896,9 +1066,15 @@ function renderValueCell(
           displayAmount={amount}
           label={`${row.label} (${month.label})`}
           allowNegative={editableKey !== "revenueMl"}
+          adjusted={isAdjusted}
           onAudit={
             auditKind && onAuditClick
               ? () => onAuditClick(auditKind, month.month)
+              : undefined
+          }
+          onRestore={
+            canRestore
+              ? () => onLineRestore!(editableKey, month.month)
               : undefined
           }
           onEditingChange={notifyEditing}
@@ -950,6 +1126,15 @@ function renderValueCell(
       >
         {moneyLabel}
       </div>
+      {isAdjusted ? (
+        <AdjustedBadge
+          onRestore={
+            canRestore
+              ? () => onLineRestore!(editableKey!, month.month)
+              : undefined
+          }
+        />
+      ) : null}
     </div>
   );
 }
@@ -1069,6 +1254,7 @@ function DreMobileRow({
   selection,
   data,
   onLineChange,
+  onLineRestore,
   onFixedCostChange,
   onOperationalCostChange,
   onInvestmentCostChange,
@@ -1079,6 +1265,7 @@ function DreMobileRow({
   selection: DreMobileSelection;
   data: DreYearView;
   onLineChange: DreYearTableProps["onLineChange"];
+  onLineRestore?: DreYearTableProps["onLineRestore"];
   onFixedCostChange: DreYearTableProps["onFixedCostChange"];
   onOperationalCostChange: DreYearTableProps["onOperationalCostChange"];
   onInvestmentCostChange: DreYearTableProps["onInvestmentCostChange"];
@@ -1137,6 +1324,8 @@ function DreMobileRow({
       onOperationalCostChange,
       onInvestmentCostChange,
       (kind, m) => onAuditClick(kind, m),
+      undefined,
+      onLineRestore,
     )
   );
 
@@ -1166,9 +1355,11 @@ function DreYearTableMobile({
   data,
   showDetails,
   onToggleDetails,
+  onSelectedMonthChange,
   syncingMonths,
   onSyncMonth,
   onLineChange,
+  onLineRestore,
   onFixedCostChange,
   onOperationalCostChange,
   onInvestmentCostChange,
@@ -1202,6 +1393,16 @@ function DreYearTableMobile({
 
   const [selection, setSelection] = useState<DreMobileSelection>(defaultIndex);
   const [auditTarget, setAuditTarget] = useState<AuditTarget>(null);
+
+  function updateSelection(next: DreMobileSelection) {
+    setSelection(next);
+    if (!onSelectedMonthChange) return;
+    if (next === "total") {
+      onSelectedMonthChange(null);
+      return;
+    }
+    onSelectedMonthChange(data.months[next]?.month ?? null);
+  }
 
   const productCostAuditItems =
     auditTarget === null || auditTarget.kind !== "productCost"
@@ -1240,13 +1441,17 @@ function DreYearTableMobile({
   ];
 
   function goToOffset(offset: number) {
-    setSelection((prev) => {
-      const base = prev === "total" ? data.months.length : prev;
-      const next = base + offset;
-      if (next < 0) return 0;
-      if (next >= data.months.length) return "total";
-      return next;
-    });
+    const base = selection === "total" ? data.months.length : selection;
+    const next = base + offset;
+    if (next < 0) {
+      updateSelection(0);
+      return;
+    }
+    if (next >= data.months.length) {
+      updateSelection("total");
+      return;
+    }
+    updateSelection(next);
   }
 
   return (
@@ -1278,7 +1483,7 @@ function DreYearTableMobile({
         <FormSelect
           value={String(selection)}
           onValueChange={(value) =>
-            setSelection(value === "total" ? "total" : Number(value))
+            updateSelection(value === "total" ? "total" : Number(value))
           }
           options={selectOptions}
           className="flex-1"
@@ -1349,6 +1554,7 @@ function DreYearTableMobile({
             selection={selection}
             data={data}
             onLineChange={onLineChange}
+            onLineRestore={onLineRestore}
             onFixedCostChange={onFixedCostChange}
             onOperationalCostChange={onOperationalCostChange}
             onInvestmentCostChange={onInvestmentCostChange}
@@ -1475,7 +1681,7 @@ function MonthHeaderCell({
 export function DreYearTable(props: DreYearTableProps) {
   const isMobile = useIsMobile();
   if (isMobile) {
-    return <DreYearTableMobile {...props} />;
+    return <DreYearTableMobile key={props.data.year} {...props} />;
   }
   return <DreYearTableDesktop {...props} />;
 }
@@ -1484,14 +1690,30 @@ function DreYearTableDesktop({
   data,
   showDetails,
   onToggleDetails,
+  selectedMonth: selectedMonthProp = null,
+  onSelectedMonthChange,
   syncingMonths,
   onSyncMonth,
   onLineChange,
+  onLineRestore,
   onFixedCostChange,
   onOperationalCostChange,
   onInvestmentCostChange,
 }: DreYearTableProps) {
-  const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
+  const [selectedMonthLocal, setSelectedMonthLocal] = useState<number | null>(
+    null,
+  );
+  const selectedMonth =
+    onSelectedMonthChange !== undefined
+      ? (selectedMonthProp ?? null)
+      : selectedMonthLocal;
+  function setSelectedMonth(next: number | null) {
+    if (onSelectedMonthChange) {
+      onSelectedMonthChange(next);
+      return;
+    }
+    setSelectedMonthLocal(next);
+  }
   /** Célula em edição — esmaece TODO o restante do DRE, inclusive a coluna atual. */
   const [editingCell, setEditingCell] = useState<{
     month: number;
@@ -1608,8 +1830,8 @@ function DreYearTableDesktop({
                   onSync={() => onSyncMonth(month.month)}
                   onToggleSelect={() => {
                     if (isEditing) return;
-                    setSelectedMonth((prev) =>
-                      prev === month.month ? null : month.month,
+                    setSelectedMonth(
+                      selectedMonth === month.month ? null : month.month,
                     );
                   }}
                 />
@@ -1693,6 +1915,7 @@ function DreYearTableDesktop({
                               setEditingCell(
                                 editing ? { month: m, rowId } : null,
                               ),
+                            onLineRestore,
                           )}
                         </td>
                       );

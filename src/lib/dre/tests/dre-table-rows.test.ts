@@ -93,6 +93,19 @@ describe("buildDreTableRows", () => {
     assert.equal(investmentIndex, totalIndex + 1);
   });
 
+  it("includes visible partial returns row after cancelled sales", () => {
+    const rows = buildDreTableRows([], [], [], true);
+    const cancelledIndex = rows.findIndex((r) => r.id === "cancelledSalesMl");
+    const partialIndex = rows.findIndex((r) => r.id === "partialReturnsMl");
+    assert.ok(partialIndex >= 0);
+    assert.equal(partialIndex, cancelledIndex + 1);
+    const partial = rows[partialIndex];
+    assert.equal(partial.type, "static");
+    if (partial.type === "static") {
+      assert.equal(partial.lineKey, "partialReturnsMl");
+    }
+  });
+
   it("produces the same number of static rows as DRE_STATIC_ROWS when there are no custom cost items", () => {
     const rows = buildDreTableRows([], [], [], true);
     assert.equal(rows.length, DRE_STATIC_ROWS.length);

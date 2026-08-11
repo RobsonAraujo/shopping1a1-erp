@@ -56,6 +56,29 @@ export type DreLineBreakdownItem = {
   amount: number;
 };
 
+/** Linhas do snapshot que podem ser editadas manualmente na grade do DRE. */
+export const DRE_EDITABLE_LINE_KEYS = [
+  "revenueMl",
+  "cancelledSalesMl",
+  "saleFeeMl",
+  "partialReturnsMl",
+  "productCostErp",
+  "taxErp",
+  "sellerShippingMl",
+  "fullShippingMl",
+  "fullStorageMl",
+  "fullNonComplianceMl",
+  "minhaPaginaMl",
+  "affiliateFeeMl",
+  "adsCost",
+] as const;
+
+export type DreEditableLineKey = (typeof DRE_EDITABLE_LINE_KEYS)[number];
+
+export function isDreEditableLineKey(key: string): key is DreEditableLineKey {
+  return (DRE_EDITABLE_LINE_KEYS as readonly string[]).includes(key);
+}
+
 export type DreMonthSnapshotPayload = DreLineAmounts & {
   adsCost: number;
   billingSource: DreBillingSource;
@@ -72,28 +95,139 @@ export type DreMonthSnapshotPayload = DreLineAmounts & {
   adsCostBreakdown?: DreLineBreakdownItem[];
   /** true quando Full envios/inconformidade vieram dos envios já importados no Relatório Full deste mês (mais confiável que o total consolidado da fatura). */
   fullReportSourced?: boolean;
+  /**
+   * Valores das linhas no último sync (baseline para “restaurar do sync”).
+   * Preenchido/atualizado em toda sincronização; preservado em edições manuais.
+   */
+  syncedLineBaseline?: Partial<Record<DreEditableLineKey, number>>;
+  /** Chaves com valor diferente do baseline (editadas após o último sync). */
+  manuallyEditedLineKeys?: DreEditableLineKey[];
 };
 
-/** Linhas do snapshot que podem ser editadas manualmente na grade do DRE. */
-export const DRE_EDITABLE_LINE_KEYS = [
-  "revenueMl",
-  "cancelledSalesMl",
-  "saleFeeMl",
-  "productCostErp",
-  "taxErp",
-  "sellerShippingMl",
-  "fullShippingMl",
-  "fullStorageMl",
-  "fullNonComplianceMl",
-  "minhaPaginaMl",
-  "affiliateFeeMl",
-  "adsCost",
-] as const;
+/** Lê o valor armazenado de uma linha editável no payload. */
+export function getEditableLineAmount(
+  payload: Pick<DreMonthSnapshotPayload, DreEditableLineKey>,
+  lineKey: DreEditableLineKey,
+): number {
+  return payload[lineKey] ?? 0;
+}
 
-export type DreEditableLineKey = (typeof DRE_EDITABLE_LINE_KEYS)[number];
+/** Snapshot dos valores atuais de todas as linhas editáveis (usado no sync). */
+export function buildSyncedLineBaseline(
+  payload: Pick<DreMonthSnapshotPayload, DreEditableLineKey>,
+): Record<DreEditableLineKey, number> {
+  const baseline = {} as Record<DreEditableLineKey, number>;
+  for (const key of DRE_EDITABLE_LINE_KEYS) {
+    baseline[key] = getEditableLineAmount(payload, key);
+  }
+  return baseline;
+}
 
-export function isDreEditableLineKey(key: string): key is DreEditableLineKey {
-  return (DRE_EDITABLE_LINE_KEYS as readonly string[]).includes(key);
+/**
+ * Anexa baseline do sync e limpa marcas de edição manual.
+ * Chamar ao persistir um snapshot vindo de `buildDreMonthSnapshot`.
+ */
+export function withSyncLineBaseline(
+  payload: DreMonthSnapshotPayload,
+): DreMonthSnapshotPayload {
+  return {
+    ...payload,
+    syncedLineBaseline: buildSyncedLineBaseline(payload),
+    manuallyEditedLineKeys: [],
+  };
+}
+
+function amountsMatch(a: number, b: number): boolean {
+  return Math.abs(a - b) < 0.000_001;
+}
+
+/**
+ * Aplica edição manual: grava o valor, garante baseline (se ausente) e
+ * marca/desmarca a chave conforme diferença vs baseline.
+ */
+export function applyManualLineEdit(
+  payload: DreMonthSnapshotPayload,
+  lineKey: DreEditableLineKey,
+  amount: number,
+): DreMonthSnapshotPayload {
+  const storedAmount =
+    lineKey === "adsCost" ? roundMoney(Math.abs(amount)) : roundMoney(amount);
+
+  const previousAmount = getEditableLineAmount(payload, lineKey);
+  const baseline: Partial<Record<DreEditableLineKey, number>> = {
+    ...(payload.syncedLineBaseline ?? {}),
+  };
+  if (baseline[lineKey] === undefined) {
+    baseline[lineKey] = previousAmount;
+  }
+
+  const edited = new Set<DreEditableLineKey>(
+    payload.manuallyEditedLineKeys ?? [],
+  );
+  const baselineAmount = baseline[lineKey] ?? previousAmount;
+  if (amountsMatch(storedAmount, baselineAmount)) {
+    edited.delete(lineKey);
+  } else {
+    edited.add(lineKey);
+  }
+
+  const next: DreMonthSnapshotPayload = {
+    ...payload,
+    [lineKey]: storedAmount,
+    syncedLineBaseline: baseline,
+    manuallyEditedLineKeys: [...edited],
+  };
+
+  // Edição manual de faturamento/custo/imposto invalida o overlay de
+  // canceladas (senão a leitura somaria de novo o bruto cancelado).
+  if (
+    lineKey === "revenueMl" ||
+    lineKey === "productCostErp" ||
+    lineKey === "taxErp"
+  ) {
+    delete next.cancelledIncludeOverlay;
+  }
+
+  return next;
+}
+
+/**
+ * Restaura uma linha ao valor do último sync (baseline).
+ * Retorna null se não houver baseline para a chave.
+ */
+export function applyRestoreLineFromSync(
+  payload: DreMonthSnapshotPayload,
+  lineKey: DreEditableLineKey,
+): DreMonthSnapshotPayload | null {
+  const baselineAmount = payload.syncedLineBaseline?.[lineKey];
+  if (baselineAmount === undefined || !Number.isFinite(baselineAmount)) {
+    return null;
+  }
+
+  const restoredAmount =
+    lineKey === "adsCost"
+      ? roundMoney(Math.abs(baselineAmount))
+      : roundMoney(baselineAmount);
+
+  const edited = (payload.manuallyEditedLineKeys ?? []).filter(
+    (key) => key !== lineKey,
+  );
+
+  const next: DreMonthSnapshotPayload = {
+    ...payload,
+    [lineKey]: restoredAmount,
+    manuallyEditedLineKeys: edited,
+  };
+
+  if (
+    lineKey === "revenueMl" ||
+    lineKey === "productCostErp" ||
+    lineKey === "taxErp"
+  ) {
+    delete next.cancelledIncludeOverlay;
+  }
+
+  return next;
 }
 
 export type DreManualCostInput = {

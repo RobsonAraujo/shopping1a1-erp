@@ -95,7 +95,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     id: "totalCustoOperacional",
     kind: "custo-total",
     label: "(-) Custos Variáveis",
-    methodology: "Soma de todas as linhas abaixo (Canceladas, Tarifa ML, Custo produto, Imposto, Frete vendedor, Full envios/armazém/inconformidades, Campanhas ADS, Minha Página, Comissão Afiliados) mais os custos operacionais manuais cadastrados. Inclui também devoluções parciais reembolsadas pelo ML, sem linha própria na tabela.",
+    methodology: "Soma de todas as linhas abaixo (Canceladas, Devoluções parciais, Tarifa ML, Custo produto, Imposto, Frete vendedor, Full envios/armazém/inconformidades, Campanhas ADS, Minha Página, Comissão Afiliados) mais os custos operacionais manuais cadastrados.",
   },
   {
     type: "static",
@@ -106,6 +106,16 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     indent: true,
     lineKey: "cancelledSalesMl",
     methodology: "Valor bruto das vendas canceladas no mês, conforme a fatura ML (ou estimado pelos pedidos cancelados quando a fatura não está disponível). Lançado como custo para abater o Faturamento ML, que já soma essas vendas de volta.",
+  },
+  {
+    type: "static",
+    id: "partialReturnsMl",
+    kind: "custo-detail",
+    label: "Devoluções parciais",
+    source: "ml",
+    indent: true,
+    lineKey: "partialReturnsMl",
+    methodology: "Reembolsos parciais (devoluções parciais) cobrados/creditados na fatura ML no mês. Entram nos custos variáveis; quando a fatura não está disponível, o valor fica zerado (não há estimativa por pedido).",
   },
   {
     type: "static",

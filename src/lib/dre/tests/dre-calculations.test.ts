@@ -2,9 +2,13 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   applyDreIncludeCancelledView,
+  applyManualLineEdit,
+  applyRestoreLineFromSync,
   computeDreTotals,
   percentOfRevenue,
   sumYearLineAmounts,
+  withSyncLineBaseline,
+  type DreMonthSnapshotPayload,
 } from "../dre-calculations";
 import { mapBillingSummaryToDreLines } from "../../mercadolibre/billing-summary";
 
@@ -22,6 +26,20 @@ const BASE_LINES = {
   minhaPaginaMl: 0,
   affiliateFeeMl: 0,
 };
+
+function emptyPayload(
+  overrides: Partial<DreMonthSnapshotPayload> = {},
+): DreMonthSnapshotPayload {
+  return {
+    ...BASE_LINES,
+    adsCost: 0,
+    billingSource: "billing",
+    isPartial: false,
+    incompleteProductCostCount: 0,
+    syncWarnings: [],
+    ...overrides,
+  };
+}
 
 describe("computeDreTotals", () => {
   it("includes ADS in custos variáveis (before margem de contribuição)", () => {
@@ -207,5 +225,42 @@ describe("mapBillingSummaryToDreLines", () => {
     assert.equal(mapped.affiliateFee, -93.73);
     assert.equal(mapped.minhaPagina, -99);
     assert.equal(mapped.adsCost, 50);
+  });
+});
+
+describe("manual line edit / restore from sync", () => {
+  it("marks edited keys and keeps sync baseline", () => {
+    const synced = withSyncLineBaseline(
+      emptyPayload({ revenueMl: 1000, saleFeeMl: -100 }),
+    );
+    assert.equal(synced.manuallyEditedLineKeys?.length, 0);
+    assert.equal(synced.syncedLineBaseline?.revenueMl, 1000);
+
+    const edited = applyManualLineEdit(synced, "revenueMl", 1100);
+    assert.deepEqual(edited.manuallyEditedLineKeys, ["revenueMl"]);
+    assert.equal(edited.revenueMl, 1100);
+    assert.equal(edited.syncedLineBaseline?.revenueMl, 1000);
+  });
+
+  it("clears the adjusted mark when value returns to baseline", () => {
+    const synced = withSyncLineBaseline(emptyPayload({ revenueMl: 1000 }));
+    const edited = applyManualLineEdit(synced, "revenueMl", 1100);
+    const back = applyManualLineEdit(edited, "revenueMl", 1000);
+    assert.deepEqual(back.manuallyEditedLineKeys, []);
+    assert.equal(back.revenueMl, 1000);
+  });
+
+  it("restores from sync baseline", () => {
+    const synced = withSyncLineBaseline(emptyPayload({ saleFeeMl: -80 }));
+    const edited = applyManualLineEdit(synced, "saleFeeMl", -50);
+    const restored = applyRestoreLineFromSync(edited, "saleFeeMl");
+    assert.ok(restored);
+    assert.equal(restored.saleFeeMl, -80);
+    assert.deepEqual(restored.manuallyEditedLineKeys, []);
+  });
+
+  it("returns null when restoring without baseline", () => {
+    const payload = emptyPayload({ revenueMl: 500 });
+    assert.equal(applyRestoreLineFromSync(payload, "revenueMl"), null);
   });
 });

@@ -3,10 +3,13 @@ import { reportsConfig } from "@/config/reports";
 import { prisma } from "@/lib/db";
 import { logServerError } from "@/lib/server-public-error";
 import {
+  applyManualLineEdit,
+  applyRestoreLineFromSync,
   computeDreTotals,
   isDreEditableLineKey,
   mergeProductCostBreakdowns,
   mergeTaxBreakdowns,
+  withSyncLineBaseline,
   type DreCancelledIncludeOverlay,
   type DreEditableLineKey,
   type DreLineBreakdownItem,
@@ -846,17 +849,18 @@ export async function persistDreMonthSnapshot(
   payload: DreMonthSnapshotPayload,
 ): Promise<Date> {
   const syncedAt = new Date();
+  const withBaseline = withSyncLineBaseline(payload);
   await prisma.dreMonthSnapshot.upsert({
     where: { year_month: { year, month } },
     create: {
       year,
       month,
       syncedAt,
-      payload: payload as object,
+      payload: withBaseline as object,
     },
     update: {
       syncedAt,
-      payload: payload as object,
+      payload: withBaseline as object,
     },
   });
   return syncedAt;
@@ -890,6 +894,7 @@ export function emptyDreMonthSnapshotPayload(): DreMonthSnapshotPayload {
 /**
  * Atualiza uma linha editável do snapshot do mês. Cria snapshot vazio se ainda
  * não existir. Não altera `syncedAt` em updates (só na criação).
+ * Marca a linha como ajustada manualmente (vs baseline do último sync).
  */
 export async function patchDreMonthLine(
   year: number,
@@ -912,23 +917,7 @@ export async function patchDreMonthLine(
     (existing ? parseSnapshotPayload(existing.payload) : null) ??
     emptyDreMonthSnapshotPayload();
 
-  const storedAmount =
-    lineKey === "adsCost" ? roundMoney(Math.abs(amount)) : roundMoney(amount);
-
-  const next: DreMonthSnapshotPayload = {
-    ...base,
-    [lineKey]: storedAmount,
-  };
-
-  // Edição manual de faturamento/custo/imposto invalida o overlay de
-  // canceladas (senão a leitura somaria de novo o bruto cancelado).
-  if (
-    lineKey === "revenueMl" ||
-    lineKey === "productCostErp" ||
-    lineKey === "taxErp"
-  ) {
-    delete next.cancelledIncludeOverlay;
-  }
+  const next = applyManualLineEdit(base, lineKey, amount);
 
   const syncedAt = existing?.syncedAt ?? new Date();
   await prisma.dreMonthSnapshot.upsert({
@@ -944,6 +933,43 @@ export async function patchDreMonthLine(
     },
   });
   return syncedAt;
+}
+
+/**
+ * Restaura uma linha ao valor do último sync (baseline).
+ * Não altera `syncedAt`.
+ */
+export async function restoreDreMonthLine(
+  year: number,
+  month: number,
+  lineKey: DreEditableLineKey,
+): Promise<Date> {
+  if (!isDreEditableLineKey(lineKey)) {
+    throw new Error(`Linha DRE não editável: ${lineKey}`);
+  }
+
+  const existing = await prisma.dreMonthSnapshot.findUnique({
+    where: { year_month: { year, month } },
+  });
+  if (!existing) {
+    throw new Error("Mês sem snapshot para restaurar.");
+  }
+
+  const base = parseSnapshotPayload(existing.payload);
+  if (!base) {
+    throw new Error("Snapshot inválido.");
+  }
+
+  const next = applyRestoreLineFromSync(base, lineKey);
+  if (!next) {
+    throw new Error("Sem valor sincronizado para restaurar nesta linha.");
+  }
+
+  await prisma.dreMonthSnapshot.update({
+    where: { year_month: { year, month } },
+    data: { payload: next as object },
+  });
+  return existing.syncedAt;
 }
 
 export function snapshotPayloadToLines(
@@ -1060,6 +1086,33 @@ export function parseSnapshotPayload(raw: unknown): DreMonthSnapshotPayload | nu
   const sellerShippingBreakdown = parseLineBreakdown(p.sellerShippingBreakdown);
   const adsCostBreakdown = parseLineBreakdown(p.adsCostBreakdown);
 
+  const syncedLineBaselineRaw = p.syncedLineBaseline;
+  let syncedLineBaseline:
+    | Partial<Record<DreEditableLineKey, number>>
+    | undefined;
+  if (
+    syncedLineBaselineRaw &&
+    typeof syncedLineBaselineRaw === "object" &&
+    !Array.isArray(syncedLineBaselineRaw)
+  ) {
+    const baseline: Partial<Record<DreEditableLineKey, number>> = {};
+    for (const key of Object.keys(
+      syncedLineBaselineRaw as Record<string, unknown>,
+    )) {
+      if (!isDreEditableLineKey(key)) continue;
+      const n = numFrom((syncedLineBaselineRaw as Record<string, unknown>)[key]);
+      baseline[key] = n;
+    }
+    syncedLineBaseline = baseline;
+  }
+
+  const manuallyEditedLineKeys = Array.isArray(p.manuallyEditedLineKeys)
+    ? p.manuallyEditedLineKeys.filter(
+        (key): key is DreEditableLineKey =>
+          typeof key === "string" && isDreEditableLineKey(key),
+      )
+    : undefined;
+
   return {
     revenueMl: num("revenueMl"),
     cancelledSalesMl: num("cancelledSalesMl"),
@@ -1090,5 +1143,7 @@ export function parseSnapshotPayload(raw: unknown): DreMonthSnapshotPayload | nu
     sellerShippingBreakdown,
     adsCostBreakdown,
     fullReportSourced: Boolean(p.fullReportSourced),
+    syncedLineBaseline,
+    manuallyEditedLineKeys,
   };
 }

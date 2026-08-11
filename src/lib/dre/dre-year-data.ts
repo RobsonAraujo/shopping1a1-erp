@@ -4,6 +4,7 @@ import {
   sumYearLineAmounts,
   type DreCancelledIncludeOverlay,
   type DreComputedTotals,
+  type DreEditableLineKey,
   type DreLineAmounts,
   type DreLineBreakdownItem,
   type DreMonthSnapshotPayload,
@@ -64,6 +65,10 @@ export type DreMonthView = {
    */
   fullReportSourced: boolean;
   adsCost: number | null;
+  /** Linhas ML/ERP/ADS ajustadas manualmente após o último sync. */
+  manuallyEditedLineKeys: DreEditableLineKey[];
+  /** Baseline do sync disponível para restaurar (chaves presentes). */
+  syncedLineBaselineKeys: DreEditableLineKey[];
   fixedCostValues: Record<string, number | null>;
   fixedCostOverrides: Record<string, number | null>;
   operationalCostValues: Record<string, number | null>;
@@ -295,6 +300,10 @@ export async function loadDreYearView(year: number): Promise<DreYearView> {
       fullReportSourced:
         fullShipmentMonths.has(month) || importedBillingMonths.has(month),
       adsCost: payload?.adsCost ?? null,
+      manuallyEditedLineKeys: payload?.manuallyEditedLineKeys ?? [],
+      syncedLineBaselineKeys: payload?.syncedLineBaseline
+        ? (Object.keys(payload.syncedLineBaseline) as DreEditableLineKey[])
+        : [],
       fixedCostValues,
       fixedCostOverrides,
       operationalCostValues,
