@@ -5,12 +5,7 @@ import {
   getCalendarMonthRange,
 } from "@/lib/mercadolibre/revenue-periods";
 import {
-  addBillingBonus,
   billingPeriodKey,
-  classifyFullChargeLabel,
-  isBillingBonusType,
-  normalizeBillingLabel,
-  subtractBillingCost,
   type MlBillingDreLines,
 } from "./billing-shared";
 import {
@@ -49,23 +44,6 @@ type BillingSummaryResponse = {
   };
   charges?: BillingCharge[];
   bonuses?: BillingCharge[];
-};
-
-type FullBillingDetail = {
-  charge_info?: {
-    detail_amount?: number;
-    detail_type?: string;
-    transaction_detail?: string;
-  };
-  fulfillment_info?: {
-    type?: string;
-  };
-};
-
-type FullBillingResponse = {
-  results?: FullBillingDetail[];
-  last_id?: number;
-  total?: number;
 };
 
 /** Resultado completo do fetch mensal de faturamento ML. */
@@ -156,33 +134,6 @@ export function extractBillingSummaryEntries(
       ...(data.bonuses ?? []),
     ],
   };
-}
-
-function classifyFullFulfillmentType(
-  type: string | undefined,
-): "fullShipping" | "fullStorage" | "fullNonCompliance" | null {
-  const normalized = (type ?? "").toUpperCase();
-  if (
-    normalized === "WAREHOUSING" ||
-    normalized === "AGING" ||
-    normalized === "SPACE_PURCHASE" ||
-    normalized === "SPACE_CANCELLATION"
-  ) {
-    return "fullStorage";
-  }
-  if (
-    normalized === "INBOUND_PENALTY" ||
-    normalized === "OVERAGE"
-  ) {
-    return "fullNonCompliance";
-  }
-  if (
-    normalized === "INBOUND_COLLECT" ||
-    normalized === "WITHDRAWAL"
-  ) {
-    return "fullShipping";
-  }
-  return null;
 }
 
 /** Mapeia charges/bonuses do summary ML para linhas do DRE (valores negativos = custo). */
@@ -280,84 +231,21 @@ function mergeBillingResponses(
 async function fetchFullBillingTotals(
   accessToken: string,
   key: string,
+  cache?: import("./billing-full-collect").FullBillingDetailsCache,
 ): Promise<{
   fullShipping: number;
   fullStorage: number;
   fullNonCompliance: number;
 }> {
-  const { apiBase } = getMercadoLibreConfig();
-  let fullShipping = 0;
-  let fullStorage = 0;
-  let fullNonCompliance = 0;
-  let fromId = 0;
-  const limit = 1000;
-
-  for (const documentType of ["BILL", "CREDIT_NOTE"] as const) {
-    fromId = 0;
-    for (;;) {
-      const u = new URL(
-        `${apiBase}/billing/integration/periods/key/${key}/group/ML/full/details`,
-      );
-      u.searchParams.set("document_type", documentType);
-      u.searchParams.set("limit", String(limit));
-      u.searchParams.set("from_id", String(fromId));
-
-      const res = await fetch(u.toString(), {
-        headers: { Authorization: `Bearer ${accessToken}` },
-        cache: "no-store",
-      });
-
-      if (!res.ok) break;
-
-      const data = (await res.json()) as FullBillingResponse;
-      const results = data.results ?? [];
-      if (results.length === 0) break;
-
-      for (const row of results) {
-        const amount = Number(row.charge_info?.detail_amount ?? 0);
-        if (!Number.isFinite(amount) || amount === 0) continue;
-
-        const detailType = (row.charge_info?.detail_type ?? "").toUpperCase();
-        const isBonus = isBillingBonusType(detailType);
-        const label = normalizeBillingLabel(row.charge_info?.transaction_detail);
-        // fulfillment_info.type é estruturado e sempre presente neste
-        // endpoint dedicado ao Full — mais confiável que o texto do label,
-        // então checado primeiro (protege inconformidade/armazenagem de
-        // labels genéricos de Full). Toda linha aqui já é um encargo Full,
-        // então na ausência de sinal específico assume-se envio (custo mais
-        // comum), em vez de descartar a cobrança.
-        const typeCategory = classifyFullFulfillmentType(row.fulfillment_info?.type);
-        const labelCategory = classifyFullChargeLabel(label);
-        const category = typeCategory ?? labelCategory ?? "fullShipping";
-
-        if (category === "fullShipping") {
-          fullShipping = isBonus
-            ? addBillingBonus(fullShipping, amount)
-            : subtractBillingCost(fullShipping, amount);
-        } else if (category === "fullStorage") {
-          fullStorage = isBonus
-            ? addBillingBonus(fullStorage, amount)
-            : subtractBillingCost(fullStorage, amount);
-        } else if (category === "fullNonCompliance") {
-          fullNonCompliance = isBonus
-            ? addBillingBonus(fullNonCompliance, amount)
-            : subtractBillingCost(fullNonCompliance, amount);
-        }
-      }
-
-      const lastId = data.last_id;
-      if (
-        typeof lastId !== "number" ||
-        !Number.isFinite(lastId) ||
-        results.length < limit
-      ) {
-        break;
-      }
-      fromId = lastId;
-    }
-  }
-
-  return { fullShipping, fullStorage, fullNonCompliance };
+  const {
+    fetchAllMlFullBillingDetails,
+    aggregateFullDetailsToDreTotals,
+  } = await import("./billing-full-collect");
+  const rows = await fetchAllMlFullBillingDetails(accessToken, key, {
+    documentTypes: ["BILL", "CREDIT_NOTE"],
+    cache,
+  });
+  return aggregateFullDetailsToDreTotals(rows);
 }
 
 function mergeFullTotals(
@@ -390,13 +278,16 @@ export async function fetchMlBillingSummaryForMonth(
   accessToken: string,
   year: number,
   month: number,
+  options?: {
+    fullDetailsCache?: import("./billing-full-collect").FullBillingDetailsCache;
+  },
 ): Promise<MlBillingMonthResult | null> {
   const key = billingPeriodKey(year, month);
 
   const [bill, creditNote, fullTotals, detailEntries] = await Promise.all([
     fetchBillingSummaryRaw(accessToken, key, "BILL"),
     fetchBillingSummaryRaw(accessToken, key, "CREDIT_NOTE"),
-    fetchFullBillingTotals(accessToken, key),
+    fetchFullBillingTotals(accessToken, key, options?.fullDetailsCache),
     fetchAllMlBillingDetails(accessToken, key),
   ]);
 

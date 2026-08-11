@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, Info, Plus, RefreshCw, X } from "lucide-react";
 import { DreCostItemsModal } from "@/components/dre/dre-fixed-costs-modal";
+import { DreSyncOverlay } from "@/components/dre/dre-sync-overlay";
 import { DreYearTable } from "@/components/dre/dre-year-table";
 import {
   AlertDialog,
@@ -18,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FormSelect } from "@/components/ui/form-select";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { consumeSSEStream } from "@/hooks/use-sse-stream";
 import { readApiError } from "@/lib/api-client-error";
 import {
   formatFinancialMoney,
@@ -30,11 +32,28 @@ import {
   dreMonthShortLabel,
 } from "@/lib/dre/dre-table-rows";
 import type { DreYearView } from "@/lib/dre/dre-year-data";
+import type { DreSyncProgressPhase } from "@/lib/dre/dre-month-data";
 import {
   getZonedYearMonth,
   isDreMonthSyncable,
 } from "@/lib/mercadolibre/revenue-periods";
 import { cn } from "@/lib/utils";
+
+const SYNC_ALL_CONCURRENCY = 2;
+
+type DreSyncSseEvent =
+  | {
+      type: "progress";
+      phase: DreSyncProgressPhase;
+      message: string;
+    }
+  | {
+      type: "complete";
+      syncedAt: string;
+      year: number;
+      yearView: DreYearView;
+    }
+  | { type: "error"; message: string };
 
 type SyncConfirmState =
   | { mode: "month"; month: number }
@@ -94,6 +113,9 @@ export function DreClient() {
   const [investmentCostsModalOpen, setInvestmentCostsModalOpen] =
     useState(false);
   const [syncingMonths, setSyncingMonths] = useState<Set<number>>(new Set());
+  const [syncingMonthMessages, setSyncingMonthMessages] = useState<
+    Record<number, string>
+  >({});
   const [syncingAll, setSyncingAll] = useState(false);
   const [syncConfirm, setSyncConfirm] = useState<SyncConfirmState>(null);
   const [preserveAdjustmentIds, setPreserveAdjustmentIds] = useState<
@@ -195,8 +217,12 @@ export function DreClient() {
       }
 
       setSyncingMonths((prev) => new Set(prev).add(month));
+      setSyncingMonthMessages((prev) => ({
+        ...prev,
+        [month]: "Iniciando sincronização…",
+      }));
       try {
-        const res = await fetch("/api/dre/sync", {
+        const res = await fetch("/api/dre/sync?stream=1", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ year, month, preserveLineKeys }),
@@ -205,16 +231,58 @@ export function DreClient() {
           setError(await readApiError(res, "dre_sync_failed"));
           return false;
         }
-        setSessionAdjustedByMonth((prev) => {
-          if (preserveLineKeys.length === 0) {
-            if (!(month in prev)) return prev;
-            const next = { ...prev };
-            delete next[month];
-            return next;
+
+        let completed = false;
+        await consumeSSEStream<DreSyncSseEvent>(res, (event) => {
+          if (event.type === "progress") {
+            setSyncingMonthMessages((prev) => ({
+              ...prev,
+              [month]: event.message,
+            }));
+            return;
           }
-          return { ...prev, [month]: [...preserveLineKeys] };
+          if (event.type === "error") {
+            setError(event.message || "dre_sync_failed");
+            return;
+          }
+          if (event.type === "complete") {
+            completed = true;
+            setData((prev) => {
+              if (!prev || prev.year !== event.yearView.year) {
+                return event.yearView;
+              }
+              // Sync-all (concorrência 2): um yearView antigo não pode
+              // sobrescrever mês já atualizado por outra sync em paralelo.
+              const prevByMonth = new Map(
+                prev.months.map((row) => [row.month, row]),
+              );
+              const months = event.yearView.months.map((row) => {
+                const existing = prevByMonth.get(row.month);
+                if (!existing) return row;
+                const existingTs = existing.syncedAt
+                  ? Date.parse(existing.syncedAt)
+                  : 0;
+                const nextTs = row.syncedAt ? Date.parse(row.syncedAt) : 0;
+                return nextTs >= existingTs ? row : existing;
+              });
+              return { ...event.yearView, months };
+            });
+            setSessionAdjustedByMonth((prev) => {
+              if (preserveLineKeys.length === 0) {
+                if (!(month in prev)) return prev;
+                const next = { ...prev };
+                delete next[month];
+                return next;
+              }
+              return { ...prev, [month]: [...preserveLineKeys] };
+            });
+          }
         });
-        await loadYear(year);
+
+        if (!completed) {
+          setError("Sincronização interrompida antes de concluir.");
+          return false;
+        }
         return true;
       } catch {
         setError("Falha de rede ao sincronizar. Verifique sua conexão.");
@@ -225,9 +293,15 @@ export function DreClient() {
           next.delete(month);
           return next;
         });
+        setSyncingMonthMessages((prev) => {
+          if (!(month in prev)) return prev;
+          const next = { ...prev };
+          delete next[month];
+          return next;
+        });
       }
     },
-    [year, loadYear],
+    [year],
   );
 
   const monthHasSnapshot = useCallback(
@@ -257,25 +331,47 @@ export function DreClient() {
       setSyncingAll(true);
       setError(null);
       const failures: number[] = [];
+      const months: number[] = [];
+      for (let month = 1; month <= 12; month += 1) {
+        if (!isDreMonthSyncable(year, month)) continue;
+        months.push(month);
+      }
+
       try {
-        for (let month = 1; month <= 12; month += 1) {
-          if (!isDreMonthSyncable(year, month)) continue;
-          const ok = await syncMonth(
-            month,
-            preserveByMonth.get(month) ?? [],
-          );
-          if (!ok) failures.push(month);
+        let cursor = 0;
+        async function worker() {
+          while (cursor < months.length) {
+            const month = months[cursor];
+            cursor += 1;
+            const ok = await syncMonth(
+              month,
+              preserveByMonth.get(month) ?? [],
+            );
+            if (!ok) failures.push(month);
+          }
         }
+
+        const workers = Array.from(
+          {
+            length: Math.min(SYNC_ALL_CONCURRENCY, Math.max(months.length, 1)),
+          },
+          () => worker(),
+        );
+        await Promise.all(workers);
+
         if (failures.length > 0) {
           setError(
-            `Sincronização interrompida no mês ${failures[0]}. Corrija o erro e tente novamente.`,
+            `Falha ao sincronizar ${failures.length} mês(es), começando por ${failures[0]}. Corrija o erro e tente novamente.`,
           );
+        } else {
+          // Garante yearTotals consistentes após merges concorrentes.
+          await loadYear(year);
         }
       } finally {
         setSyncingAll(false);
       }
     },
-    [syncMonth, year],
+    [syncMonth, year, loadYear],
   );
 
   const requestSyncAll = useCallback(() => {
@@ -435,6 +531,18 @@ export function DreClient() {
 
   return (
     <TooltipProvider delayDuration={200}>
+      {syncingMonths.size > 0 ? (
+        <DreSyncOverlay
+          year={year}
+          syncingAll={syncingAll}
+          items={[...syncingMonths]
+            .sort((a, b) => a - b)
+            .map((month) => ({
+              month,
+              message: syncingMonthMessages[month] ?? "Sincronizando…",
+            }))}
+        />
+      ) : null}
       <div className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-end gap-2">
@@ -692,6 +800,7 @@ export function DreClient() {
             selectedMonth={selectedMonth}
             onSelectedMonthChange={setSelectedMonth}
             syncingMonths={syncingMonths}
+            syncingMonthMessages={syncingMonthMessages}
             onSyncMonth={requestSyncMonth}
             onLineChange={(lineKey, month, amount) =>
               void handleLineChange(lineKey, month, amount)

@@ -4,15 +4,18 @@ import {
   DRE_EDITABLE_LINE_KEYS,
   type DreEditableLineKey,
 } from "@/lib/dre/dre-calculations";
-import { loadDreYearView } from "@/lib/dre/dre-year-data";
+import { loadDreYearView, type DreYearView } from "@/lib/dre/dre-year-data";
 import {
   buildDreMonthSnapshot,
   persistDreMonthSnapshot,
+  type DreSyncProgress,
 } from "@/lib/dre/dre-month-data";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
 import { parseJsonBody } from "@/lib/api-validation";
 import { isDreMonthSyncable } from "@/lib/mercadolibre/revenue-periods";
+
+export const maxDuration = 300;
 
 const syncBodySchema = z.object({
   year: z.number().int().min(2000).max(2100),
@@ -30,6 +33,57 @@ const syncBodySchema = z.object({
     .default([]),
 });
 
+function sseLine(data: unknown): string {
+  return `data: ${JSON.stringify(data)}\n\n`;
+}
+
+type DreSyncCompletePayload = {
+  syncedAt: string;
+  month: DreYearView["months"][number] | undefined;
+  year: number;
+  yearView: DreYearView;
+};
+
+async function runDreSync(args: {
+  token: string;
+  userId: number;
+  year: number;
+  month: number;
+  preserveLineKeys: DreEditableLineKey[];
+  onProgress?: (progress: DreSyncProgress) => void;
+}): Promise<DreSyncCompletePayload> {
+  const { token, userId, year, month, preserveLineKeys, onProgress } = args;
+
+  onProgress?.({
+    phase: "billing",
+    message: "Iniciando sincronização do mês…",
+  });
+
+  const payload = await buildDreMonthSnapshot(token, userId, year, month, {
+    onProgress,
+  });
+
+  onProgress?.({ phase: "persist", message: "Salvando snapshot do DRE…" });
+
+  const syncedAt = await persistDreMonthSnapshot(
+    year,
+    month,
+    payload,
+    preserveLineKeys,
+  );
+  const yearView = await loadDreYearView(year);
+  const monthView = yearView.months.find((row) => row.month === month);
+
+  onProgress?.({ phase: "done", message: "Sincronização concluída." });
+
+  return {
+    syncedAt: syncedAt.toISOString(),
+    month: monthView,
+    year: yearView.year,
+    yearView,
+  };
+}
+
 export async function POST(request: NextRequest) {
   const auth = await requireAuth();
   if (!auth) return unauthorizedResponse();
@@ -46,22 +100,64 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const stream =
+    request.nextUrl.searchParams.get("stream") === "1" ||
+    request.nextUrl.searchParams.get("stream") === "true";
+
+  if (stream) {
+    const encoder = new TextEncoder();
+    const readable = new ReadableStream({
+      async start(controller) {
+        const send = (data: unknown) => {
+          controller.enqueue(encoder.encode(sseLine(data)));
+        };
+
+        try {
+          const result = await runDreSync({
+            token,
+            userId,
+            year,
+            month,
+            preserveLineKeys,
+            onProgress: (progress) => {
+              send({ type: "progress", ...progress });
+            },
+          });
+          send({ type: "complete", ...result });
+        } catch (e) {
+          logServerError("api/dre/sync POST stream", e);
+          const payload = apiErrorPayload(e, "dre_sync_failed");
+          send({
+            type: "error",
+            message:
+              typeof payload.error === "string"
+                ? payload.error
+                : "dre_sync_failed",
+          });
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(readable, {
+      headers: {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+      },
+    });
+  }
+
   try {
-    const payload = await buildDreMonthSnapshot(token, userId, year, month);
-    const syncedAt = await persistDreMonthSnapshot(
+    const result = await runDreSync({
+      token,
+      userId,
       year,
       month,
-      payload,
       preserveLineKeys,
-    );
-    const yearView = await loadDreYearView(year);
-    const monthView = yearView.months.find((row) => row.month === month);
-
-    return NextResponse.json({
-      syncedAt: syncedAt.toISOString(),
-      month: monthView,
-      year: yearView.year,
     });
+    return NextResponse.json(result);
   } catch (e) {
     logServerError("api/dre/sync POST", e);
     return NextResponse.json(apiErrorPayload(e, "dre_sync_failed"), {

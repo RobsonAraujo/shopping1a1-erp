@@ -6,6 +6,8 @@ import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
 import { parseJsonBody, yearMonthSchema } from "@/lib/api-validation";
 
+export const maxDuration = 300;
+
 export async function POST(request: NextRequest) {
   const auth = await requireAuth();
   if (!auth) {

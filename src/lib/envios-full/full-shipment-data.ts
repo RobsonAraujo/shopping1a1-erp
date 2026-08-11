@@ -189,12 +189,16 @@ export async function importFullCollectChargesFromBilling(
   sellerId: number,
   year: number,
   month: number,
+  options?: {
+    fullDetailsCache?: import("@/lib/mercadolibre/billing-full-collect").FullBillingDetailsCache;
+  },
 ): Promise<ImportFullShipmentsResult> {
   const { shipments, probe } = await fetchFullInboundShipmentsForPeriod(
     accessToken,
     sellerId,
     year,
     month,
+    { fullDetailsCache: options?.fullDetailsCache },
   );
 
   const { start, end } = activityMonthBounds(year, month);
@@ -205,9 +209,18 @@ export async function importFullCollectChargesFromBilling(
     },
   });
 
-  const created: FullShipmentRecord[] = [];
+  if (shipments.length === 0) {
+    return {
+      imported: 0,
+      skipped: 0,
+      replaced: replaced.count,
+      foundInBilling: 0,
+      probe,
+      shipments: [],
+    };
+  }
 
-  for (const shipment of shipments) {
+  const rowsData = shipments.map((shipment) => {
     const normalized = normalizeImportedShipmentInput({
       shippedAt: shipment.shippedAt
         ? new Date(shipment.shippedAt)
@@ -225,23 +238,30 @@ export async function importFullCollectChargesFromBilling(
         : `Envio N.º ${shipment.inboundId}`,
     });
 
-    const row = await prisma.fullShipment.create({
-      data: {
-        shippedAt: normalized.shippedAt,
-        totalCost: normalized.totalCost,
-        nonComplianceCost: normalized.nonComplianceCost,
-        totalUnits: normalized.totalUnits,
-        costPerUnit: normalized.costPerUnit,
-        source: normalized.source,
-        mlInboundId: normalized.mlInboundId,
-        productCount: normalized.productCount,
-        billingYear: normalized.billingYear,
-        billingMonth: normalized.billingMonth,
-        mlChargeDetailId: normalized.mlChargeDetailId,
-        notes: normalized.notes,
-      },
+    return {
+      shippedAt: normalized.shippedAt,
+      totalCost: normalized.totalCost,
+      nonComplianceCost: normalized.nonComplianceCost,
+      totalUnits: normalized.totalUnits,
+      costPerUnit: normalized.costPerUnit,
+      source: normalized.source,
+      mlInboundId: normalized.mlInboundId,
+      productCount: normalized.productCount,
+      billingYear: normalized.billingYear,
+      billingMonth: normalized.billingMonth,
+      mlChargeDetailId: normalized.mlChargeDetailId,
+      notes: normalized.notes,
+    };
+  });
+
+  const CREATE_CHUNK = 100;
+  const created: FullShipmentRecord[] = [];
+  for (let i = 0; i < rowsData.length; i += CREATE_CHUNK) {
+    const chunk = rowsData.slice(i, i + CREATE_CHUNK);
+    const rows = await prisma.fullShipment.createManyAndReturn({
+      data: chunk,
     });
-    created.push(toRecord(row));
+    created.push(...rows.map(toRecord));
   }
 
   return {

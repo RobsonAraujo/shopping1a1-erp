@@ -214,6 +214,8 @@ type DreYearTableProps = {
   selectedMonth?: number | null;
   onSelectedMonthChange?: (month: number | null) => void;
   syncingMonths: Set<number>;
+  /** Mensagem de estágio SSE por mês (ex.: "Importando Relatório Full…"). */
+  syncingMonthMessages?: Record<number, string>;
   onSyncMonth: (month: number) => void;
   onLineChange: (
     lineKey: DreEditableLineKey,
@@ -1408,6 +1410,7 @@ function DreYearTableMobile({
   onToggleDetails,
   onSelectedMonthChange,
   syncingMonths,
+  syncingMonthMessages = {},
   onSyncMonth,
   onLineChange,
   onLineRestore,
@@ -1567,6 +1570,12 @@ function DreYearTableMobile({
               size="sm"
               className="ml-auto gap-1.5"
               disabled={syncingMonths.has(selectedMonth.month)}
+              title={
+                syncingMonths.has(selectedMonth.month)
+                  ? (syncingMonthMessages[selectedMonth.month] ??
+                    "Sincronizando…")
+                  : undefined
+              }
               onClick={() => onSyncMonth(selectedMonth.month)}
             >
               <RefreshCw
@@ -1576,7 +1585,10 @@ function DreYearTableMobile({
                 )}
                 aria-hidden
               />
-              Sincronizar
+              {syncingMonths.has(selectedMonth.month)
+                ? (syncingMonthMessages[selectedMonth.month] ??
+                  "Sincronizando…")
+                : "Sincronizar"}
             </Button>
           ) : null}
         </div>
@@ -1678,6 +1690,7 @@ function MonthHeaderCell({
   year,
   month,
   syncing,
+  syncMessage,
   selected,
   dimmed,
   onSync,
@@ -1686,6 +1699,7 @@ function MonthHeaderCell({
   year: number;
   month: DreMonthView;
   syncing: boolean;
+  syncMessage?: string;
   selected: boolean;
   dimmed: boolean;
   onSync: () => void;
@@ -1738,7 +1752,16 @@ function MonthHeaderCell({
             variant="ghost"
             size="icon-sm"
             className="size-6 shrink-0 rounded-sm border border-[var(--border)] p-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-            aria-label={`Sincronizar ${month.label}`}
+            aria-label={
+              syncing
+                ? `Sincronizando ${month.label}: ${syncMessage ?? "em andamento"}`
+                : `Sincronizar ${month.label}`
+            }
+            title={
+              syncing
+                ? (syncMessage ?? "Sincronizando…")
+                : `Sincronizar ${month.label}`
+            }
             disabled={syncing}
             onClick={(e) => {
               e.stopPropagation();
@@ -1748,7 +1771,6 @@ function MonthHeaderCell({
             <RefreshCw
               className={cn("size-3", syncing && "animate-spin")}
               aria-hidden
-              // style={{ padding: 2 }}
             />
           </Button>
         ) : null}
@@ -1772,6 +1794,7 @@ function DreYearTableDesktop({
   selectedMonth: selectedMonthProp = null,
   onSelectedMonthChange,
   syncingMonths,
+  syncingMonthMessages = {},
   onSyncMonth,
   onLineChange,
   onLineRestore,
@@ -1910,6 +1933,7 @@ function DreYearTableDesktop({
                   year={data.year}
                   month={month}
                   syncing={syncingMonths.has(month.month)}
+                  syncMessage={syncingMonthMessages[month.month]}
                   selected={
                     !isEditing && selectedMonth === month.month
                   }

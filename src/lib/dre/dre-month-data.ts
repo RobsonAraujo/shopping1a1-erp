@@ -25,8 +25,6 @@ import { loadKitsByMlItemId, resolveKitPricing } from "@/lib/kit-data";
 import { normalizeProductSku } from "@/lib/product-pricing";
 import {
   fetchCancelledOrderLinesInDateRange,
-  fetchCancelledOrderRevenueInDateRange,
-  fetchOrderMetricsByItemInDateRange,
   fetchPaidOrderLinesInDateRange,
   fetchItemsByIdsBatched,
 } from "@/lib/mercadolibre/api";
@@ -34,6 +32,10 @@ import {
   fetchMlBillingSummaryForMonth,
   isBillingSummaryEmpty,
 } from "@/lib/mercadolibre/billing-summary";
+import {
+  createFullBillingDetailsCache,
+  type FullBillingDetailsCache,
+} from "@/lib/mercadolibre/billing-full-collect";
 import { listFullShipmentsForPeriod, importFullCollectChargesFromBilling } from "@/lib/envios-full/full-shipment-data";
 import {
   fetchListingSaleFee,
@@ -52,6 +54,53 @@ import {
   type CalendarDateRange,
 } from "@/lib/mercadolibre/revenue-periods";
 import { fetchSellerShippingCost } from "@/lib/mercadolibre/seller-shipping-cost";
+
+const FALLBACK_ML_COST_CONCURRENCY = 8;
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const current = nextIndex;
+      nextIndex += 1;
+      results[current] = await mapper(items[current], current);
+    }
+  }
+
+  const workers = Array.from(
+    { length: Math.min(concurrency, Math.max(items.length, 1)) },
+    () => worker(),
+  );
+  await Promise.all(workers);
+  return results;
+}
+
+export type DreSyncProgressPhase =
+  | "billing"
+  | "orders"
+  | "ads"
+  | "erp"
+  | "ml_costs"
+  | "full"
+  | "cancelled"
+  | "persist"
+  | "done";
+
+export type DreSyncProgress = {
+  phase: DreSyncProgressPhase;
+  message: string;
+};
+
+export type BuildDreMonthSnapshotOptions = {
+  onProgress?: (progress: DreSyncProgress) => void;
+  fullDetailsCache?: FullBillingDetailsCache;
+};
 
 async function computeErpCostsFromOrderLines(
   accessToken: string,
@@ -347,12 +396,15 @@ async function estimateMlCostsFallback(
   saleFeeBreakdown: DreLineBreakdownItem[];
   sellerShippingBreakdown: DreLineBreakdownItem[];
 }> {
-  const cancelledRevenue = await fetchCancelledOrderRevenueInDateRange(
+  const cancelledLines = await fetchCancelledOrderLinesInDateRange(
     accessToken,
     sellerId,
     from,
     to,
     stockPlanningConfig.salesWindowDateField,
+  );
+  const cancelledRevenue = roundMoney(
+    cancelledLines.reduce((sum, line) => sum + line.revenue, 0),
   );
 
   const itemIds = [...new Set(orderLines.map((line) => line.itemId))];
@@ -362,6 +414,96 @@ async function estimateMlCostsFallback(
 
   const feeCache = new Map<string, number>();
   const shippingCache = new Map<string, number>();
+  const feeInflight = new Map<string, Promise<number>>();
+  const shippingInflight = new Map<string, Promise<number>>();
+
+  async function resolveUnitFee(
+    line: { itemId: string; quantity: number; revenue: number },
+  ): Promise<number> {
+    const item = itemById.get(line.itemId);
+    if (!item || line.quantity <= 0) return 0;
+    const unitPrice =
+      line.quantity > 0 ? line.revenue / line.quantity : item.price;
+    const feeKey = `${line.itemId}:${roundMoney(unitPrice)}`;
+    const cached = feeCache.get(feeKey);
+    if (cached !== undefined) return cached;
+    const inflight = feeInflight.get(feeKey);
+    if (inflight) return inflight;
+
+    const promise = (async () => {
+      let unitFee = 0;
+      if (item.category_id && item.listing_type_id) {
+        try {
+          const fee = await fetchListingSaleFee(accessToken, {
+            siteId: siteIdFromItemId(line.itemId),
+            price: unitPrice,
+            categoryId: item.category_id,
+            listingTypeId: item.listing_type_id,
+            currencyId: item.currency_id,
+            logisticType: item.shipping?.logistic_type,
+            shippingMode: item.shipping?.mode,
+          });
+          unitFee = fee.feeAmount;
+        } catch {
+          unitFee = 0;
+        }
+      }
+      feeCache.set(feeKey, unitFee);
+      feeInflight.delete(feeKey);
+      return unitFee;
+    })();
+    feeInflight.set(feeKey, promise);
+    return promise;
+  }
+
+  async function resolveUnitShip(
+    line: { itemId: string; quantity: number; revenue: number },
+  ): Promise<number> {
+    const item = itemById.get(line.itemId);
+    if (!item || line.quantity <= 0) return 0;
+    const shipKey = line.itemId;
+    const cached = shippingCache.get(shipKey);
+    if (cached !== undefined) return cached;
+    const inflight = shippingInflight.get(shipKey);
+    if (inflight) return inflight;
+
+    const unitPrice =
+      line.quantity > 0 ? line.revenue / line.quantity : item.price;
+    const promise = (async () => {
+      let unitShip = 0;
+      try {
+        const shipping = await fetchSellerShippingCost(accessToken, {
+          sellerId,
+          item,
+          effectiveSalePrice: unitPrice,
+        });
+        unitShip = shipping.applicable ? shipping.cost : 0;
+      } catch {
+        unitShip = 0;
+      }
+      shippingCache.set(shipKey, unitShip);
+      shippingInflight.delete(shipKey);
+      return unitShip;
+    })();
+    shippingInflight.set(shipKey, promise);
+    return promise;
+  }
+
+  const lineCosts = await mapWithConcurrency(
+    orderLines,
+    FALLBACK_ML_COST_CONCURRENCY,
+    async (line) => {
+      const [unitFee, unitShip] = await Promise.all([
+        resolveUnitFee(line),
+        resolveUnitShip(line),
+      ]);
+      return {
+        line,
+        feeAmount: unitFee * line.quantity,
+        shipAmount: unitShip * line.quantity,
+      };
+    },
+  );
 
   let saleFeeTotal = 0;
   let shippingTotal = 0;
@@ -385,7 +527,7 @@ async function estimateMlCostsFallback(
     map.set(key, { key, sku, title, quantity, amount: roundMoney(amount) });
   }
 
-  for (const line of orderLines) {
+  for (const { line, feeAmount, shipAmount } of lineCosts) {
     const item = itemById.get(line.itemId);
     if (!item || line.quantity <= 0) continue;
 
@@ -393,31 +535,6 @@ async function estimateMlCostsFallback(
     const key = sku ? normalizeProductSku(sku) : `item:${line.itemId}`;
     const title = item.title ?? line.itemId;
 
-    const unitPrice =
-      line.quantity > 0 ? line.revenue / line.quantity : item.price;
-    const feeKey = `${line.itemId}:${roundMoney(unitPrice)}`;
-    let unitFee = feeCache.get(feeKey);
-    if (unitFee === undefined) {
-      unitFee = 0;
-      if (item.category_id && item.listing_type_id) {
-        try {
-          const fee = await fetchListingSaleFee(accessToken, {
-            siteId: siteIdFromItemId(line.itemId),
-            price: unitPrice,
-            categoryId: item.category_id,
-            listingTypeId: item.listing_type_id,
-            currencyId: item.currency_id,
-            logisticType: item.shipping?.logistic_type,
-            shippingMode: item.shipping?.mode,
-          });
-          unitFee = fee.feeAmount;
-        } catch {
-          unitFee = 0;
-        }
-      }
-      feeCache.set(feeKey, unitFee);
-    }
-    const feeAmount = unitFee * line.quantity;
     saleFeeTotal += feeAmount;
     addToLineBreakdown(
       saleFeeBreakdownByKey,
@@ -428,23 +545,6 @@ async function estimateMlCostsFallback(
       -feeAmount,
     );
 
-    const shipKey = line.itemId;
-    let unitShip = shippingCache.get(shipKey);
-    if (unitShip === undefined) {
-      unitShip = 0;
-      try {
-        const shipping = await fetchSellerShippingCost(accessToken, {
-          sellerId,
-          item,
-          effectiveSalePrice: unitPrice,
-        });
-        unitShip = shipping.applicable ? shipping.cost : 0;
-      } catch {
-        unitShip = 0;
-      }
-      shippingCache.set(shipKey, unitShip);
-    }
-    const shipAmount = unitShip * line.quantity;
     shippingTotal += shipAmount;
     addToLineBreakdown(
       sellerShippingBreakdownByKey,
@@ -479,25 +579,17 @@ async function fetchOrderDataForRange(
   range: CalendarDateRange,
 ) {
   const dateField = stockPlanningConfig.salesWindowDateField;
-  const [orderMetrics, orderLines] = await Promise.all([
-    fetchOrderMetricsByItemInDateRange(
-      accessToken,
-      sellerId,
-      range.from,
-      range.to,
-      dateField,
-    ),
-    fetchPaidOrderLinesInDateRange(
-      accessToken,
-      sellerId,
-      range.from,
-      range.to,
-      dateField,
-    ),
-  ]);
+  // Uma única paginação de pedidos pagos — metrics e lines saem do mesmo scrape.
+  const orderLines = await fetchPaidOrderLinesInDateRange(
+    accessToken,
+    sellerId,
+    range.from,
+    range.to,
+    dateField,
+  );
 
   const revenueMl = roundMoney(
-    Object.values(orderMetrics.revenueByItem).reduce((sum, n) => sum + n, 0),
+    orderLines.reduce((sum, line) => sum + line.revenue, 0),
   );
 
   return { orderLines, revenueMl };
@@ -508,20 +600,41 @@ export async function buildDreMonthSnapshot(
   sellerId: number,
   year: number,
   month: number,
+  options: BuildDreMonthSnapshotOptions = {},
 ): Promise<DreMonthSnapshotPayload> {
   const timeZone = reportsConfig.catalogCompetitionTimezone;
   const calendarRange = getCalendarMonthRange(year, month, timeZone);
   const syncWarnings: string[] = [];
+  const fullDetailsCache =
+    options.fullDetailsCache ?? createFullBillingDetailsCache();
+  const report = (progress: DreSyncProgress) => {
+    options.onProgress?.(progress);
+  };
 
-  let billing: Awaited<ReturnType<typeof fetchMlBillingSummaryForMonth>> = null;
-  try {
-    billing = await fetchMlBillingSummaryForMonth(accessToken, year, month);
-  } catch (error) {
-    logServerError("dre-month-data billing", error);
-    syncWarnings.push(
-      "API de faturamento ML indisponível; tarifas estimadas pelos pedidos.",
-    );
-  }
+  report({ phase: "billing", message: "Buscando fatura e pedidos do ML…" });
+
+  const [billingResult, orderResult] = await Promise.all([
+    (async () => {
+      try {
+        // Popula fullDetailsCache com /full/details do mês — reutilizado no
+        // auto-import Full sem re-paginar.
+        return await fetchMlBillingSummaryForMonth(accessToken, year, month, {
+          fullDetailsCache,
+        });
+      } catch (error) {
+        logServerError("dre-month-data billing", error);
+        syncWarnings.push(
+          "API de faturamento ML indisponível; tarifas estimadas pelos pedidos.",
+        );
+        return null;
+      }
+    })(),
+    fetchOrderDataForRange(accessToken, sellerId, calendarRange),
+  ]);
+
+  const billing = billingResult;
+  const { orderLines, revenueMl: ordersRevenueMl } = orderResult;
+  const revenueMl = ordersRevenueMl;
 
   const billingAlignsWithCivil =
     billing?.billingPeriod !== null &&
@@ -540,68 +653,76 @@ export async function buildDreMonthSnapshot(
     );
   }
 
-  const { orderLines, revenueMl: ordersRevenueMl } =
-    await fetchOrderDataForRange(accessToken, sellerId, calendarRange);
+  report({ phase: "ads", message: "Carregando ADS e custos ERP…" });
 
-  const revenueMl = ordersRevenueMl;
+  const [adsResult, erpCosts] = await Promise.all([
+    (async () => {
+      let adsCost = 0;
+      let adsCostBreakdown: DreLineBreakdownItem[] | undefined;
+      try {
+        const advertiserId = await fetchPadsAdvertiserId(accessToken);
+        if (advertiserId !== null) {
+          const { dateFrom, dateTo } = getProductAdsDateRangeForMonth(
+            year,
+            month,
+          );
+          const adsMetrics = await fetchProductAdsMetricsByItem(accessToken, {
+            advertiserId,
+            siteId: "MLB",
+            dateFrom,
+            dateTo,
+          });
+          adsCost = roundMoney(
+            [...adsMetrics.values()].reduce((sum, row) => sum + row.cost, 0),
+          );
+          const adsItemIds = [...adsMetrics.keys()].filter(
+            (id) => (adsMetrics.get(id)?.cost ?? 0) !== 0,
+          );
+          const adsItems = await fetchItemsByIdsBatched(accessToken, adsItemIds);
+          const adsItemById = new Map(adsItems.map((item) => [item.id, item]));
+          const adsSkuByItemId = new Map(
+            adsItems.map((item) => [item.id, getItemSku(item)]),
+          );
+          adsCostBreakdown = adsItemIds
+            .map((itemId) => {
+              const metrics = adsMetrics.get(itemId)!;
+              const sku = adsSkuByItemId.get(itemId) ?? null;
+              const title = adsItemById.get(itemId)?.title ?? itemId;
+              return {
+                key: sku ? normalizeProductSku(sku) : `item:${itemId}`,
+                sku,
+                title,
+                quantity: metrics.unitsQuantity,
+                amount: roundMoney(-metrics.cost),
+              };
+            })
+            .sort((a, b) => a.amount - b.amount);
+        }
+      } catch (error) {
+        logServerError("dre-month-data ads", error);
+        if (billing && billing.adsCost > 0 && billingAlignsWithCivil) {
+          adsCost = billing.adsCost;
+          adsCostBreakdown = undefined;
+        } else {
+          syncWarnings.push(
+            "Não foi possível carregar o gasto com campanhas ADS neste mês.",
+          );
+        }
+      }
+      return { adsCost, adsCostBreakdown };
+    })(),
+    computeErpCostsFromOrderLines(
+      accessToken,
+      sellerId,
+      orderLines,
+      year,
+      month,
+    ),
+  ]);
 
-  let adsCost = 0;
-  let adsCostBreakdown: DreLineBreakdownItem[] | undefined;
-  try {
-    const advertiserId = await fetchPadsAdvertiserId(accessToken);
-    if (advertiserId !== null) {
-      const { dateFrom, dateTo } = getProductAdsDateRangeForMonth(year, month);
-      const adsMetrics = await fetchProductAdsMetricsByItem(accessToken, {
-        advertiserId,
-        siteId: "MLB",
-        dateFrom,
-        dateTo,
-      });
-      adsCost = roundMoney(
-        [...adsMetrics.values()].reduce((sum, row) => sum + row.cost, 0),
-      );
-      const adsItemIds = [...adsMetrics.keys()].filter(
-        (id) => (adsMetrics.get(id)?.cost ?? 0) !== 0,
-      );
-      const adsItems = await fetchItemsByIdsBatched(accessToken, adsItemIds);
-      const adsItemById = new Map(adsItems.map((item) => [item.id, item]));
-      const adsSkuByItemId = new Map(
-        adsItems.map((item) => [item.id, getItemSku(item)]),
-      );
-      adsCostBreakdown = adsItemIds
-        .map((itemId) => {
-          const metrics = adsMetrics.get(itemId)!;
-          const sku = adsSkuByItemId.get(itemId) ?? null;
-          const title = adsItemById.get(itemId)?.title ?? itemId;
-          return {
-            key: sku ? normalizeProductSku(sku) : `item:${itemId}`,
-            sku,
-            title,
-            quantity: metrics.unitsQuantity,
-            amount: roundMoney(-metrics.cost),
-          };
-        })
-        .sort((a, b) => a.amount - b.amount);
-    }
-  } catch (error) {
-    logServerError("dre-month-data ads", error);
-    if (billing && billing.adsCost > 0 && billingAlignsWithCivil) {
-      adsCost = billing.adsCost;
-      adsCostBreakdown = undefined;
-    } else {
-      syncWarnings.push(
-        "Não foi possível carregar o gasto com campanhas ADS neste mês.",
-      );
-    }
-  }
+  let { adsCost, adsCostBreakdown } = adsResult;
 
-  const erpCosts = await computeErpCostsFromOrderLines(
-    accessToken,
-    sellerId,
-    orderLines,
-    year,
-    month,
-  );
+  report({ phase: "ml_costs", message: "Mapeando custos ML…" });
 
   let saleFeeMl = 0;
   let sellerShippingMl = 0;
@@ -667,8 +788,6 @@ export async function buildDreMonthSnapshot(
       saleFeeMl = fallback.saleFeeMl;
       sellerShippingMl = fallback.sellerShippingMl;
       cancelledSalesMl = fallback.cancelledSalesMl;
-      // Devoluções parciais não têm estimativa por pedido — manter da fatura
-      // (mesmo padrão de Full / Minha Página / Afiliados).
       partialReturnsMl = billing!.partialReturns;
       fullShippingMl = billing!.fullShipping;
       fullStorageMl = billing!.fullStorage;
@@ -685,7 +804,6 @@ export async function buildDreMonthSnapshot(
       syncWarnings.push(
         "Não foi possível estimar tarifas e frete do Mercado Livre.",
       );
-      // Mesmo com falha no fallback de pedidos, preserve o que a fatura trouxe.
       partialReturnsMl = billing!.partialReturns;
       fullShippingMl = billing!.fullShipping;
       fullStorageMl = billing!.fullStorage;
@@ -729,10 +847,11 @@ export async function buildDreMonthSnapshot(
     }
   }
 
-  // Full envios/inconformidade: preferir o Relatório Full (tabela full_shipments).
-  // Se o mês ainda não foi importado, roda o mesmo fluxo do botão "Importar"
-  // (Fulfillment ops + fatura full/details → grava full_shipments) e só então
-  // soma. Sem isso, cairíamos no total consolidado da fatura (menos preciso).
+  report({
+    phase: "full",
+    message: "Conferindo Relatório Full (envios/inconformidade)…",
+  });
+
   let fullReportSourced = false;
   try {
     let fullShipmentRecords = await listFullShipmentsForPeriod(year, month);
@@ -740,11 +859,16 @@ export async function buildDreMonthSnapshot(
 
     if (fullShipmentRecords.length === 0) {
       try {
+        report({
+          phase: "full",
+          message: "Importando Relatório Full automaticamente…",
+        });
         const imported = await importFullCollectChargesFromBilling(
           accessToken,
           sellerId,
           year,
           month,
+          { fullDetailsCache },
         );
         fullShipmentRecords = imported.shipments;
         autoImported = imported.imported > 0;
@@ -806,6 +930,11 @@ export async function buildDreMonthSnapshot(
       `${erpCosts.taxFromDifferentPeriodCount} anúncio(s) usaram % de imposto de um mês diferente (sem apuração tributária própria em ${String(month).padStart(2, "0")}/${year}).`,
     );
   }
+
+  report({
+    phase: "cancelled",
+    message: "Calculando overlay de pedidos cancelados…",
+  });
 
   let cancelledIncludeOverlay: DreCancelledIncludeOverlay | undefined;
   let cancelledBreakdown: DreProductCostBreakdownItem[] = [];

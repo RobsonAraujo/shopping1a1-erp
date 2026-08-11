@@ -1,9 +1,12 @@
 import { getMercadoLibreConfig } from "./config";
 import {
+  addBillingBonus,
   billingPeriodKey,
   classifyFullChargeLabel,
   classifyMlBillingEntry,
+  isBillingBonusType,
   normalizeBillingLabel,
+  subtractBillingCost,
 } from "./billing-shared";
 import type { MlBillingDetailEntry } from "./billing-details";
 import { fetchAllMlBillingDetails } from "./billing-details";
@@ -508,19 +511,36 @@ export function extractFullCollectCharges(
   return extractFullCollectChargesFromMlDetails(entries);
 }
 
-export async function fetchAllMlFullBillingDetails(
+/** Cache in-request: evita re-paginar `/full/details` na mesma sync (fatura + import Full). */
+export type FullBillingDetailsCache = Map<string, Promise<FullBillingDetailRow[]>>;
+
+export function createFullBillingDetailsCache(): FullBillingDetailsCache {
+  return new Map();
+}
+
+function fullDetailsCacheKey(
+  periodKey: string,
+  documentType: "BILL" | "CREDIT_NOTE",
+): string {
+  return `${periodKey}:${documentType}`;
+}
+
+async function fetchMlFullBillingDetailsForDocument(
   accessToken: string,
   key: string,
-  options?: { documentTypes?: readonly ("BILL" | "CREDIT_NOTE")[] },
+  documentType: "BILL" | "CREDIT_NOTE",
+  cache?: FullBillingDetailsCache,
 ): Promise<FullBillingDetailRow[]> {
-  const { apiBase } = getMercadoLibreConfig();
-  const limit = 1000;
-  const allRows: FullBillingDetailRow[] = [];
-  const documentTypes = options?.documentTypes ?? ["BILL", "CREDIT_NOTE"];
+  const ck = fullDetailsCacheKey(key, documentType);
+  const hit = cache?.get(ck);
+  if (hit) return hit;
 
-  for (const documentType of documentTypes) {
-    const rowsBefore = allRows.length;
+  const promise = (async () => {
+    const { apiBase } = getMercadoLibreConfig();
+    const limit = 1000;
+    const allRows: FullBillingDetailRow[] = [];
     let fromId = 0;
+
     for (;;) {
       const u = new URL(
         `${apiBase}/billing/integration/periods/key/${key}/group/ML/full/details`,
@@ -563,7 +583,6 @@ export async function fetchAllMlFullBillingDetails(
       fromId = lastId;
     }
 
-    const docRows = allRows.slice(rowsBefore);
     const byInbound: Record<
       string,
       {
@@ -574,7 +593,7 @@ export async function fetchAllMlFullBillingDetails(
         dates: Array<string | null>;
       }
     > = {};
-    for (const row of docRows) {
+    for (const row of allRows) {
       const id = row.fulfillment_info?.inbound_id;
       if (id == null || !DEBUG_TARGET_INBOUNDS.has(String(id))) continue;
       if (!isInboundCollectFromFullDetailsRow(row)) continue;
@@ -607,9 +626,82 @@ export async function fetchAllMlFullBillingDetails(
         "H2",
       );
     }
+
+    return allRows;
+  })();
+
+  cache?.set(ck, promise);
+  try {
+    return await promise;
+  } catch (e) {
+    cache?.delete(ck);
+    throw e;
+  }
+}
+
+export async function fetchAllMlFullBillingDetails(
+  accessToken: string,
+  key: string,
+  options?: {
+    documentTypes?: readonly ("BILL" | "CREDIT_NOTE")[];
+    cache?: FullBillingDetailsCache;
+  },
+): Promise<FullBillingDetailRow[]> {
+  const documentTypes = options?.documentTypes ?? ["BILL", "CREDIT_NOTE"];
+  const allRows: FullBillingDetailRow[] = [];
+
+  for (const documentType of documentTypes) {
+    const rows = await fetchMlFullBillingDetailsForDocument(
+      accessToken,
+      key,
+      documentType,
+      options?.cache,
+    );
+    allRows.push(...rows);
   }
 
   return allRows;
+}
+
+/** Agrega linhas de `/full/details` nas três linhas Full do DRE. */
+export function aggregateFullDetailsToDreTotals(
+  rows: FullBillingDetailRow[],
+): {
+  fullShipping: number;
+  fullStorage: number;
+  fullNonCompliance: number;
+} {
+  let fullShipping = 0;
+  let fullStorage = 0;
+  let fullNonCompliance = 0;
+
+  for (const row of rows) {
+    const amount = chargeAmount(row.charge_info);
+    if (amount === 0) continue;
+
+    const detailType = (row.charge_info?.detail_type ?? "").toUpperCase();
+    const isBonus = isBillingBonusType(detailType);
+    const label = normalizeBillingLabel(row.charge_info?.transaction_detail);
+    const typeCategory = classifyFullFulfillmentType(row.fulfillment_info?.type);
+    const labelCategory = classifyFullChargeLabel(label);
+    const category = typeCategory ?? labelCategory ?? "fullShipping";
+
+    if (category === "fullShipping") {
+      fullShipping = isBonus
+        ? addBillingBonus(fullShipping, amount)
+        : subtractBillingCost(fullShipping, amount);
+    } else if (category === "fullStorage") {
+      fullStorage = isBonus
+        ? addBillingBonus(fullStorage, amount)
+        : subtractBillingCost(fullStorage, amount);
+    } else if (category === "fullNonCompliance") {
+      fullNonCompliance = isBonus
+        ? addBillingBonus(fullNonCompliance, amount)
+        : subtractBillingCost(fullNonCompliance, amount);
+    }
+  }
+
+  return { fullShipping, fullStorage, fullNonCompliance };
 }
 
 export type FullInboundBillingProbe = {
@@ -625,6 +717,7 @@ async function fetchBillingGroupedInboundsForPeriods(
   accessToken: string,
   year: number,
   month: number,
+  cache?: FullBillingDetailsCache,
 ): Promise<{
   grouped: FullInboundShipment[];
   fullDetailsRowCount: number;
@@ -644,6 +737,7 @@ async function fetchBillingGroupedInboundsForPeriods(
     try {
       const rows = await fetchAllMlFullBillingDetails(accessToken, key, {
         documentTypes: ["BILL"],
+        cache,
       });
       fullDetailsRowCount += rows.length;
       for (const shipment of groupFullDetailsIntoInboundShipments(rows)) {
@@ -675,6 +769,7 @@ async function fetchFullInboundShipmentsBillingFallback(
   accessToken: string,
   year: number,
   month: number,
+  cache?: FullBillingDetailsCache,
 ): Promise<{
   shipments: FullInboundShipment[];
   fullDetailsRowCount: number;
@@ -687,6 +782,7 @@ async function fetchFullInboundShipmentsBillingFallback(
 
   const fullDetailRows = await fetchAllMlFullBillingDetails(accessToken, key, {
     documentTypes: ["BILL"],
+    cache,
   });
   const grouped = groupFullDetailsIntoInboundShipments(fullDetailRows);
   for (const shipment of grouped) {
@@ -752,15 +848,17 @@ export async function fetchFullInboundShipmentsForPeriod(
   sellerId: number,
   year: number,
   month: number,
+  options?: { fullDetailsCache?: FullBillingDetailsCache },
 ): Promise<{ shipments: FullInboundShipment[]; probe: FullInboundBillingProbe }> {
   const { fetchSellerFulfillmentInventoryIds } = await import("./api");
   const inventoryIds = await fetchSellerFulfillmentInventoryIds(
     accessToken,
     sellerId,
   );
+  const cache = options?.fullDetailsCache;
 
   const [billing, discoveries] = await Promise.all([
-    fetchBillingGroupedInboundsForPeriods(accessToken, year, month),
+    fetchBillingGroupedInboundsForPeriods(accessToken, year, month, cache),
     fetchInboundReceptionsForActivityMonth(
       accessToken,
       sellerId,
@@ -872,6 +970,7 @@ export async function fetchFullInboundShipmentsForPeriod(
     accessToken,
     year,
     month,
+    cache,
   );
 
   return {
