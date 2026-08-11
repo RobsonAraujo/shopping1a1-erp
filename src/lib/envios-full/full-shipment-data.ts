@@ -24,6 +24,7 @@ function toRecord(row: FullShipment): FullShipmentRecord {
     id: row.id,
     shippedAt: row.shippedAt.toISOString(),
     totalCost: decimalToNumber(row.totalCost),
+    nonComplianceCost: decimalToNumber(row.nonComplianceCost),
     totalUnits: row.totalUnits,
     costPerUnit: decimalToNumber(row.costPerUnit),
     source: row.source,
@@ -90,6 +91,7 @@ export async function createFullShipment(
     data: {
       shippedAt: normalized.shippedAt,
       totalCost: normalized.totalCost,
+      nonComplianceCost: normalized.nonComplianceCost,
       totalUnits: normalized.totalUnits,
       costPerUnit: normalized.costPerUnit,
       source: normalized.source,
@@ -183,6 +185,7 @@ export async function importFullCollectChargesFromBilling(
         ? new Date(shipment.shippedAt)
         : defaultShippedAtForBillingPeriod(year, month),
       totalCost: shipment.totalCost,
+      nonComplianceCost: shipment.nonComplianceCost,
       totalUnits: shipment.totalUnits,
       productCount: shipment.productCount,
       mlInboundId: shipment.inboundId,
@@ -198,6 +201,7 @@ export async function importFullCollectChargesFromBilling(
       data: {
         shippedAt: normalized.shippedAt,
         totalCost: normalized.totalCost,
+        nonComplianceCost: normalized.nonComplianceCost,
         totalUnits: normalized.totalUnits,
         costPerUnit: normalized.costPerUnit,
         source: normalized.source,

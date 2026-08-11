@@ -147,6 +147,73 @@ describe("groupFullDetailsIntoInboundShipments", () => {
     assert.equal(shipments[0]?.unassigned, true);
   });
 
+  it("defaults an unrecognized sub_type/label to fullShipping instead of dropping the row (regression: was excluding real collect charges)", () => {
+    const shipments = groupFullDetailsIntoInboundShipments([
+      {
+        charge_info: {
+          detail_amount: 600,
+          detail_type: "CHARGE",
+          detail_sub_type: "UNKNOWN",
+          transaction_detail: "Full",
+          detail_id: 1,
+          creation_date_time: "2026-07-20T10:00:00",
+        },
+        fulfillment_info: {
+          inbound_id: 71750136,
+          quantity: 50,
+          sku: "SKU-A",
+        },
+      },
+    ]);
+
+    assert.equal(shipments.length, 1);
+    assert.equal(shipments[0]?.inboundId, "71750136");
+    assert.equal(shipments[0]?.totalCost, 600);
+    assert.equal(shipments[0]?.nonComplianceCost, 0);
+    assert.equal(shipments[0]?.totalUnits, 50);
+  });
+
+  it("sums an INBOUND_PENALTY charge into the same envio's totalCost and tracks it as nonComplianceCost", () => {
+    const shipments = groupFullDetailsIntoInboundShipments([
+      {
+        charge_info: {
+          detail_amount: 600,
+          detail_type: "CHARGE",
+          detail_sub_type: "CFCBI",
+          transaction_detail: "Custo do serviço de coleta Full",
+          detail_id: 1,
+          creation_date_time: "2026-07-20T10:00:00",
+        },
+        fulfillment_info: {
+          type: "INBOUND_COLLECT",
+          inbound_id: 71750136,
+          quantity: 50,
+          sku: "SKU-A",
+        },
+      },
+      {
+        charge_info: {
+          detail_amount: 129,
+          detail_type: "CHARGE",
+          detail_sub_type: "CFPB",
+          transaction_detail: "Full",
+          detail_id: 2,
+          creation_date_time: "2026-07-20T10:05:00",
+        },
+        fulfillment_info: {
+          type: "INBOUND_PENALTY",
+          inbound_id: 71750136,
+        },
+      },
+    ]);
+
+    assert.equal(shipments.length, 1);
+    assert.equal(shipments[0]?.inboundId, "71750136");
+    assert.equal(shipments[0]?.totalCost, 729);
+    assert.equal(shipments[0]?.nonComplianceCost, 129);
+    assert.equal(shipments[0]?.totalUnits, 50);
+  });
+
   it("does not double-count duplicate detail_id rows", () => {
     const row = {
       charge_info: {

@@ -78,20 +78,21 @@ enum FullShipmentSource {
 
 /// Envio de estoque ao Mercado Livre Full (coleta) com custo e unidades.
 model FullShipment {
-  id               String             @id @default(cuid())
-  shippedAt        DateTime           @map("shipped_at")
-  totalCost        Decimal            @map("total_cost") @db.Decimal(18, 2)
-  totalUnits       Int                @map("total_units")
-  costPerUnit      Decimal            @map("cost_per_unit") @db.Decimal(18, 4)
-  source           FullShipmentSource @default(manual)
-  mlInboundId      String?            @unique @map("ml_inbound_id")
-  productCount     Int?               @map("product_count")
-  billingYear      Int?               @map("billing_year")
-  billingMonth     Int?               @map("billing_month")
-  mlChargeDetailId String?            @map("ml_charge_detail_id")
-  notes            String?
-  createdAt        DateTime           @default(now()) @map("created_at")
-  updatedAt        DateTime           @updatedAt @map("updated_at")
+  id                String             @id @default(cuid())
+  shippedAt         DateTime           @map("shipped_at")
+  totalCost         Decimal            @map("total_cost") @db.Decimal(18, 2)
+  nonComplianceCost Decimal            @default(0) @map("non_compliance_cost") @db.Decimal(18, 2)
+  totalUnits        Int                @map("total_units")
+  costPerUnit       Decimal            @map("cost_per_unit") @db.Decimal(18, 4)
+  source            FullShipmentSource @default(manual)
+  mlInboundId       String?            @unique @map("ml_inbound_id")
+  productCount      Int?               @map("product_count")
+  billingYear       Int?               @map("billing_year")
+  billingMonth      Int?               @map("billing_month")
+  mlChargeDetailId  String?            @map("ml_charge_detail_id")
+  notes             String?
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
 
   @@index([shippedAt])
   @@index([billingYear, billingMonth])
@@ -408,17 +409,17 @@ model DreCostMonthValue {
 
 /// Item de custo fixo cadastrado pra gerar crédito de PIS/COFINS (ex.: aluguel).
 model TaxFixedCostItem {
-  id          String                   @id @default(cuid())
+  id          String                       @id @default(cuid())
   name        String
-  sortOrder   Int                      @default(0) @map("sort_order")
-  active      Boolean                  @default(true)
+  sortOrder   Int                          @default(0) @map("sort_order")
+  active      Boolean                      @default(true)
   /// true = repete todo mês até ser alterado/removido; false = só vale nos meses com valor explícito.
-  recurring   Boolean                  @default(true)
+  recurring   Boolean                      @default(true)
   /// Se setado, o item deixa de se aplicar a partir de (endYear, endMonth) inclusive — "Encerrar gasto fixo".
-  endYear     Int?                     @map("end_year")
-  endMonth    Int?                     @map("end_month")
-  createdAt   DateTime                 @default(now()) @map("created_at")
-  updatedAt   DateTime                 @updatedAt @map("updated_at")
+  endYear     Int?                         @map("end_year")
+  endMonth    Int?                         @map("end_month")
+  createdAt   DateTime                     @default(now()) @map("created_at")
+  updatedAt   DateTime                     @updatedAt @map("updated_at")
   monthValues TaxFixedCostMonthValue[]
   exclusions  TaxFixedCostMonthExclusion[]
 

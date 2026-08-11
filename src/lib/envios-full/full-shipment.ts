@@ -4,6 +4,8 @@ export type FullShipmentRecord = {
   id: string;
   shippedAt: string;
   totalCost: number;
+  /** Parte do totalCost referente a cobranças de inconformidade (INBOUND_PENALTY/OVERAGE) deste envio. */
+  nonComplianceCost: number;
   totalUnits: number;
   costPerUnit: number;
   source: FullShipmentSource;
@@ -62,6 +64,7 @@ export function normalizeFullShipmentInput(
 ): {
   shippedAt: Date;
   totalCost: number;
+  nonComplianceCost: number;
   totalUnits: number;
   costPerUnit: number;
   notes: string | null;
@@ -83,6 +86,7 @@ export function normalizeFullShipmentInput(
   return {
     shippedAt: input.shippedAt,
     totalCost,
+    nonComplianceCost: 0,
     totalUnits,
     costPerUnit,
     notes,
@@ -98,6 +102,7 @@ export function normalizeFullShipmentInput(
 export function normalizeImportedShipmentInput(input: {
   shippedAt: Date;
   totalCost: number;
+  nonComplianceCost?: number;
   totalUnits: number;
   productCount?: number | null;
   mlInboundId: string;
@@ -108,6 +113,7 @@ export function normalizeImportedShipmentInput(input: {
 }): {
   shippedAt: Date;
   totalCost: number;
+  nonComplianceCost: number;
   totalUnits: number;
   costPerUnit: number;
   productCount: number | null;
@@ -125,6 +131,10 @@ export function normalizeImportedShipmentInput(input: {
     );
   }
 
+  const nonComplianceCost = roundMoneyInput(
+    Math.min(Math.max(input.nonComplianceCost ?? 0, 0), totalCost),
+  );
+
   const totalUnits = Number.isInteger(input.totalUnits) ? input.totalUnits : 0;
   const costPerUnit =
     totalUnits > 0 ? computeCostPerUnit(totalCost, totalUnits) : 0;
@@ -132,6 +142,7 @@ export function normalizeImportedShipmentInput(input: {
   return {
     shippedAt: input.shippedAt,
     totalCost,
+    nonComplianceCost,
     totalUnits,
     costPerUnit,
     productCount:

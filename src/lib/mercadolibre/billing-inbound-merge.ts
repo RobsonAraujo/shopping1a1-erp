@@ -33,6 +33,7 @@ export function mergeOperationsWithBillingCosts(
       inboundId: discovery.inboundId,
       shippedAt: discovery.shippedAt,
       totalCost: billing?.totalCost ?? 0,
+      nonComplianceCost: billing?.nonComplianceCost ?? 0,
       totalUnits: discovery.totalUnits,
       productCount:
         discovery.productCount > 0

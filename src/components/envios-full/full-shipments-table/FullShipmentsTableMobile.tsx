@@ -74,6 +74,12 @@ export function FullShipmentsTableMobile({
                       </Badge>
                     ) : null}
                   </div>
+                  {shipment.nonComplianceCost > 0 ? (
+                    <p className="mt-0.5 text-[11px] text-amber-700 dark:text-amber-400">
+                      Inclui {formatFinancialMoney(shipment.nonComplianceCost)}{" "}
+                      de inconformidade
+                    </p>
+                  ) : null}
                 </div>
                 <div>
                   <p className="text-[11px] uppercase tracking-wide text-[var(--muted-foreground)]">

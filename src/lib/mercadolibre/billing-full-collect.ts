@@ -167,28 +167,55 @@ function isFullCollectEntry(
   return classifyMlBillingEntry(subType, label, detailType) === "fullShipping";
 }
 
-function isInboundCollectFromFullDetailsRow(row: FullBillingDetailRow): boolean {
+/**
+ * Classifica uma linha do detalhamento Full (`/full/details`) para fins de
+ * atribuição por envio (`inbound_id`): custo de coleta (fullShipping) ou
+ * inconformidade (fullNonCompliance, ex.: INBOUND_PENALTY/OVERAGE/CFPB).
+ * Retorna null para linhas fora desse escopo (ex.: armazenagem, retirada).
+ */
+function classifyFullDetailsRowForInbound(
+  row: FullBillingDetailRow,
+): "fullShipping" | "fullNonCompliance" | null {
   const info = row.charge_info;
-  if (!info) return false;
+  if (!info) return null;
 
   const detailType = (info.detail_type ?? "").toUpperCase();
-  if (detailType === "BONUS") return false;
+  if (detailType === "BONUS") return null;
 
   const fulfillmentType = (row.fulfillment_info?.type ?? "").toUpperCase();
-  if (fulfillmentType === "WITHDRAWAL") return false;
+  if (fulfillmentType === "WITHDRAWAL") return null;
 
   const subType = (info.detail_sub_type ?? "").toUpperCase();
-  if (subType === "CFCBI" || subType.startsWith("CFCB")) return true;
-  if (fulfillmentType === "INBOUND_COLLECT") return true;
+  if (subType === "CFCBI" || subType.startsWith("CFCB")) return "fullShipping";
+  if (fulfillmentType === "INBOUND_COLLECT") return "fullShipping";
+  if (subType === "CFPB") return "fullNonCompliance";
+  if (fulfillmentType === "INBOUND_PENALTY" || fulfillmentType === "OVERAGE") {
+    return "fullNonCompliance";
+  }
 
   const label = normalizeBillingLabel(info.transaction_detail);
   const labelCategory = classifyFullChargeLabel(label);
-  if (labelCategory === "fullShipping" && fulfillmentType !== "WITHDRAWAL") {
-    return true;
+  if (labelCategory === "fullShipping" || labelCategory === "fullNonCompliance") {
+    return labelCategory;
   }
 
   const typeCategory = classifyFullFulfillmentType(row.fulfillment_info?.type);
-  return typeCategory === "fullShipping" && fulfillmentType !== "WITHDRAWAL";
+  if (typeCategory === "fullShipping" || typeCategory === "fullNonCompliance") {
+    return typeCategory;
+  }
+  // Armazenagem identificada (por label ou fulfillment_info.type): fora do
+  // escopo de custo por envio, excluir.
+  if (labelCategory === "fullStorage" || typeCategory === "fullStorage") {
+    return null;
+  }
+
+  // Linha do endpoint dedicado ao Full sem sub-tipo/label reconhecido:
+  // assumir custo de coleta (caso mais comum) em vez de descartar o envio.
+  return "fullShipping";
+}
+
+function isInboundCollectFromFullDetailsRow(row: FullBillingDetailRow): boolean {
+  return classifyFullDetailsRowForInbound(row) === "fullShipping";
 }
 
 /** @deprecated use isInboundCollectFromFullDetailsRow */
@@ -247,6 +274,7 @@ export function groupFullDetailsIntoInboundShipments(
       inboundId: string;
       unassigned: boolean;
       totalCost: number;
+      nonComplianceCost: number;
       totalUnits: number;
       products: Set<string>;
       chargeDetailIds: string[];
@@ -264,7 +292,8 @@ export function groupFullDetailsIntoInboundShipments(
 
     const amount = chargeAmount(info);
     if (amount <= 0) continue;
-    if (!isInboundCollectFromFullDetailsRow(row)) continue;
+    const category = classifyFullDetailsRowForInbound(row);
+    if (category === null) continue;
 
     const detailId = buildDetailId(
       info,
@@ -275,7 +304,10 @@ export function groupFullDetailsIntoInboundShipments(
     const { inboundId, unassigned } = inboundGroupKey(row, detailId);
     const shippedAt = parseBillingDate(row, info);
     const qty = Number(row.fulfillment_info?.quantity ?? 0);
-    const units = Number.isFinite(qty) && qty > 0 ? Math.floor(qty) : 0;
+    const units =
+      category === "fullShipping" && Number.isFinite(qty) && qty > 0
+        ? Math.floor(qty)
+        : 0;
 
     let group = groups.get(inboundId);
     if (!group) {
@@ -283,6 +315,7 @@ export function groupFullDetailsIntoInboundShipments(
         inboundId,
         unassigned,
         totalCost: 0,
+        nonComplianceCost: 0,
         totalUnits: 0,
         products: new Set<string>(),
         chargeDetailIds: [],
@@ -294,6 +327,9 @@ export function groupFullDetailsIntoInboundShipments(
     }
 
     group.totalCost += amount;
+    if (category === "fullNonCompliance") {
+      group.nonComplianceCost += amount;
+    }
     group.totalUnits += units;
     group.chargeDetailIds.push(detailId);
     group.shippedAt = earliestDate(group.shippedAt, shippedAt);
@@ -309,6 +345,7 @@ export function groupFullDetailsIntoInboundShipments(
     inboundId: group.inboundId,
     shippedAt: group.shippedAt,
     totalCost: roundMoney(group.totalCost),
+    nonComplianceCost: roundMoney(group.nonComplianceCost),
     totalUnits: group.totalUnits,
     productCount: group.products.size,
     chargeDetailIds: group.chargeDetailIds,
@@ -426,6 +463,7 @@ function inboundShipmentFromMlCharge(charge: FullCollectCharge): FullInboundShip
     inboundId: charge.detailId,
     shippedAt: charge.shippedAt,
     totalCost: charge.totalCost,
+    nonComplianceCost: 0,
     totalUnits: 0,
     productCount: 0,
     chargeDetailIds: [charge.detailId],

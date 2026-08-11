@@ -1,9 +1,15 @@
 "use client";
 
-import { Pencil, Trash2 } from "lucide-react";
+import { AlertTriangle, Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { formatFinancialMoney } from "@/lib/financial-margin";
 import {
   formatShipmentDate,
@@ -20,6 +26,7 @@ export function FullShipmentsTableDesktop({
   onDelete,
 }: FullShipmentsTableProps) {
   return (
+    <TooltipProvider delayDuration={200}>
     <Card className="overflow-hidden p-0 shadow-sm">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[56rem] text-left text-sm">
@@ -92,6 +99,20 @@ export function FullShipmentsTableDesktop({
                     <td className="px-4 py-3.5 tabular-nums">
                       <span className="inline-flex flex-wrap items-center gap-2">
                         {formatFinancialMoney(shipment.totalCost)}
+                        {shipment.nonComplianceCost > 0 ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex cursor-help items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                                <AlertTriangle className="size-3" aria-hidden />
+                                Inconform.
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">
+                              Inclui {formatFinancialMoney(shipment.nonComplianceCost)}{" "}
+                              de cobrança por inconformidade (INBOUND_PENALTY/OVERAGE).
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : null}
                         {needsCost ? (
                           <Badge
                             variant="warning"
@@ -155,5 +176,6 @@ export function FullShipmentsTableDesktop({
         </table>
       </div>
     </Card>
+    </TooltipProvider>
   );
 }

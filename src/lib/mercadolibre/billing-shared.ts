@@ -66,7 +66,11 @@ export function classifyFullChargeLabel(
     return "fullShipping";
   }
 
-  return "fullShipping";
+  // Label genérico ("Full", "Fulfillment") sem palavra-chave específica: não
+  // presumir "envio" — deixar o chamador decidir pelo detail_sub_type /
+  // fulfillment_info.type (mais confiável), em vez de arriscar classificar
+  // errado uma cobrança de armazenagem/inconformidade como envio.
+  return null;
 }
 
 export function subtractBillingCost(current: number, amount: number): number {
@@ -130,14 +134,23 @@ export function classifyMlBillingEntry(
 
   if (type === "PADS") return "ads";
 
+  // Sub-tipo estruturado do ML é mais confiável que o texto do label —
+  // checar primeiro para não deixar um label genérico de Full ("Full",
+  // "Fulfillment") mascarar uma cobrança de armazenagem/inconformidade
+  // cujo sub-tipo já identifica exatamente a categoria.
+  if (type === "CFCBI" || type.startsWith("CFCB")) return "fullShipping";
+  if (type === "CFWA" || type === "CFWARE") return "fullStorage";
+  if (type === "CFPB") return "fullNonCompliance";
+
   const fullFromLabel = classifyFullChargeLabel(label);
   if (fullFromLabel === "fullShipping") return "fullShipping";
   if (fullFromLabel === "fullStorage") return "fullStorage";
   if (fullFromLabel === "fullNonCompliance") return "fullNonCompliance";
 
-  if (type === "CFCBI" || type.startsWith("CFCB")) return "fullShipping";
-  if (type === "CFWA" || type === "CFWARE") return "fullStorage";
-  if (type === "CFPB") return "fullNonCompliance";
+  // Label de Full sem palavra-chave específica e sem sub-tipo reconhecido:
+  // assumir custo de envio (caso mais comum) em vez de deixar a cobrança
+  // cair como "unmapped".
+  if (isFullChargeLabel(label)) return "fullShipping";
 
   if (type === "CXC" || /cancel|cancelad|anulad/.test(label)) {
     return "cancelled";

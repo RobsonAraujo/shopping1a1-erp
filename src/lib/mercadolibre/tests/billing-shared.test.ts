@@ -50,8 +50,8 @@ describe("isFullChargeLabel / classifyFullChargeLabel", () => {
     assert.equal(classifyFullChargeLabel("full - coleta"), "fullShipping");
   });
 
-  it("defaults unclassified full charges to fullShipping", () => {
-    assert.equal(classifyFullChargeLabel("full - outro"), "fullShipping");
+  it("returns null for full-labeled charges without a specific keyword (let the caller fall back to detail_sub_type/fulfillment_info.type)", () => {
+    assert.equal(classifyFullChargeLabel("full - outro"), null);
   });
 
   it("returns null for non-full labels", () => {
@@ -128,6 +128,13 @@ describe("classifyMlBillingEntry", () => {
     assert.equal(classifyMlBillingEntry("CFCBI", "", ""), "fullShipping");
     assert.equal(classifyMlBillingEntry("CFWA", "", ""), "fullStorage");
     assert.equal(classifyMlBillingEntry("CFPB", "", ""), "fullNonCompliance");
+  });
+
+  it("prefers detail_sub_type over a generic 'full' label for non-compliance charges (regression: label used to default to fullShipping and mask CFPB)", () => {
+    assert.equal(
+      classifyMlBillingEntry("CFPB", "full - outro", ""),
+      "fullNonCompliance",
+    );
   });
 
   it("classifies bonus refunds as partialReturn by default", () => {

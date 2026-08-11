@@ -311,9 +311,15 @@ async function fetchFullBillingTotals(
         const detailType = (row.charge_info?.detail_type ?? "").toUpperCase();
         const isBonus = detailType === "BONUS";
         const label = normalizeBillingLabel(row.charge_info?.transaction_detail);
-        const labelCategory = classifyFullChargeLabel(label);
+        // fulfillment_info.type é estruturado e sempre presente neste
+        // endpoint dedicado ao Full — mais confiável que o texto do label,
+        // então checado primeiro (protege inconformidade/armazenagem de
+        // labels genéricos de Full). Toda linha aqui já é um encargo Full,
+        // então na ausência de sinal específico assume-se envio (custo mais
+        // comum), em vez de descartar a cobrança.
         const typeCategory = classifyFullFulfillmentType(row.fulfillment_info?.type);
-        const category = labelCategory ?? typeCategory;
+        const labelCategory = classifyFullChargeLabel(label);
+        const category = typeCategory ?? labelCategory ?? "fullShipping";
 
         if (category === "fullShipping") {
           fullShipping = isBonus

@@ -93,7 +93,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     id: "totalCustoOperacional",
     kind: "custo-total",
     label: "(-) Custos Variáveis",
-    methodology: "Soma de todas as linhas abaixo (Canceladas, Tarifa ML, Devolução, Custo produto, Imposto, Frete vendedor, Full envios/armazém/inconformidades, Campanhas ADS) mais os custos operacionais manuais cadastrados.",
+    methodology: "Soma de todas as linhas abaixo (Canceladas, Tarifa ML, Custo produto, Imposto, Frete vendedor, Full envios/armazém/inconformidades, Campanhas ADS) mais os custos operacionais manuais cadastrados. Inclui também devoluções parciais reembolsadas pelo ML, sem linha própria na tabela.",
   },
   {
     type: "static",
@@ -114,16 +114,6 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     indent: true,
     lineKey: "saleFeeMl",
     methodology: "Tarifas de venda cobradas pelo Mercado Livre no mês, conforme a fatura ML. Quando a fatura não está disponível/alinhada ao mês civil, é estimada por anúncio (categoria, tipo de anúncio e preço de cada pedido pago).",
-  },
-  {
-    type: "static",
-    id: "partialReturnsMl",
-    kind: "custo-detail",
-    label: "Devolução ML",
-    source: "ml",
-    indent: true,
-    lineKey: "partialReturnsMl",
-    methodology: "Valor de devoluções parciais reembolsadas pelo Mercado Livre no mês (bônus/estornos da fatura ML).",
   },
   {
     type: "static",

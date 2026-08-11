@@ -321,11 +321,7 @@ type AuditKind =
   | "cancelledSales"
   | "saleFee"
   | "sellerShipping"
-  | "adsCost"
-  | "partialReturns"
-  | "fullShipping"
-  | "fullStorage"
-  | "fullNonCompliance";
+  | "adsCost";
 type AuditTarget = { kind: AuditKind; period: number | "year" } | null;
 
 /** Linhas estáticas do DRE que abrem auditoria ao clicar no valor. */
@@ -337,10 +333,6 @@ const ROW_ID_TO_AUDIT_KIND: Partial<Record<DreStaticRowId, AuditKind>> = {
   saleFeeMl: "saleFee",
   sellerShippingMl: "sellerShipping",
   adsCost: "adsCost",
-  partialReturnsMl: "partialReturns",
-  fullShippingMl: "fullShipping",
-  fullStorageMl: "fullStorage",
-  fullNonComplianceMl: "fullNonCompliance",
 };
 
 function getAuditKindForRow(row: DreTableRow): AuditKind | null {
@@ -381,27 +373,6 @@ const LINE_AUDIT_TEXT: Partial<
     description:
       "Gasto com campanhas de Product Ads no mês, por anúncio.",
   },
-  partialReturns: {
-    rowLabel: "Devolução ML",
-    amountLabel: "Devolução",
-    description:
-      "Valor de devoluções parciais reembolsadas pelo Mercado Livre no mês.",
-  },
-  fullShipping: {
-    rowLabel: "Full envios",
-    amountLabel: "Full envios",
-    description: "Custo de envios do Mercado Envios Full no mês.",
-  },
-  fullStorage: {
-    rowLabel: "Full armazém",
-    amountLabel: "Full armazém",
-    description: "Custo de armazenamento no Full no mês.",
-  },
-  fullNonCompliance: {
-    rowLabel: "Full inconform.",
-    amountLabel: "Full inconform.",
-    description: "Multas por inconformidade no Full no mês.",
-  },
 };
 
 const LINE_BREAKDOWN_FIELD: Partial<
@@ -413,13 +384,6 @@ const LINE_BREAKDOWN_FIELD: Partial<
   sellerShipping: "sellerShippingBreakdown",
   adsCost: "adsCostBreakdown",
 };
-
-const AGGREGATE_ONLY_KINDS = new Set<AuditKind>([
-  "partialReturns",
-  "fullShipping",
-  "fullStorage",
-  "fullNonCompliance",
-]);
 
 type LineAuditState = {
   items: DreLineBreakdownItem[];
@@ -441,10 +405,6 @@ function resolveLineAuditState(
       ? data.months
       : data.months.filter((m) => m.month === target.period);
   const relevantMonths = months.filter((m) => m.lines !== null);
-
-  if (AGGREGATE_ONLY_KINDS.has(target.kind)) {
-    return { items: [], unavailable: true, needsResync: false };
-  }
 
   const field = LINE_BREAKDOWN_FIELD[target.kind];
   if (!field) return { items: [], unavailable: false, needsResync: false };
