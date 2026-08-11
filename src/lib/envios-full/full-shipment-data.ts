@@ -1,4 +1,5 @@
 import type { FullShipment } from "@/generated/prisma/client";
+import { reportsConfig } from "@/config/reports";
 import { prisma } from "@/lib/db";
 import {
   defaultShippedAtForBillingPeriod,
@@ -14,6 +15,7 @@ import {
   normalizeImportedShipmentInput,
   normalizeShipmentUpdateInput,
 } from "@/lib/envios-full/full-shipment";
+import { getZonedParts } from "@/lib/report-timezone";
 
 function decimalToNumber(value: { toString(): string } | number): number {
   return Number(value);
@@ -58,6 +60,32 @@ export async function listFullShipmentsForPeriod(
     orderBy: [{ shippedAt: "desc" }, { createdAt: "desc" }],
   });
   return rows.map(toRecord);
+}
+
+/**
+ * Meses do ano com pelo menos um envio Full (por data de coleta / shippedAt),
+ * alinhado a `listFullShipmentsForPeriod` — o mesmo critério do DRE e da
+ * listagem em Relatório Full.
+ */
+export async function listFullShipmentActivityMonthsForYear(
+  year: number,
+): Promise<Set<number>> {
+  const { start } = activityMonthBounds(year, 1);
+  const { end } = activityMonthBounds(year, 12);
+  const rows = await prisma.fullShipment.findMany({
+    where: { shippedAt: { gte: start, lte: end } },
+    select: { shippedAt: true },
+  });
+
+  const months = new Set<number>();
+  for (const row of rows) {
+    const parts = getZonedParts(
+      row.shippedAt,
+      reportsConfig.catalogCompetitionTimezone,
+    );
+    if (parts.year === year) months.add(parts.month);
+  }
+  return months;
 }
 
 export async function listImportedBillingPeriods(): Promise<

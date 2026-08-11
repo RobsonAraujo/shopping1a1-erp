@@ -68,6 +68,8 @@ export type DreMonthSnapshotPayload = DreLineAmounts & {
   saleFeeBreakdown?: DreLineBreakdownItem[];
   sellerShippingBreakdown?: DreLineBreakdownItem[];
   adsCostBreakdown?: DreLineBreakdownItem[];
+  /** true quando Full envios/inconformidade vieram dos envios já importados no Relatório Full deste mês (mais confiável que o total consolidado da fatura). */
+  fullReportSourced?: boolean;
 };
 
 export type DreManualCostInput = {

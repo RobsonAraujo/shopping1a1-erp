@@ -21,6 +21,10 @@ import {
   resolveEffectiveFixedCostsForYear,
 } from "@/lib/dre/dre-fixed-costs";
 import {
+  listFullShipmentActivityMonthsForYear,
+  listImportedBillingPeriods,
+} from "@/lib/envios-full/full-shipment-data";
+import {
   formatDreMonthLabel,
   isCurrentCalendarMonth,
   isDreMonthSyncable,
@@ -53,6 +57,12 @@ export type DreMonthView = {
   saleFeeBreakdown: DreLineBreakdownItem[] | null;
   sellerShippingBreakdown: DreLineBreakdownItem[] | null;
   adsCostBreakdown: DreLineBreakdownItem[] | null;
+  /**
+   * true quando o Relatório Full já tem envios para o mês (import ML ou
+   * manual) — usado só para o alerta de UI; o valor na célula ainda vem do
+   * snapshot até a próxima sync do DRE.
+   */
+  fullReportSourced: boolean;
   adsCost: number | null;
   fixedCostValues: Record<string, number | null>;
   fixedCostOverrides: Record<string, number | null>;
@@ -167,7 +177,13 @@ function buildEffectiveCostMaps(
 }
 
 export async function loadDreYearView(year: number): Promise<DreYearView> {
-  const [allCostItems, snapshots, monthValues] = await Promise.all([
+  const [
+    allCostItems,
+    snapshots,
+    monthValues,
+    fullShipmentMonths,
+    importedBillingPeriods,
+  ] = await Promise.all([
     prisma.dreCostItem.findMany({
       where: { active: true },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
@@ -180,7 +196,15 @@ export async function loadDreYearView(year: number): Promise<DreYearView> {
       where: { year: { in: [year, year - 1] } },
       select: { costItemId: true, year: true, month: true, amount: true },
     }),
+    listFullShipmentActivityMonthsForYear(year),
+    listImportedBillingPeriods(),
   ]);
+
+  const importedBillingMonths = new Set(
+    importedBillingPeriods
+      .filter((period) => period.year === year)
+      .map((period) => period.month),
+  );
 
   const costItems = allCostItems
     .filter((item) => item.section === "FIXED")
@@ -264,6 +288,10 @@ export async function loadDreYearView(year: number): Promise<DreYearView> {
       saleFeeBreakdown: payload?.saleFeeBreakdown ?? null,
       sellerShippingBreakdown: payload?.sellerShippingBreakdown ?? null,
       adsCostBreakdown: payload?.adsCostBreakdown ?? null,
+      // Checagem ao vivo (não só o flag do snapshot): snapshots antigos não
+      // tinham `fullReportSourced`, e importar depois da sync também conta.
+      fullReportSourced:
+        fullShipmentMonths.has(month) || importedBillingMonths.has(month),
       adsCost: payload?.adsCost ?? null,
       fixedCostValues,
       fixedCostOverrides,

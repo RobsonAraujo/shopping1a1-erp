@@ -708,6 +708,7 @@ export async function buildDreMonthSnapshot(
   // (mês atual + próximo) e, quando o mesmo envio aparece nos dois, fica
   // com o maior total — se o período seguinte ainda está "em formação" do
   // lado do ML, esse valor muda a cada chamada.
+  let fullReportSourced = false;
   try {
     const fullShipmentRecords = await listFullShipmentsForPeriod(year, month);
     if (fullShipmentRecords.length > 0) {
@@ -722,6 +723,7 @@ export async function buildDreMonthSnapshot(
       const totalCollect = roundMoney(totalFullCost - totalNonCompliance);
       fullShippingMl = roundMoney(-Math.max(0, totalCollect));
       fullNonComplianceMl = roundMoney(-Math.max(0, totalNonCompliance));
+      fullReportSourced = true;
       syncWarnings.push(
         "Full envios/inconformidade vêm dos envios já importados no Relatório Full deste mês.",
       );
@@ -824,6 +826,7 @@ export async function buildDreMonthSnapshot(
     saleFeeBreakdown,
     sellerShippingBreakdown,
     adsCostBreakdown,
+    fullReportSourced,
   };
 }
 
@@ -988,5 +991,6 @@ export function parseSnapshotPayload(raw: unknown): DreMonthSnapshotPayload | nu
     saleFeeBreakdown,
     sellerShippingBreakdown,
     adsCostBreakdown,
+    fullReportSourced: Boolean(p.fullReportSourced),
   };
 }
