@@ -4,9 +4,11 @@ import { prisma } from "@/lib/db";
 import { logServerError } from "@/lib/server-public-error";
 import {
   computeDreTotals,
+  isDreEditableLineKey,
   mergeProductCostBreakdowns,
   mergeTaxBreakdowns,
   type DreCancelledIncludeOverlay,
+  type DreEditableLineKey,
   type DreLineBreakdownItem,
   type DreMonthSnapshotPayload,
   type DreProductCostBreakdownItem,
@@ -847,6 +849,88 @@ export async function persistDreMonthSnapshot(
     update: {
       syncedAt,
       payload: payload as object,
+    },
+  });
+  return syncedAt;
+}
+
+export function emptyDreMonthSnapshotPayload(): DreMonthSnapshotPayload {
+  return {
+    revenueMl: 0,
+    cancelledSalesMl: 0,
+    saleFeeMl: 0,
+    partialReturnsMl: 0,
+    productCostErp: 0,
+    taxErp: 0,
+    sellerShippingMl: 0,
+    fullShippingMl: 0,
+    fullStorageMl: 0,
+    fullNonComplianceMl: 0,
+    adsCost: 0,
+    billingSource: "fallback",
+    isPartial: false,
+    incompleteProductCostCount: 0,
+    syncWarnings: [
+      "Valores preenchidos manualmente (ainda sem sincronização completa).",
+    ],
+    fullReportSourced: false,
+  };
+}
+
+/**
+ * Atualiza uma linha editável do snapshot do mês. Cria snapshot vazio se ainda
+ * não existir. Não altera `syncedAt` em updates (só na criação).
+ */
+export async function patchDreMonthLine(
+  year: number,
+  month: number,
+  lineKey: DreEditableLineKey,
+  amount: number,
+): Promise<Date> {
+  if (!isDreEditableLineKey(lineKey)) {
+    throw new Error(`Linha DRE não editável: ${lineKey}`);
+  }
+  if (!Number.isFinite(amount)) {
+    throw new Error("Valor monetário inválido.");
+  }
+
+  const existing = await prisma.dreMonthSnapshot.findUnique({
+    where: { year_month: { year, month } },
+  });
+
+  const base =
+    (existing ? parseSnapshotPayload(existing.payload) : null) ??
+    emptyDreMonthSnapshotPayload();
+
+  const storedAmount =
+    lineKey === "adsCost" ? roundMoney(Math.abs(amount)) : roundMoney(amount);
+
+  const next: DreMonthSnapshotPayload = {
+    ...base,
+    [lineKey]: storedAmount,
+  };
+
+  // Edição manual de faturamento/custo/imposto invalida o overlay de
+  // canceladas (senão a leitura somaria de novo o bruto cancelado).
+  if (
+    lineKey === "revenueMl" ||
+    lineKey === "productCostErp" ||
+    lineKey === "taxErp"
+  ) {
+    delete next.cancelledIncludeOverlay;
+  }
+
+  const syncedAt = existing?.syncedAt ?? new Date();
+  await prisma.dreMonthSnapshot.upsert({
+    where: { year_month: { year, month } },
+    create: {
+      year,
+      month,
+      syncedAt,
+      payload: next as object,
+    },
+    update: {
+      payload: next as object,
     },
   });
   return syncedAt;

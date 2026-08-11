@@ -72,6 +72,26 @@ export type DreMonthSnapshotPayload = DreLineAmounts & {
   fullReportSourced?: boolean;
 };
 
+/** Linhas do snapshot que podem ser editadas manualmente na grade do DRE. */
+export const DRE_EDITABLE_LINE_KEYS = [
+  "revenueMl",
+  "cancelledSalesMl",
+  "saleFeeMl",
+  "productCostErp",
+  "taxErp",
+  "sellerShippingMl",
+  "fullShippingMl",
+  "fullStorageMl",
+  "fullNonComplianceMl",
+  "adsCost",
+] as const;
+
+export type DreEditableLineKey = (typeof DRE_EDITABLE_LINE_KEYS)[number];
+
+export function isDreEditableLineKey(key: string): key is DreEditableLineKey {
+  return (DRE_EDITABLE_LINE_KEYS as readonly string[]).includes(key);
+}
+
 export type DreManualCostInput = {
   costItemId: string;
   amount: number;

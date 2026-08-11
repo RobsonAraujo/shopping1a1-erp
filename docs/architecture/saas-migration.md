@@ -263,6 +263,17 @@ Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templ
 - **Cron/background:** sync manual; usa seller da sessão mas persiste global
 - **Ação futura:** unique `(organizationId, year, month)`; custos fixos por org
 
+### DRE — linhas editáveis (PATCH) — 2026-08-11
+
+- **Tabelas novas/alteradas:** nenhuma (reusa `dre_month_snapshots.payload` JSON)
+- **Precisa `organizationId`?** **sim** — mesmo snapshot global por `(year, month)`
+- **APIs afetadas:** `PATCH /api/dre/lines` (cria/atualiza uma linha do payload); sync `POST /api/dre/sync` inalterado (overwrite com confirmação no client)
+- **Assume singleton?** **sim** — `@@unique([year, month])`
+- **Cron/background:** nenhum
+- **Dados globais vs por org:** edição e sync gravam no snapshot único do deployment
+- **Código já tenant-ready?** **não** — `patchDreMonthLine(year, month, …)` sem `organizationId`
+- **Ação futura na migração:** escopar `patchDreMonthLine` / sync / cost-values por `organizationId`
+
 ### Produtos e pricing — baseline
 
 - **Tabelas:** `products`, `company_tax_settings`

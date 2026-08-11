@@ -1,8 +1,17 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
 import { NumericFormat } from "react-number-format";
-import { AlertCircle, ChevronLeft, ChevronRight, Info, Pencil, RefreshCw } from "lucide-react";
+import { AlertCircle, ChevronLeft, ChevronRight, Info, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FormSelect } from "@/components/ui/form-select";
 import {
@@ -24,13 +33,14 @@ import {
   getYearLineBreakdown,
   getYearProductCostBreakdown,
   getYearTaxBreakdown,
+  isDreEditableLineKey,
+  type DreEditableLineKey,
   type DreLineBreakdownItem,
 } from "@/lib/dre/dre-calculations";
 import {
   buildDreTableRows,
   dreMonthShortLabel,
   getCellValue,
-  getRowMethodology,
   isColoredRow,
   rowBackgroundClass,
   rowLabelClass,
@@ -69,12 +79,12 @@ const ALT_ROW_BG = "#f4f2f7";
 const SELECTED_MONTH_CELL_CLASS = "relative";
 
 /**
- * Esmaece e desativa a interação das colunas que NÃO são a do mês
- * selecionado. `opacity` funciona de forma uniforme em cima de qualquer cor
- * de fundo (verde/vermelho/branco) — diferente do `box-shadow` inset escuro
- * que tentamos antes, que ficava inconsistente sobre as linhas já coloridas.
- * `pointer-events-none` também desliga os ícones/botões (sync, aviso, editar
- * valor manual) dessas colunas enquanto uma está em destaque.
+ * Esmaece e desativa a interação das células que não estão em foco.
+ * Usado ao destacar uma coluna de mês, e também na edição inline
+ * (quando tudo fica esmaecido exceto a célula sendo editada).
+ * `opacity` funciona de forma uniforme em cima de qualquer cor de fundo
+ * (verde/vermelho/branco). `pointer-events-none` desliga ícones/botões
+ * das áreas esmaecidas.
  */
 const DIM_CLASS =
   "pointer-events-none opacity-40 transition-opacity duration-150";
@@ -82,8 +92,14 @@ const DIM_CLASS =
 type DreYearTableProps = {
   data: DreYearView;
   showDetails: boolean;
+  onToggleDetails?: () => void;
   syncingMonths: Set<number>;
   onSyncMonth: (month: number) => void;
+  onLineChange: (
+    lineKey: DreEditableLineKey,
+    month: number,
+    amount: number,
+  ) => void;
   onFixedCostChange: (
     costItemId: string,
     month: number,
@@ -268,93 +284,297 @@ function sourceOriginLabel(source: string): string {
   }
 }
 
-function DreManualCostCell({
-  value,
-  override,
+function DreInlineMoneyCell({
+  displayAmount,
   label,
+  allowNegative = true,
+  disabled = false,
+  muted = false,
+  title,
   onCommit,
+  onEditingChange,
+  onAudit,
+  leading,
+  trailing,
 }: {
-  value: number | null;
-  override: number | null;
+  displayAmount: number | null;
   label: string;
+  allowNegative?: boolean;
+  disabled?: boolean;
+  muted?: boolean;
+  title?: string;
   onCommit: (amount: number | null) => void;
+  /** Notifica o pai ao entrar/sair do modo de edição (para esmaecer o restante do DRE). */
+  onEditingChange?: (editing: boolean) => void;
+  /** Clique simples abre auditoria (atrasado para não conflitar com duplo-clique de edição). */
+  onAudit?: () => void;
+  leading?: ReactNode;
+  trailing?: ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<number | null>(value);
+  const [draft, setDraft] = useState<number | null>(displayAmount);
+  const [panelStyle, setPanelStyle] = useState<CSSProperties | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const focusedOnceRef = useRef(false);
+
+  const EDITOR_MIN_WIDTH_PX = 260;
+  const VIEWPORT_PAD_PX = 16;
+
+  function placeEditorPanel() {
+    const anchor = anchorRef.current;
+    if (!anchor) return;
+    const rect = anchor.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const width = Math.min(
+      Math.max(EDITOR_MIN_WIDTH_PX, rect.width),
+      vw - VIEWPORT_PAD_PX * 2,
+    );
+
+    // Prefere alinhar à direita da célula; se não couber à esquerda (meses
+    // iniciais / sticky), empurra para dentro da viewport.
+    let left = rect.right - width;
+    left = Math.max(
+      VIEWPORT_PAD_PX,
+      Math.min(left, vw - width - VIEWPORT_PAD_PX),
+    );
+
+    // Centro vertical da célula (painel via portal no body — fixed real).
+    const halfH = 22;
+    let top = rect.top + rect.height / 2;
+    top = Math.max(
+      VIEWPORT_PAD_PX + halfH,
+      Math.min(top, vh - VIEWPORT_PAD_PX - halfH),
+    );
+
+    setPanelStyle({
+      position: "fixed",
+      left,
+      top,
+      width,
+      transform: "translateY(-50%)",
+      zIndex: 60,
+    });
+  }
 
   useEffect(() => {
-    if (editing) {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    }
+    if (!editing) return;
+    placeEditorPanel();
+    // rAF: layout da célula de foco (z-index/dim) pode mudar no mesmo tick.
+    const raf = requestAnimationFrame(() => placeEditorPanel());
+    const onReposition = () => placeEditorPanel();
+    window.addEventListener("resize", onReposition);
+    // Captura scroll de qualquer container (tabela com overflow-x-auto).
+    window.addEventListener("scroll", onReposition, true);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", onReposition);
+      window.removeEventListener("scroll", onReposition, true);
+    };
   }, [editing]);
+
+  useEffect(() => {
+    if (!editing) {
+      focusedOnceRef.current = false;
+      return;
+    }
+    if (!panelStyle || focusedOnceRef.current) return;
+    focusedOnceRef.current = true;
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, [editing, panelStyle]);
+
+  useEffect(() => {
+    return () => {
+      if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+    };
+  }, []);
+
+  function clearClickTimer() {
+    if (clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+    }
+  }
+
+  function startEditing() {
+    if (disabled) return;
+    clearClickTimer();
+    setDraft(displayAmount);
+    setEditing(true);
+    onEditingChange?.(true);
+  }
+
+  function cancelEditing() {
+    setDraft(displayAmount);
+    setEditing(false);
+    setPanelStyle(null);
+    onEditingChange?.(false);
+  }
 
   function commit(next: number | null) {
     setEditing(false);
-    if (next !== value) {
+    setPanelStyle(null);
+    onEditingChange?.(false);
+    const prev = displayAmount;
+    const same =
+      (next === null && prev === null) ||
+      (next !== null && prev !== null && Math.abs(next - prev) < 0.000_001);
+    if (!same) {
       onCommit(next);
     }
   }
 
   if (editing) {
+    // Portal no body: a página do DRE usa `-translate-x-1/2`, o que faz
+    // `position:fixed` interno ancorar nesse ancestral (e subir com o scroll).
+    const editorPanel =
+      panelStyle && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              style={panelStyle}
+              className="pointer-events-auto"
+              onClick={(e) => e.stopPropagation()}
+              onDoubleClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex animate-in items-center justify-end gap-1 rounded-md border border-[var(--primary)]/40 bg-[var(--background)] p-1 shadow-lg ring-2 ring-[var(--primary)]/30 duration-200 fade-in-0 zoom-in-95">
+                <NumericFormat
+                  getInputRef={inputRef}
+                  value={draft ?? ""}
+                  onValueChange={(values) => {
+                    setDraft(values.floatValue ?? null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      cancelEditing();
+                    }
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      commit(draft);
+                    }
+                  }}
+                  thousandSeparator="."
+                  decimalSeparator=","
+                  prefix="R$ "
+                  decimalScale={2}
+                  allowNegative={allowNegative}
+                  aria-label={`Editar ${label}`}
+                  className="h-8 min-w-0 flex-1 rounded border border-[var(--border)] bg-white px-2 py-1 text-right text-sm font-bold tabular-nums outline-none transition-[border-color,box-shadow] duration-150 focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/40"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 shrink-0 px-2 text-[11px] font-semibold"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => cancelEditing()}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8 shrink-0 px-2.5 text-[11px] font-semibold"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => commit(draft)}
+                >
+                  Aplicar
+                </Button>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null;
+
     return (
-      <NumericFormat
-        getInputRef={inputRef}
-        value={draft ?? ""}
-        onValueChange={(values) => {
-          setDraft(values.floatValue ?? null);
-        }}
-        onBlur={() => commit(draft)}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") {
-            setDraft(value);
-            setEditing(false);
-          }
-          if (e.key === "Enter") {
-            e.preventDefault();
-            commit(draft);
-          }
-        }}
-        thousandSeparator="."
-        decimalSeparator=","
-        prefix="R$ "
-        decimalScale={2}
-        allowNegative={false}
-        className="w-full rounded border border-[var(--border)] bg-[var(--background)] px-1 py-0.5 text-right text-[12.5px] font-bold tabular-nums"
-      />
+      <div ref={anchorRef} className="relative h-8 w-full min-w-[4.5rem]">
+        {/* Placeholder mantém a altura da célula enquanto o painel é portal. */}
+        <span className="invisible whitespace-nowrap text-[12.5px] font-bold tabular-nums">
+          {formatFinancialMoney(displayAmount)}
+        </span>
+        {editorPanel}
+      </div>
     );
   }
 
-  const displayAmount = value === null ? null : -value;
-  const inherited = override === null && value !== null;
+  const defaultTitle = disabled
+    ? onAudit
+      ? `Clique para auditar ${label}`
+      : undefined
+    : onAudit
+      ? `Clique para auditar · Duplo-clique para editar ${label}`
+      : `Duplo-clique para editar ${label}`;
 
   return (
-    <div className="flex items-center justify-end gap-0">
+    <div className="inline-flex items-center justify-end gap-1.5">
+      {leading}
       <span
+        role={disabled && !onAudit ? undefined : "button"}
+        tabIndex={disabled && !onAudit ? undefined : 0}
         className={cn(
           "whitespace-nowrap text-[12.5px] font-bold tabular-nums leading-tight",
-          inherited && "text-[var(--muted-foreground)]",
+          muted && "text-[var(--muted-foreground)]",
+          (!disabled || onAudit) && "rounded-sm hover:bg-black/[0.04]",
+          !disabled && (onAudit ? "cursor-pointer" : "cursor-text"),
+          disabled && onAudit && "cursor-pointer",
+          onAudit &&
+            "underline decoration-dotted decoration-1 underline-offset-2",
         )}
-        title={inherited ? "Valor herdado do mês anterior" : undefined}
+        title={title ?? defaultTitle}
+        onClick={(e) => {
+          if (!onAudit) return;
+          e.stopPropagation();
+          clearClickTimer();
+          clickTimerRef.current = setTimeout(() => {
+            clickTimerRef.current = null;
+            onAudit();
+          }, 280);
+        }}
+        onDoubleClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (disabled) {
+            clearClickTimer();
+            return;
+          }
+          startEditing();
+        }}
+        onKeyDown={(e) => {
+          if (!disabled && (e.key === "Enter" || e.key === "F2")) {
+            e.preventDefault();
+            startEditing();
+            return;
+          }
+          if (disabled && onAudit && e.key === "Enter") {
+            e.preventDefault();
+            onAudit();
+          }
+        }}
       >
         {formatFinancialMoney(displayAmount)}
       </span>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        className="size-5 shrink-0 p-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-        aria-label={`Editar ${label}`}
-        onClick={() => {
-          setDraft(value);
-          setEditing(true);
-        }}
-      >
-        <Pencil className="size-3" aria-hidden />
-      </Button>
+      {trailing}
     </div>
   );
+}
+
+function getEditableLineKey(row: DreTableRow): DreEditableLineKey | null {
+  if (row.type !== "static") return null;
+  if (
+    row.kind === "entrada-total" ||
+    row.kind === "custo-total" ||
+    row.kind === "resultado"
+  ) {
+    return null;
+  }
+  if (row.id === "adsCost") return "adsCost";
+  if (row.lineKey && isDreEditableLineKey(row.lineKey)) {
+    return row.lineKey;
+  }
+  return null;
 }
 
 type AuditKind =
@@ -484,28 +704,6 @@ function auditTargetNeedsResync(data: DreYearView, target: AuditTarget): boolean
   );
 }
 
-/** Tooltip de auditoria: explica como o valor da célula foi calculado. */
-function ValueMethodologyTooltip({
-  text,
-  children,
-}: {
-  text: string | undefined;
-  children: ReactNode;
-}) {
-  if (!text) return <>{children}</>;
-
-  return (
-    <Tooltip delayDuration={2000}>
-      <TooltipTrigger asChild>
-        <div className="cursor-help">{children}</div>
-      </TooltipTrigger>
-      <TooltipContent side="left" align="center" className="max-w-[20rem] text-left">
-        {text}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
 function renderLabelCell(row: DreTableRow) {
   const source =
     row.type === "fixed-cost" ||
@@ -549,105 +747,184 @@ function renderLabelCell(row: DreTableRow) {
 function renderValueCell(
   row: DreTableRow,
   month: DreMonthView,
+  onLineChange: DreYearTableProps["onLineChange"],
   onFixedCostChange: DreYearTableProps["onFixedCostChange"],
   onOperationalCostChange: DreYearTableProps["onOperationalCostChange"],
   onInvestmentCostChange: DreYearTableProps["onInvestmentCostChange"],
   onAuditClick?: (kind: AuditKind, month: number) => void,
+  onEditingChange?: (editing: boolean, month: number, rowId: string) => void,
 ) {
+  const canEditMonth = !month.isFutureMonth;
+  const notifyEditing = (editing: boolean) =>
+    onEditingChange?.(editing, month.month, row.id);
+
   if (row.type === "fixed-cost") {
     const stored = month.fixedCostValues[row.costItemId];
     const override = month.fixedCostOverrides[row.costItemId];
+    const displayAmount = stored === null || stored === undefined ? null : -stored;
+    const inherited = override === null && stored !== null;
     return (
-      <ValueMethodologyTooltip text={getRowMethodology(row)}>
-        <DreManualCostCell
-          value={stored}
-          override={override}
-          label={`${row.label} (${month.label})`}
-          onCommit={(amount) =>
-            onFixedCostChange(row.costItemId, month.month, amount)
-          }
-        />
-      </ValueMethodologyTooltip>
+      <DreInlineMoneyCell
+        displayAmount={displayAmount}
+        label={`${row.label} (${month.label})`}
+        allowNegative
+        disabled={!canEditMonth}
+        muted={inherited}
+        title={
+          inherited
+            ? "Valor herdado do mês anterior — duplo-clique para editar"
+            : undefined
+        }
+        onEditingChange={notifyEditing}
+        onCommit={(amount) =>
+          onFixedCostChange(
+            row.costItemId,
+            month.month,
+            amount === null ? null : Math.abs(amount),
+          )
+        }
+      />
     );
   }
 
   if (row.type === "operational-cost") {
     const stored = month.operationalCostValues[row.costItemId];
     const override = month.operationalCostOverrides[row.costItemId];
+    const displayAmount = stored === null || stored === undefined ? null : -stored;
+    const inherited = override === null && stored !== null;
     return (
-      <ValueMethodologyTooltip text={getRowMethodology(row)}>
-        <DreManualCostCell
-          value={stored}
-          override={override}
-          label={`${row.label} (${month.label})`}
-          onCommit={(amount) =>
-            onOperationalCostChange(row.costItemId, month.month, amount)
-          }
-        />
-      </ValueMethodologyTooltip>
+      <DreInlineMoneyCell
+        displayAmount={displayAmount}
+        label={`${row.label} (${month.label})`}
+        allowNegative
+        disabled={!canEditMonth}
+        muted={inherited}
+        title={
+          inherited
+            ? "Valor herdado do mês anterior — duplo-clique para editar"
+            : undefined
+        }
+        onEditingChange={notifyEditing}
+        onCommit={(amount) =>
+          onOperationalCostChange(
+            row.costItemId,
+            month.month,
+            amount === null ? null : Math.abs(amount),
+          )
+        }
+      />
     );
   }
 
   if (row.type === "investment-cost") {
     const stored = month.investmentCostValues[row.costItemId];
     const override = month.investmentCostOverrides[row.costItemId];
+    const displayAmount = stored === null || stored === undefined ? null : -stored;
+    const inherited = override === null && stored !== null;
     return (
-      <ValueMethodologyTooltip text={getRowMethodology(row)}>
-        <DreManualCostCell
-          value={stored}
-          override={override}
-          label={`${row.label} (${month.label})`}
-          onCommit={(amount) =>
-            onInvestmentCostChange(row.costItemId, month.month, amount)
-          }
-        />
-      </ValueMethodologyTooltip>
+      <DreInlineMoneyCell
+        displayAmount={displayAmount}
+        label={`${row.label} (${month.label})`}
+        allowNegative
+        disabled={!canEditMonth}
+        muted={inherited}
+        title={
+          inherited
+            ? "Valor herdado do mês anterior — duplo-clique para editar"
+            : undefined
+        }
+        onEditingChange={notifyEditing}
+        onCommit={(amount) =>
+          onInvestmentCostChange(
+            row.costItemId,
+            month.month,
+            amount === null ? null : Math.abs(amount),
+          )
+        }
+      />
     );
   }
 
   const { amount } = getCellValue(row, month);
   const colored = isColoredRow(row);
-  const methodology = getRowMethodology(row);
-
   const moneyLabel = formatFinancialMoney(amount);
   const valueClassName = cn(
     "whitespace-nowrap text-right text-[12.5px] font-bold tabular-nums leading-tight",
     colored ? "text-white" : "",
   );
 
+  const editableKey = getEditableLineKey(row);
   const auditKind = getAuditKindForRow(row);
-
-  if (auditKind && onAuditClick) {
-    return (
-      <ValueMethodologyTooltip text={methodology}>
-        <button
-          type="button"
-          onClick={() => onAuditClick(auditKind, month.month)}
-          className={cn(
-            valueClassName,
-            "w-full cursor-pointer underline decoration-dotted decoration-1 underline-offset-2 hover:opacity-80",
-          )}
-        >
-          {moneyLabel}
-        </button>
-      </ValueMethodologyTooltip>
-    );
-  }
-
   const needsFullReportAlert =
     row.type === "static" &&
     (row.id === "fullShippingMl" || row.id === "fullNonComplianceMl") &&
     month.lines !== null &&
     !month.fullReportSourced;
 
+  if (editableKey && canEditMonth) {
+    return (
+      <div className={cn(valueClassName, "inline-flex items-center justify-end gap-1.5")}>
+        {needsFullReportAlert ? (
+          <FullReportMissingTooltip month={month} colored={colored} />
+        ) : null}
+        <DreInlineMoneyCell
+          displayAmount={amount}
+          label={`${row.label} (${month.label})`}
+          allowNegative={editableKey !== "revenueMl"}
+          onAudit={
+            auditKind && onAuditClick
+              ? () => onAuditClick(auditKind, month.month)
+              : undefined
+          }
+          onEditingChange={notifyEditing}
+          onCommit={(next) => {
+            if (next === null) return;
+            onLineChange(editableKey, month.month, next);
+          }}
+        />
+      </div>
+    );
+  }
+
+  const auditable = Boolean(auditKind && onAuditClick);
   return (
-    <div className={cn(valueClassName, "inline-flex items-center justify-end gap-1")}>
+    <div className={cn(valueClassName, "inline-flex items-center justify-end gap-1.5")}>
       {needsFullReportAlert ? (
         <FullReportMissingTooltip month={month} colored={colored} />
       ) : null}
-      <ValueMethodologyTooltip text={methodology}>
-        <div>{moneyLabel}</div>
-      </ValueMethodologyTooltip>
+      <div
+        role={auditable ? "button" : undefined}
+        tabIndex={auditable ? 0 : undefined}
+        className={cn(
+          auditable &&
+            "cursor-pointer rounded-sm underline decoration-dotted decoration-1 underline-offset-2 hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]",
+        )}
+        title={
+          auditable
+            ? `Clique para auditar ${row.label} (${month.label})`
+            : undefined
+        }
+        onClick={
+          auditable
+            ? (e) => {
+                e.stopPropagation();
+                onAuditClick!(auditKind!, month.month);
+              }
+            : undefined
+        }
+        onKeyDown={
+          auditable
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onAuditClick!(auditKind!, month.month);
+                }
+              }
+            : undefined
+        }
+      >
+        {moneyLabel}
+      </div>
     </div>
   );
 }
@@ -766,6 +1043,7 @@ function DreMobileRow({
   isAlt,
   selection,
   data,
+  onLineChange,
   onFixedCostChange,
   onOperationalCostChange,
   onInvestmentCostChange,
@@ -775,6 +1053,7 @@ function DreMobileRow({
   isAlt: boolean;
   selection: DreMobileSelection;
   data: DreYearView;
+  onLineChange: DreYearTableProps["onLineChange"];
   onFixedCostChange: DreYearTableProps["onFixedCostChange"];
   onOperationalCostChange: DreYearTableProps["onOperationalCostChange"];
   onInvestmentCostChange: DreYearTableProps["onInvestmentCostChange"];
@@ -788,33 +1067,47 @@ function DreMobileRow({
   const auditKind = getAuditKindForRow(row);
 
   const valueNode = isTotal ? (
-    <ValueMethodologyTooltip text={getRowMethodology(row)}>
-      {auditKind ? (
-        <button
-          type="button"
-          onClick={() => onAuditClick(auditKind, "year")}
-          className={cn(
-            "w-full cursor-pointer whitespace-nowrap text-right text-[13px] font-bold tabular-nums leading-tight underline decoration-dotted decoration-1 underline-offset-2 hover:opacity-80",
-            colored ? "text-white" : "",
-          )}
-        >
-          {formatFinancialMoney(getYearTotalForRow(row, data).amount)}
-        </button>
-      ) : (
-        <div
-          className={cn(
-            "whitespace-nowrap text-right text-[13px] font-bold tabular-nums leading-tight",
-            colored ? "text-white" : "",
-          )}
-        >
-          {formatFinancialMoney(getYearTotalForRow(row, data).amount)}
-        </div>
+    <div
+      className={cn(
+        "inline-flex w-full items-center justify-end gap-1.5",
+        colored ? "text-white" : "",
       )}
-    </ValueMethodologyTooltip>
+    >
+      <div
+        role={auditKind ? "button" : undefined}
+        tabIndex={auditKind ? 0 : undefined}
+        className={cn(
+          "whitespace-nowrap text-right text-[13px] font-bold tabular-nums leading-tight",
+          auditKind &&
+            "cursor-pointer rounded-sm underline decoration-dotted decoration-1 underline-offset-2 hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]",
+        )}
+        title={
+          auditKind ? `Clique para auditar ${row.label} (ano)` : undefined
+        }
+        onClick={
+          auditKind
+            ? () => onAuditClick(auditKind, "year")
+            : undefined
+        }
+        onKeyDown={
+          auditKind
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onAuditClick(auditKind, "year");
+                }
+              }
+            : undefined
+        }
+      >
+        {formatFinancialMoney(getYearTotalForRow(row, data).amount)}
+      </div>
+    </div>
   ) : (
     renderValueCell(
       row,
       month!,
+      onLineChange,
       onFixedCostChange,
       onOperationalCostChange,
       onInvestmentCostChange,
@@ -847,8 +1140,10 @@ function DreMobileRow({
 function DreYearTableMobile({
   data,
   showDetails,
+  onToggleDetails,
   syncingMonths,
   onSyncMonth,
+  onLineChange,
   onFixedCostChange,
   onOperationalCostChange,
   onInvestmentCostChange,
@@ -931,6 +1226,19 @@ function DreYearTableMobile({
 
   return (
     <div className="space-y-3">
+      {onToggleDetails ? (
+        <div className="flex items-center justify-end">
+          <Button
+            type="button"
+            variant={showDetails ? "secondary" : "default"}
+            size="sm"
+            className="h-8 text-xs font-semibold shadow-sm"
+            onClick={onToggleDetails}
+          >
+            {showDetails ? "Ocultar detalhes" : "Mostrar detalhes"}
+          </Button>
+        </div>
+      ) : null}
       <div className="flex items-center gap-2">
         <Button
           type="button"
@@ -1015,6 +1323,7 @@ function DreYearTableMobile({
             isAlt={altRowFlags[index]}
             selection={selection}
             data={data}
+            onLineChange={onLineChange}
             onFixedCostChange={onFixedCostChange}
             onOperationalCostChange={onOperationalCostChange}
             onInvestmentCostChange={onInvestmentCostChange}
@@ -1149,14 +1458,31 @@ export function DreYearTable(props: DreYearTableProps) {
 function DreYearTableDesktop({
   data,
   showDetails,
+  onToggleDetails,
   syncingMonths,
   onSyncMonth,
+  onLineChange,
   onFixedCostChange,
   onOperationalCostChange,
   onInvestmentCostChange,
 }: DreYearTableProps) {
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
+  /** Célula em edição — esmaece TODO o restante do DRE, inclusive a coluna atual. */
+  const [editingCell, setEditingCell] = useState<{
+    month: number;
+    rowId: string;
+  } | null>(null);
   const [auditTarget, setAuditTarget] = useState<AuditTarget>(null);
+  const isEditing = editingCell !== null;
+  const columnFocusMonth = isEditing ? null : selectedMonth;
+
+  function isEditingThisCell(month: number, rowId: string) {
+    return (
+      editingCell !== null &&
+      editingCell.month === month &&
+      editingCell.rowId === rowId
+    );
+  }
 
   const productCostAuditItems =
     auditTarget === null || auditTarget.kind !== "productCost"
@@ -1202,7 +1528,26 @@ function DreYearTableDesktop({
 
   return (
     <TooltipProvider delayDuration={200}>
-      <div className="overflow-x-auto rounded-lg border border-[var(--border)] bg-white shadow-sm">
+      <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-white shadow-sm">
+        {onToggleDetails ? (
+          <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--muted)]/25 px-3 py-2">
+            <p className="text-[11px] text-[var(--muted-foreground)]">
+              {showDetails
+                ? "Exibindo linhas detalhadas (custos, tarifas, fretes…)."
+                : "Detalhes ocultos — só totais e resultados."}
+            </p>
+            <Button
+              type="button"
+              variant={showDetails ? "outline" : "default"}
+              size="sm"
+              className="h-7 shrink-0 text-[11px] font-semibold"
+              onClick={onToggleDetails}
+            >
+              {showDetails ? "Ocultar detalhes" : "Mostrar detalhes"}
+            </Button>
+          </div>
+        ) : null}
+        <div className="overflow-x-auto">
         <table className="w-full min-w-[64rem] table-fixed border-collapse text-[12.5px]">
           <colgroup>
             <col style={{ width: "8%" }} />
@@ -1216,7 +1561,7 @@ function DreYearTableDesktop({
               <th
                 className={cn(
                   "sticky left-0 z-20 border-b border-[var(--border)] bg-white px-3 py-2 text-left text-[12.5px] font-bold uppercase text-[var(--muted-foreground)]",
-                  selectedMonth !== null && DIM_CLASS,
+                  (isEditing || columnFocusMonth !== null) && DIM_CLASS,
                 )}
               >
                 Linha
@@ -1227,22 +1572,27 @@ function DreYearTableDesktop({
                   year={data.year}
                   month={month}
                   syncing={syncingMonths.has(month.month)}
-                  selected={selectedMonth === month.month}
+                  selected={
+                    !isEditing && selectedMonth === month.month
+                  }
                   dimmed={
-                    selectedMonth !== null && selectedMonth !== month.month
+                    isEditing ||
+                    (columnFocusMonth !== null &&
+                      columnFocusMonth !== month.month)
                   }
                   onSync={() => onSyncMonth(month.month)}
-                  onToggleSelect={() =>
+                  onToggleSelect={() => {
+                    if (isEditing) return;
                     setSelectedMonth((prev) =>
                       prev === month.month ? null : month.month,
-                    )
-                  }
+                    );
+                  }}
                 />
               ))}
               <th
                 className={cn(
                   "border-b border-[var(--border)] bg-[var(--muted)]/30 px-2 py-2 text-center text-[12.5px] font-bold uppercase text-[var(--muted-foreground)]",
-                  selectedMonth !== null && DIM_CLASS,
+                  (isEditing || columnFocusMonth !== null) && DIM_CLASS,
                 )}
               >
                 Total
@@ -1263,6 +1613,7 @@ function DreYearTableDesktop({
               const cellStyle = isAlt
                 ? { ...dividerStyle, backgroundColor: ALT_ROW_BG }
                 : dividerStyle;
+              const yearAuditKind = getAuditKindForRow(row);
 
               return (
                 <Fragment key={row.id}>
@@ -1271,73 +1622,111 @@ function DreYearTableDesktop({
                       className={cn(
                         "sticky left-0 z-10 px-3 py-2",
                         rowClassName,
-                        selectedMonth !== null && DIM_CLASS,
+                        (isEditing || columnFocusMonth !== null) && DIM_CLASS,
                       )}
                       style={cellStyle}
                     >
                       {renderLabelCell(row)}
                     </td>
-                    {data.months.map((month) => (
-                      <td
-                        key={month.month}
-                        className={cn(
-                          "px-1.5 py-2 align-middle",
-                          month.month === selectedMonth
-                            ? cn(SELECTED_MONTH_CELL_CLASS, bg || "bg-white")
-                            : selectedMonth !== null && DIM_CLASS,
-                        )}
-                        style={cellStyle}
-                      >
-                        {renderValueCell(
-                          row,
-                          month,
-                          onFixedCostChange,
-                          onOperationalCostChange,
-                          onInvestmentCostChange,
-                          (kind, m) => setAuditTarget({ kind, period: m }),
-                        )}
-                      </td>
-                    ))}
+                    {data.months.map((month) => {
+                      const editingThis = isEditingThisCell(
+                        month.month,
+                        row.id,
+                      );
+                      return (
+                        <td
+                          key={month.month}
+                          className={cn(
+                            "px-1.5 py-2 align-middle",
+                            editingThis
+                              ? cn(
+                                  "relative z-30",
+                                  SELECTED_MONTH_CELL_CLASS,
+                                  bg || "bg-white",
+                                )
+                              : isEditing
+                                ? DIM_CLASS
+                                : month.month === columnFocusMonth
+                                  ? cn(
+                                      SELECTED_MONTH_CELL_CLASS,
+                                      bg || "bg-white",
+                                    )
+                                  : columnFocusMonth !== null && DIM_CLASS,
+                          )}
+                          style={cellStyle}
+                        >
+                          {renderValueCell(
+                            row,
+                            month,
+                            onLineChange,
+                            onFixedCostChange,
+                            onOperationalCostChange,
+                            onInvestmentCostChange,
+                            (kind, m) =>
+                              setAuditTarget({ kind, period: m }),
+                            (editing, m, rowId) =>
+                              setEditingCell(
+                                editing ? { month: m, rowId } : null,
+                              ),
+                          )}
+                        </td>
+                      );
+                    })}
                     <td
                       className={cn(
                         "px-2 py-2 align-middle",
                         rowClassName,
-                        selectedMonth !== null && DIM_CLASS,
+                        (isEditing || columnFocusMonth !== null) && DIM_CLASS,
                       )}
                       style={cellStyle}
                     >
-                      <ValueMethodologyTooltip text={getRowMethodology(row)}>
-                        {getAuditKindForRow(row) ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setAuditTarget({
-                                kind: getAuditKindForRow(row)!,
-                                period: "year",
-                              })
-                            }
-                            className={cn(
-                              "w-full cursor-pointer whitespace-nowrap text-right text-[12.5px] font-bold tabular-nums leading-tight underline decoration-dotted decoration-1 underline-offset-2 hover:opacity-80",
-                              isColoredRow(row) ? "text-white" : "",
-                            )}
-                          >
-                            {formatFinancialMoney(
-                              getYearTotalForRow(row, data).amount,
-                            )}
-                          </button>
-                        ) : (
-                          <div
-                            className={cn(
-                              "whitespace-nowrap text-right text-[12.5px] font-bold tabular-nums leading-tight",
-                              isColoredRow(row) ? "text-white" : "",
-                            )}
-                          >
-                            {formatFinancialMoney(
-                              getYearTotalForRow(row, data).amount,
-                            )}
-                          </div>
+                      <div
+                        className={cn(
+                          "inline-flex w-full items-center justify-end gap-1.5",
+                          isColoredRow(row) ? "text-white" : "",
                         )}
-                      </ValueMethodologyTooltip>
+                      >
+                        <div
+                          role={yearAuditKind ? "button" : undefined}
+                          tabIndex={yearAuditKind ? 0 : undefined}
+                          className={cn(
+                            "whitespace-nowrap text-right text-[12.5px] font-bold tabular-nums leading-tight",
+                            yearAuditKind &&
+                              "cursor-pointer rounded-sm underline decoration-dotted decoration-1 underline-offset-2 hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]",
+                          )}
+                          title={
+                            yearAuditKind
+                              ? `Clique para auditar ${row.label} (ano)`
+                              : undefined
+                          }
+                          onClick={
+                            yearAuditKind
+                              ? () =>
+                                  setAuditTarget({
+                                    kind: yearAuditKind,
+                                    period: "year",
+                                  })
+                              : undefined
+                          }
+                          onKeyDown={
+                            yearAuditKind
+                              ? (e) => {
+                                  if (e.key === "Enter" || e.key === " ") {
+                                    e.preventDefault();
+                                    setAuditTarget({
+                                      kind: yearAuditKind,
+                                      period: "year",
+                                    });
+                                  }
+                                }
+                              : undefined
+                          }
+                        >
+                          {formatFinancialMoney(
+                            getYearTotalForRow(row, data).amount,
+                          )}
+                        </div>
+                      </div>
                     </td>
                   </tr>
                   {showPercentRow ? (
@@ -1346,7 +1735,8 @@ function DreYearTableDesktop({
                         className={cn(
                           "sticky left-0 z-10 px-3 py-1.5",
                           bg,
-                          selectedMonth !== null && DIM_CLASS,
+                          (isEditing || columnFocusMonth !== null) &&
+                            DIM_CLASS,
                         )}
                         style={PERCENT_ROW_DIVIDER_STYLE}
                       />
@@ -1355,9 +1745,11 @@ function DreYearTableDesktop({
                           key={month.month}
                           className={cn(
                             "px-1.5 py-1.5 align-middle",
-                            month.month === selectedMonth
-                              ? cn(SELECTED_MONTH_CELL_CLASS, bg)
-                              : selectedMonth !== null && DIM_CLASS,
+                            isEditing
+                              ? DIM_CLASS
+                              : month.month === columnFocusMonth
+                                ? cn(SELECTED_MONTH_CELL_CLASS, bg)
+                                : columnFocusMonth !== null && DIM_CLASS,
                           )}
                           style={PERCENT_ROW_DIVIDER_STYLE}
                         >
@@ -1371,7 +1763,8 @@ function DreYearTableDesktop({
                         className={cn(
                           "px-2 py-1.5 align-middle",
                           bg,
-                          selectedMonth !== null && DIM_CLASS,
+                          (isEditing || columnFocusMonth !== null) &&
+                            DIM_CLASS,
                         )}
                         style={PERCENT_ROW_DIVIDER_STYLE}
                       >
@@ -1387,6 +1780,7 @@ function DreYearTableDesktop({
             })}
           </tbody>
         </table>
+        </div>
       </div>
       <DreProductCostAuditModal
         open={auditTarget !== null && auditTarget.kind === "productCost"}

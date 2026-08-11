@@ -137,18 +137,45 @@ export function DreCostItemsModal({
           <SheetDescription>{description}</SheetDescription>
         </SheetHeader>
         <SheetBody>
+          <div className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--muted)]/30 px-3 py-2 text-xs leading-relaxed text-[var(--muted-foreground)]">
+            <p>
+              <span className="font-medium text-[var(--foreground)]">
+                Passo 1:
+              </span>{" "}
+              cadastre o nome do item abaixo.
+            </p>
+            <p className="mt-1">
+              <span className="font-medium text-[var(--foreground)]">
+                Passo 2:
+              </span>{" "}
+              na tabela do DRE, dê dois cliques na célula do mês para
+              informar o valor.
+            </p>
+          </div>
           <div className="flex gap-2">
             <input
               type="text"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              placeholder="Ex.: Embalagens"
+              placeholder={
+                section === "fixed"
+                  ? "Ex.: Aluguel"
+                  : section === "operational"
+                    ? "Ex.: Embalagens"
+                    : "Ex.: Marketing institucional"
+              }
               className="h-11 flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-base sm:h-10 sm:text-sm"
               disabled={busy}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void addItem();
+                }
+              }}
             />
             <Button type="button" size="sm" onClick={() => void addItem()} disabled={busy}>
               <Plus className="size-4" aria-hidden />
-              Adicionar
+              Cadastrar
             </Button>
           </div>
 
