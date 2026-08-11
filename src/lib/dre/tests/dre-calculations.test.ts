@@ -102,7 +102,7 @@ describe("sumYearLineAmounts", () => {
 });
 
 describe("applyDreIncludeCancelledView", () => {
-  it("moves cancelled revenue into entrada and clears cancelled line", () => {
+  it("moves cancelled revenue into entrada and keeps cancelled line as custo variável", () => {
     const lines = {
       ...BASE_LINES,
       revenueMl: 1000,
@@ -116,7 +116,7 @@ describe("applyDreIncludeCancelledView", () => {
       taxErp: -15,
     });
     assert.equal(adjusted.revenueMl, 1150);
-    assert.equal(adjusted.cancelledSalesMl, 0);
+    assert.equal(adjusted.cancelledSalesMl, -150);
     assert.equal(adjusted.productCostErp, -450);
     assert.equal(adjusted.taxErp, -115);
   });
@@ -129,7 +129,7 @@ describe("applyDreIncludeCancelledView", () => {
     };
     const adjusted = applyDreIncludeCancelledView(lines);
     assert.equal(adjusted.revenueMl, 580);
-    assert.equal(adjusted.cancelledSalesMl, 0);
+    assert.equal(adjusted.cancelledSalesMl, -80);
   });
 });
 

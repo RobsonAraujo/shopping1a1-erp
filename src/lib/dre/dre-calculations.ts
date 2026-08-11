@@ -157,7 +157,10 @@ export function computeDreTotals(
   };
 }
 
-/** Inclui vendas canceladas na entrada (como o painel ML) e zera a linha de canceladas. */
+/**
+ * Inclui vendas canceladas no faturamento bruto (como o painel ML), mantendo
+ * a linha de canceladas nos custos variáveis para abater o resultado.
+ */
 export function applyDreIncludeCancelledView(
   lines: DreLineAmounts,
   overlay?: DreCancelledIncludeOverlay | null,
@@ -170,14 +173,13 @@ export function applyDreIncludeCancelledView(
         ? Math.abs(cancelledLine)
         : 0;
 
-  if (revenueAdd <= 0 && cancelledLine === 0) {
+  if (revenueAdd <= 0) {
     return lines;
   }
 
   return {
     ...lines,
     revenueMl: roundMoney(lines.revenueMl + revenueAdd),
-    cancelledSalesMl: 0,
     productCostErp: roundMoney(
       lines.productCostErp + (overlay?.productCostErp ?? 0),
     ),

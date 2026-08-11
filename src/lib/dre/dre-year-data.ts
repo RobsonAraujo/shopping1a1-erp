@@ -62,40 +62,10 @@ export type DreYearView = {
   yearTotals: DreComputedTotals | null;
 };
 
-function buildMonthTotalsFromLines(
-  lines: DreLineAmounts,
-  adsCost: number,
-  fixedCostItems: DreCostItemView[],
-  operationalCostItems: DreCostItemView[],
-  investmentCostItems: DreCostItemView[],
-  fixedCostValues: Record<string, number | null>,
-  operationalCostValues: Record<string, number | null>,
-  investmentCostValues: Record<string, number | null>,
-): DreComputedTotals {
-  const fixed = fixedCostItems.map((item) => ({
-    costItemId: item.id,
-    amount: fixedCostValues[item.id] ?? 0,
-  }));
-  const operational = operationalCostItems.map((item) => ({
-    costItemId: item.id,
-    amount: operationalCostValues[item.id] ?? 0,
-  }));
-  const investment = investmentCostItems.map((item) => ({
-    costItemId: item.id,
-    amount: investmentCostValues[item.id] ?? 0,
-  }));
-
-  return computeDreTotals(
-    lines,
-    adsCost,
-    fixed.filter((row) => row.amount > 0),
-    operational.filter((row) => row.amount > 0),
-    investment.filter((row) => row.amount > 0),
-  );
-}
 
 function buildMonthTotals(
   payload: DreMonthSnapshotPayload | null,
+  lines: DreLineAmounts | null,
   fixedCostItems: DreCostItemView[],
   operationalCostItems: DreCostItemView[],
   investmentCostItems: DreCostItemView[],
@@ -116,7 +86,7 @@ function buildMonthTotals(
     amount: investmentCostValues[item.id] ?? 0,
   }));
 
-  if (!payload) {
+  if (!payload || !lines) {
     const manualOnly = [...fixed, ...operational, ...investment].filter(
       (row) => row.amount > 0,
     );
@@ -142,7 +112,7 @@ function buildMonthTotals(
   }
 
   return computeDreTotals(
-    snapshotPayloadToLines(payload),
+    lines,
     payload.adsCost,
     fixed.filter((row) => row.amount > 0),
     operational.filter((row) => row.amount > 0),
@@ -246,8 +216,16 @@ export async function loadDreYearView(year: number): Promise<DreYearView> {
     const investmentCostOverrides =
       investmentMaps.overridesByMonth[month] ?? {};
 
+    const lines = payload
+      ? applyDreIncludeCancelledView(
+          snapshotPayloadToLines(payload),
+          payload.cancelledIncludeOverlay,
+        )
+      : null;
+
     const totals = buildMonthTotals(
       payload,
+      lines,
       costItems,
       operationalCostItems,
       investmentCostItems,
@@ -267,7 +245,7 @@ export async function loadDreYearView(year: number): Promise<DreYearView> {
       isPartial: payload?.isPartial ?? false,
       incompleteProductCostCount: payload?.incompleteProductCostCount ?? 0,
       syncWarnings: payload?.syncWarnings ?? [],
-      lines: payload ? snapshotPayloadToLines(payload) : null,
+      lines,
       cancelledIncludeOverlay: payload?.cancelledIncludeOverlay ?? null,
       adsCost: payload?.adsCost ?? null,
       fixedCostValues,
@@ -396,44 +374,4 @@ function buildYearTotals(
   }
 
   return null;
-}
-
-/** Visão compatível com o painel ML: canceladas entram no faturamento. */
-export function applyIncludeCancelledSalesToYearView(
-  view: DreYearView,
-): DreYearView {
-  const months = view.months.map((month) => {
-    if (!month.lines) return month;
-
-    const lines = applyDreIncludeCancelledView(
-      month.lines,
-      month.cancelledIncludeOverlay,
-    );
-    const totals =
-      month.adsCost !== null
-        ? buildMonthTotalsFromLines(
-            lines,
-            month.adsCost,
-            view.costItems,
-            view.operationalCostItems,
-            view.investmentCostItems,
-            month.fixedCostValues,
-            month.operationalCostValues,
-            month.investmentCostValues,
-          )
-        : month.totals;
-
-    return { ...month, lines, totals };
-  });
-
-  return {
-    ...view,
-    months,
-    yearTotals: buildYearTotals(
-      months,
-      view.costItems,
-      view.operationalCostItems,
-      view.investmentCostItems,
-    ),
-  };
 }
