@@ -831,9 +831,14 @@ export async function fetchFullInboundShipmentsForPeriod(
   );
 
   if (discoveries.size > 0) {
+    // Usa `fromBilling` (já passado pelo bleed guard de mês), não
+    // `billing.grouped` cru — este último mescla as chaves de fatura do mês
+    // atual e do seguinte "pegando o maior total" por inbound_id, o que pode
+    // atribuir a um envio deste mês o custo de um envio de um mês diferente
+    // que reaproveitou/colidiu o mesmo inbound_id nessa mescla ainda instável.
     const shipments = mergeOperationsWithBillingCosts(
       discoveries,
-      billing.grouped,
+      fromBilling,
     );
 
     return {

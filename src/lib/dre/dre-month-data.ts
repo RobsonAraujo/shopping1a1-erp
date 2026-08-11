@@ -29,7 +29,7 @@ import {
   fetchMlBillingSummaryForMonth,
   isBillingSummaryEmpty,
 } from "@/lib/mercadolibre/billing-summary";
-import { fetchFullInboundShipmentsForPeriod } from "@/lib/mercadolibre/billing-full-collect";
+import { listFullShipmentsForPeriod } from "@/lib/envios-full/full-shipment-data";
 import {
   fetchListingSaleFee,
   siteIdFromItemId,
@@ -700,24 +700,22 @@ export async function buildDreMonthSnapshot(
     }
   }
 
-  // Recalcula Full envios/inconformidade com o mesmo agrupamento por envio
-  // (inbound_id) do Relatório Full — mais preciso que o total consolidado
-  // da fatura, pois usa sub-tipo/fulfillment_info.type (protege
-  // inconformidade de labels genéricos) e o "bleed guard" de atribuição de
-  // mês. Full armazém (fullStorageMl) não é por envio; mantém a fonte atual.
+  // Full envios/inconformidade vêm dos envios já IMPORTADOS e persistidos no
+  // Relatório Full (tabela full_shipments) — igual ao que a própria página
+  // /dashboard/envios-full faz (ela só lê a tabela, nunca rechama a API ao
+  // vivo ao carregar). Rechamar a API ao vivo a cada sync do DRE é o que
+  // causava a instabilidade: a busca consulta a fatura de dois períodos
+  // (mês atual + próximo) e, quando o mesmo envio aparece nos dois, fica
+  // com o maior total — se o período seguinte ainda está "em formação" do
+  // lado do ML, esse valor muda a cada chamada.
   try {
-    const { shipments: fullShipments } = await fetchFullInboundShipmentsForPeriod(
-      accessToken,
-      sellerId,
-      year,
-      month,
-    );
-    if (fullShipments.length > 0) {
-      const totalFullCost = fullShipments.reduce(
+    const fullShipmentRecords = await listFullShipmentsForPeriod(year, month);
+    if (fullShipmentRecords.length > 0) {
+      const totalFullCost = fullShipmentRecords.reduce(
         (sum, s) => sum + s.totalCost,
         0,
       );
-      const totalNonCompliance = fullShipments.reduce(
+      const totalNonCompliance = fullShipmentRecords.reduce(
         (sum, s) => sum + s.nonComplianceCost,
         0,
       );
@@ -725,13 +723,17 @@ export async function buildDreMonthSnapshot(
       fullShippingMl = roundMoney(-Math.max(0, totalCollect));
       fullNonComplianceMl = roundMoney(-Math.max(0, totalNonCompliance));
       syncWarnings.push(
-        "Full envios/inconformidade recalculados a partir do agrupamento por envio do Relatório Full.",
+        "Full envios/inconformidade vêm dos envios já importados no Relatório Full deste mês.",
+      );
+    } else {
+      syncWarnings.push(
+        "Nenhum envio Full importado no Relatório Full para este mês; Full envios/inconformidade usam o total consolidado da fatura ML (pode ser impreciso). Importe em Relatório Full para valores exatos.",
       );
     }
   } catch (error) {
     logServerError("dre-month-data full-report", error);
     syncWarnings.push(
-      "Não foi possível recalcular Full envios/inconformidade pelo Relatório Full; usando total da fatura ML.",
+      "Não foi possível ler os envios Full importados; usando total consolidado da fatura ML.",
     );
   }
 
