@@ -318,6 +318,17 @@ Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templ
 - **Código já tenant-ready?** **não** — create/update/load sem `organizationId`
 - **Ação futura na migração:** escopar `DreCostItem` / `DreCostMonthValue` por `organizationId`
 
+### DRE — merge billing summary vs details (estabilidade) — 2026-08-11
+
+- **Tabelas novas/alteradas:** nenhuma
+- **Precisa `organizationId`?** **sim** — snapshot DRE / fatura ML por seller (hoje single-tenant)
+- **APIs afetadas:** sync DRE (`fetchMlBillingSummaryForMonth` / `mergeBillingLines`)
+- **Assume singleton?** **sim**
+- **Cron/background:** nenhum (sync manual/UI)
+- **Dados globais vs por org:** totais de fatura no snapshot único
+- **Código já tenant-ready?** **não**
+- **Ação futura na migração:** escopar sync/billing por org + seller
+
 ### Produtos e pricing — baseline
 
 - **Tabelas:** `products`, `company_tax_settings`

@@ -12,6 +12,7 @@ import { prisma } from "../src/lib/db";
 import {
   aggregateMlBillingDetails,
   fetchAllMlBillingDetails,
+  preferCompleteBillingAmount,
 } from "../src/lib/mercadolibre/billing-details";
 import { billingPeriodKey } from "../src/lib/mercadolibre/billing-shared";
 import {
@@ -191,7 +192,7 @@ async function main() {
     }
   }
 
-  printSection("Totais DRE (summary vs details)");
+  printSection("Totais DRE (summary vs details → escolhido)");
   const rows: Array<[string, number, number | null]> = [
     ["Faturamento ML", mergedSummary.revenueMl ?? 0, detailsAgg?.revenueFromOrders ?? null],
     ["Tarifa de venda", mergedSummary.saleFee, detailsAgg?.saleFeeMl ?? null],
@@ -206,11 +207,19 @@ async function main() {
     ["Full - Inconformidades", mergedSummary.fullNonCompliance, null],
   ];
 
-  console.log("Linha                     | Summary            | Details");
-  console.log("--------------------------|--------------------|--------------------");
+  console.log(
+    "Linha                     | Summary            | Details            | Escolhido",
+  );
+  console.log(
+    "--------------------------|--------------------|--------------------|--------------------",
+  );
   for (const [label, summaryVal, detailsVal] of rows) {
+    const chosen =
+      detailsVal === null
+        ? summaryVal
+        : preferCompleteBillingAmount(detailsVal, summaryVal);
     console.log(
-      `${label.padEnd(25)} | ${money(summaryVal).padStart(18)} | ${money(detailsVal).padStart(18)}`,
+      `${label.padEnd(25)} | ${money(summaryVal).padStart(18)} | ${money(detailsVal).padStart(18)} | ${money(chosen).padStart(18)}`,
     );
   }
 

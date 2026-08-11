@@ -214,7 +214,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     source: "ml",
     indent: true,
     lineKey: "affiliateFeeMl",
-    methodology: "Comissão paga a afiliados por vendas geradas, conforme a fatura ML (código CVAF).",
+    methodology: "Comissão paga a afiliados (código CVAF/BVAF) na fatura ML do ciclo do mês (key YYYY-MM-01). O ciclo pode começar no mês anterior (ex.: 05/06→04/07 para a fatura de julho) — não é necessariamente o mês civil.",
   },
   {
     type: "static",

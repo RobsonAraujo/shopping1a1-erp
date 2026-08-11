@@ -394,6 +394,80 @@ export async function fetchMlBillingDetailsAggregation(
   return aggregateMlBillingDetails(entries);
 }
 
+/**
+ * Escolhe entre total do summary e do /details.
+ *
+ * A API de details frequentemente devolve um subconjunto das cobranças
+ * (ex.: sem CVAF/CESM e com tarifas/frete bem menores que o summary). A regra
+ * antiga (detail diferente de zero vence) fazia o DRE preferir esse
+ * subconjunto e os totais "pulavam" a cada sync.
+ *
+ * Preferimos o valor de maior magnitude (rollup mais completo). Empate ou
+ * detail zerado → summary (documento do período, mais estável).
+ */
+export function preferCompleteBillingAmount(
+  detailVal: number,
+  summaryVal: number,
+): number {
+  if (detailVal === 0) return summaryVal;
+  if (summaryVal === 0) return detailVal;
+  const detailAbs = Math.abs(detailVal);
+  const summaryAbs = Math.abs(summaryVal);
+  if (detailAbs > summaryAbs) return detailVal;
+  return summaryVal;
+}
+
+const BILLING_DIVERGENCE_EPS = 0.009;
+
+export function billingAmountsDiverge(
+  detailVal: number,
+  summaryVal: number,
+): boolean {
+  return (
+    detailVal !== 0 &&
+    summaryVal !== 0 &&
+    Math.abs(detailVal - summaryVal) > BILLING_DIVERGENCE_EPS
+  );
+}
+
+export function listBillingMergeDivergences(
+  details: MlDetailsAggregation | null,
+  summary: Omit<MlBillingDreLines, "source" | "billingPeriod">,
+  full: Pick<
+    MlBillingDreLines,
+    "fullShipping" | "fullStorage" | "fullNonCompliance"
+  >,
+): string[] {
+  if (!details || details.chargeCount <= 0) return [];
+
+  const rows: Array<[string, number, number]> = [
+    ["Tarifa ML", details.saleFeeMl, summary.saleFee],
+    ["Frete vendedor", details.sellerShippingMl, summary.sellerShipping],
+    ["Canceladas", details.cancelledSalesMl, summary.cancelledSales],
+    ["Devoluções parciais", details.partialReturnsMl, summary.partialReturns],
+    ["ADS (fatura)", details.adsCost, summary.adsCost],
+    ["Minha Página", details.minhaPaginaMl, summary.minhaPagina],
+    ["Comissão Afiliados", details.affiliateFeeMl, summary.affiliateFee],
+    ["Full envios", details.fullShippingMl, full.fullShipping],
+    ["Full armazém", details.fullStorageMl, full.fullStorage],
+    ["Full inconformidade", details.fullNonComplianceMl, full.fullNonCompliance],
+  ];
+
+  const out: string[] = [];
+  for (const [label, detailVal, summaryVal] of rows) {
+    if (!billingAmountsDiverge(detailVal, summaryVal)) continue;
+    const chosen = preferCompleteBillingAmount(detailVal, summaryVal);
+    const source =
+      chosen === summaryVal || Math.abs(chosen) === Math.abs(summaryVal)
+        ? "summary"
+        : "details";
+    out.push(
+      `${label}: summary ${summaryVal.toFixed(2)} vs details ${detailVal.toFixed(2)} → ${source}`,
+    );
+  }
+  return out;
+}
+
 export function mergeBillingLines(
   details: MlDetailsAggregation | null,
   summary: Omit<MlBillingDreLines, "source" | "billingPeriod">,
@@ -402,8 +476,7 @@ export function mergeBillingLines(
     "fullShipping" | "fullStorage" | "fullNonCompliance"
   >,
 ): Omit<MlBillingDreLines, "source" | "billingPeriod"> {
-  const pick = (detailVal: number, summaryVal: number) =>
-    detailVal !== 0 ? detailVal : summaryVal;
+  const pick = preferCompleteBillingAmount;
 
   const revenueMl =
     summary.revenueMl !== null && summary.revenueMl !== undefined

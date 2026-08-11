@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   aggregateMlBillingDetails,
   mergeBillingLines,
+  preferCompleteBillingAmount,
 } from "../mercadolibre/billing-details";
 import { mapBillingSummaryToDreLines } from "../mercadolibre/billing-summary";
 
@@ -120,7 +121,7 @@ describe("mapBillingSummaryToDreLines", () => {
 });
 
 describe("mergeBillingLines", () => {
-  it("prefers details for costs", () => {
+  it("prefers details when they are the more complete rollup", () => {
     const merged = mergeBillingLines(
       {
         revenueMl: 50000,
@@ -160,6 +161,71 @@ describe("mergeBillingLines", () => {
     assert.equal(merged.fullNonCompliance, -228);
     assert.equal(merged.minhaPagina, -99);
     assert.equal(merged.affiliateFee, -20.46);
+  });
+
+  it("prefers summary when details undercount (partial /details response)", () => {
+    const merged = mergeBillingLines(
+      {
+        revenueMl: null,
+        revenueFromOrders: 23916,
+        saleFeeMl: -4176.93,
+        sellerShippingMl: -5133.7,
+        cancelledSalesMl: 405.15,
+        partialReturnsMl: 0,
+        adsCost: 1024,
+        fullShippingMl: 0,
+        fullStorageMl: 0,
+        fullNonComplianceMl: 0,
+        minhaPaginaMl: 0,
+        affiliateFeeMl: 0,
+        unmappedCharges: 0,
+        chargeCount: 1950,
+        bySubType: {},
+        byLabel: {},
+      },
+      {
+        revenueMl: null,
+        saleFee: -19180.41,
+        sellerShipping: -32104.43,
+        cancelledSales: 18,
+        partialReturns: 26.5,
+        fullShipping: -503.6,
+        fullStorage: -605.47,
+        fullNonCompliance: 0,
+        adsCost: 7397.46,
+        minhaPagina: -99,
+        affiliateFee: -93.73,
+      },
+      {
+        fullShipping: -503.6,
+        fullStorage: -605.47,
+        fullNonCompliance: 0,
+      },
+    );
+
+    assert.equal(merged.saleFee, -19180.41);
+    assert.equal(merged.sellerShipping, -32104.43);
+    assert.equal(merged.affiliateFee, -93.73);
+    assert.equal(merged.minhaPagina, -99);
+    assert.equal(merged.adsCost, 7397.46);
+    assert.equal(merged.fullShipping, -503.6);
+    // Canceladas: details tem magnitude maior → details vence.
+    assert.equal(merged.cancelledSales, 405.15);
+  });
+});
+
+describe("preferCompleteBillingAmount", () => {
+  it("falls back to summary when details are zero", () => {
+    assert.equal(preferCompleteBillingAmount(0, -93.73), -93.73);
+  });
+
+  it("keeps details when summary is zero", () => {
+    assert.equal(preferCompleteBillingAmount(-20.46, 0), -20.46);
+  });
+
+  it("prefers larger absolute value", () => {
+    assert.equal(preferCompleteBillingAmount(-4176, -19180), -19180);
+    assert.equal(preferCompleteBillingAmount(-20000, -100), -20000);
   });
 });
 

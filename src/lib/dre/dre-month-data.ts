@@ -632,9 +632,18 @@ export async function buildDreMonthSnapshot(
     minhaPaginaMl = billing!.minhaPagina;
     affiliateFeeMl = billing!.affiliateFee;
     if (billing!.detailsUsed) {
-      syncWarnings.push(
-        "Custos ML carregados do detalhamento de faturamento (/group/ML/details).",
-      );
+      if ((billing!.mergeWarnings?.length ?? 0) > 0) {
+        syncWarnings.push(
+          `Fatura ML: summary e /details divergem em ${billing!.mergeWarnings.length} linha(s); o DRE usou o total mais completo (maior magnitude).`,
+        );
+        for (const note of billing!.mergeWarnings.slice(0, 4)) {
+          syncWarnings.push(`• ${note}`);
+        }
+      } else {
+        syncWarnings.push(
+          "Custos ML conferidos com o detalhamento de faturamento (/group/ML/details).",
+        );
+      }
     }
     const unmapped = billing!.detailsAggregation?.unmappedCharges ?? 0;
     if (unmapped !== 0) {

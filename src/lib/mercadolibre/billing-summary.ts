@@ -17,7 +17,9 @@ import {
   aggregateMlBillingDetails,
   aggregateSummaryCharges,
   fetchAllMlBillingDetails,
+  listBillingMergeDivergences,
   mergeBillingLines,
+  preferCompleteBillingAmount,
   type MlDetailsAggregation,
 } from "./billing-details";
 import { getMercadoLibreConfig } from "./config";
@@ -72,6 +74,8 @@ export type MlBillingMonthResult = MlBillingDreLines & {
   source: "billing";
   detailsUsed: boolean;
   detailsAggregation: MlDetailsAggregation | null;
+  /** Diferenças summary vs details (já resolvidas pelo merge mais completo). */
+  mergeWarnings: string[];
 };
 
 /** @deprecated use MlBillingMonthResult */
@@ -367,18 +371,18 @@ function mergeFullTotals(
   >,
 ): Pick<MlBillingDreLines, "fullShipping" | "fullStorage" | "fullNonCompliance"> {
   return {
-    fullShipping:
-      detailTotals.fullShipping !== 0
-        ? detailTotals.fullShipping
-        : summaryTotals.fullShipping,
-    fullStorage:
-      detailTotals.fullStorage !== 0
-        ? detailTotals.fullStorage
-        : summaryTotals.fullStorage,
-    fullNonCompliance:
-      detailTotals.fullNonCompliance !== 0
-        ? detailTotals.fullNonCompliance
-        : summaryTotals.fullNonCompliance,
+    fullShipping: preferCompleteBillingAmount(
+      detailTotals.fullShipping,
+      summaryTotals.fullShipping,
+    ),
+    fullStorage: preferCompleteBillingAmount(
+      detailTotals.fullStorage,
+      summaryTotals.fullStorage,
+    ),
+    fullNonCompliance: preferCompleteBillingAmount(
+      detailTotals.fullNonCompliance,
+      summaryTotals.fullNonCompliance,
+    ),
   };
 }
 
@@ -419,6 +423,11 @@ export async function fetchMlBillingSummaryForMonth(
     getCalendarMonthRange(year, month);
 
   const detailsUsed = detailsAggregation !== null && detailsAggregation.chargeCount > 0;
+  const mergeWarnings = listBillingMergeDivergences(
+    detailsAggregation,
+    summaryMapped,
+    fullMerged,
+  );
 
   return {
     ...mergedLines,
@@ -426,6 +435,7 @@ export async function fetchMlBillingSummaryForMonth(
     source: "billing",
     detailsUsed,
     detailsAggregation,
+    mergeWarnings,
   };
 }
 
