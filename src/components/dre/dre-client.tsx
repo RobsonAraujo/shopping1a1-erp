@@ -281,8 +281,8 @@ export function DreClient() {
     : (data?.yearTotals ?? null);
   const monthFocused = selectedMonth !== null && focusMonthView !== null;
   const focusCardClass = monthFocused
-    ? "border-[var(--primary)]/25 bg-[var(--accent)] shadow-sm ring-1 ring-[var(--primary)]/20 transition-[background-color,box-shadow,border-color] duration-200"
-    : "shadow-sm transition-[background-color,box-shadow,border-color] duration-200";
+    ? "origin-center scale-[1.02] shadow-[0_4px_14px_-2px_rgba(27,45,111,0.18),0_2px_6px_-2px_rgba(27,45,111,0.08)] transition-[transform,box-shadow] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
+    : "origin-center scale-100 shadow-sm transition-[transform,box-shadow] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]";
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -369,13 +369,16 @@ export function DreClient() {
 
         {data ? (
           <div className="space-y-2">
-            {monthFocused ? (
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--primary)]/20 bg-[var(--accent)] px-2.5 py-1 text-[11px] font-semibold tracking-wide text-[var(--primary)]">
-                  Cards focados em {focusMonthView.label}
+            <div className="flex h-5 items-center gap-2">
+              {monthFocused ? (
+                <span className="inline-flex animate-in fade-in-0 items-center gap-1.5 text-[11px] font-medium text-[var(--muted-foreground)] duration-500">
+                  Exibindo{" "}
+                  <span className="font-semibold text-[var(--foreground)]">
+                    {focusMonthView.label}
+                  </span>
                   <button
                     type="button"
-                    className="inline-flex size-4 items-center justify-center rounded-full text-[var(--primary)] hover:bg-[var(--primary)]/10"
+                    className="inline-flex size-4 items-center justify-center rounded-full text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
                     aria-label="Voltar aos totais do ano"
                     title="Voltar aos totais do ano"
                     onClick={() => setSelectedMonth(null)}
@@ -383,15 +386,13 @@ export function DreClient() {
                     <X className="size-3" aria-hidden />
                   </button>
                 </span>
-                <span className="text-[11px] text-[var(--muted-foreground)]">
-                  Clique de novo no mês na tabela para limpar o foco
+              ) : (
+                <span className="text-[11px] text-transparent" aria-hidden>
+                  &nbsp;
                 </span>
-              </div>
-            ) : null}
-            <div
-              key={selectedMonth ?? "year"}
-              className="grid animate-in fade-in-0 zoom-in-[0.99] gap-2 duration-200 sm:grid-cols-2 lg:grid-cols-4"
-            >
+              )}
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               <Card className={focusCardClass}>
                 <CardHeader className="px-3 pb-1 pt-3">
                   <CardTitle className="flex items-center gap-1.5 text-xs font-medium text-[var(--muted-foreground)]">
@@ -400,7 +401,7 @@ export function DreClient() {
                       className={cn(
                         "rounded px-1 py-px text-[10px] font-semibold uppercase tracking-wide",
                         monthFocused
-                          ? "bg-[var(--primary)]/10 text-[var(--primary)]"
+                          ? "text-[var(--foreground)]"
                           : "bg-[var(--muted)] text-[var(--muted-foreground)]",
                       )}
                     >
@@ -419,7 +420,7 @@ export function DreClient() {
                   <CardTitle className="flex items-center gap-1.5 text-xs font-medium text-[var(--muted-foreground)]">
                     Margem de contribuição
                     {monthFocused && selectedMonth !== null ? (
-                      <span className="rounded bg-[var(--primary)]/10 px-1 py-px text-[10px] font-semibold uppercase tracking-wide text-[var(--primary)]">
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--foreground)]">
                         {dreMonthShortLabel(selectedMonth)}
                       </span>
                     ) : null}
@@ -440,7 +441,7 @@ export function DreClient() {
                   <CardTitle className="flex items-center gap-1.5 text-xs font-medium text-[var(--muted-foreground)]">
                     Lucro operacional
                     {monthFocused && selectedMonth !== null ? (
-                      <span className="rounded bg-[var(--primary)]/10 px-1 py-px text-[10px] font-semibold uppercase tracking-wide text-[var(--primary)]">
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--foreground)]">
                         {dreMonthShortLabel(selectedMonth)}
                       </span>
                     ) : null}
