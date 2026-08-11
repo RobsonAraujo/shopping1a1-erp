@@ -11,6 +11,7 @@ const patchBodySchema = z
   .object({
     name: z.string().trim().min(1, "Name is required"),
     sortOrder: z.number().int("Invalid sortOrder"),
+    recurring: z.boolean(),
   })
   .partial()
   .refine((data) => Object.keys(data).length > 0, {
@@ -31,7 +32,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const item = await prisma.dreCostItem.update({
       where: { id },
       data,
-      select: { id: true, name: true, sortOrder: true },
+      select: { id: true, name: true, sortOrder: true, recurring: true },
     });
     return NextResponse.json({ item });
   } catch (e) {

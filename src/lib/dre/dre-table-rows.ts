@@ -328,13 +328,13 @@ export function buildDreTableRows(
 export function getRowMethodology(row: DreTableRow): string | undefined {
   if (row.type === "static") return row.methodology;
   if (row.type === "fixed-cost") {
-    return `Valor de custo fixo informado manualmente por você para "${row.label}" neste mês (herdado do mês anterior quando não editado).`;
+    return `Valor de custo fixo informado manualmente por você para "${row.label}" neste mês. Itens recorrentes herdam o último valor informado; itens “só no mês” valem apenas onde você digitou.`;
   }
   if (row.type === "operational-cost") {
-    return `Valor de custo operacional informado manualmente por você para "${row.label}" neste mês (herdado do mês anterior quando não editado).`;
+    return `Valor de custo operacional informado manualmente por você para "${row.label}" neste mês. Itens recorrentes herdam o último valor informado; itens “só no mês” valem apenas onde você digitou.`;
   }
   if (row.type === "investment-cost") {
-    return `Valor de investimento informado manualmente por você para "${row.label}" neste mês (herdado do mês anterior quando não editado).`;
+    return `Valor de investimento informado manualmente por você para "${row.label}" neste mês. Itens recorrentes herdam o último valor informado; itens “só no mês” valem apenas onde você digitou.`;
   }
   return undefined;
 }

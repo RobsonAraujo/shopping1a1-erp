@@ -8,6 +8,7 @@ import { parseJsonBody } from "@/lib/api-validation";
 const costItemBodySchema = z.object({
   name: z.string().trim().min(1, "Name is required"),
   section: z.enum(["fixed", "operational", "investment"]).optional(),
+  recurring: z.boolean().optional().default(true),
 });
 
 const SECTION_MAP = {
@@ -25,7 +26,7 @@ export async function GET() {
     const items = await prisma.dreCostItem.findMany({
       where: { active: true },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-      select: { id: true, name: true, sortOrder: true },
+      select: { id: true, name: true, sortOrder: true, recurring: true },
     });
     return NextResponse.json({ items });
   } catch (e) {
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
 
   const parsedBody = await parseJsonBody(request, costItemBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
-  const { name } = parsedBody.data;
+  const { name, recurring } = parsedBody.data;
   const section = SECTION_MAP[parsedBody.data.section ?? "fixed"];
 
   try {
@@ -55,9 +56,10 @@ export async function POST(request: NextRequest) {
       data: {
         name,
         section,
+        recurring,
         sortOrder: (maxSort._max.sortOrder ?? 0) + 1,
       },
-      select: { id: true, name: true, sortOrder: true },
+      select: { id: true, name: true, sortOrder: true, recurring: true },
     });
     return NextResponse.json({ item });
   } catch (e) {

@@ -15,11 +15,16 @@ export function buildExplicitFixedCostMap(
   return map;
 }
 
-/** Valor efetivo por mês: explícito ou herança do último mês com valor (incl. dez do ano anterior). */
+/**
+ * Valor efetivo por mês.
+ * - `recurring` (default): explícito ou herança do último mês com valor (incl. dez do ano anterior).
+ * - não recorrente: só o valor explícito daquele mês (sem herança).
+ */
 export function resolveEffectiveFixedCostsForYear(
   costItemIds: string[],
   year: number,
   explicit: Map<string, number>,
+  recurringByItemId: ReadonlyMap<string, boolean> = new Map(),
 ): Record<number, Record<string, number | null>> {
   const byMonth: Record<number, Record<string, number | null>> = {};
   for (let month = 1; month <= 12; month += 1) {
@@ -27,6 +32,18 @@ export function resolveEffectiveFixedCostsForYear(
   }
 
   for (const costItemId of costItemIds) {
+    const recurring = recurringByItemId.get(costItemId) ?? true;
+
+    if (!recurring) {
+      for (let month = 1; month <= 12; month += 1) {
+        const key = `${year}:${month}:${costItemId}`;
+        byMonth[month][costItemId] = explicit.has(key)
+          ? explicit.get(key)!
+          : null;
+      }
+      continue;
+    }
+
     let carrying: number | null = null;
 
     for (let month = 12; month >= 1; month -= 1) {

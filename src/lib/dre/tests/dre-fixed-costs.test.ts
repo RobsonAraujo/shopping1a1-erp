@@ -40,4 +40,24 @@ describe("resolveEffectiveFixedCostsForYear", () => {
     );
     assert.equal(resolved[1].rent, null);
   });
+
+  it("does not carry forward when item is not recurring", () => {
+    const explicit = buildExplicitFixedCostMap([
+      { costItemId: "bonus", year: 2026, month: 3, amount: 500 },
+      { costItemId: "bonus", year: 2025, month: 12, amount: 900 },
+    ]);
+    const recurringByItemId = new Map([["bonus", false]]);
+
+    const resolved = resolveEffectiveFixedCostsForYear(
+      ["bonus"],
+      2026,
+      explicit,
+      recurringByItemId,
+    );
+
+    assert.equal(resolved[2].bonus, null);
+    assert.equal(resolved[3].bonus, 500);
+    assert.equal(resolved[4].bonus, null);
+    assert.equal(resolved[1].bonus, null);
+  });
 });

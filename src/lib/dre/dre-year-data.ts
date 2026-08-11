@@ -36,6 +36,7 @@ export type DreCostItemView = {
   id: string;
   name: string;
   sortOrder: number;
+  recurring: boolean;
 };
 
 export type DreMonthView = {
@@ -156,10 +157,14 @@ function buildEffectiveCostMaps(
   overridesByMonth: Record<number, Record<string, number | null>>;
 } {
   const costItemIds = costItems.map((item) => item.id);
+  const recurringByItemId = new Map(
+    costItems.map((item) => [item.id, item.recurring] as const),
+  );
   const effectiveByMonth = resolveEffectiveFixedCostsForYear(
     costItemIds,
     year,
     explicitMap,
+    recurringByItemId,
   );
 
   const valuesByMonth: Record<number, Record<string, number | null>> = {};
@@ -194,7 +199,13 @@ export async function loadDreYearView(year: number): Promise<DreYearView> {
     prisma.dreCostItem.findMany({
       where: { active: true },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-      select: { id: true, name: true, sortOrder: true, section: true },
+      select: {
+        id: true,
+        name: true,
+        sortOrder: true,
+        section: true,
+        recurring: true,
+      },
     }),
     prisma.dreMonthSnapshot.findMany({
       where: { year },
@@ -215,13 +226,28 @@ export async function loadDreYearView(year: number): Promise<DreYearView> {
 
   const costItems = allCostItems
     .filter((item) => item.section === "FIXED")
-    .map(({ id, name, sortOrder }) => ({ id, name, sortOrder }));
+    .map(({ id, name, sortOrder, recurring }) => ({
+      id,
+      name,
+      sortOrder,
+      recurring,
+    }));
   const operationalCostItems = allCostItems
     .filter((item) => item.section === "OPERATIONAL")
-    .map(({ id, name, sortOrder }) => ({ id, name, sortOrder }));
+    .map(({ id, name, sortOrder, recurring }) => ({
+      id,
+      name,
+      sortOrder,
+      recurring,
+    }));
   const investmentCostItems = allCostItems
     .filter((item) => item.section === "INVESTMENT")
-    .map(({ id, name, sortOrder }) => ({ id, name, sortOrder }));
+    .map(({ id, name, sortOrder, recurring }) => ({
+      id,
+      name,
+      sortOrder,
+      recurring,
+    }));
 
   const snapshotByMonth = new Map(
     snapshots.map((row) => [row.month, row]),

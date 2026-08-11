@@ -391,6 +391,8 @@ model DreCostItem {
   section     DreCostSection      @default(FIXED)
   sortOrder   Int                 @default(0) @map("sort_order")
   active      Boolean             @default(true)
+  /// true = valor informado se replica nos meses seguintes; false = só vale no mês com valor explícito.
+  recurring   Boolean             @default(true)
   createdAt   DateTime            @default(now()) @map("created_at")
   updatedAt   DateTime            @updatedAt @map("updated_at")
   monthValues DreCostMonthValue[]

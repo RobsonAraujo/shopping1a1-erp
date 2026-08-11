@@ -15,13 +15,13 @@ import {
 import type { DreCostItemView, DreMonthView } from "../dre-year-data";
 
 const costItems: DreCostItemView[] = [
-  { id: "c1", name: "Aluguel" } as DreCostItemView,
+  { id: "c1", name: "Aluguel", sortOrder: 1, recurring: true },
 ];
 const operationalItems: DreCostItemView[] = [
-  { id: "o1", name: "Salários" } as DreCostItemView,
+  { id: "o1", name: "Salários", sortOrder: 1, recurring: true },
 ];
 const investmentItems: DreCostItemView[] = [
-  { id: "i1", name: "Marketing institucional" } as DreCostItemView,
+  { id: "i1", name: "Marketing institucional", sortOrder: 1, recurring: true },
 ];
 
 describe("buildDreTableRows", () => {

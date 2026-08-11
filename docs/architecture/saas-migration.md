@@ -307,6 +307,17 @@ Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templ
 - **Código já tenant-ready?** **não** — `persistDreMonthSnapshot` / sync sem `organizationId`
 - **Ação futura na migração:** escopar sync/persist por `organizationId`
 
+### DRE — custo recorrente vs só no mês — 2026-08-11
+
+- **Tabelas novas/alteradas:** `dre_cost_items.recurring` (boolean, default true)
+- **Precisa `organizationId`?** **sim** — itens de custo globais do deployment
+- **APIs afetadas:** `POST/PATCH /api/dre/cost-items` (`recurring`); leitura efetiva em `resolveEffectiveFixedCostsForYear`
+- **Assume singleton?** **sim** — sem `organizationId` em `DreCostItem`
+- **Cron/background:** nenhum
+- **Dados globais vs por org:** itens e valores mensais únicos do deployment
+- **Código já tenant-ready?** **não** — create/update/load sem `organizationId`
+- **Ação futura na migração:** escopar `DreCostItem` / `DreCostMonthValue` por `organizationId`
+
 ### Produtos e pricing — baseline
 
 - **Tabelas:** `products`, `company_tax_settings`
