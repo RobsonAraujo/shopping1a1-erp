@@ -281,8 +281,8 @@ export function DreClient() {
     : (data?.yearTotals ?? null);
   const monthFocused = selectedMonth !== null && focusMonthView !== null;
   const focusCardClass = monthFocused
-    ? "origin-center scale-[1.02] shadow-[0_4px_14px_-2px_rgba(27,45,111,0.18),0_2px_6px_-2px_rgba(27,45,111,0.08)] transition-[transform,box-shadow] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
-    : "origin-center scale-100 shadow-sm transition-[transform,box-shadow] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]";
+    ? "origin-center scale-[1.04] shadow-[0_8px_24px_-4px_rgba(27,45,111,0.28),0_4px_10px_-2px_rgba(27,45,111,0.12)] transition-[transform,box-shadow] duration-[1800ms] ease-linear"
+    : "origin-center scale-100 shadow-sm transition-[transform,box-shadow] duration-[1800ms] ease-linear";
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -371,7 +371,7 @@ export function DreClient() {
           <div className="space-y-2">
             <div className="flex h-5 items-center gap-2">
               {monthFocused ? (
-                <span className="inline-flex animate-in fade-in-0 items-center gap-1.5 text-[11px] font-medium text-[var(--muted-foreground)] duration-500">
+                <span className="inline-flex animate-in fade-in-0 items-center gap-1.5 text-[11px] font-medium text-[var(--muted-foreground)] duration-[1800ms]">
                   Exibindo{" "}
                   <span className="font-semibold text-[var(--foreground)]">
                     {focusMonthView.label}
