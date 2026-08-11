@@ -2,6 +2,7 @@ import { stockPlanningConfig } from "@/config/stock-planning";
 import { prisma } from "@/lib/db";
 import { roundMoney } from "@/lib/financial-margin";
 import { getMercadoLibreConfig } from "./config";
+import { fetchWithRetry } from "./fetch-with-retry";
 import {
   aggregateFulfillmentSnapshots,
   collectInventoryIdsFromItem,
@@ -245,14 +246,10 @@ export async function fetchOrdersInDateRange(
     u.searchParams.set("sort", "date_desc");
     u.searchParams.set("display", "complete");
 
-    const res = await fetch(u.toString(), {
+    const res = await fetchWithRetry(u.toString(), {
       headers: { Authorization: `Bearer ${accessToken}` },
       cache: "no-store",
     });
-    if (!res.ok) {
-      const t = await res.text();
-      throw new Error(`orders/search failed: ${res.status} ${t}`);
-    }
 
     const data = (await res.json()) as OrderSearchResponse;
     const reported = data.paging?.total;
@@ -393,14 +390,10 @@ export async function fetchOrderMetricsByItemInDateRange(
     u.searchParams.set("sort", "date_desc");
     u.searchParams.set("display", "complete");
 
-    const res = await fetch(u.toString(), {
+    const res = await fetchWithRetry(u.toString(), {
       headers: { Authorization: `Bearer ${accessToken}` },
       cache: "no-store",
     });
-    if (!res.ok) {
-      const t = await res.text();
-      throw new Error(`orders/search failed: ${res.status} ${t}`);
-    }
 
     const data = (await res.json()) as OrderSearchResponse;
     const reported = data.paging?.total;
@@ -471,14 +464,10 @@ export async function fetchDailyUnitsSoldByItemInDateRange(
   }
 
   async function fetchPage(offset: number): Promise<OrderSearchResponse> {
-    const res = await fetch(buildUrl(offset), {
+    const res = await fetchWithRetry(buildUrl(offset), {
       headers: { Authorization: `Bearer ${accessToken}` },
       cache: "no-store",
     });
-    if (!res.ok) {
-      const t = await res.text();
-      throw new Error(`orders/search failed: ${res.status} ${t}`);
-    }
     return (await res.json()) as OrderSearchResponse;
   }
 
@@ -641,14 +630,10 @@ async function fetchUnitsSoldForOneItem(
     u.searchParams.set("sort", "date_desc");
     u.searchParams.set("display", "complete");
 
-    const res = await fetch(u.toString(), {
+    const res = await fetchWithRetry(u.toString(), {
       headers: { Authorization: `Bearer ${accessToken}` },
       cache: "no-store",
     });
-    if (!res.ok) {
-      const t = await res.text();
-      throw new Error(`orders/search failed: ${res.status} ${t}`);
-    }
 
     const data = (await res.json()) as OrderSearchResponse;
     const reported = data.paging?.total;
@@ -718,14 +703,10 @@ export async function fetchItemSaleEventsInDateRange(
     u.searchParams.set("sort", "date_desc");
     u.searchParams.set("display", "complete");
 
-    const res = await fetch(u.toString(), {
+    const res = await fetchWithRetry(u.toString(), {
       headers: { Authorization: `Bearer ${accessToken}` },
       cache: "no-store",
     });
-    if (!res.ok) {
-      const t = await res.text();
-      throw new Error(`orders/search failed: ${res.status} ${t}`);
-    }
 
     const data = (await res.json()) as OrderSearchResponse;
     const reported = data.paging?.total;

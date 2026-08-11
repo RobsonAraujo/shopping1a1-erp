@@ -29,6 +29,7 @@ import {
   fetchMlBillingSummaryForMonth,
   isBillingSummaryEmpty,
 } from "@/lib/mercadolibre/billing-summary";
+import { fetchFullInboundShipmentsForPeriod } from "@/lib/mercadolibre/billing-full-collect";
 import {
   fetchListingSaleFee,
   siteIdFromItemId,
@@ -697,6 +698,41 @@ export async function buildDreMonthSnapshot(
         "Não foi possível estimar tarifas e frete do Mercado Livre.",
       );
     }
+  }
+
+  // Recalcula Full envios/inconformidade com o mesmo agrupamento por envio
+  // (inbound_id) do Relatório Full — mais preciso que o total consolidado
+  // da fatura, pois usa sub-tipo/fulfillment_info.type (protege
+  // inconformidade de labels genéricos) e o "bleed guard" de atribuição de
+  // mês. Full armazém (fullStorageMl) não é por envio; mantém a fonte atual.
+  try {
+    const { shipments: fullShipments } = await fetchFullInboundShipmentsForPeriod(
+      accessToken,
+      sellerId,
+      year,
+      month,
+    );
+    if (fullShipments.length > 0) {
+      const totalFullCost = fullShipments.reduce(
+        (sum, s) => sum + s.totalCost,
+        0,
+      );
+      const totalNonCompliance = fullShipments.reduce(
+        (sum, s) => sum + s.nonComplianceCost,
+        0,
+      );
+      const totalCollect = roundMoney(totalFullCost - totalNonCompliance);
+      fullShippingMl = roundMoney(-Math.max(0, totalCollect));
+      fullNonComplianceMl = roundMoney(-Math.max(0, totalNonCompliance));
+      syncWarnings.push(
+        "Full envios/inconformidade recalculados a partir do agrupamento por envio do Relatório Full.",
+      );
+    }
+  } catch (error) {
+    logServerError("dre-month-data full-report", error);
+    syncWarnings.push(
+      "Não foi possível recalcular Full envios/inconformidade pelo Relatório Full; usando total da fatura ML.",
+    );
   }
 
   if (erpCosts.incompleteProductCostCount > 0) {
