@@ -314,6 +314,7 @@ function DreInlineMoneyCell({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<number | null>(displayAmount);
   const [panelStyle, setPanelStyle] = useState<CSSProperties | null>(null);
+  const [panelEntered, setPanelEntered] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -376,6 +377,22 @@ function DreInlineMoneyCell({
   }, [editing]);
 
   useEffect(() => {
+    if (!editing || !panelStyle) {
+      setPanelEntered(false);
+      return;
+    }
+    // Dois rAFs: monta em opacity-0 e só então anima até o estado final.
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => setPanelEntered(true));
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+  }, [editing, panelStyle !== null]);
+
+  useEffect(() => {
     if (!editing) {
       focusedOnceRef.current = false;
       return;
@@ -411,12 +428,14 @@ function DreInlineMoneyCell({
     setDraft(displayAmount);
     setEditing(false);
     setPanelStyle(null);
+    setPanelEntered(false);
     onEditingChange?.(false);
   }
 
   function commit(next: number | null) {
     setEditing(false);
     setPanelStyle(null);
+    setPanelEntered(false);
     onEditingChange?.(false);
     const prev = displayAmount;
     const same =
@@ -439,7 +458,14 @@ function DreInlineMoneyCell({
               onClick={(e) => e.stopPropagation()}
               onDoubleClick={(e) => e.stopPropagation()}
             >
-              <div className="flex animate-in items-center justify-end gap-1 rounded-md border border-[var(--primary)]/40 bg-[var(--background)] p-1 shadow-lg ring-2 ring-[var(--primary)]/30 duration-300 fade-in-0">
+              <div
+                className={cn(
+                  "flex items-center justify-end gap-1 rounded-md border border-[var(--primary)]/40 bg-[var(--background)] p-1 shadow-lg ring-2 ring-[var(--primary)]/30 transition-[opacity,transform] duration-300 ease-out",
+                  panelEntered
+                    ? "scale-100 opacity-100"
+                    : "scale-90 opacity-0",
+                )}
+              >
                 <NumericFormat
                   getInputRef={inputRef}
                   value={draft ?? ""}
