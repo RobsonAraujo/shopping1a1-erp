@@ -99,6 +99,10 @@ export function DreClient() {
   const [preserveAdjustmentIds, setPreserveAdjustmentIds] = useState<
     Set<string>
   >(new Set());
+  /** Marca visual "ajustado" + restore — só na sessão atual (some no reload). */
+  const [sessionAdjustedByMonth, setSessionAdjustedByMonth] = useState<
+    Record<number, DreEditableLineKey[]>
+  >({});
 
   const yearOptions = useMemo(
     () =>
@@ -109,8 +113,20 @@ export function DreClient() {
     [currentYear],
   );
 
+  const viewData = useMemo((): DreYearView | null => {
+    if (!data) return null;
+    return {
+      ...data,
+      months: data.months.map((month) => ({
+        ...month,
+        manuallyEditedLineKeys: sessionAdjustedByMonth[month.month] ?? [],
+      })),
+    };
+  }, [data, sessionAdjustedByMonth]);
+
   const syncAdjustments = useMemo(
-    () => (data && syncConfirm ? collectSyncAdjustments(data, syncConfirm) : []),
+    () =>
+      data && syncConfirm ? collectSyncAdjustments(data, syncConfirm) : [],
     [data, syncConfirm],
   );
 
@@ -147,7 +163,27 @@ export function DreClient() {
 
   useEffect(() => {
     setSelectedMonth(null);
+    setSessionAdjustedByMonth({});
   }, [year]);
+
+  const updateSessionAdjustedAfterEdit = useCallback(
+    (
+      month: number,
+      lineKey: DreEditableLineKey,
+      yearView: DreYearView,
+    ) => {
+      const serverKeys =
+        yearView.months.find((m) => m.month === month)
+          ?.manuallyEditedLineKeys ?? [];
+      setSessionAdjustedByMonth((prev) => {
+        const nextKeys = new Set(prev[month] ?? []);
+        if (serverKeys.includes(lineKey)) nextKeys.add(lineKey);
+        else nextKeys.delete(lineKey);
+        return { ...prev, [month]: [...nextKeys] };
+      });
+    },
+    [],
+  );
 
   const syncMonth = useCallback(
     async (
@@ -169,6 +205,15 @@ export function DreClient() {
           setError(await readApiError(res, "dre_sync_failed"));
           return false;
         }
+        setSessionAdjustedByMonth((prev) => {
+          if (preserveLineKeys.length === 0) {
+            if (!(month in prev)) return prev;
+            const next = { ...prev };
+            delete next[month];
+            return next;
+          }
+          return { ...prev, [month]: [...preserveLineKeys] };
+        });
         await loadYear(year);
         return true;
       } catch {
@@ -327,12 +372,13 @@ export function DreClient() {
         const json = (await res.json()) as { year?: DreYearView };
         if (json.year) {
           setData(json.year);
+          updateSessionAdjustedAfterEdit(month, lineKey, json.year);
         }
       } catch {
         setError("Falha de rede ao salvar o valor.");
       }
     },
-    [year],
+    [year, updateSessionAdjustedAfterEdit],
   );
 
   const handleLineRestore = useCallback(
@@ -356,6 +402,10 @@ export function DreClient() {
         const json = (await res.json()) as { year?: DreYearView };
         if (json.year) {
           setData(json.year);
+          setSessionAdjustedByMonth((prev) => ({
+            ...prev,
+            [month]: (prev[month] ?? []).filter((key) => key !== lineKey),
+          }));
         }
       } catch {
         setError("Falha de rede ao restaurar o valor.");
@@ -634,9 +684,9 @@ export function DreClient() {
           <p className="text-sm text-[var(--muted-foreground)]">Carregando…</p>
         ) : null}
 
-        {data ? (
+        {viewData ? (
           <DreYearTable
-            data={data}
+            data={viewData}
             showDetails={showDetails}
             onToggleDetails={() => setShowDetails((v) => !v)}
             selectedMonth={selectedMonth}
