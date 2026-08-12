@@ -7,6 +7,7 @@ import {
   type MarginBasis,
   type MinSalePriceResult,
 } from "@/lib/financial-margin";
+import { prisma } from "@/lib/db";
 import { calendarYmdRangeToUtc } from "@/lib/financial-evaluation-period";
 import {
   fetchItemsByIdsBatched,
@@ -91,6 +92,8 @@ export type FinancialEvaluationRow = {
   /** true quando custo/imposto vieram da composição de um kit cadastrado manualmente. */
   isKitComposition?: boolean;
   kitComponents?: KitComponent[] | null;
+  /** Preço Mínimo Anunciável cadastrado para o SKU (null se não cadastrado). */
+  pmaPrice: number | null;
 };
 
 async function mapWithConcurrency<T, R>(
@@ -252,6 +255,7 @@ async function buildRowForItem(
     pricingBySku: Map<string, ResolvedProductPricing>;
     kitsByMlItemId: Map<string, KitComponent[]>;
   },
+  pmaBySku?: Map<string, number>,
 ): Promise<
   Omit<
     FinancialEvaluationRow,
@@ -464,6 +468,7 @@ async function buildRowForItem(
     isKit: isKitItem(item),
     isKitComposition,
     kitComponents,
+    pmaPrice: sku ? (pmaBySku?.get(normalizeProductSku(sku)) ?? null) : null,
   };
 }
 
@@ -586,6 +591,7 @@ async function buildRowForPeriodItem(
     pricingBySku: Map<string, ResolvedProductPricing>;
     kitsByMlItemId: Map<string, KitComponent[]>;
   },
+  pmaBySku?: Map<string, number>,
 ): Promise<
   Omit<
     FinancialEvaluationRow,
@@ -769,6 +775,7 @@ async function buildRowForPeriodItem(
     isKit: isKitItem(item),
     isKitComposition,
     kitComponents,
+    pmaPrice: sku ? (pmaBySku?.get(normalizeProductSku(sku)) ?? null) : null,
   };
 }
 
@@ -892,13 +899,22 @@ export async function loadFinancialEvaluationRows(
     .map((item) => getItemSku(item))
     .filter((sku): sku is string => Boolean(sku))
     .concat(kitComponentSkus);
-  const [pricingBySku, taxFromReport] = await Promise.all([
+  const [pricingBySku, taxFromReport, productsWithPma] = await Promise.all([
     loadProductsMapBySku(skus),
     loadProductTaxFromLatestReport(userId),
+    prisma.product.findMany({
+      where: { sku: { in: skus }, pmaPrice: { not: null } },
+      select: { sku: true, pmaPrice: true },
+    }),
   ]);
   const taxBySku = new Map(
     [...taxFromReport.bySku].map(([sku, entry]) => [sku, entry.taxPercent]),
   );
+  const pmaBySku = new Map<string, number>();
+  for (const product of productsWithPma) {
+    if (product.pmaPrice == null) continue;
+    pmaBySku.set(normalizeProductSku(product.sku), Number(product.pmaPrice));
+  }
 
   const baseRows = await mapWithConcurrency(
     operationalItems,
@@ -908,10 +924,18 @@ export async function loadFinancialEvaluationRows(
       const pricing = sku
         ? (pricingBySku.get(normalizeProductSku(sku)) ?? null)
         : null;
-      return buildRowForItem(accessToken, userId, item, pricing, taxBySku, {
-        pricingBySku,
-        kitsByMlItemId,
-      });
+      return buildRowForItem(
+        accessToken,
+        userId,
+        item,
+        pricing,
+        taxBySku,
+        {
+          pricingBySku,
+          kitsByMlItemId,
+        },
+        pmaBySku,
+      );
     },
     options?.onRow
       ? (row) => {
@@ -1039,13 +1063,22 @@ export async function loadFinancialEvaluationRowsForPeriod(
     .map((item) => getItemSku(item))
     .filter((sku): sku is string => Boolean(sku))
     .concat(kitComponentSkus);
-  const [pricingBySku, taxFromReport] = await Promise.all([
+  const [pricingBySku, taxFromReport, productsWithPma] = await Promise.all([
     loadProductsMapBySku(skus),
     loadProductTaxFromLatestReport(userId),
+    prisma.product.findMany({
+      where: { sku: { in: skus }, pmaPrice: { not: null } },
+      select: { sku: true, pmaPrice: true },
+    }),
   ]);
   const taxBySku = new Map(
     [...taxFromReport.bySku].map(([sku, entry]) => [sku, entry.taxPercent]),
   );
+  const pmaBySku = new Map<string, number>();
+  for (const product of productsWithPma) {
+    if (product.pmaPrice == null) continue;
+    pmaBySku.set(normalizeProductSku(product.sku), Number(product.pmaPrice));
+  }
 
   const orderedAggs = itemIds
     .map((id) => {
@@ -1064,10 +1097,19 @@ export async function loadFinancialEvaluationRowsForPeriod(
       const pricing = sku
         ? (pricingBySku.get(normalizeProductSku(sku)) ?? null)
         : null;
-      return buildRowForPeriodItem(accessToken, userId, item, pricing, agg, taxBySku, {
-        pricingBySku,
-        kitsByMlItemId,
-      });
+      return buildRowForPeriodItem(
+        accessToken,
+        userId,
+        item,
+        pricing,
+        agg,
+        taxBySku,
+        {
+          pricingBySku,
+          kitsByMlItemId,
+        },
+        pmaBySku,
+      );
     },
     options?.onRow
       ? (row) => {

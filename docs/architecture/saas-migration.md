@@ -168,6 +168,17 @@ Detalhes dos modelos: [tenant-data-model.md](tenant-data-model.md).
 
 Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templates/feature-saas-impact.md).
 
+### Badge "Fora do PMA" na lista de Lucratividade — 2026-08-12
+
+- **Tabelas novas/alteradas:** nenhuma (reaproveita `Product.pmaPrice`, já existente)
+- **Precisa `organizationId`?** parcial — hoje a consulta de PMA por SKU é global (`prisma.product.findMany`), sem filtro de org; segue o padrão já usado no restante de `financial-evaluation-data.ts`
+- **APIs afetadas:** `GET /api/financial-evaluation` (stream e não-stream); `FinancialEvaluationRow` ganhou o campo `pmaPrice: number | null`
+- **Assume singleton?** não
+- **Cron/background:** nenhum
+- **Dados globais vs por org:** `Product.pmaPrice` é global hoje, mesma limitação de todo o cadastro de produtos
+- **Código já tenant-ready?** não — segue o padrão existente do módulo (sem `organizationId`); ao escopar `Product` por org, a query de `pmaBySku` em `loadFinancialEvaluationRows`/`loadFinancialEvaluationRowsForPeriod` deve ganhar o mesmo filtro
+- **Ação futura na migração:** ao adicionar `organizationId` em `Product`, propagar para as duas queries de `pmaBySku` em `src/lib/financial-evaluation-data.ts`
+
 ### DRE — nivelamento de custo de produto por período — 2026-08-11
 
 - **Tabelas novas/alteradas:** nova `dre_product_cost_levelings` (`DreProductCostLeveling`: SKU FK → `Product`, intervalo inclusivo de meses, campos NF/ST/IPI); `Product` ganha relação `dreCostLevelings`

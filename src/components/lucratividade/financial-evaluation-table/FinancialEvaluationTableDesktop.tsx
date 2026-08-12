@@ -183,6 +183,15 @@ export function FinancialEvaluationTableDesktop({
                             Sem alíquota
                           </Badge>
                         ) : null}
+                        {row.pmaPrice !== null &&
+                        row.salePrice > row.pmaPrice ? (
+                          <Badge
+                            variant="destructive"
+                            title={`Preço atual (${formatFinancialMoney(row.salePrice)}) acima do PMA (${formatFinancialMoney(row.pmaPrice)}).`}
+                          >
+                            Fora do PMA
+                          </Badge>
+                        ) : null}
                       </div>
                       <p className="truncate text-xs text-[var(--muted-foreground)]">
                         {row.mlItemId}
