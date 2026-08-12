@@ -18,46 +18,46 @@ function item(overrides: Partial<ItemBody> = {}): ItemBody {
 }
 
 describe("buildPmaAlertRows", () => {
-  it("includes an item priced above its PMA", () => {
+  it("includes an item priced below its PMA", () => {
     const rows = buildPmaAlertRows(
-      new Map([["SKU-A", 80]]),
-      [item({ id: "MLB1", price: 100, seller_custom_field: "SKU-A" })],
+      new Map([["SKU-A", 100]]),
+      [item({ id: "MLB1", price: 80, seller_custom_field: "SKU-A" })],
     );
     assert.equal(rows.length, 1);
     assert.equal(rows[0].mlItemId, "MLB1");
-    assert.equal(rows[0].pmaPrice, 80);
-    assert.equal(rows[0].currentPrice, 100);
-    assert.equal(rows[0].excessPercent, 25);
+    assert.equal(rows[0].pmaPrice, 100);
+    assert.equal(rows[0].currentPrice, 80);
+    assert.equal(rows[0].shortfallPercent, 20);
   });
 
-  it("excludes an item priced at or below its PMA", () => {
+  it("excludes an item priced at or above its PMA", () => {
     const atPma = buildPmaAlertRows(
       new Map([["SKU-A", 100]]),
       [item({ id: "MLB1", price: 100, seller_custom_field: "SKU-A" })],
     );
-    const belowPma = buildPmaAlertRows(
-      new Map([["SKU-A", 120]]),
+    const abovePma = buildPmaAlertRows(
+      new Map([["SKU-A", 80]]),
       [item({ id: "MLB1", price: 100, seller_custom_field: "SKU-A" })],
     );
     assert.equal(atPma.length, 0);
-    assert.equal(belowPma.length, 0);
+    assert.equal(abovePma.length, 0);
   });
 
   it("ignores items whose SKU has no PMA registered", () => {
     const rows = buildPmaAlertRows(
-      new Map([["SKU-A", 80]]),
-      [item({ id: "MLB1", price: 100, seller_custom_field: "SKU-B" })],
+      new Map([["SKU-A", 100]]),
+      [item({ id: "MLB1", price: 80, seller_custom_field: "SKU-B" })],
     );
     assert.equal(rows.length, 0);
   });
 
-  it("ignores paused/non-active items even if priced above PMA", () => {
+  it("ignores paused/non-active items even if priced below PMA", () => {
     const rows = buildPmaAlertRows(
-      new Map([["SKU-A", 80]]),
+      new Map([["SKU-A", 100]]),
       [
         item({
           id: "MLB1",
-          price: 100,
+          price: 80,
           seller_custom_field: "SKU-A",
           status: "paused",
         }),
@@ -68,11 +68,11 @@ describe("buildPmaAlertRows", () => {
 
   it("includes 'own' (non-catalog) listings, not just catalog ones", () => {
     const rows = buildPmaAlertRows(
-      new Map([["SKU-A", 80]]),
+      new Map([["SKU-A", 100]]),
       [
         item({
           id: "MLB1",
-          price: 100,
+          price: 80,
           seller_custom_field: "SKU-A",
           catalog_listing: false,
         }),
@@ -88,8 +88,8 @@ describe("buildPmaAlertRows", () => {
         ["SKU-B", 100],
       ]),
       [
-        item({ id: "MLB1", price: 110, seller_custom_field: "SKU-A" }),
-        item({ id: "MLB2", price: 150, seller_custom_field: "SKU-B" }),
+        item({ id: "MLB1", price: 90, seller_custom_field: "SKU-A" }),
+        item({ id: "MLB2", price: 50, seller_custom_field: "SKU-B" }),
       ],
     );
     assert.deepEqual(

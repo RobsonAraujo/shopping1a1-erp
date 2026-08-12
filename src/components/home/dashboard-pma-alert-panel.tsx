@@ -13,10 +13,10 @@ export function DashboardPmaAlertPanel({ rows }: { rows: PmaAlertRow[] }) {
     <section className="space-y-3">
       <div>
         <h2 className="text-xl font-semibold tracking-tight text-[var(--primary)]">
-          Acima do PMA
+          Abaixo do PMA
         </h2>
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-          Preço atual do anúncio acima do preço máximo autorizado (PMA)
+          Preço atual do anúncio abaixo do preço mínimo autorizado (PMA)
           cadastrado para o produto.
         </p>
       </div>
@@ -92,8 +92,8 @@ export function DashboardPmaAlertPanel({ rows }: { rows: PmaAlertRow[] }) {
                         variant="destructive"
                         className="h-5 px-2 text-[11px]"
                       >
-                        +
-                        {row.excessPercent.toLocaleString("pt-BR", {
+                        -
+                        {row.shortfallPercent.toLocaleString("pt-BR", {
                           maximumFractionDigits: 0,
                         })}
                         %

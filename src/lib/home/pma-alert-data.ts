@@ -14,7 +14,7 @@ export type PmaAlertRow = {
   imageUrl: string | null;
   pmaPrice: number;
   currentPrice: number;
-  excessPercent: number;
+  shortfallPercent: number;
 };
 
 export function buildPmaAlertRows(
@@ -32,7 +32,7 @@ export function buildPmaAlertRows(
     const pmaPrice = pmaBySku.get(canonicalSku);
     if (pmaPrice == null) continue;
 
-    if (item.price <= pmaPrice) continue;
+    if (item.price >= pmaPrice) continue;
 
     rows.push({
       mlItemId: item.id,
@@ -41,11 +41,11 @@ export function buildPmaAlertRows(
       imageUrl: bestItemImageUrl(item) ?? null,
       pmaPrice,
       currentPrice: item.price,
-      excessPercent: ((item.price - pmaPrice) / pmaPrice) * 100,
+      shortfallPercent: ((pmaPrice - item.price) / pmaPrice) * 100,
     });
   }
 
-  return rows.sort((a, b) => b.excessPercent - a.excessPercent);
+  return rows.sort((a, b) => b.shortfallPercent - a.shortfallPercent);
 }
 
 export async function loadPmaAlerts(

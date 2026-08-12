@@ -184,12 +184,12 @@ export function FinancialEvaluationTableDesktop({
                           </Badge>
                         ) : null}
                         {row.pmaPrice !== null &&
-                        row.salePrice > row.pmaPrice ? (
+                        row.salePrice < row.pmaPrice ? (
                           <Badge
                             variant="destructive"
-                            title={`Preço atual (${formatFinancialMoney(row.salePrice)}) acima do PMA (${formatFinancialMoney(row.pmaPrice)}).`}
+                            title={`Preço atual (${formatFinancialMoney(row.salePrice)}) abaixo do PMA (${formatFinancialMoney(row.pmaPrice)}).`}
                           >
-                            Fora do PMA
+                            Abaixo do PMA
                           </Badge>
                         ) : null}
                       </div>
