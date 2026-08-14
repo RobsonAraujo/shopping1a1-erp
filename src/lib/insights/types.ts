@@ -64,12 +64,16 @@ export type DifalMapRow = {
 // Pareto de receita — concentração de receita por SKU
 // ---------------------------------------------------------------------------
 
+export type ParetoCurve = "A" | "B" | "C";
+
 export type ParetoRow = Pick<
   SkuAggregation,
   "sku" | "receitaTotal" | "unidadesVendidas" | "impostoTotal"
 > & {
   receitaPercent: number;
   receitaAcumuladaPercent: number;
+  /** Curva ABC: A = até 80% acumulado, B = até 95%, C = restante. */
+  curve: ParetoCurve;
 };
 
 // ---------------------------------------------------------------------------

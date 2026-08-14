@@ -1,5 +1,14 @@
 import type { TaxReportPayload } from "@/lib/tax-report/types";
-import type { ParetoRow } from "./types";
+import type { ParetoCurve, ParetoRow } from "./types";
+
+const CURVE_A_MAX_PERCENT = 80;
+const CURVE_B_MAX_PERCENT = 95;
+
+function curveFor(receitaAcumuladaPercent: number): ParetoCurve {
+  if (receitaAcumuladaPercent <= CURVE_A_MAX_PERCENT) return "A";
+  if (receitaAcumuladaPercent <= CURVE_B_MAX_PERCENT) return "B";
+  return "C";
+}
 
 export function buildParetoRows(payload: TaxReportPayload): ParetoRow[] {
   const receitaTotal = payload.porSku.reduce((s, sku) => s + sku.receitaTotal, 0);
@@ -18,6 +27,7 @@ export function buildParetoRows(payload: TaxReportPayload): ParetoRow[] {
       impostoTotal: sku.impostoTotal,
       receitaPercent,
       receitaAcumuladaPercent: acumulado,
+      curve: curveFor(acumulado),
     };
   });
 }

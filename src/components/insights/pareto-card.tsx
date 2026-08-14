@@ -1,15 +1,34 @@
 "use client";
 
+import { Badge } from "@/components/ui/badge";
 import { SortableTh } from "@/components/ui/sortable-th";
 import { useTableSort } from "@/hooks/use-table-sort";
 import { cn } from "@/lib/utils";
-import type { ParetoRow } from "@/lib/insights/types";
+import type { ParetoCurve, ParetoRow } from "@/lib/insights/types";
 
-type ParetoSortKey = "receitaTotal" | "receitaPercent" | "receitaAcumuladaPercent" | "unidadesVendidas";
+type ParetoSortKey =
+  | "receitaTotal"
+  | "receitaPercent"
+  | "receitaAcumuladaPercent"
+  | "unidadesVendidas"
+  | "curve";
 
 function sortValue(row: ParetoRow, key: ParetoSortKey): number {
+  if (key === "curve") return row.curve.charCodeAt(0);
   return row[key];
 }
+
+const CURVE_LABEL: Record<ParetoCurve, string> = {
+  A: "Curva A",
+  B: "Curva B",
+  C: "Curva C",
+};
+
+const CURVE_BADGE_CLASS: Record<ParetoCurve, string> = {
+  A: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
+  B: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
+  C: "bg-[var(--muted)] text-[var(--muted-foreground)]",
+};
 
 function fmtBrl(n: number): string {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -41,6 +60,13 @@ export function ParetoCard({ rows }: { rows: ParetoRow[] }) {
           <tr className="border-b border-[var(--border)] text-left text-xs text-[var(--muted-foreground)]">
             <th className="pb-2 pr-1 font-medium">#</th>
             <th className="pb-2 pr-3 font-medium">SKU</th>
+            <SortableTh
+              label="Curva"
+              sortKey="curve"
+              sort={sort}
+              onSortChange={onSortChange}
+              align="left"
+            />
             <SortableTh label="Receita" sortKey="receitaTotal" sort={sort} onSortChange={onSortChange} />
             <SortableTh
               label="% receita"
@@ -65,17 +91,21 @@ export function ParetoCard({ rows }: { rows: ParetoRow[] }) {
         </thead>
         <tbody>
           {sortedRows.slice(0, 20).map((row, i) => {
-            const past80 = row.receitaAcumuladaPercent - row.receitaPercent >= 80;
             return (
               <tr
                 key={row.sku}
                 className={cn(
                   "border-b border-[var(--border)] last:border-0",
-                  past80 ? "opacity-50" : "",
+                  row.curve === "C" ? "opacity-60" : "",
                 )}
               >
                 <td className="py-2 pr-1 text-[var(--muted-foreground)]">{i + 1}</td>
                 <td className="py-2 pr-3 font-mono text-xs">{row.sku}</td>
+                <td className="py-2 pr-3">
+                  <Badge variant="secondary" className={cn("text-[10px]", CURVE_BADGE_CLASS[row.curve])}>
+                    {CURVE_LABEL[row.curve]}
+                  </Badge>
+                </td>
                 <td className="py-2 pr-3 text-right">{fmtBrl(row.receitaTotal)}</td>
                 <td className="py-2 pr-3 text-right font-medium">
                   {fmtPercent(row.receitaPercent)}

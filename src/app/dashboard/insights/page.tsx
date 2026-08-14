@@ -15,11 +15,9 @@ import { loadLatestTaxReportSnapshot } from "@/lib/tax-report/service/generate-m
 import { mapToSlowMoverRows } from "@/lib/insights/slow-movers";
 import { buildDifalMap } from "@/lib/insights/difal-map";
 import { buildParetoRows, paretoConcentration } from "@/lib/insights/pareto";
-import { InsightExpandableCard } from "@/components/insights/insight-expandable-card";
 import { SlowMoversInsightCard } from "@/components/insights/slow-movers-insight-card";
 import { SlowMoversKpiTile } from "@/components/insights/slow-movers-kpi-tile";
-import { DifalMapCard } from "@/components/insights/difal-map-card";
-import { ParetoCard } from "@/components/insights/pareto-card";
+import { TaxInsightsRangeSection } from "@/components/insights/tax-insights-range-section";
 import { InsightsPageSkeleton } from "@/components/insights/insights-page-skeleton";
 
 const MONTH_NAMES = [
@@ -54,9 +52,9 @@ async function InsightsDataSection({
   // Badges calculados no servidor
   const worstDifalUf = difalRows.find((r) => r.margemMedia < 0);
 
-  const { top3Percent, skusFor80Percent } = paretoRows.length > 0
+  const { top3Percent } = paretoRows.length > 0
     ? paretoConcentration(paretoRows)
-    : { top3Percent: 0, skusFor80Percent: 0 };
+    : { top3Percent: 0 };
   const highConcentration = top3Percent > 60;
 
   const kpis = [
@@ -153,37 +151,7 @@ async function InsightsDataSection({
             <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
               Financeiro &amp; tributário
             </h2>
-            <InsightExpandableCard
-              title="Margem por estado (DIFAL)"
-              subtitle={`Impacto do DIFAL na margem por UF de destino — ${taxPeriod}`}
-              icon={<Map className="size-4" aria-hidden />}
-              iconClassName="bg-blue-100 text-blue-700"
-              accentClassName="border-l-blue-400"
-              badge={
-                worstDifalUf
-                  ? `${worstDifalUf.uf} negativo`
-                  : plural(difalRows.length, "estado", "estados")
-              }
-              badgeVariant={worstDifalUf ? "destructive" : "secondary"}
-            >
-              <DifalMapCard rows={difalRows} />
-            </InsightExpandableCard>
-
-            <InsightExpandableCard
-              title="Concentração de receita (Pareto)"
-              subtitle={`${taxPeriod} — ${skusFor80Percent} SKU${skusFor80Percent !== 1 ? "s" : ""} respondem por 80% da receita`}
-              icon={<PieChart className="size-4" aria-hidden />}
-              iconClassName="bg-indigo-100 text-indigo-700"
-              accentClassName="border-l-indigo-400"
-              badge={
-                highConcentration
-                  ? `top 3 = ${top3Percent.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%`
-                  : plural(paretoRows.length, "SKU", "SKUs")
-              }
-              badgeVariant={highConcentration ? "warning" : "secondary"}
-            >
-              <ParetoCard rows={paretoRows} />
-            </InsightExpandableCard>
+            <TaxInsightsRangeSection initialPayload={taxSnapshot} taxPeriodLabel={taxPeriod} />
           </section>
         )}
       </div>
