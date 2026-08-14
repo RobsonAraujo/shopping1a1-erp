@@ -42,6 +42,14 @@ export function mapToSlowMoverRows(rows: PurchaseAnalysisItemRow[]): SlowMoverRo
     .map(toSlowMoverRow);
 }
 
+/** Filtra `SlowMoverRow[]` já mapeados por threshold de cobertura (ou sem vendas). */
+export function filterSlowMoverRows(rows: SlowMoverRow[], thresholdDays: number): SlowMoverRow[] {
+  return rows.filter((r) => {
+    if (r.performanceTier === "zero") return true;
+    return r.coverageDays !== null && r.coverageDays > thresholdDays;
+  });
+}
+
 /** Filtra rows com cobertura acima do threshold ou sem vendas. */
 export function buildSlowMoverRows(
   rows: PurchaseAnalysisItemRow[],

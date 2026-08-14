@@ -12,11 +12,12 @@ import { cn } from "@/lib/utils";
 import { readSession } from "@/lib/mercadolibre/session";
 import { loadDashboardPurchaseData } from "@/lib/compras/dashboard-purchase-data";
 import { loadLatestTaxReportSnapshot } from "@/lib/tax-report/service/generate-monthly-report";
-import { mapToSlowMoverRows, DEFAULT_SLOW_MOVER_THRESHOLD_DAYS } from "@/lib/insights/slow-movers";
+import { mapToSlowMoverRows } from "@/lib/insights/slow-movers";
 import { buildDifalMap } from "@/lib/insights/difal-map";
 import { buildParetoRows, paretoConcentration } from "@/lib/insights/pareto";
 import { InsightExpandableCard } from "@/components/insights/insight-expandable-card";
-import { SlowMoversCard } from "@/components/insights/slow-movers-card";
+import { SlowMoversInsightCard } from "@/components/insights/slow-movers-insight-card";
+import { SlowMoversKpiTile } from "@/components/insights/slow-movers-kpi-tile";
 import { DifalMapCard } from "@/components/insights/difal-map-card";
 import { ParetoCard } from "@/components/insights/pareto-card";
 import { InsightsPageSkeleton } from "@/components/insights/insights-page-skeleton";
@@ -51,12 +52,6 @@ async function InsightsDataSection({
     : null;
 
   // Badges calculados no servidor
-  const slowCount = allSlowMoverRows.filter(
-    (r) =>
-      r.performanceTier === "zero" ||
-      (r.coverageDays !== null && r.coverageDays > DEFAULT_SLOW_MOVER_THRESHOLD_DAYS),
-  ).length;
-
   const worstDifalUf = difalRows.find((r) => r.margemMedia < 0);
 
   const { top3Percent, skusFor80Percent } = paretoRows.length > 0
@@ -65,14 +60,6 @@ async function InsightsDataSection({
   const highConcentration = top3Percent > 60;
 
   const kpis = [
-    purchaseData && {
-      key: "rotacao",
-      label: "Rotação baixa",
-      value: slowCount,
-      hint: `cobertura > ${DEFAULT_SLOW_MOVER_THRESHOLD_DAYS}d ou parado`,
-      tone: slowCount === 0 ? "success" : "warning",
-      icon: TrendingDown,
-    },
     taxSnapshot && {
       key: "difal",
       label: "DIFAL",
@@ -107,9 +94,10 @@ async function InsightsDataSection({
 
   return (
     <>
-      {kpis.length > 0 && (
+      {(purchaseData || kpis.length > 0) && (
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-6 py-5 sm:px-8">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {purchaseData && <SlowMoversKpiTile allRows={allSlowMoverRows} />}
             {kpis.map(({ key, label, value, hint, tone, icon: Icon }) => (
               <div
                 key={key}
@@ -156,17 +144,7 @@ async function InsightsDataSection({
             <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
               Estoque &amp; reposição
             </h2>
-            <InsightExpandableCard
-              title="Rotação baixa"
-              subtitle={`Produtos com cobertura acima de ${DEFAULT_SLOW_MOVER_THRESHOLD_DAYS} dias ou sem vendas no período`}
-              icon={<TrendingDown className="size-4" aria-hidden />}
-              iconClassName="bg-orange-100 text-orange-700"
-              accentClassName="border-l-orange-400"
-              badge={slowCount > 0 ? plural(slowCount, "produto", "produtos") : "tudo ok"}
-              badgeVariant={slowCount > 0 ? "warning" : "success"}
-            >
-              <SlowMoversCard allRows={allSlowMoverRows} />
-            </InsightExpandableCard>
+            <SlowMoversInsightCard allRows={allSlowMoverRows} />
           </section>
         )}
 

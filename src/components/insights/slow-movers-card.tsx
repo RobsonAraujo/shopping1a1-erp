@@ -2,22 +2,14 @@
 
 import { Info } from "lucide-react";
 import type { SlowMoverRow } from "@/lib/insights/types";
-import { DEFAULT_SLOW_MOVER_THRESHOLD_DAYS, MIN_LISTING_AGE_DAYS } from "@/lib/insights/slow-movers";
+import { MIN_LISTING_AGE_DAYS, filterSlowMoverRows } from "@/lib/insights/slow-movers";
 import { SlowMoversTable } from "@/components/insights/slow-movers-table";
-import { usePersistedJson } from "@/hooks/use-persisted-json";
-
-const THRESHOLD_STORAGE_KEY = "insights.slowMovers.threshold";
+import { useSlowMoverThreshold } from "@/hooks/use-slow-mover-threshold";
 
 export function SlowMoversCard({ allRows }: { allRows: SlowMoverRow[] }) {
-  const [threshold, setThreshold] = usePersistedJson(
-    THRESHOLD_STORAGE_KEY,
-    DEFAULT_SLOW_MOVER_THRESHOLD_DAYS,
-  );
+  const [threshold, setThreshold] = useSlowMoverThreshold();
 
-  const rows = allRows.filter((r) => {
-    if (r.performanceTier === "zero") return true;
-    return r.coverageDays !== null && r.coverageDays > threshold;
-  });
+  const rows = filterSlowMoverRows(allRows, threshold);
 
   return (
     <div className="space-y-3">
