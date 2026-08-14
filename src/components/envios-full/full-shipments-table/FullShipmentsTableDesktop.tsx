@@ -10,12 +10,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { SortableTh } from "@/components/ui/sortable-th";
 import { formatFinancialMoney } from "@/lib/financial-margin";
 import {
   formatShipmentDate,
   sourceLabel,
 } from "@/components/envios-full/full-shipments-table/shared";
-import type { FullShipmentsTableProps } from "@/components/envios-full/full-shipments-table/types";
+import type { FullShipmentsTableViewProps } from "@/components/envios-full/full-shipments-table/types";
 
 export function FullShipmentsTableDesktop({
   shipments,
@@ -24,7 +25,9 @@ export function FullShipmentsTableDesktop({
   viewYear,
   onEdit,
   onDelete,
-}: FullShipmentsTableProps) {
+  sort,
+  onSortChange,
+}: FullShipmentsTableViewProps) {
   return (
     <TooltipProvider delayDuration={200}>
     <Card className="overflow-hidden p-0 shadow-sm">
@@ -35,21 +38,46 @@ export function FullShipmentsTableDesktop({
               <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                 Envio ML
               </th>
-              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                Data
-              </th>
-              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                Produtos
-              </th>
-              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                Custo total
-              </th>
-              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                Unidades
-              </th>
-              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                Custo/un.
-              </th>
+              <SortableTh
+                label="Data"
+                sortKey="shippedAt"
+                sort={sort}
+                onSortChange={onSortChange}
+                align="left"
+                className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]"
+              />
+              <SortableTh
+                label="Produtos"
+                sortKey="productCount"
+                sort={sort}
+                onSortChange={onSortChange}
+                align="left"
+                className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]"
+              />
+              <SortableTh
+                label="Custo total"
+                sortKey="totalCost"
+                sort={sort}
+                onSortChange={onSortChange}
+                align="left"
+                className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]"
+              />
+              <SortableTh
+                label="Unidades"
+                sortKey="totalUnits"
+                sort={sort}
+                onSortChange={onSortChange}
+                align="left"
+                className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]"
+              />
+              <SortableTh
+                label="Custo/un."
+                sortKey="costPerUnit"
+                sort={sort}
+                onSortChange={onSortChange}
+                align="left"
+                className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]"
+              />
               <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                 Origem
               </th>

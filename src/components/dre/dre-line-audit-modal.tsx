@@ -13,8 +13,12 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { FormInput } from "@/components/ui/form-input";
+import { SortableTh } from "@/components/ui/sortable-th";
+import { useTableSort } from "@/hooks/use-table-sort";
 import { formatFinancialMoney } from "@/lib/financial-margin";
 import type { DreLineBreakdownItem } from "@/lib/dre/dre-calculations";
+
+type DreLineAuditSortKey = "title" | "quantity" | "amount";
 
 type DreLineAuditModalProps = {
   open: boolean;
@@ -55,6 +59,19 @@ export function DreLineAuditModal({
   const filteredItems = useMemo(
     () => items.filter((item) => matchesQuery(item, query)),
     [items, query],
+  );
+
+  const { sort, sortedRows, onSortChange } = useTableSort<
+    DreLineBreakdownItem,
+    DreLineAuditSortKey
+  >(
+    filteredItems,
+    (item, key) => {
+      if (key === "title") return item.title || item.sku || "";
+      if (key === "quantity") return item.quantity ?? 0;
+      return item.amount;
+    },
+    { key: "amount", direction: "desc" },
   );
 
   const totalQuantity = filteredItems.reduce(
@@ -137,15 +154,30 @@ export function DreLineAuditModal({
                       </colgroup>
                       <thead className="sticky top-0 z-10">
                         <tr className="border-b border-[var(--border)] bg-[var(--muted)] text-[11px] uppercase text-[var(--muted-foreground)]">
-                          <th className="px-3 py-2 font-medium">Produto</th>
+                          <SortableTh
+                            label="Produto"
+                            sortKey="title"
+                            sort={sort}
+                            onSortChange={onSortChange}
+                            align="left"
+                            className="px-3 py-2"
+                          />
                           {hasQuantity ? (
-                            <th className="px-3 py-2 text-right font-medium">
-                              Qtd.
-                            </th>
+                            <SortableTh
+                              label="Qtd."
+                              sortKey="quantity"
+                              sort={sort}
+                              onSortChange={onSortChange}
+                              className="px-3 py-2"
+                            />
                           ) : null}
-                          <th className="px-3 py-2 text-right font-medium">
-                            {amountLabel}
-                          </th>
+                          <SortableTh
+                            label={amountLabel}
+                            sortKey="amount"
+                            sort={sort}
+                            onSortChange={onSortChange}
+                            className="px-3 py-2"
+                          />
                         </tr>
                       </thead>
                       <tbody>
@@ -160,7 +192,7 @@ export function DreLineAuditModal({
                             </td>
                           </tr>
                         ) : (
-                          filteredItems.map((item) => (
+                          sortedRows.map((item) => (
                             <tr
                               key={item.key}
                               className="border-b border-[var(--border)] last:border-b-0"

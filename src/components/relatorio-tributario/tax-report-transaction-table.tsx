@@ -1,15 +1,17 @@
 "use client";
 
-import { useRef, useState, type CSSProperties } from "react";
+import { useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { AlertTriangle, ChevronRight, Info } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, ChevronRight, Info } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import type { TableSort } from "@/components/ui/sortable-th";
 import { useIsMobile } from "@/hooks/use-is-mobile";
+import { useTableSort } from "@/hooks/use-table-sort";
 import {
   formatFinancialMoney,
   formatFinancialPercent,
@@ -20,6 +22,83 @@ import { icmsSemDifal } from "@/lib/tax-report/calculators/icms-difal";
 import { impostoOperacionalLinha, margemOperacionalEstimadaLinha } from "@/lib/tax-report/imposto-operacional";
 import { TaxReportCalculationPanel } from "@/components/relatorio-tributario/tax-report-calculation-panel";
 import { cn } from "@/lib/utils";
+
+type TransactionSortKey =
+  | "sku"
+  | "data"
+  | "uf"
+  | "doc"
+  | "qtd"
+  | "receita"
+  | "pisCofins"
+  | "icms"
+  | "difal"
+  | "impostoOperacional"
+  | "margemOperacional";
+
+function getTransactionSortValue(
+  row: DetalhamentoTributario,
+  key: TransactionSortKey,
+): string | number {
+  const t = row.transacao;
+  switch (key) {
+    case "sku":
+      return t.sku ?? "";
+    case "data":
+      return new Date(t.orderDate).getTime();
+    case "uf":
+      return t.ufDestino ?? "";
+    case "doc":
+      return t.tipoDocumento ?? "";
+    case "qtd":
+      return t.quantidade;
+    case "receita":
+      return t.receitaBruta;
+    case "pisCofins":
+      return row.pisCofins?.liquido ?? Number.NEGATIVE_INFINITY;
+    case "icms":
+      return row.incluidoNaApuracao ? (icmsSemDifal(row.icmsDifal) ?? Number.NEGATIVE_INFINITY) : Number.NEGATIVE_INFINITY;
+    case "difal":
+      return row.icmsDifal?.difal ?? Number.NEGATIVE_INFINITY;
+    case "impostoOperacional":
+      return impostoOperacionalLinha(row) ?? Number.NEGATIVE_INFINITY;
+    case "margemOperacional":
+      return row.incluidoNaApuracao
+        ? (margemOperacionalEstimadaLinha(row) ?? Number.NEGATIVE_INFINITY)
+        : Number.NEGATIVE_INFINITY;
+  }
+}
+
+function SortTrigger({
+  label,
+  sortKey,
+  sort,
+  onSortChange,
+  align = "right",
+}: {
+  label: ReactNode;
+  sortKey: TransactionSortKey;
+  sort: TableSort<TransactionSortKey>;
+  onSortChange: (key: TransactionSortKey) => void;
+  align?: "left" | "right";
+}) {
+  const active = sort.key === sortKey;
+  const Icon = active ? (sort.direction === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
+  return (
+    <button
+      type="button"
+      onClick={() => onSortChange(sortKey)}
+      className={cn(
+        "inline-flex w-full cursor-pointer items-center gap-1 hover:text-[var(--foreground)]",
+        align === "right" && "flex-row-reverse",
+        active && "text-[var(--foreground)]",
+      )}
+    >
+      {label}
+      <Icon className="size-3 shrink-0" />
+    </button>
+  );
+}
 
 const ROW_HEIGHT = 52;
 const MOBILE_CARD_HEIGHT = 128;
@@ -99,66 +178,130 @@ export function TaxReportHeaderWithTip({
 function TransactionTableHeader({
   showSku,
   showOrderSku,
+  sort,
+  onSortChange,
 }: {
   showSku?: boolean;
   showOrderSku?: boolean;
+  sort: TableSort<TransactionSortKey>;
+  onSortChange: (key: TransactionSortKey) => void;
 }) {
   return (
     <div
       className="grid w-full items-center border-b border-[var(--border)] bg-[var(--background)] text-left text-xs text-[var(--muted-foreground)]"
       style={tableGridStyle({ showSku, showOrderSku })}
     >
-      <span className="min-w-0 px-2 py-2.5 whitespace-nowrap">Data</span>
+      <span className="min-w-0 px-2 py-2.5 whitespace-nowrap">
+        <SortTrigger label="Data" sortKey="data" sort={sort} onSortChange={onSortChange} align="left" />
+      </span>
       {showOrderSku ? (
         <span className="min-w-0 truncate px-2 py-2.5">
-          <TaxReportHeaderWithTip
-            label="SKU no pedido"
-            tip="Nome do SKU registrado no pedido do Mercado Livre. Pode diferir do cadastro atual quando o SKU foi renomeado."
+          <SortTrigger
+            label={
+              <TaxReportHeaderWithTip
+                label="SKU no pedido"
+                tip="Nome do SKU registrado no pedido do Mercado Livre. Pode diferir do cadastro atual quando o SKU foi renomeado."
+                align="left"
+              />
+            }
+            sortKey="sku"
+            sort={sort}
+            onSortChange={onSortChange}
             align="left"
           />
         </span>
       ) : null}
       {showSku ? (
-        <span className="min-w-0 truncate px-2 py-2.5">SKU</span>
+        <span className="min-w-0 truncate px-2 py-2.5">
+          <SortTrigger label="SKU" sortKey="sku" sort={sort} onSortChange={onSortChange} align="left" />
+        </span>
       ) : null}
-      <span className="min-w-0 py-2.5 pr-4 pl-2 whitespace-nowrap">UF</span>
-      <span className="min-w-0 truncate py-2.5 pr-2 pl-4">Doc.</span>
+      <span className="min-w-0 py-2.5 pr-4 pl-2 whitespace-nowrap">
+        <SortTrigger label="UF" sortKey="uf" sort={sort} onSortChange={onSortChange} align="left" />
+      </span>
+      <span className="min-w-0 truncate py-2.5 pr-2 pl-4">
+        <SortTrigger label="Doc." sortKey="doc" sort={sort} onSortChange={onSortChange} align="left" />
+      </span>
       <span className="min-w-0 px-2 py-2.5 text-right">
-        <TaxReportHeaderWithTip
-          label="Qtd"
-          tip="Unidades vendidas nesta linha do pedido."
-          align="right"
-        />
-      </span>
-      <span className="px-2 py-2.5 text-right whitespace-nowrap">Receita</span>
-      <span className="px-2 py-2.5 text-right whitespace-nowrap">
-        <TaxReportHeaderWithTip
-          label="PIS/COFINS"
-          tip="Líquido após crédito na NF de entrada. Passe o mouse no valor da linha para ver débito e crédito."
-        />
-      </span>
-      <span className="px-2 py-2.5 text-right whitespace-nowrap">
-        <TaxReportHeaderWithTip
-          label="ICMS"
-          tip="ICMS interno ou interestadual (UF origem) — sem DIFAL."
+        <SortTrigger
+          label={
+            <TaxReportHeaderWithTip
+              label="Qtd"
+              tip="Unidades vendidas nesta linha do pedido."
+              align="right"
+            />
+          }
+          sortKey="qtd"
+          sort={sort}
+          onSortChange={onSortChange}
         />
       </span>
       <span className="px-2 py-2.5 text-right whitespace-nowrap">
-        <TaxReportHeaderWithTip
-          label="DIFAL"
-          tip="Diferencial de alíquota (EC 87/2015) para comprador não contribuinte."
+        <SortTrigger label="Receita" sortKey="receita" sort={sort} onSortChange={onSortChange} />
+      </span>
+      <span className="px-2 py-2.5 text-right whitespace-nowrap">
+        <SortTrigger
+          label={
+            <TaxReportHeaderWithTip
+              label="PIS/COFINS"
+              tip="Líquido após crédito na NF de entrada. Passe o mouse no valor da linha para ver débito e crédito."
+            />
+          }
+          sortKey="pisCofins"
+          sort={sort}
+          onSortChange={onSortChange}
         />
       </span>
       <span className="px-2 py-2.5 text-right whitespace-nowrap">
-        <TaxReportHeaderWithTip
-          label="Imp. oper."
-          tip="PIS/COFINS + ICMS por venda. Percentual sobre a receita bruta."
+        <SortTrigger
+          label={
+            <TaxReportHeaderWithTip
+              label="ICMS"
+              tip="ICMS interno ou interestadual (UF origem) — sem DIFAL."
+            />
+          }
+          sortKey="icms"
+          sort={sort}
+          onSortChange={onSortChange}
         />
       </span>
       <span className="px-2 py-2.5 text-right whitespace-nowrap">
-        <TaxReportHeaderWithTip
-          label="Margem oper."
-          tip="Receita menos CMV e impostos operacionais nesta venda."
+        <SortTrigger
+          label={
+            <TaxReportHeaderWithTip
+              label="DIFAL"
+              tip="Diferencial de alíquota (EC 87/2015) para comprador não contribuinte."
+            />
+          }
+          sortKey="difal"
+          sort={sort}
+          onSortChange={onSortChange}
+        />
+      </span>
+      <span className="px-2 py-2.5 text-right whitespace-nowrap">
+        <SortTrigger
+          label={
+            <TaxReportHeaderWithTip
+              label="Imp. oper."
+              tip="PIS/COFINS + ICMS por venda. Percentual sobre a receita bruta."
+            />
+          }
+          sortKey="impostoOperacional"
+          sort={sort}
+          onSortChange={onSortChange}
+        />
+      </span>
+      <span className="px-2 py-2.5 text-right whitespace-nowrap">
+        <SortTrigger
+          label={
+            <TaxReportHeaderWithTip
+              label="Margem oper."
+              tip="Receita menos CMV e impostos operacionais nesta venda."
+            />
+          }
+          sortKey="margemOperacional"
+          sort={sort}
+          onSortChange={onSortChange}
         />
       </span>
     </div>
@@ -422,8 +565,13 @@ export function VirtualizedTaxReportTransactionTable({
   const parentRef = useRef<HTMLDivElement>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
+  const { sort, sortedRows, onSortChange } = useTableSort<
+    DetalhamentoTributario,
+    TransactionSortKey
+  >(rows, getTransactionSortValue, { key: "data", direction: "desc" });
+
   const rowVirtualizer = useVirtualizer({
-    count: rows.length,
+    count: sortedRows.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => (isMobile ? MOBILE_CARD_HEIGHT : ROW_HEIGHT),
     overscan: 8,
@@ -431,7 +579,7 @@ export function VirtualizedTaxReportTransactionTable({
 
   const selectedRow =
     selectedKey != null
-      ? (rows.find((row) => row.transacao.transactionKey === selectedKey) ??
+      ? (sortedRows.find((row) => row.transacao.transactionKey === selectedKey) ??
         null)
       : null;
 
@@ -459,7 +607,7 @@ export function VirtualizedTaxReportTransactionTable({
               }}
             >
               {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                const row = rows[virtualRow.index];
+                const row = sortedRows[virtualRow.index];
                 const isSelected =
                   selectedKey === row.transacao.transactionKey;
                 return (
@@ -493,7 +641,7 @@ export function VirtualizedTaxReportTransactionTable({
             style={{ WebkitOverflowScrolling: "touch" }}
           >
             <div style={{ minWidth: tableMinWidth({ showSku, showOrderSku }) }}>
-              <TransactionTableHeader showSku={showSku} showOrderSku={showOrderSku} />
+              <TransactionTableHeader showSku={showSku} showOrderSku={showOrderSku} sort={sort} onSortChange={onSortChange} />
               <div
                 ref={parentRef}
                 className="max-h-[32rem] overflow-x-hidden overflow-y-auto"
@@ -506,7 +654,7 @@ export function VirtualizedTaxReportTransactionTable({
                   }}
                 >
                   {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                    const row = rows[virtualRow.index];
+                    const row = sortedRows[virtualRow.index];
                     const isSelected =
                       selectedKey === row.transacao.transactionKey;
                     return (

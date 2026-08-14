@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
-import type { WorkingCapitalTableProps } from "@/components/insights/working-capital-table/types";
+import { SortableTh } from "@/components/ui/sortable-th";
+import type { WorkingCapitalTableDesktopProps } from "@/components/insights/working-capital-table/types";
 
 function fmtBrl(n: number): string {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -9,7 +10,7 @@ function fmtUnits(n: number): string {
   return n.toLocaleString("pt-BR");
 }
 
-export function WorkingCapitalTableDesktop({ rows }: WorkingCapitalTableProps) {
+export function WorkingCapitalTableDesktop({ rows, sort, onSortChange }: WorkingCapitalTableDesktopProps) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -17,11 +18,22 @@ export function WorkingCapitalTableDesktop({ rows }: WorkingCapitalTableProps) {
           <tr className="border-b border-[var(--border)] text-left text-xs text-[var(--muted-foreground)]">
             <th className="pb-2 pr-3 font-medium">SKU</th>
             <th className="pb-2 pr-3 font-medium">Fornecedor</th>
-            <th className="pb-2 pr-3 text-right font-medium">Unid. necessárias</th>
-            <th className="pb-2 pr-3 text-right font-medium">Custo unit.</th>
-            <th className="pb-2 pr-3 text-right font-medium">Subtotal</th>
+            <SortableTh
+              label="Unid. necessárias"
+              sortKey="unitsNeeded"
+              sort={sort}
+              onSortChange={onSortChange}
+            />
+            <SortableTh label="Custo unit." sortKey="unitCost" sort={sort} onSortChange={onSortChange} />
+            <SortableTh label="Subtotal" sortKey="grossCapital" sort={sort} onSortChange={onSortChange} />
             <th className="pb-2 pr-3 text-right font-medium">Parcelas</th>
-            <th className="pb-2 text-right font-medium">Capital efetivo</th>
+            <SortableTh
+              label="Capital efetivo"
+              sortKey="effectiveCapital"
+              sort={sort}
+              onSortChange={onSortChange}
+              className="pr-0"
+            />
           </tr>
         </thead>
         <tbody>

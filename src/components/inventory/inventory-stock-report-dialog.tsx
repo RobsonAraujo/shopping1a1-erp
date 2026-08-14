@@ -34,6 +34,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
+import { SortableTh } from "@/components/ui/sortable-th";
 import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
@@ -45,6 +46,7 @@ import {
   itemListSearchEmptyMessage,
 } from "@/components/item-list-search";
 import { filterByItemListSearch } from "@/lib/item-list-search";
+import { useTableSort } from "@/hooks/use-table-sort";
 import { downloadStockReportExcel } from "@/lib/inventory/inventory-stock-report-excel";
 import { downloadStockReportPdf } from "@/lib/inventory/inventory-stock-report-pdf";
 import {
@@ -95,6 +97,18 @@ type MergeDraft = {
   ncm: string;
   editingGroupId: string | null;
 };
+
+type ListingAdjustmentSortKey =
+  | "estoqueHoje"
+  | "vendasPeriodo"
+  | "estoqueNaData";
+
+type SkuPreviewSortKey =
+  | "produto"
+  | "ncm"
+  | "custoUnitario"
+  | "unidades"
+  | "valor";
 
 type InventoryStockReportDialogProps = {
   rows: InventoryRow[];
@@ -493,6 +507,50 @@ export function InventoryStockReportDialog({
     [listings, listingStatesByMlItemId, productsBySku, mergeGroups],
   );
 
+  const {
+    sort: extrasSort,
+    sortedRows: sortedFilteredListings,
+    onSortChange: onExtrasSortChange,
+  } = useTableSort<(typeof filteredListings)[number], ListingAdjustmentSortKey>(
+    filteredListings,
+    (listing, key) => {
+      const state = listingStateFor(listingStatesByMlItemId, listing.mlItemId);
+      const audit = listingAuditBreakdown(listing, state);
+      switch (key) {
+        case "estoqueHoje":
+          return inventoryBaseUnits(listing);
+        case "vendasPeriodo":
+          return audit.salesAfterSnapshot;
+        case "estoqueNaData":
+          return audit.total;
+      }
+    },
+    { key: "estoqueNaData", direction: "desc" },
+  );
+
+  const {
+    sort: skuSort,
+    sortedRows: sortedReportRows,
+    onSortChange: onSkuSortChange,
+  } = useTableSort<(typeof report.rows)[number], SkuPreviewSortKey>(
+    report.rows,
+    (row, key) => {
+      switch (key) {
+        case "produto":
+          return row.label;
+        case "ncm":
+          return row.ncm ?? "";
+        case "custoUnitario":
+          return row.unitCost ?? Number.NEGATIVE_INFINITY;
+        case "unidades":
+          return row.units;
+        case "valor":
+          return row.stockValue ?? Number.NEGATIVE_INFINITY;
+      }
+    },
+    { key: "valor", direction: "desc" },
+  );
+
   const fetchSalesAdjustment = useCallback(async () => {
     if (!snapshotDateInput || listings.length === 0) return;
 
@@ -783,11 +841,32 @@ export function InventoryStockReportDialog({
                     <thead className="border-b border-[var(--border)] bg-[var(--muted)]/80 text-xs uppercase tracking-wide text-[var(--muted-foreground)]">
                       <tr>
                         <th className="px-3 py-2.5">Anúncio</th>
-                        <th className="px-3 py-2.5">Estoque hoje</th>
-                        <th className="px-3 py-2.5">Vendas no período (+)</th>
+                        <SortableTh
+                          label="Estoque hoje"
+                          sortKey="estoqueHoje"
+                          sort={extrasSort}
+                          onSortChange={onExtrasSortChange}
+                          align="left"
+                          className="px-3 py-2.5"
+                        />
+                        <SortableTh
+                          label="Vendas no período (+)"
+                          sortKey="vendasPeriodo"
+                          sort={extrasSort}
+                          onSortChange={onExtrasSortChange}
+                          align="left"
+                          className="px-3 py-2.5"
+                        />
                         <th className="px-3 py-2.5">NF não entregue</th>
                         <th className="px-3 py-2.5">Ajuste manual (+/−)</th>
-                        <th className="px-3 py-2.5">Estoque na data</th>
+                        <SortableTh
+                          label="Estoque na data"
+                          sortKey="estoqueNaData"
+                          sort={extrasSort}
+                          onSortChange={onExtrasSortChange}
+                          align="left"
+                          className="px-3 py-2.5"
+                        />
                       </tr>
                     </thead>
                     <tbody>
@@ -801,7 +880,7 @@ export function InventoryStockReportDialog({
                           </td>
                         </tr>
                       ) : (
-                        filteredListings.map((listing) => {
+                        sortedFilteredListings.map((listing) => {
                           const state = listingStateFor(
                             listingStatesByMlItemId,
                             listing.mlItemId,
@@ -1016,11 +1095,46 @@ export function InventoryStockReportDialog({
                   <tr>
                     <th className="w-8 px-2 py-2.5" />
                     <th className="w-10 px-3 py-2.5" />
-                    <th className="px-3 py-2.5">Produto (SKU)</th>
-                    <th className="px-3 py-2.5">NCM</th>
-                    <th className="px-3 py-2.5">Custo unit.</th>
-                    <th className="px-3 py-2.5">Unidades</th>
-                    <th className="px-3 py-2.5">Valor</th>
+                    <SortableTh
+                      label="Produto (SKU)"
+                      sortKey="produto"
+                      sort={skuSort}
+                      onSortChange={onSkuSortChange}
+                      align="left"
+                      className="px-3 py-2.5"
+                    />
+                    <SortableTh
+                      label="NCM"
+                      sortKey="ncm"
+                      sort={skuSort}
+                      onSortChange={onSkuSortChange}
+                      align="left"
+                      className="px-3 py-2.5"
+                    />
+                    <SortableTh
+                      label="Custo unit."
+                      sortKey="custoUnitario"
+                      sort={skuSort}
+                      onSortChange={onSkuSortChange}
+                      align="left"
+                      className="px-3 py-2.5"
+                    />
+                    <SortableTh
+                      label="Unidades"
+                      sortKey="unidades"
+                      sort={skuSort}
+                      onSortChange={onSkuSortChange}
+                      align="left"
+                      className="px-3 py-2.5"
+                    />
+                    <SortableTh
+                      label="Valor"
+                      sortKey="valor"
+                      sort={skuSort}
+                      onSortChange={onSkuSortChange}
+                      align="left"
+                      className="px-3 py-2.5"
+                    />
                     <th className="px-3 py-2.5" />
                   </tr>
                 </thead>
@@ -1036,7 +1150,7 @@ export function InventoryStockReportDialog({
                       </td>
                     </tr>
                   ) : (
-                    report.rows.map((row) => {
+                    sortedReportRows.map((row) => {
                       const mergeGroup = mergeGroups.find(
                         (group) => group.id === row.rowKey,
                       );

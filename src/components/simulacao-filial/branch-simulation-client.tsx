@@ -22,6 +22,8 @@ import { BRAZILIAN_UF_OPTIONS } from "@/lib/tax-report/brazilian-ufs";
 import { TAX_REPORT_MONTH_NAMES } from "@/lib/tax-report/routes";
 import { getSkuSupplier } from "@/lib/mercadolibre/item-sku";
 import { cn } from "@/lib/utils";
+import { SortableTh } from "@/components/ui/sortable-th";
+import { useTableSort } from "@/hooks/use-table-sort";
 
 type Period = { year: number; month: number; generatedAt: string };
 
@@ -72,6 +74,13 @@ type ComparisonEntry = {
   creditoPresumidoPercent: number;
   totais: SimulationRow;
 };
+
+type ComparisonSortKey = "uf" | "atual" | "cenario" | "economia";
+
+function comparisonSortValue(entry: ComparisonEntry, key: ComparisonSortKey): string | number {
+  if (key === "uf") return entry.uf;
+  return entry.totais[key];
+}
 
 /** Referência de mercado (pesquisada) usada só como default editável — nunca fixo no cálculo. */
 const INCENTIVE_UF_DEFAULTS: Record<string, number> = {
@@ -452,6 +461,12 @@ function MemoriaCalculoPanel({
   );
 }
 
+type ResultTableSortKey = "key" | "atual" | "atualPercent" | "cenario" | "cenarioPercent" | "economia";
+
+function resultTableSortValue(row: SimulationRow, key: ResultTableSortKey): string | number {
+  return row[key];
+}
+
 function ResultTable({
   title,
   infoText,
@@ -481,13 +496,17 @@ function ResultTable({
     onToggleExpand ??
     ((key: string) =>
       setInternalExpandedKey((current) => (current === key ? null : key)));
-  const filtered = useMemo(
+  const searched = useMemo(
     () =>
       searchable
         ? filterByItemListSearch(rows, query, (row) => ({ sku: row.key }))
         : rows,
     [rows, query, searchable],
   );
+  const { sort, sortedRows: filtered, onSortChange } = useTableSort<
+    SimulationRow,
+    ResultTableSortKey
+  >(searched, resultTableSortValue, { key: "economia", direction: "desc" });
 
   return (
     <Card className="overflow-hidden p-0">
@@ -515,24 +534,63 @@ function ResultTable({
         <table className="w-full min-w-[36rem] text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] bg-[var(--muted)]/30 text-left text-xs text-[var(--muted-foreground)]">
-              <th className="sticky left-0 z-10 bg-[var(--muted)]/30 px-4 py-2.5">
-                {keyLabel}
-              </th>
-              <th className="px-4 py-2.5 text-right">Imposto atual</th>
-              <th className="px-4 py-2.5 text-right">
-                % médio atual
-                <span className="block text-[10px] normal-case">
-                  (para precificação)
-                </span>
-              </th>
-              <th className="px-4 py-2.5 text-right">Imposto cenário</th>
-              <th className="px-4 py-2.5 text-right">
-                % médio cenário
-                <span className="block text-[10px] normal-case">
-                  (para precificação)
-                </span>
-              </th>
-              <th className="px-4 py-2.5 text-right">Economia</th>
+              <SortableTh
+                label={keyLabel}
+                sortKey="key"
+                sort={sort}
+                onSortChange={onSortChange}
+                align="left"
+                className="sticky left-0 z-10 bg-[var(--muted)]/30 px-4 py-2.5"
+              />
+              <SortableTh
+                label="Imposto atual"
+                sortKey="atual"
+                sort={sort}
+                onSortChange={onSortChange}
+                className="px-4 py-2.5"
+              />
+              <SortableTh
+                label={
+                  <span>
+                    % médio atual
+                    <span className="block text-[10px] normal-case">
+                      (para precificação)
+                    </span>
+                  </span>
+                }
+                sortKey="atualPercent"
+                sort={sort}
+                onSortChange={onSortChange}
+                className="px-4 py-2.5"
+              />
+              <SortableTh
+                label="Imposto cenário"
+                sortKey="cenario"
+                sort={sort}
+                onSortChange={onSortChange}
+                className="px-4 py-2.5"
+              />
+              <SortableTh
+                label={
+                  <span>
+                    % médio cenário
+                    <span className="block text-[10px] normal-case">
+                      (para precificação)
+                    </span>
+                  </span>
+                }
+                sortKey="cenarioPercent"
+                sort={sort}
+                onSortChange={onSortChange}
+                className="px-4 py-2.5"
+              />
+              <SortableTh
+                label="Economia"
+                sortKey="economia"
+                sort={sort}
+                onSortChange={onSortChange}
+                className="px-4 py-2.5"
+              />
             </tr>
           </thead>
           <tbody>
@@ -895,9 +953,7 @@ export function BranchSimulationClient() {
       };
       setResult(json.result);
       setExpandedSku(null);
-      setComparisonResult(
-        [...json.comparison].sort((a, b) => b.totais.economia - a.totais.economia),
-      );
+      setComparisonResult(json.comparison);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao comparar estados");
     } finally {
@@ -988,6 +1044,22 @@ export function BranchSimulationClient() {
     value: uf,
     label: uf,
   }));
+
+  const {
+    sort: comparisonSort,
+    sortedRows: sortedComparisonResult,
+    onSortChange: onComparisonSortChange,
+  } = useTableSort<ComparisonEntry, ComparisonSortKey>(
+    comparisonResult ?? [],
+    comparisonSortValue,
+    { key: "economia", direction: "desc" },
+  );
+  const bestComparisonUf = useMemo(() => {
+    if (!comparisonResult || comparisonResult.length === 0) return null;
+    return comparisonResult.reduce((best, entry) =>
+      entry.totais.economia > best.totais.economia ? entry : best,
+    ).uf;
+  }, [comparisonResult]);
 
   const topGains = useMemo(() => {
     if (!result) return [];
@@ -1227,21 +1299,44 @@ export function BranchSimulationClient() {
             <table className="w-full min-w-[32rem] text-sm">
               <thead>
                 <tr className="bg-[var(--muted)]/30 text-left text-xs text-[var(--muted-foreground)]">
-                  <th className="sticky left-0 z-10 bg-[var(--muted)]/30 px-3 py-2">
-                    UF
-                  </th>
-                  <th className="px-3 py-2 text-right">Imposto atual</th>
-                  <th className="px-3 py-2 text-right">Imposto cenário</th>
-                  <th className="px-3 py-2 text-right">Economia</th>
+                  <SortableTh
+                    label="UF"
+                    sortKey="uf"
+                    sort={comparisonSort}
+                    onSortChange={onComparisonSortChange}
+                    align="left"
+                    className="sticky left-0 z-10 bg-[var(--muted)]/30 px-3 py-2"
+                  />
+                  <SortableTh
+                    label="Imposto atual"
+                    sortKey="atual"
+                    sort={comparisonSort}
+                    onSortChange={onComparisonSortChange}
+                    className="px-3 py-2"
+                  />
+                  <SortableTh
+                    label="Imposto cenário"
+                    sortKey="cenario"
+                    sort={comparisonSort}
+                    onSortChange={onComparisonSortChange}
+                    className="px-3 py-2"
+                  />
+                  <SortableTh
+                    label="Economia"
+                    sortKey="economia"
+                    sort={comparisonSort}
+                    onSortChange={onComparisonSortChange}
+                    className="px-3 py-2"
+                  />
                   <th className="px-3 py-2 text-right">Ação</th>
                 </tr>
               </thead>
               <tbody>
-                {comparisonResult.map((entry, index) => (
+                {sortedComparisonResult.map((entry) => (
                   <tr key={entry.uf} className="border-t border-[var(--border)]">
                     <td className="sticky left-0 z-10 bg-[var(--background)] px-3 py-2 font-medium">
                       {entry.uf}
-                      {index === 0 ? (
+                      {bestComparisonUf === entry.uf ? (
                         <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
                           Melhor opção
                         </span>

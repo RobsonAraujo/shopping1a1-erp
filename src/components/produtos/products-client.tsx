@@ -17,6 +17,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { ProductsTable } from "@/components/produtos/products-table";
+import type { ProductSortKey } from "@/components/produtos/products-table/types";
+import { useTableSort } from "@/hooks/use-table-sort";
 import {
   MaskedMoneyField,
   MaskedPercentField,
@@ -540,13 +542,36 @@ export function ProductsClient() {
     );
   }, [data?.products]);
 
-  const filteredProducts = useMemo(
+  const searchedProducts = useMemo(
     () =>
       filterByItemListSearch(sortedProducts, searchQuery, (product) => ({
         sku: product.sku,
         extra: [product.ncm],
       })),
     [sortedProducts, searchQuery],
+  );
+
+  const {
+    sort: productsSort,
+    sortedRows: filteredProducts,
+    onSortChange: onProductsSortChange,
+  } = useTableSort<ProductView, ProductSortKey>(
+    searchedProducts,
+    (product, key) => {
+      switch (key) {
+        case "sku":
+          return product.sku;
+        case "ncm":
+          return product.ncm ?? "";
+        case "pricingCost":
+          return product.pricingCost ?? Number.NEGATIVE_INFINITY;
+        case "taxPercent":
+          return product.taxPercent ?? Number.NEGATIVE_INFINITY;
+        default:
+          return "";
+      }
+    },
+    { key: "sku", direction: "asc" },
   );
 
   async function savePisCofins() {
@@ -769,6 +794,8 @@ export function ProductsClient() {
         sortedProducts={sortedProducts}
         filteredProducts={filteredProducts}
         searchQuery={searchQuery}
+        sort={productsSort}
+        onSortChange={onProductsSortChange}
         formatPricingCostExplainer={formatPricingCostExplainer}
         taxPercentExplainer={(product) =>
           product.taxPercent !== null &&

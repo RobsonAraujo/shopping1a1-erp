@@ -4,26 +4,24 @@ import { useState } from "react";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FormInput } from "@/components/ui/form-input";
-import type { IcmsRateRow } from "@/lib/tax-report/types";
-import type { IcmsRateRowEditorProps } from "./types";
+import { SortableTh } from "@/components/ui/sortable-th";
+import type { IcmsRatesTableViewProps, IcmsRateRowEditorProps } from "./types";
 
-export function IcmsRatesDesktop({
-  rows,
-  saving,
-  onSave,
-}: {
-  rows: IcmsRateRow[];
-  saving: boolean;
-  onSave: (row: IcmsRateRow) => Promise<void>;
-}) {
+export function IcmsRatesDesktop({ rows, saving, onSave, sort, onSortChange }: IcmsRatesTableViewProps) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[32rem] text-sm">
         <thead>
           <tr className="border-b border-[var(--border)] text-left text-xs text-[var(--muted-foreground)]">
-            <th className="py-2 pr-3">UF</th>
-            <th className="py-2 pr-3">Base %</th>
-            <th className="py-2 pr-3">FCP %</th>
+            <SortableTh label="UF" sortKey="uf" sort={sort} onSortChange={onSortChange} align="left" />
+            <SortableTh
+              label="Base %"
+              sortKey="aliquotaBase"
+              sort={sort}
+              onSortChange={onSortChange}
+              align="left"
+            />
+            <SortableTh label="FCP %" sortKey="fcp" sort={sort} onSortChange={onSortChange} align="left" />
             <th className="py-2">Ação</th>
           </tr>
         </thead>

@@ -13,8 +13,16 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { FormInput } from "@/components/ui/form-input";
+import { SortableTh } from "@/components/ui/sortable-th";
+import { useTableSort } from "@/hooks/use-table-sort";
 import { formatFinancialMoney } from "@/lib/financial-margin";
 import type { DreProductCostBreakdownItem } from "@/lib/dre/dre-calculations";
+
+type DreProductCostAuditSortKey =
+  | "title"
+  | "quantity"
+  | "unitCost"
+  | "totalCost";
 
 type DreProductCostAuditModalProps = {
   open: boolean;
@@ -46,6 +54,26 @@ export function DreProductCostAuditModal({
   const filteredItems = useMemo(
     () => items.filter((item) => matchesQuery(item, query)),
     [items, query],
+  );
+
+  const { sort, sortedRows, onSortChange } = useTableSort<
+    DreProductCostBreakdownItem,
+    DreProductCostAuditSortKey
+  >(
+    filteredItems,
+    (item, key) => {
+      switch (key) {
+        case "title":
+          return item.title || item.sku || "";
+        case "quantity":
+          return item.quantity;
+        case "unitCost":
+          return item.unitCost;
+        case "totalCost":
+          return item.totalCost;
+      }
+    },
+    { key: "totalCost", direction: "desc" },
   );
 
   const totalQuantity = filteredItems.reduce((sum, item) => sum + item.quantity, 0);
@@ -110,14 +138,35 @@ export function DreProductCostAuditModal({
                   </colgroup>
                   <thead className="sticky top-0 z-10">
                     <tr className="border-b border-[var(--border)] bg-[var(--muted)] text-[11px] uppercase text-[var(--muted-foreground)]">
-                      <th className="px-3 py-2 font-medium">Produto</th>
-                      <th className="px-3 py-2 text-right font-medium">Qtd.</th>
-                      <th className="px-3 py-2 text-right font-medium">
-                        Custo unit.
-                      </th>
-                      <th className="px-3 py-2 text-right font-medium">
-                        Custo total
-                      </th>
+                      <SortableTh
+                        label="Produto"
+                        sortKey="title"
+                        sort={sort}
+                        onSortChange={onSortChange}
+                        align="left"
+                        className="px-3 py-2"
+                      />
+                      <SortableTh
+                        label="Qtd."
+                        sortKey="quantity"
+                        sort={sort}
+                        onSortChange={onSortChange}
+                        className="px-3 py-2"
+                      />
+                      <SortableTh
+                        label="Custo unit."
+                        sortKey="unitCost"
+                        sort={sort}
+                        onSortChange={onSortChange}
+                        className="px-3 py-2"
+                      />
+                      <SortableTh
+                        label="Custo total"
+                        sortKey="totalCost"
+                        sort={sort}
+                        onSortChange={onSortChange}
+                        className="px-3 py-2"
+                      />
                     </tr>
                   </thead>
                   <tbody>
@@ -131,7 +180,7 @@ export function DreProductCostAuditModal({
                         </td>
                       </tr>
                     ) : (
-                      filteredItems.map((item) => (
+                      sortedRows.map((item) => (
                         <tr
                           key={item.key}
                           className="border-b border-[var(--border)] last:border-b-0"

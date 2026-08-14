@@ -1,3 +1,5 @@
+import type { TableSort } from "@/components/ui/sortable-th";
+
 export type InventoryRow = {
   mlItemId: string;
   sku: string | null;
@@ -20,11 +22,21 @@ export type SupplierGroup = {
   rows: InventoryRow[];
 };
 
+export type InventorySortKey =
+  | "warehouseStock"
+  | "mlStock"
+  | "onTheWay"
+  | "totalStock"
+  | "leadTimeDays"
+  | "needsPurchaseAttention";
+
 export type InventoryStockTableGridProps = {
   rows: InventoryRow[];
   filteredRows: InventoryRow[];
   supplierGroups: SupplierGroup[];
   searchQuery: string;
+  sort: TableSort<InventorySortKey>;
+  onSortChange: (key: InventorySortKey) => void;
   onEdit: (mlItemId: string) => void;
   onSettings: (mlItemId: string) => void;
 };

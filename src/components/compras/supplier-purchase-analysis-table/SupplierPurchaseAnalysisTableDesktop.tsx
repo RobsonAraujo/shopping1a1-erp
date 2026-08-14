@@ -19,6 +19,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { SortableTh } from "@/components/ui/sortable-th";
 import { cn } from "@/lib/utils";
 import {
   BadgeTooltip,
@@ -35,13 +36,15 @@ import {
   showCatalogReportLink,
   statusLabels,
   statusVariants,
-  type SupplierPurchaseAnalysisTableProps,
+  type SupplierPurchaseAnalysisTableDesktopProps,
 } from "@/components/compras/supplier-purchase-analysis-table/types";
 
 export function SupplierPurchaseAnalysisTableDesktop({
   rows,
   emptyMessage = "Nenhum produto neste fornecedor.",
-}: SupplierPurchaseAnalysisTableProps) {
+  sort,
+  onSortChange,
+}: SupplierPurchaseAnalysisTableDesktopProps) {
   return (
     <TooltipProvider delayDuration={200} disableHoverableContent={false}>
       <Card className="overflow-hidden p-0 shadow-sm">
@@ -52,24 +55,44 @@ export function SupplierPurchaseAnalysisTableDesktop({
                 <th className="w-[10.5rem] max-w-[10.5rem] px-2.5 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                   Produto
                 </th>
-                <th className="w-[8rem] px-2 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                  Estoque
-                </th>
-                <th className="w-[5rem] px-2 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                  Vendas
-                </th>
-                <th className="w-[5.5rem] px-2 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                  Cobertura
-                </th>
+                <SortableTh
+                  label="Estoque"
+                  sortKey="totalStock"
+                  sort={sort}
+                  onSortChange={onSortChange}
+                  align="left"
+                  className="w-[8rem] px-2 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]"
+                />
+                <SortableTh
+                  label="Vendas"
+                  sortKey="unitsSold"
+                  sort={sort}
+                  onSortChange={onSortChange}
+                  align="left"
+                  className="w-[5rem] px-2 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]"
+                />
+                <SortableTh
+                  label="Cobertura"
+                  sortKey="coverageDays"
+                  sort={sort}
+                  onSortChange={onSortChange}
+                  align="left"
+                  className="w-[5.5rem] px-2 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]"
+                />
                 <th className="w-[4.5rem] px-2 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                   Rotação
                 </th>
                 <th className="w-[5.5rem] px-2 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                   Status
                 </th>
-                <th className="w-[4.5rem] px-2 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                  Qtd.
-                </th>
+                <SortableTh
+                  label="Qtd."
+                  sortKey="suggestedQty"
+                  sort={sort}
+                  onSortChange={onSortChange}
+                  align="left"
+                  className="w-[4.5rem] px-2 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]"
+                />
                 <th className="w-[6rem] px-2 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                   Ação
                 </th>

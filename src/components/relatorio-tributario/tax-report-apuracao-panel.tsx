@@ -4,7 +4,9 @@ import { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { TaxReportHeaderWithTip } from "@/components/relatorio-tributario/tax-report-transaction-table";
+import { SortableTh } from "@/components/ui/sortable-th";
 import { useIsMobile } from "@/hooks/use-is-mobile";
+import { useTableSort } from "@/hooks/use-table-sort";
 import { formatFinancialMoney, formatFinancialPercent } from "@/lib/financial-margin";
 import type { ApuracaoConsolidada } from "@/lib/tax-report/types";
 import { cn } from "@/lib/utils";
@@ -16,6 +18,13 @@ type ApuracaoRow = {
   liquido: number;
   aRecolher: number;
   tip?: string;
+};
+
+type ApuracaoSortKey = "debito" | "credito" | "liquido" | "aRecolher";
+
+type DifalUfRow = {
+  uf: string;
+  valor: number;
 };
 
 const APURACAO_COL_CLASS = "px-3 py-2.5 sm:px-4";
@@ -162,8 +171,23 @@ export function TaxReportApuracaoPanel({
     apuracao.icmsARecolherSpEstimado +
     apuracao.difalARecolherEstimado;
 
-  const difalUfs = Object.entries(apuracao.difalPorUf).sort(
-    (a, b) => b[1] - a[1],
+  const { sort, sortedRows, onSortChange } = useTableSort<ApuracaoRow, ApuracaoSortKey>(
+    rows,
+    (row, key) => row[key],
+    { key: "aRecolher", direction: "desc" },
+  );
+
+  const difalUfRows: DifalUfRow[] = Object.entries(apuracao.difalPorUf).map(
+    ([uf, valor]) => ({ uf, valor }),
+  );
+  const {
+    sort: difalSort,
+    sortedRows: sortedDifalUfs,
+    onSortChange: onDifalSortChange,
+  } = useTableSort<DifalUfRow, "valor">(
+    difalUfRows,
+    (row, key) => row[key],
+    { key: "valor", direction: "desc" },
   );
   const diag = apuracao.diagnostico;
   const pctSemCusto =
@@ -185,7 +209,7 @@ export function TaxReportApuracaoPanel({
         </div>
         {isMobile ? (
           <ul className="space-y-2 p-3">
-            {rows.map((row) => (
+            {sortedRows.map((row) => (
               <ApuracaoCard key={row.imposto} row={row} />
             ))}
             <ApuracaoCard
@@ -205,21 +229,45 @@ export function TaxReportApuracaoPanel({
               <thead>
                 <tr className="border-b border-[var(--border)] bg-[var(--muted)]/30 text-left text-xs text-[var(--muted-foreground)]">
                   <th className={cn(APURACAO_COL_CLASS, "min-w-[7rem]")}>Imposto</th>
-                  <th className={APURACAO_MONEY_COL_CLASS}>Débitos</th>
-                  <th className={APURACAO_MONEY_COL_CLASS}>Créditos</th>
-                  <th className={APURACAO_MONEY_COL_CLASS}>Líquido</th>
-                  <th className={cn(APURACAO_MONEY_COL_CLASS, "min-w-[8.5rem]")}>
-                    <span className="inline-block text-right leading-tight">
-                      A recolher
-                      <span className="block text-[10px] font-normal text-[var(--muted-foreground)]">
-                        (est.)
+                  <SortableTh
+                    label="Débitos"
+                    sortKey="debito"
+                    sort={sort}
+                    onSortChange={onSortChange}
+                    className={APURACAO_MONEY_COL_CLASS}
+                  />
+                  <SortableTh
+                    label="Créditos"
+                    sortKey="credito"
+                    sort={sort}
+                    onSortChange={onSortChange}
+                    className={APURACAO_MONEY_COL_CLASS}
+                  />
+                  <SortableTh
+                    label="Líquido"
+                    sortKey="liquido"
+                    sort={sort}
+                    onSortChange={onSortChange}
+                    className={APURACAO_MONEY_COL_CLASS}
+                  />
+                  <SortableTh
+                    label={
+                      <span className="inline-block text-right leading-tight">
+                        A recolher
+                        <span className="block text-[10px] font-normal text-[var(--muted-foreground)]">
+                          (est.)
+                        </span>
                       </span>
-                    </span>
-                  </th>
+                    }
+                    sortKey="aRecolher"
+                    sort={sort}
+                    onSortChange={onSortChange}
+                    className={cn(APURACAO_MONEY_COL_CLASS, "min-w-[8.5rem]")}
+                  />
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
+                {sortedRows.map((row) => (
                   <ApuracaoTableRow key={row.imposto} row={row} />
                 ))}
                 <tr className="bg-[var(--primary)]/5 font-semibold">
@@ -239,7 +287,7 @@ export function TaxReportApuracaoPanel({
         )}
       </Card>
 
-      {difalUfs.length > 0 ? (
+      {difalUfRows.length > 0 ? (
         <Card className="p-4">
           <button
             type="button"
@@ -251,18 +299,23 @@ export function TaxReportApuracaoPanel({
             ) : (
               <ChevronRight className="size-4 shrink-0" />
             )}
-            DIFAL por UF destino ({difalUfs.length} UF{difalUfs.length === 1 ? "" : "s"})
+            DIFAL por UF destino ({difalUfRows.length} UF{difalUfRows.length === 1 ? "" : "s"})
           </button>
           {difalOpen ? (
             <table className="mt-3 w-full text-sm">
               <thead>
                 <tr className="border-b border-[var(--border)] text-left text-xs text-[var(--muted-foreground)]">
                   <th className="py-2 pr-3">UF</th>
-                  <th className="py-2 text-right">DIFAL estimado</th>
+                  <SortableTh
+                    label="DIFAL estimado"
+                    sortKey="valor"
+                    sort={difalSort}
+                    onSortChange={onDifalSortChange}
+                  />
                 </tr>
               </thead>
               <tbody>
-                {difalUfs.map(([uf, valor]) => (
+                {sortedDifalUfs.map(({ uf, valor }) => (
                   <tr key={uf} className="border-b border-[var(--border)]">
                     <td className="py-2 pr-3 font-medium">{uf}</td>
                     <td className="py-2 text-right tabular-nums">

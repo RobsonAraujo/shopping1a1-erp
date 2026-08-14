@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PlanningInfoTrigger } from "@/components/planning-info-trigger";
 import { itemListSearchEmptyMessage } from "@/components/item-list-search";
+import { SortableTh } from "@/components/ui/sortable-th";
 import { formatFinancialMoney, formatFinancialPercent } from "@/lib/financial-margin";
 import type { ProductsTableProps } from "@/components/produtos/products-table/types";
 
@@ -14,6 +15,8 @@ export function ProductsTableDesktop({
   sortedProducts,
   filteredProducts,
   searchQuery,
+  sort,
+  onSortChange,
   formatPricingCostExplainer,
   taxPercentExplainer,
   onEdit,
@@ -25,14 +28,38 @@ export function ProductsTableDesktop({
         <table className="w-full min-w-[56rem] text-sm">
           <thead className="border-b border-[var(--border)] bg-[var(--muted)]/80 text-left text-xs text-[var(--muted-foreground)]">
             <tr>
-              <th className="px-4 py-3 font-semibold uppercase tracking-wide">SKU</th>
-              <th className="px-4 py-3 font-semibold uppercase tracking-wide">NCM</th>
-              <th className="px-4 py-3 text-right font-semibold uppercase tracking-wide">
-                Custo precificação
-              </th>
-              <th className="px-4 py-3 text-right font-semibold uppercase tracking-wide">
-                Imposto %
-              </th>
+              <SortableTh
+                label="SKU"
+                sortKey="sku"
+                sort={sort}
+                onSortChange={onSortChange}
+                align="left"
+                className="px-4 py-3 font-semibold uppercase tracking-wide"
+              />
+              <SortableTh
+                label="NCM"
+                sortKey="ncm"
+                sort={sort}
+                onSortChange={onSortChange}
+                align="left"
+                className="px-4 py-3 font-semibold uppercase tracking-wide"
+              />
+              <SortableTh
+                label="Custo precificação"
+                sortKey="pricingCost"
+                sort={sort}
+                onSortChange={onSortChange}
+                align="right"
+                className="px-4 py-3 font-semibold uppercase tracking-wide"
+              />
+              <SortableTh
+                label="Imposto %"
+                sortKey="taxPercent"
+                sort={sort}
+                onSortChange={onSortChange}
+                align="right"
+                className="px-4 py-3 font-semibold uppercase tracking-wide"
+              />
               <th className="px-4 py-3 text-center font-semibold uppercase tracking-wide">ST</th>
               <th className="px-4 py-3 text-center font-semibold uppercase tracking-wide">Mono</th>
               <th className="px-4 py-3 text-center font-semibold uppercase tracking-wide">

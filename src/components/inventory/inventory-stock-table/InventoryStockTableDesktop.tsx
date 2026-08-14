@@ -16,6 +16,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { itemListSearchEmptyMessage } from "@/components/item-list-search";
+import { SortableTh } from "@/components/ui/sortable-th";
 import { cn } from "@/lib/utils";
 import type { InventoryStockTableGridProps } from "@/components/inventory/inventory-stock-table/types";
 import {
@@ -39,13 +40,16 @@ function StockColumnHeader({
       {label}
       <Tooltip>
         <TooltipTrigger asChild>
-          <button
-            type="button"
+          {/* span (not button) — this sits inside SortableTh's own <button> */}
+          <span
+            role="button"
+            tabIndex={0}
             className="inline-flex cursor-pointer rounded text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
             aria-label={ariaLabel}
+            onClick={(e) => e.stopPropagation()}
           >
             <HelpCircle className="size-3.5" />
-          </button>
+          </span>
         </TooltipTrigger>
         <TooltipContent side="top" className="max-w-xs">
           {tooltip}
@@ -55,11 +59,16 @@ function StockColumnHeader({
   );
 }
 
+const HEADER_CELL_CLASS =
+  "px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]";
+
 export function InventoryStockTableDesktop({
   rows,
   filteredRows,
   supplierGroups,
   searchQuery,
+  sort,
+  onSortChange,
   onEdit,
   onSettings,
 }: InventoryStockTableGridProps) {
@@ -72,74 +81,109 @@ export function InventoryStockTableDesktop({
               <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                 Produto
               </th>
-              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                <StockColumnHeader
-                  label="Galpão"
-                  ariaLabel="Informação sobre estoque no galpão"
-                  tooltip="Unidades no nosso galpão, ainda não enviadas ao Mercado Livre."
-                />
-              </th>
-              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                <StockColumnHeader
-                  label="Já no Full"
-                  ariaLabel="Informação sobre estoque já no Full"
-                  tooltip="Unidades que já entraram no depósito Full do Mercado Livre e estão disponíveis para venda no anúncio."
-                />
-              </th>
-              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                <StockColumnHeader
-                  label="A caminho"
-                  ariaLabel="Informação sobre estoque a caminho do Full"
-                  tooltip={
-                    <>
-                      <p>
-                        Unidades enviadas ao Full que ainda não estão
-                        vendáveis. O número reflete o que a API do Mercado
-                        Livre informa: <strong>em transferência</strong> e{" "}
-                        <strong>processamento interno</strong>.
-                      </p>
-                      <p className="mt-2">
-                        A <strong>entrada pendente</strong> (envio agendado
-                        que ainda não entrou no inventário do ML) aparece no
-                        painel do Meli, mas{" "}
-                        <strong>não é exposta pela API</strong>— por isso
-                        pode ser menor que o &quot;A caminho&quot; do Seller
-                        Center.
-                      </p>
-                    </>
-                  }
-                />
-              </th>
-              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                <StockColumnHeader
-                  label="Total"
-                  ariaLabel="Informação sobre estoque total"
-                  tooltip="Soma de todas as unidades sob nosso controle: galpão + já no Full + a caminho (via API). Pode ser menor que o total do painel Meli quando há entrada pendente."
-                />
-              </th>
-              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                <span className="inline-flex items-center gap-1">
-                  Prazo compra
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        className="inline-flex cursor-pointer rounded text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-                        aria-label="Informação sobre prazo de compra"
-                      >
-                        <HelpCircle className="size-3.5" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="max-w-xs">
-                      Tempo entre decidir comprar e o produto chegar no
-                      galpão. Usado para planejamento futuro.
-                    </TooltipContent>
-                  </Tooltip>
-                </span>
-              </th>
-              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                Ações
-              </th>
+              <SortableTh
+                label={
+                  <StockColumnHeader
+                    label="Galpão"
+                    ariaLabel="Informação sobre estoque no galpão"
+                    tooltip="Unidades no nosso galpão, ainda não enviadas ao Mercado Livre."
+                  />
+                }
+                sortKey="warehouseStock"
+                sort={sort}
+                onSortChange={onSortChange}
+                align="left"
+                className={HEADER_CELL_CLASS}
+              />
+              <SortableTh
+                label={
+                  <StockColumnHeader
+                    label="Já no Full"
+                    ariaLabel="Informação sobre estoque já no Full"
+                    tooltip="Unidades que já entraram no depósito Full do Mercado Livre e estão disponíveis para venda no anúncio."
+                  />
+                }
+                sortKey="mlStock"
+                sort={sort}
+                onSortChange={onSortChange}
+                align="left"
+                className={HEADER_CELL_CLASS}
+              />
+              <SortableTh
+                label={
+                  <StockColumnHeader
+                    label="A caminho"
+                    ariaLabel="Informação sobre estoque a caminho do Full"
+                    tooltip={
+                      <>
+                        <p>
+                          Unidades enviadas ao Full que ainda não estão
+                          vendáveis. O número reflete o que a API do Mercado
+                          Livre informa: <strong>em transferência</strong> e{" "}
+                          <strong>processamento interno</strong>.
+                        </p>
+                        <p className="mt-2">
+                          A <strong>entrada pendente</strong> (envio agendado
+                          que ainda não entrou no inventário do ML) aparece no
+                          painel do Meli, mas{" "}
+                          <strong>não é exposta pela API</strong>— por isso
+                          pode ser menor que o &quot;A caminho&quot; do Seller
+                          Center.
+                        </p>
+                      </>
+                    }
+                  />
+                }
+                sortKey="onTheWay"
+                sort={sort}
+                onSortChange={onSortChange}
+                align="left"
+                className={HEADER_CELL_CLASS}
+              />
+              <SortableTh
+                label={
+                  <StockColumnHeader
+                    label="Total"
+                    ariaLabel="Informação sobre estoque total"
+                    tooltip="Soma de todas as unidades sob nosso controle: galpão + já no Full + a caminho (via API). Pode ser menor que o total do painel Meli quando há entrada pendente."
+                  />
+                }
+                sortKey="totalStock"
+                sort={sort}
+                onSortChange={onSortChange}
+                align="left"
+                className={HEADER_CELL_CLASS}
+              />
+              <SortableTh
+                label={
+                  <span className="inline-flex items-center gap-1">
+                    Prazo compra
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          className="inline-flex cursor-pointer rounded text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                          aria-label="Informação sobre prazo de compra"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <HelpCircle className="size-3.5" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs">
+                        Tempo entre decidir comprar e o produto chegar no
+                        galpão. Usado para planejamento futuro.
+                      </TooltipContent>
+                    </Tooltip>
+                  </span>
+                }
+                sortKey="leadTimeDays"
+                sort={sort}
+                onSortChange={onSortChange}
+                align="left"
+                className={HEADER_CELL_CLASS}
+              />
+              <th className={HEADER_CELL_CLASS}>Ações</th>
             </tr>
           </thead>
           <tbody>

@@ -22,6 +22,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { filterByItemListSearch } from "@/lib/item-list-search";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-is-mobile";
+import { SortableTh } from "@/components/ui/sortable-th";
+import { useTableSort } from "@/hooks/use-table-sort";
 
 type ReportItem = {
   mlItemId: string;
@@ -79,6 +81,24 @@ function itemMlStatus(row: ReportItem): string {
   return row.mlStatus ?? "active";
 }
 
+/** Ordem lógica de relevância: ganhando > compartilhando > perdendo > sem sinal. */
+const STATUS_RANK: Record<string, number> = {
+  winning: 0,
+  shared: 1,
+  losing: 2,
+};
+
+function statusRank(status: string | null): number {
+  return status !== null && status in STATUS_RANK ? STATUS_RANK[status] : 3;
+}
+
+type ReportSortKey = "item" | "status";
+
+function reportSortValue(row: ReportItem, key: ReportSortKey): string | number {
+  if (key === "status") return statusRank(row.catalogStatus);
+  return row.skuSnapshot ?? row.titleSnapshot ?? row.mlItemId;
+}
+
 export function CatalogCompetitionReportClient() {
   const isMobile = useIsMobile();
   const [loading, setLoading] = useState(false);
@@ -108,6 +128,10 @@ export function CatalogCompetitionReportClient() {
       })),
     [statusVisibleItems, searchQuery],
   );
+  const { sort, sortedRows: sortedItems, onSortChange } = useTableSort<
+    ReportItem,
+    ReportSortKey
+  >(filteredItems, reportSortValue, { key: "item", direction: "asc" });
 
   async function loadReport() {
     setLoading(true);
@@ -248,7 +272,7 @@ export function CatalogCompetitionReportClient() {
             </p>
           ) : isMobile ? (
             <div className="space-y-2">
-              {filteredItems.map((row) => {
+              {sortedItems.map((row) => {
                 const mlStatus = itemMlStatus(row);
                 return (
                   <Link
@@ -302,12 +326,26 @@ export function CatalogCompetitionReportClient() {
               <table className="w-full min-w-[40rem] text-left text-sm">
                 <thead className="border-b border-[var(--border)] text-xs text-[var(--muted-foreground)]">
                   <tr>
-                    <th className="py-2 pr-3">Item</th>
-                    <th className="py-2 pr-3">Status</th>
+                    <SortableTh
+                      label="Item"
+                      sortKey="item"
+                      sort={sort}
+                      onSortChange={onSortChange}
+                      align="left"
+                      className="py-2 pr-3"
+                    />
+                    <SortableTh
+                      label="Status"
+                      sortKey="status"
+                      sort={sort}
+                      onSortChange={onSortChange}
+                      align="left"
+                      className="py-2 pr-3"
+                    />
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredItems.map((row) => {
+                  {sortedItems.map((row) => {
                     const mlStatus = itemMlStatus(row);
                     return (
                       <tr

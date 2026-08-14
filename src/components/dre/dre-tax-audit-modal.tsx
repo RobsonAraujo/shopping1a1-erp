@@ -13,11 +13,20 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { FormInput } from "@/components/ui/form-input";
+import { SortableTh } from "@/components/ui/sortable-th";
+import { useTableSort } from "@/hooks/use-table-sort";
 import {
   formatFinancialMoney,
   formatFinancialPercent,
 } from "@/lib/financial-margin";
 import type { DreTaxBreakdownItem } from "@/lib/dre/dre-calculations";
+
+type DreTaxAuditSortKey =
+  | "title"
+  | "quantity"
+  | "revenue"
+  | "taxPercent"
+  | "totalTax";
 
 type DreTaxAuditModalProps = {
   open: boolean;
@@ -49,6 +58,28 @@ export function DreTaxAuditModal({
   const filteredItems = useMemo(
     () => items.filter((item) => matchesQuery(item, query)),
     [items, query],
+  );
+
+  const { sort, sortedRows, onSortChange } = useTableSort<
+    DreTaxBreakdownItem,
+    DreTaxAuditSortKey
+  >(
+    filteredItems,
+    (item, key) => {
+      switch (key) {
+        case "title":
+          return item.title || item.sku || "";
+        case "quantity":
+          return item.quantity;
+        case "revenue":
+          return item.revenue;
+        case "taxPercent":
+          return item.taxPercent ?? 0;
+        case "totalTax":
+          return item.totalTax;
+      }
+    },
+    { key: "totalTax", direction: "desc" },
   );
 
   const totalQuantity = filteredItems.reduce((sum, item) => sum + item.quantity, 0);
@@ -114,17 +145,42 @@ export function DreTaxAuditModal({
                   </colgroup>
                   <thead className="sticky top-0 z-10">
                     <tr className="border-b border-[var(--border)] bg-[var(--muted)] text-[11px] uppercase text-[var(--muted-foreground)]">
-                      <th className="px-3 py-2 font-medium">Produto</th>
-                      <th className="px-3 py-2 text-right font-medium">Qtd.</th>
-                      <th className="px-3 py-2 text-right font-medium">
-                        Faturamento
-                      </th>
-                      <th className="px-3 py-2 text-right font-medium">
-                        % Imposto
-                      </th>
-                      <th className="px-3 py-2 text-right font-medium">
-                        Imposto total
-                      </th>
+                      <SortableTh
+                        label="Produto"
+                        sortKey="title"
+                        sort={sort}
+                        onSortChange={onSortChange}
+                        align="left"
+                        className="px-3 py-2"
+                      />
+                      <SortableTh
+                        label="Qtd."
+                        sortKey="quantity"
+                        sort={sort}
+                        onSortChange={onSortChange}
+                        className="px-3 py-2"
+                      />
+                      <SortableTh
+                        label="Faturamento"
+                        sortKey="revenue"
+                        sort={sort}
+                        onSortChange={onSortChange}
+                        className="px-3 py-2"
+                      />
+                      <SortableTh
+                        label="% Imposto"
+                        sortKey="taxPercent"
+                        sort={sort}
+                        onSortChange={onSortChange}
+                        className="px-3 py-2"
+                      />
+                      <SortableTh
+                        label="Imposto total"
+                        sortKey="totalTax"
+                        sort={sort}
+                        onSortChange={onSortChange}
+                        className="px-3 py-2"
+                      />
                     </tr>
                   </thead>
                   <tbody>
@@ -138,7 +194,7 @@ export function DreTaxAuditModal({
                         </td>
                       </tr>
                     ) : (
-                      filteredItems.map((item) => (
+                      sortedRows.map((item) => (
                         <tr
                           key={item.key}
                           className="border-b border-[var(--border)] last:border-b-0"

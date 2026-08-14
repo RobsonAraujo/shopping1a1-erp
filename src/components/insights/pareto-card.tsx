@@ -1,5 +1,15 @@
+"use client";
+
+import { SortableTh } from "@/components/ui/sortable-th";
+import { useTableSort } from "@/hooks/use-table-sort";
 import { cn } from "@/lib/utils";
 import type { ParetoRow } from "@/lib/insights/types";
+
+type ParetoSortKey = "receitaTotal" | "receitaPercent" | "receitaAcumuladaPercent" | "unidadesVendidas";
+
+function sortValue(row: ParetoRow, key: ParetoSortKey): number {
+  return row[key];
+}
 
 function fmtBrl(n: number): string {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -10,6 +20,12 @@ function fmtPercent(n: number, decimals = 1): string {
 }
 
 export function ParetoCard({ rows }: { rows: ParetoRow[] }) {
+  // Ordem padrão preserva a lógica de Pareto (maior receita primeiro, acumulando %).
+  const { sort, sortedRows, onSortChange } = useTableSort<ParetoRow, ParetoSortKey>(rows, sortValue, {
+    key: "receitaTotal",
+    direction: "desc",
+  });
+
   if (rows.length === 0) {
     return (
       <p className="py-4 text-center text-sm text-[var(--muted-foreground)]">
@@ -25,14 +41,30 @@ export function ParetoCard({ rows }: { rows: ParetoRow[] }) {
           <tr className="border-b border-[var(--border)] text-left text-xs text-[var(--muted-foreground)]">
             <th className="pb-2 pr-1 font-medium">#</th>
             <th className="pb-2 pr-3 font-medium">SKU</th>
-            <th className="pb-2 pr-3 text-right font-medium">Receita</th>
-            <th className="pb-2 pr-3 text-right font-medium">% receita</th>
-            <th className="pb-2 pr-3 text-right font-medium">% acumulado</th>
-            <th className="pb-2 text-right font-medium">Unidades</th>
+            <SortableTh label="Receita" sortKey="receitaTotal" sort={sort} onSortChange={onSortChange} />
+            <SortableTh
+              label="% receita"
+              sortKey="receitaPercent"
+              sort={sort}
+              onSortChange={onSortChange}
+            />
+            <SortableTh
+              label="% acumulado"
+              sortKey="receitaAcumuladaPercent"
+              sort={sort}
+              onSortChange={onSortChange}
+            />
+            <SortableTh
+              label="Unidades"
+              sortKey="unidadesVendidas"
+              sort={sort}
+              onSortChange={onSortChange}
+              className="pr-0"
+            />
           </tr>
         </thead>
         <tbody>
-          {rows.slice(0, 20).map((row, i) => {
+          {sortedRows.slice(0, 20).map((row, i) => {
             const past80 = row.receitaAcumuladaPercent - row.receitaPercent >= 80;
             return (
               <tr

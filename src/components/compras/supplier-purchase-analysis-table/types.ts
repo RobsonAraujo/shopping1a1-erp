@@ -4,11 +4,24 @@ import type {
   PurchaseRecommendation,
   PurchaseStatus,
 } from "@/lib/purchase-analysis";
+import type { TableSort } from "@/components/ui/sortable-th";
 
 export type SupplierPurchaseAnalysisTableProps = {
   rows: PurchaseAnalysisItemRow[];
   emptyMessage?: string;
 };
+
+export type SupplierPurchaseAnalysisSortKey =
+  | "totalStock"
+  | "unitsSold"
+  | "coverageDays"
+  | "suggestedQty";
+
+export type SupplierPurchaseAnalysisTableDesktopProps =
+  SupplierPurchaseAnalysisTableProps & {
+    sort: TableSort<SupplierPurchaseAnalysisSortKey>;
+    onSortChange: (key: SupplierPurchaseAnalysisSortKey) => void;
+  };
 
 export const performanceLabels: Record<PurchasePerformanceTier, string> = {
   alta: "Alta",

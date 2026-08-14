@@ -1,6 +1,33 @@
-import type { InventoryRow } from "@/components/inventory/inventory-stock-table/types";
+import type {
+  InventoryRow,
+  InventorySortKey,
+} from "@/components/inventory/inventory-stock-table/types";
 
 export const MAX_LEAD_DAYS = 365;
+
+export function getInventorySortValue(
+  row: InventoryRow,
+  key: InventorySortKey,
+): number {
+  switch (key) {
+    case "warehouseStock":
+      return stockUnits(row.warehouseStock);
+    case "mlStock":
+      return stockUnits(row.mlStock);
+    case "onTheWay":
+      return onTheWayUnits(row);
+    case "totalStock":
+      return (
+        stockUnits(row.warehouseStock) +
+        stockUnits(row.mlStock) +
+        onTheWayUnits(row)
+      );
+    case "leadTimeDays":
+      return row.leadTimeDays ?? Number.POSITIVE_INFINITY;
+    case "needsPurchaseAttention":
+      return row.needsPurchaseAttention ? 1 : 0;
+  }
+}
 
 export function stockUnits(value: number | null | undefined): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return 0;

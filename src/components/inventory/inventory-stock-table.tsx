@@ -31,6 +31,9 @@ import { filterByItemListSearch } from "@/lib/item-list-search";
 import type { StockReportProductInfo } from "@/lib/inventory/inventory-stock-report";
 import { InventoryStockReportLauncher } from "@/components/inventory/inventory-stock-report-dialog";
 import { InventoryStockTableGrid } from "@/components/inventory/inventory-stock-table/index";
+import type { InventorySortKey } from "@/components/inventory/inventory-stock-table/types";
+import { getInventorySortValue } from "@/components/inventory/inventory-stock-table/utils";
+import { useTableSort } from "@/hooks/use-table-sort";
 
 const MAX_LEAD_DAYS = 365;
 
@@ -105,6 +108,29 @@ export function InventoryStockTable({
     [filteredRows],
   );
 
+  const { sort, onSortChange } = useTableSort<InventoryRow, InventorySortKey>(
+    filteredRows,
+    getInventorySortValue,
+    { key: "needsPurchaseAttention", direction: "desc" },
+  );
+
+  const sortedSupplierGroups = useMemo(
+    () =>
+      supplierGroups.map((group) => {
+        const dir = sort.direction === "asc" ? 1 : -1;
+        return {
+          supplier: group.supplier,
+          rows: [...group.rows].sort(
+            (a, b) =>
+              dir *
+              (getInventorySortValue(a, sort.key) -
+                getInventorySortValue(b, sort.key)),
+          ),
+        };
+      }),
+    [supplierGroups, sort],
+  );
+
   return (
     <TooltipProvider delayDuration={200}>
       <div className="space-y-3">
@@ -129,8 +155,10 @@ export function InventoryStockTable({
         <InventoryStockTableGrid
           rows={rows}
           filteredRows={filteredRows}
-          supplierGroups={supplierGroups}
+          supplierGroups={sortedSupplierGroups}
           searchQuery={searchQuery}
+          sort={sort}
+          onSortChange={onSortChange}
           onEdit={setEditId}
           onSettings={setSettingsId}
         />

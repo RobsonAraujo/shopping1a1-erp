@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { itemListSearchEmptyMessage } from "@/components/item-list-search";
 import { TaxReportHeaderWithTip } from "@/components/relatorio-tributario/tax-report-transaction-table";
+import { SortableTh } from "@/components/ui/sortable-th";
 import { formatFinancialMoney, formatFinancialPercent } from "@/lib/financial-margin";
 import {
   skuImpostoOperacionalMedio,
@@ -15,6 +16,8 @@ export function TaxReportSkuTableDesktop({
   rows,
   searchQuery,
   skuPathFor,
+  sort,
+  onSortChange,
 }: TaxReportSkuTableProps) {
   return (
     <div className="overflow-x-auto">
@@ -22,21 +25,46 @@ export function TaxReportSkuTableDesktop({
         <thead>
           <tr className="border-b border-[var(--border)] text-left text-xs text-[var(--muted-foreground)]">
             <th className="py-2 pr-3">SKU</th>
-            <th className="py-2 pr-3 text-right">Vendas</th>
-            <th className="py-2 pr-3 text-right">Unidades</th>
-            <th className="py-2 pr-3 text-right">Receita</th>
-            <th className="py-2 pr-3 text-right">
-              <TaxReportHeaderWithTip
-                label="Imp. oper. médio"
-                tip="Média de PIS/COFINS + ICMS por venda."
-              />
-            </th>
-            <th className="py-2 pr-3 text-right">
-              <TaxReportHeaderWithTip
-                label="% oper."
-                tip="Imposto operacional total do SKU sobre a receita."
-              />
-            </th>
+            <SortableTh
+              label="Vendas"
+              sortKey="quantidadeVendas"
+              sort={sort}
+              onSortChange={onSortChange}
+            />
+            <SortableTh
+              label="Unidades"
+              sortKey="unidadesVendidas"
+              sort={sort}
+              onSortChange={onSortChange}
+            />
+            <SortableTh
+              label="Receita"
+              sortKey="receitaTotal"
+              sort={sort}
+              onSortChange={onSortChange}
+            />
+            <SortableTh
+              label={
+                <TaxReportHeaderWithTip
+                  label="Imp. oper. médio"
+                  tip="Média de PIS/COFINS + ICMS por venda."
+                />
+              }
+              sortKey="impostoOperacionalMedio"
+              sort={sort}
+              onSortChange={onSortChange}
+            />
+            <SortableTh
+              label={
+                <TaxReportHeaderWithTip
+                  label="% oper."
+                  tip="Imposto operacional total do SKU sobre a receita."
+                />
+              }
+              sortKey="impostoOperacionalPercentual"
+              sort={sort}
+              onSortChange={onSortChange}
+            />
             <th className="py-2 w-8" aria-hidden />
           </tr>
         </thead>

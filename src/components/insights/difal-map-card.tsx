@@ -1,5 +1,15 @@
+"use client";
+
+import { SortableTh } from "@/components/ui/sortable-th";
+import { useTableSort } from "@/hooks/use-table-sort";
 import { cn } from "@/lib/utils";
 import type { DifalMapRow } from "@/lib/insights/types";
+
+type DifalSortKey = "receitaTotal" | "unidades" | "totalTransacoes" | "margemMedia";
+
+function sortValue(row: DifalMapRow, key: DifalSortKey): number {
+  return row[key];
+}
 
 function fmtBrl(n: number): string {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -10,6 +20,11 @@ function fmtPercent(n: number): string {
 }
 
 export function DifalMapCard({ rows }: { rows: DifalMapRow[] }) {
+  const { sort, sortedRows, onSortChange } = useTableSort<DifalMapRow, DifalSortKey>(rows, sortValue, {
+    key: "receitaTotal",
+    direction: "desc",
+  });
+
   if (rows.length === 0) {
     return (
       <p className="py-4 text-center text-sm text-[var(--muted-foreground)]">
@@ -24,14 +39,25 @@ export function DifalMapCard({ rows }: { rows: DifalMapRow[] }) {
         <thead>
           <tr className="border-b border-[var(--border)] text-left text-xs text-[var(--muted-foreground)]">
             <th className="pb-2 pr-3 font-medium">UF</th>
-            <th className="pb-2 pr-3 text-right font-medium">Receita</th>
-            <th className="pb-2 pr-3 text-right font-medium">Unidades</th>
-            <th className="pb-2 pr-3 text-right font-medium">Transações</th>
-            <th className="pb-2 text-right font-medium">Margem média</th>
+            <SortableTh label="Receita" sortKey="receitaTotal" sort={sort} onSortChange={onSortChange} />
+            <SortableTh label="Unidades" sortKey="unidades" sort={sort} onSortChange={onSortChange} />
+            <SortableTh
+              label="Transações"
+              sortKey="totalTransacoes"
+              sort={sort}
+              onSortChange={onSortChange}
+            />
+            <SortableTh
+              label="Margem média"
+              sortKey="margemMedia"
+              sort={sort}
+              onSortChange={onSortChange}
+              className="pr-0"
+            />
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
+          {sortedRows.map((row) => (
             <tr
               key={row.uf}
               className="border-b border-[var(--border)] last:border-0"
