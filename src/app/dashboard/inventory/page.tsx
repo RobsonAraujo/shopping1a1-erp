@@ -117,6 +117,12 @@ async function InventoryDataSection({
       catalogListing: item.catalog_listing === true,
     }));
 
+    // Anúncios encerrados (`closed`) só aparecem se ainda houver estoque registrado.
+    rows = rows.filter((row) => {
+      if (row.mlStatus !== "closed") return true;
+      return row.mlStock + row.warehouseStock + row.mlStockOnTheWay > 0;
+    });
+
     total = items.length;
     statusCounts = countListingsByStatus(items);
 
