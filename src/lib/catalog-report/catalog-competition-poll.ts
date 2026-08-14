@@ -1,9 +1,9 @@
 import { reportsConfig } from "@/config/reports";
 import {
-  decimalToNumber,
   deriveStatusFromPriceToWin,
   extractPriceToWin,
   extractSellerPrice,
+  loadLatestCatalogCompetitionSnapshots,
   shouldRecordCatalogSnapshot,
   type LatestCatalogSnapshot,
 } from "@/lib/catalog-competition";
@@ -34,37 +34,6 @@ function decimalOrNull(value: number | null): string | null {
   return String(value);
 }
 
-async function loadLatestSnapshotByItemId(
-  itemIds: string[],
-): Promise<Record<string, LatestCatalogSnapshot>> {
-  if (itemIds.length === 0) return {};
-
-  const rows = await prisma.catalogCompetitionSnapshot.findMany({
-    where: { mlItemId: { in: itemIds } },
-    orderBy: { snapshotAt: "desc" },
-    distinct: ["mlItemId"],
-    select: {
-      mlItemId: true,
-      status: true,
-      sellerPrice: true,
-      priceToWin: true,
-      snapshotAt: true,
-    },
-  });
-
-  return Object.fromEntries(
-    rows.map((row) => [
-      row.mlItemId,
-      {
-        status: row.status,
-        sellerPrice: decimalToNumber(row.sellerPrice),
-        priceToWin: decimalToNumber(row.priceToWin),
-        snapshotAt: row.snapshotAt,
-      },
-    ]),
-  );
-}
-
 export async function pollCatalogCompetitionForSeller(
   accessToken: string,
   mlUserId: number,
@@ -93,7 +62,7 @@ export async function pollCatalogCompetitionForSeller(
   const items = await fetchItemsByIdsBatched(accessToken, ids, 20);
   const itemById = Object.fromEntries(items.map((item) => [item.id, item]));
 
-  const latestSnapshotById = await loadLatestSnapshotByItemId(ids);
+  const latestSnapshotById = await loadLatestCatalogCompetitionSnapshots(ids);
 
   let changed = 0;
   const errors: string[] = [];

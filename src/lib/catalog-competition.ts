@@ -1,5 +1,7 @@
 import { reportsConfig } from "@/config/reports";
 import { getZonedParts } from "@/lib/report-timezone";
+import { prisma } from "@/lib/db";
+import { Prisma } from "@/generated/prisma/client";
 
 export type CompetitionStatus = "winning" | "losing" | "shared" | "unknown";
 
@@ -9,6 +11,46 @@ export type LatestCatalogSnapshot = {
   priceToWin: number | null;
   snapshotAt: Date;
 };
+
+type LatestCatalogSnapshotRow = {
+  ml_item_id: string;
+  status: CompetitionStatus;
+  seller_price: Prisma.Decimal | null;
+  price_to_win: Prisma.Decimal | null;
+  snapshot_at: Date;
+};
+
+/**
+ * Fetches only the most recent snapshot per item via DISTINCT ON, backed by the
+ * (ml_item_id, snapshot_at desc) index. A plain findMany+distinct pulls each
+ * item's entire snapshot history before deduping, which grows unbounded as the
+ * table accumulates rows from the polling cron.
+ */
+export async function loadLatestCatalogCompetitionSnapshots(
+  itemIds: string[],
+): Promise<Record<string, LatestCatalogSnapshot>> {
+  if (itemIds.length === 0) return {};
+
+  const rows = await prisma.$queryRaw<LatestCatalogSnapshotRow[]>(Prisma.sql`
+    SELECT DISTINCT ON (ml_item_id)
+      ml_item_id, status, seller_price, price_to_win, snapshot_at
+    FROM catalog_competition_snapshots
+    WHERE ml_item_id IN (${Prisma.join(itemIds)})
+    ORDER BY ml_item_id, snapshot_at DESC
+  `);
+
+  return Object.fromEntries(
+    rows.map((row) => [
+      row.ml_item_id,
+      {
+        status: row.status,
+        sellerPrice: row.seller_price === null ? null : Number(row.seller_price),
+        priceToWin: row.price_to_win === null ? null : Number(row.price_to_win),
+        snapshotAt: row.snapshot_at,
+      } satisfies LatestCatalogSnapshot,
+    ]),
+  );
+}
 
 const PRICE_EPSILON = 0.001;
 

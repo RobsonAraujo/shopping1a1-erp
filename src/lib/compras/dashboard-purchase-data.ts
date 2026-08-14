@@ -1,4 +1,5 @@
 import { stockPlanningConfig } from "@/config/stock-planning";
+import { loadLatestCatalogCompetitionSnapshots } from "@/lib/catalog-competition";
 import {
   fetchCategoriesByIds,
   fetchOperationalListingIds,
@@ -144,7 +145,7 @@ export async function loadDashboardPurchaseData(
   const dateField = stockPlanningConfig.salesWindowDateField;
 
   const allIds = await fetchOperationalListingIds(token, userId);
-  const [rawItems, salesByItem, warehouseStocks, replenishmentCycles, snapshots] =
+  const [rawItems, salesByItem, warehouseStocks, replenishmentCycles, latestSnapshotById] =
     await Promise.all([
       fetchItemsByIdsBatched(token, allIds),
       fetchUnitsSoldForItemsInWindowBatched(
@@ -175,12 +176,7 @@ export async function loadDashboardPurchaseData(
         },
         orderBy: { updatedAt: "desc" },
       }),
-      prisma.catalogCompetitionSnapshot.findMany({
-        where: { mlItemId: { in: allIds } },
-        orderBy: { snapshotAt: "desc" },
-        distinct: ["mlItemId"],
-        select: { mlItemId: true, status: true },
-      }),
+      loadLatestCatalogCompetitionSnapshots(allIds),
     ]);
   const items = rawItems.filter((item) => !isKitItem(item));
 
@@ -195,7 +191,7 @@ export async function loadDashboardPurchaseData(
     ]),
   );
   const catalogStatusById = Object.fromEntries(
-    snapshots.map((s) => [s.mlItemId, s.status]),
+    Object.entries(latestSnapshotById).map(([mlItemId, s]) => [mlItemId, s.status]),
   );
 
   const categoryIds = [
