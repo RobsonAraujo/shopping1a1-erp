@@ -1,3 +1,4 @@
+import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import type { PurchaseAnalysisItemRow } from "@/lib/purchase-analysis-rows";
 import type { RupturaRow } from "./types";
 
@@ -13,6 +14,7 @@ export function buildRupturaRows(rows: PurchaseAnalysisItemRow[]): RupturaRow[] 
     .map((row) => ({
       mlItemId: row.item.id,
       title: (row.item.title as string | undefined) ?? row.sku ?? row.item.id,
+      imageUrl: bestItemImageUrl(row.item) ?? null,
       sku: row.sku,
       totalStock: row.totalStock,
       purchaseLeadTimeDays: row.purchaseLeadTimeDays,

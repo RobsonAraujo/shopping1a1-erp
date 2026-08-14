@@ -16,6 +16,7 @@ export type SlowMoverRow = Pick<
 > & {
   mlItemId: string;
   title: string;
+  imageUrl: string | null;
   coverageDays: number | null;
   dailyAvg: number;
   unitsSoldInWindow: number;

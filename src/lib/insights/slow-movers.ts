@@ -1,12 +1,22 @@
+import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import type { PurchaseAnalysisItemRow } from "@/lib/purchase-analysis-rows";
 import type { SlowMoverRow } from "./types";
 
 export const DEFAULT_SLOW_MOVER_THRESHOLD_DAYS = 30;
+export const MIN_LISTING_AGE_DAYS = 15;
+
+function listingAgeDays(dateCreated: string | undefined): number | null {
+  if (!dateCreated) return null;
+  const created = new Date(dateCreated).getTime();
+  if (Number.isNaN(created)) return null;
+  return (Date.now() - created) / (1000 * 60 * 60 * 24);
+}
 
 function toSlowMoverRow(row: PurchaseAnalysisItemRow): SlowMoverRow {
   return {
     mlItemId: row.item.id,
     title: (row.item.title as string | undefined) ?? row.sku ?? row.item.id,
+    imageUrl: bestItemImageUrl(row.item) ?? null,
     sku: row.sku,
     totalStock: row.totalStock,
     purchaseLeadTimeDays: row.purchaseLeadTimeDays,
@@ -18,9 +28,18 @@ function toSlowMoverRow(row: PurchaseAnalysisItemRow): SlowMoverRow {
   };
 }
 
-/** Mapeia todos os rows para SlowMoverRow (sem filtro de threshold) — apenas anúncios ativos. */
+/**
+ * Mapeia todos os rows para SlowMoverRow (sem filtro de threshold) — apenas anúncios
+ * ativos com pelo menos MIN_LISTING_AGE_DAYS dias de vida (evita alarme falso em anúncios recém-criados).
+ */
 export function mapToSlowMoverRows(rows: PurchaseAnalysisItemRow[]): SlowMoverRow[] {
-  return rows.filter((r) => r.item.status === "active").map(toSlowMoverRow);
+  return rows
+    .filter((r) => r.item.status === "active")
+    .filter((r) => {
+      const age = listingAgeDays(r.item.date_created);
+      return age === null || age >= MIN_LISTING_AGE_DAYS;
+    })
+    .map(toSlowMoverRow);
 }
 
 /** Filtra rows com cobertura acima do threshold ou sem vendas. */

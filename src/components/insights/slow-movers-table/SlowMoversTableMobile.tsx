@@ -1,3 +1,6 @@
+import Image from "next/image";
+import Link from "next/link";
+import { ImageOff } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -24,31 +27,54 @@ export function SlowMoversTableMobile({ rows, threshold }: SlowMoversTableProps)
         <li key={row.mlItemId}>
           <Card className="p-4 shadow-sm">
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <a
+              <div className="flex min-w-0 flex-1 gap-2">
+                <Link
                   href={`/dashboard/items/${row.mlItemId}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="block truncate text-sm font-medium text-[var(--primary)] hover:underline"
-                  title={row.title}
+                  className="relative shrink-0 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--muted)]"
                 >
-                  {row.title}
-                </a>
-                <p className="mt-0.5 truncate font-mono text-xs text-[var(--muted-foreground)]">
-                  {row.sku ?? "—"}
-                </p>
-                {row.catalogListing && (
+                  {row.imageUrl ? (
+                    <Image
+                      src={row.imageUrl}
+                      alt={row.title}
+                      width={40}
+                      height={40}
+                      className="size-10 object-contain"
+                      sizes="40px"
+                    />
+                  ) : (
+                    <span className="flex size-10 items-center justify-center">
+                      <ImageOff className="size-4 text-[var(--muted-foreground)]/60" />
+                    </span>
+                  )}
+                </Link>
+                <div className="min-w-0 flex-1">
                   <a
-                    href={`/dashboard/catalog-report/${row.mlItemId}`}
+                    href={`/dashboard/items/${row.mlItemId}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-1 inline-block"
+                    className="block truncate text-sm font-medium text-[var(--primary)] hover:underline"
+                    title={row.title}
                   >
-                    <Badge variant="secondary" className="text-[10px] px-1 py-0 hover:opacity-80">
-                      catálogo ↗
-                    </Badge>
+                    {row.title}
                   </a>
-                )}
+                  <p className="mt-0.5 truncate font-mono text-xs text-[var(--muted-foreground)]">
+                    {row.sku ?? "—"}
+                  </p>
+                  {row.catalogListing && (
+                    <a
+                      href={`/dashboard/catalog-report/${row.mlItemId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1 inline-block"
+                    >
+                      <Badge variant="secondary" className="text-[10px] px-1 py-0 hover:opacity-80">
+                        catálogo ↗
+                      </Badge>
+                    </a>
+                  )}
+                </div>
               </div>
               <Badge
                 variant={row.performanceTier === "zero" ? "destructive" : "secondary"}
