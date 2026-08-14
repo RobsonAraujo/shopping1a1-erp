@@ -7,6 +7,7 @@ import {
   PURCHASE_COVERAGE_BUFFER_TOOLTIP,
 } from "@/lib/purchase-analysis";
 import { Card, CardContent } from "@/components/ui/card";
+import { FormInput } from "@/components/ui/form-input";
 import { MetricWithHint } from "@/components/metric-with-hint";
 
 const BUFFER_CHANGE_EVENT = "compras-buffer-change";
@@ -77,6 +78,9 @@ export function PurchaseCoverageBufferControl({
 }: PurchaseCoverageBufferControlProps) {
   const inputId = useId();
   const [draft, setDraft] = useState<string | null>(null);
+  const displayedDays = draft !== null && draft.trim() !== "" && Number.isFinite(Number(draft))
+    ? Math.max(0, Math.floor(Number(draft)))
+    : bufferDays;
 
   function commitDraft() {
     const value = draft ?? String(bufferDays);
@@ -105,16 +109,14 @@ export function PurchaseCoverageBufferControl({
             </span>
           </MetricWithHint>
           <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-            Padrão: {DEFAULT_PURCHASE_COVERAGE_BUFFER_DAYS} dias. Salvo neste
-            navegador.
+            Usando {displayedDays} {displayedDays === 1 ? "dia" : "dias"} (padrão:{" "}
+            {DEFAULT_PURCHASE_COVERAGE_BUFFER_DAYS}). Salvo neste navegador.
           </p>
         </div>
         <div className="w-full sm:w-36">
-          <label htmlFor={inputId} className="sr-only">
-            Buffer de estoque em dias
-          </label>
-          <input
+          <FormInput
             id={inputId}
+            aria-label="Buffer de estoque em dias"
             type="number"
             inputMode="numeric"
             min={0}
@@ -127,7 +129,7 @@ export function PurchaseCoverageBufferControl({
                 e.currentTarget.blur();
               }
             }}
-            className="h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-base tabular-nums text-[var(--foreground)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] sm:h-10 sm:text-sm"
+            inputClassName="tabular-nums"
           />
         </div>
       </CardContent>
