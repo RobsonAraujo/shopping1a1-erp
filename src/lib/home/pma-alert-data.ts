@@ -1,11 +1,32 @@
 import { prisma } from "@/lib/db";
 import { fetchOperationalListings } from "@/lib/mercadolibre/api";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
+import { fetchItemSalePrice } from "@/lib/mercadolibre/item-sale-price";
 import { getItemSku } from "@/lib/mercadolibre/item-sku";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import { normalizeProductSku } from "@/lib/product-pricing";
 import { resolveCanonicalSku, type SkuAliasMap } from "@/lib/product-sku-alias";
 import { loadSkuAliasMap } from "@/lib/product-sku-alias-data";
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await fn(items[index], index);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+  return results;
+}
 
 export type PmaAlertRow = {
   mlItemId: string;
@@ -17,12 +38,13 @@ export type PmaAlertRow = {
   shortfallPercent: number;
 };
 
-export function buildPmaAlertRows(
+export async function buildPmaAlertRows(
+  accessToken: string,
   pmaBySku: Map<string, number>,
   items: ItemBody[],
   aliasMap?: SkuAliasMap,
-): PmaAlertRow[] {
-  const rows: PmaAlertRow[] = [];
+): Promise<PmaAlertRow[]> {
+  const candidates: { item: ItemBody; canonicalSku: string; pmaPrice: number }[] = [];
 
   for (const item of items) {
     if (item.status !== "active") continue;
@@ -32,7 +54,21 @@ export function buildPmaAlertRows(
     const pmaPrice = pmaBySku.get(canonicalSku);
     if (pmaPrice == null) continue;
 
-    if (item.price >= pmaPrice) continue;
+    candidates.push({ item, canonicalSku, pmaPrice });
+  }
+
+  const rows: PmaAlertRow[] = [];
+
+  await mapWithConcurrency(candidates, 5, async ({ item, canonicalSku, pmaPrice }) => {
+    let currentPrice = item.price;
+    try {
+      const salePriceInfo = await fetchItemSalePrice(accessToken, item.id, item.price);
+      currentPrice = salePriceInfo.amount;
+    } catch {
+      // mantém item.price como fallback quando a consulta de preço promocional falha
+    }
+
+    if (currentPrice >= pmaPrice) return;
 
     rows.push({
       mlItemId: item.id,
@@ -40,10 +76,10 @@ export function buildPmaAlertRows(
       title: item.title,
       imageUrl: bestItemImageUrl(item) ?? null,
       pmaPrice,
-      currentPrice: item.price,
-      shortfallPercent: ((pmaPrice - item.price) / pmaPrice) * 100,
+      currentPrice,
+      shortfallPercent: ((pmaPrice - currentPrice) / pmaPrice) * 100,
     });
-  }
+  });
 
   return rows.sort((a, b) => b.shortfallPercent - a.shortfallPercent);
 }
@@ -69,5 +105,5 @@ export async function loadPmaAlerts(
     fetchOperationalListings(accessToken, userId),
   ]);
 
-  return buildPmaAlertRows(pmaBySku, items, aliasMap);
+  return buildPmaAlertRows(accessToken, pmaBySku, items, aliasMap);
 }
