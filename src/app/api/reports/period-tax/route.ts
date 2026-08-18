@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { loadTaxReportForPeriod } from "@/lib/tax-report/service/period-report";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { stripTransacoesForResponse } from "@/lib/tax-report/strip-transacoes-for-response";
 
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_RANGE_DAYS = 90;
@@ -42,7 +43,16 @@ export async function GET(request: NextRequest) {
       parsed.from,
       parsed.to,
     );
-    return NextResponse.json({ ...payload, missingMonths });
+    // Por padrão devolve o payload completo (ex.: card DIFAL de Insights
+    // precisa de `porSku[].transacoes` de todos os SKUs). Consumidores que só
+    // usam agregados ou 1 SKU pedem `summary`/`sku` para evitar trafegar o
+    // detalhamento por venda inteiro.
+    const searchParams = request.nextUrl.searchParams;
+    const sku = searchParams.get("sku") ?? undefined;
+    const summary = searchParams.get("summary") === "1";
+    const responsePayload =
+      sku || summary ? stripTransacoesForResponse(payload, sku) : payload;
+    return NextResponse.json({ ...responsePayload, missingMonths });
   } catch (e) {
     logServerError("api/reports/period-tax GET", e);
     return NextResponse.json(apiErrorPayload(e, "period_tax_load_failed"), {

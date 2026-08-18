@@ -129,7 +129,7 @@ export function MonthlyTaxReportClient() {
     try {
       const res = await fetch(
         isPeriodMode
-          ? `/api/reports/period-tax?from=${fromDate}&to=${toDate}`
+          ? `/api/reports/period-tax?from=${fromDate}&to=${toDate}&summary=1`
           : `/api/reports/monthly-tax?year=${year}&month=${month}`,
       );
       if (res.status === 404) {

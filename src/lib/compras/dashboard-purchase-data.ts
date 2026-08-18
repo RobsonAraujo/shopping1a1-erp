@@ -17,6 +17,7 @@ import type {
   PurchaseAnalysisItemRow,
 } from "@/lib/purchase-analysis-rows";
 import { prisma } from "@/lib/db";
+import { Prisma } from "@/generated/prisma/client";
 import {
   isActiveReplenishmentStatus,
   isCompletedCycleStillValid,
@@ -95,6 +96,56 @@ function hasActiveReplenishmentBeyondAttention(
   return entry.activeStatus !== "attention";
 }
 
+type LatestPurchaseCycleRow = {
+  ml_item_id: string;
+  status: string;
+  completed_ml_qty: number | null;
+  completed_warehouse_qty: number | null;
+  completed_lead_time_days: number | null;
+  updated_at: Date;
+};
+
+/**
+ * Só o ciclo de compra ativo e o completado mais recente por item — via
+ * DISTINCT ON, evitando trazer o histórico inteiro de `replenishment_cycles`
+ * (nunca purgado, cresce sem limite) a cada carregamento do dashboard de
+ * Compras. Mesmo padrão de loadLatestCatalogCompetitionSnapshots.
+ */
+async function loadLatestPurchaseCyclesByItem(mlItemIds: string[]) {
+  if (mlItemIds.length === 0) return [];
+
+  const columns = Prisma.sql`
+      ml_item_id, status, completed_ml_qty, completed_warehouse_qty,
+      completed_lead_time_days, updated_at`;
+
+  const rows = await prisma.$queryRaw<LatestPurchaseCycleRow[]>(Prisma.sql`
+    (SELECT DISTINCT ON (ml_item_id) ${columns}
+    FROM replenishment_cycles
+    WHERE ml_item_id IN (${Prisma.join(mlItemIds)})
+      AND kind::text = 'purchase'
+      AND status::text != 'completed'
+    ORDER BY ml_item_id, updated_at DESC)
+
+    UNION ALL
+
+    (SELECT DISTINCT ON (ml_item_id) ${columns}
+    FROM replenishment_cycles
+    WHERE ml_item_id IN (${Prisma.join(mlItemIds)})
+      AND kind::text = 'purchase'
+      AND status::text = 'completed'
+    ORDER BY ml_item_id, updated_at DESC)
+  `);
+
+  return rows.map((row) => ({
+    mlItemId: row.ml_item_id,
+    status: row.status,
+    completedMlQty: row.completed_ml_qty,
+    completedWarehouseQty: row.completed_warehouse_qty,
+    completedLeadTimeDays: row.completed_lead_time_days,
+    updatedAt: row.updated_at,
+  }));
+}
+
 function buildCyclesByItem(
   cycles: Array<{
     mlItemId: string;
@@ -164,18 +215,7 @@ export async function loadDashboardPurchaseData(
           targetCoverageDays: true,
         },
       }),
-      prisma.replenishmentCycle.findMany({
-        where: { mlItemId: { in: allIds }, kind: "purchase" },
-        select: {
-          mlItemId: true,
-          status: true,
-          completedMlQty: true,
-          completedWarehouseQty: true,
-          completedLeadTimeDays: true,
-          updatedAt: true,
-        },
-        orderBy: { updatedAt: "desc" },
-      }),
+      loadLatestPurchaseCyclesByItem(allIds),
       loadLatestCatalogCompetitionSnapshots(allIds),
     ]);
   const items = rawItems.filter((item) => !isKitItem(item));

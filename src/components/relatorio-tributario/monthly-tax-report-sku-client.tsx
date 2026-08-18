@@ -112,8 +112,8 @@ export function MonthlyTaxReportSkuClient({
     try {
       const res = await fetch(
         period
-          ? `/api/reports/period-tax?from=${period.from}&to=${period.to}`
-          : `/api/reports/monthly-tax?year=${year}&month=${month}`,
+          ? `/api/reports/period-tax?from=${period.from}&to=${period.to}&sku=${encodeURIComponent(sku)}`
+          : `/api/reports/monthly-tax?year=${year}&month=${month}&sku=${encodeURIComponent(sku)}`,
       );
       if (res.status === 404) {
         setReport(null);

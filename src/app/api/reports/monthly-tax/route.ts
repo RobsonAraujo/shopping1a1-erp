@@ -8,6 +8,7 @@ import {
 import type { ManualFiscalOverride } from "@/lib/tax-report/types";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { stripTransacoesForResponse } from "@/lib/tax-report/strip-transacoes-for-response";
 
 export const maxDuration = 300;
 
@@ -51,7 +52,8 @@ export async function GET(request: NextRequest) {
     if (!snapshot) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    return NextResponse.json(snapshot);
+    const sku = request.nextUrl.searchParams.get("sku") ?? undefined;
+    return NextResponse.json(stripTransacoesForResponse(snapshot, sku));
   } catch (e) {
     logServerError("api/reports/monthly-tax GET", e);
     return NextResponse.json(

@@ -3,6 +3,7 @@ import type {
   OperationCycleKind,
   ReplenishmentStatus,
 } from "@/generated/prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import {
   buildPurchasePlan,
@@ -217,28 +218,91 @@ type CycleEntry = {
   latestCompleted: Awaited<ReturnType<typeof prisma.replenishmentCycle.findFirst>>;
 };
 
+type LatestCycleRow = {
+  id: string;
+  ml_item_id: string;
+  kind: OperationCycleKind;
+  status: ReplenishmentStatus;
+  trigger_ml_qty: number;
+  trigger_warehouse_qty: number;
+  trigger_lead_time_days: number | null;
+  warehouse_qty_at_order: number | null;
+  ml_qty_at_collection: number | null;
+  completed_ml_qty: number | null;
+  completed_warehouse_qty: number | null;
+  completed_lead_time_days: number | null;
+  completed_at: Date | null;
+};
+
+function rowToCycle(
+  row: LatestCycleRow,
+): NonNullable<CycleEntry["active"]> {
+  return {
+    id: row.id,
+    mlItemId: row.ml_item_id,
+    kind: row.kind,
+    status: row.status,
+    triggerMlQty: row.trigger_ml_qty,
+    triggerWarehouseQty: row.trigger_warehouse_qty,
+    triggerLeadTimeDays: row.trigger_lead_time_days,
+    warehouseQtyAtOrder: row.warehouse_qty_at_order,
+    mlQtyAtCollection: row.ml_qty_at_collection,
+    completedMlQty: row.completed_ml_qty,
+    completedWarehouseQty: row.completed_warehouse_qty,
+    completedLeadTimeDays: row.completed_lead_time_days,
+    completedAt: row.completed_at,
+  } as NonNullable<CycleEntry["active"]>;
+}
+
+/**
+ * Só o ciclo ativo (status != completed) e o completado mais recente por item
+ * — via DISTINCT ON, mesmo padrão de loadLatestCatalogCompetitionSnapshots em
+ * catalog-competition.ts. Um findMany simples traz o histórico inteiro de
+ * ciclos por anúncio (nunca purgado), o que cresce sem limite e foi
+ * identificado como fonte de egress alto no Supabase.
+ */
 async function getLatestCyclesByItemAndKind(
   mlItemIds: string[],
   kind: OperationCycleKind,
 ): Promise<Map<string, CycleEntry>> {
-  const cycles = await prisma.replenishmentCycle.findMany({
-    where: { mlItemId: { in: mlItemIds }, kind },
-    orderBy: { updatedAt: "desc" },
-  });
-
   const map = new Map<string, CycleEntry>();
   for (const id of mlItemIds) {
     map.set(id, { active: null, latestCompleted: null });
   }
+  if (mlItemIds.length === 0) return map;
 
-  for (const cycle of cycles) {
-    const entry = map.get(cycle.mlItemId);
+  const columns = Prisma.sql`
+      id, ml_item_id, kind, status, trigger_ml_qty, trigger_warehouse_qty,
+      trigger_lead_time_days, warehouse_qty_at_order, ml_qty_at_collection,
+      completed_ml_qty, completed_warehouse_qty, completed_lead_time_days,
+      completed_at`;
+
+  const rows = await prisma.$queryRaw<LatestCycleRow[]>(Prisma.sql`
+    (SELECT DISTINCT ON (ml_item_id) ${columns}
+    FROM replenishment_cycles
+    WHERE ml_item_id IN (${Prisma.join(mlItemIds)})
+      AND kind::text = ${kind}
+      AND status::text != 'completed'
+    ORDER BY ml_item_id, updated_at DESC)
+
+    UNION ALL
+
+    (SELECT DISTINCT ON (ml_item_id) ${columns}
+    FROM replenishment_cycles
+    WHERE ml_item_id IN (${Prisma.join(mlItemIds)})
+      AND kind::text = ${kind}
+      AND status::text = 'completed'
+    ORDER BY ml_item_id, updated_at DESC)
+  `);
+
+  for (const row of rows) {
+    const entry = map.get(row.ml_item_id);
     if (!entry) continue;
-    if (isActiveReplenishmentStatus(cycle.status) && !entry.active) {
-      entry.active = cycle;
-    }
-    if (cycle.status === "completed" && !entry.latestCompleted) {
+    const cycle = rowToCycle(row);
+    if (row.status === "completed") {
       entry.latestCompleted = cycle;
+    } else {
+      entry.active = cycle;
     }
   }
 
@@ -511,7 +575,16 @@ export async function syncReplenishmentFromWarehouse(
 }
 
 function buildCardFromCycle(
-  cycle: Awaited<ReturnType<typeof prisma.replenishmentCycle.findMany>>[number],
+  cycle: {
+    id: string;
+    mlItemId: string;
+    kind: OperationCycleKind;
+    status: ReplenishmentStatus;
+    suggestedQty: number | null;
+    notes: string | null;
+    warehouseQtyAtOrder: number | null;
+    mlQtyAtCollection: number | null;
+  },
   ctx: ItemPlanningContext,
   item: ItemBody,
 ): OperationsBoardCard {
@@ -619,6 +692,16 @@ export async function loadOperationsBoards(
       status: { not: "completed" },
     },
     orderBy: { updatedAt: "desc" },
+    select: {
+      id: true,
+      mlItemId: true,
+      kind: true,
+      status: true,
+      suggestedQty: true,
+      notes: true,
+      warehouseQtyAtOrder: true,
+      mlQtyAtCollection: true,
+    },
   });
 
   const itemById = new Map(items.map((item) => [item.id, item]));
