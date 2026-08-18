@@ -7,18 +7,18 @@ const RECENT_SNAPSHOTS_LIMIT = 12;
 type SnapshotsLoader = (sellerId: number) => Promise<TaxReportPayload[]>;
 
 async function defaultLoadSnapshots(sellerId: number) {
-  const { loadRecentTaxReportSnapshots } = await import(
+  const { loadRecentTaxReportSummaries } = await import(
     "@/lib/tax-report/service/generate-monthly-report"
   );
-  return loadRecentTaxReportSnapshots(sellerId, RECENT_SNAPSHOTS_LIMIT);
+  return loadRecentTaxReportSummaries(sellerId, RECENT_SNAPSHOTS_LIMIT);
 }
 
 function anchoredLoadSnapshots(anchor: { year: number; month: number }) {
   return async (sellerId: number) => {
-    const { loadRecentTaxReportSnapshotsUpTo } = await import(
+    const { loadRecentTaxReportSummariesUpTo } = await import(
       "@/lib/tax-report/service/generate-monthly-report"
     );
-    return loadRecentTaxReportSnapshotsUpTo(
+    return loadRecentTaxReportSummariesUpTo(
       sellerId,
       anchor.year,
       anchor.month,

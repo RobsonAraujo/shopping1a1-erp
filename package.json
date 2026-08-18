@@ -15,7 +15,8 @@
     "seed:sql": "tsx scripts/seed-from-sql.ts",
     "dre:billing-debug": "tsx scripts/dre-billing-debug.ts",
     "full:collect-debug": "tsx scripts/debug-full-collect-charges.ts",
-    "full:inbound-debug": "tsx scripts/debug-full-inbound.ts"
+    "full:inbound-debug": "tsx scripts/debug-full-inbound.ts",
+    "backfill:tax-report-summary": "tsx scripts/backfill-tax-report-summary.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.7.0",

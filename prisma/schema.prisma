@@ -307,6 +307,11 @@ model TaxReportMonthSnapshot {
   month       Int
   generatedAt DateTime @map("generated_at")
   payload     Json
+  /// Mesmo payload, mas com `porSku[].transacoes` removido — usado por leituras
+  /// "ao vivo" (Produtos, DRE, Avaliação Financeira) que só precisam de agregados
+  /// por SKU, evitando trafegar o detalhamento por venda do banco. Nullable para
+  /// snapshots antigos ainda não migrados (backfill).
+  payloadSummary Json? @map("payload_summary")
 
   @@unique([sellerId, year, month])
   @@index([year, month])
