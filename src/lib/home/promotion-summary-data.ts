@@ -32,6 +32,7 @@ export type PromotionSummaryRow = {
 export type PromotionSummaryPayload = {
   withoutPromotion: PromotionSummaryRow[];
   expiringSoon: PromotionSummaryRow[];
+  totalActiveItems: number;
   fetchedAt: string;
   expiringSoonDays: number;
   warnings: string[];
@@ -210,6 +211,7 @@ export async function loadPromotionSummary(
     return {
       withoutPromotion: [],
       expiringSoon: [],
+      totalActiveItems: 0,
       fetchedAt: now.toISOString(),
       expiringSoonDays,
       warnings: [],
@@ -264,6 +266,7 @@ export async function loadPromotionSummary(
   return {
     withoutPromotion,
     expiringSoon,
+    totalActiveItems: ownActiveItems.length,
     fetchedAt: now.toISOString(),
     expiringSoonDays,
     warnings,

@@ -226,7 +226,9 @@ export function DashboardSummaryClient() {
             {totalCount === 0 ? (
               <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-[var(--border)] bg-[var(--muted)]/30 px-6 py-12 text-center">
                 <p className="max-w-md text-sm leading-relaxed text-[var(--muted-foreground)]">
-                  Nenhum anúncio próprio ativo no momento.
+                  {(data?.totalActiveItems ?? 0) === 0
+                    ? "Nenhum anúncio próprio ativo no momento."
+                    : "Todos os anúncios ativos já têm promoção e nenhuma vence nos próximos dias."}
                 </p>
               </div>
             ) : (
