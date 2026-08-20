@@ -78,9 +78,6 @@ postgresql://erp:erp@localhost:5433/shopping1a1?schema=public
 ```bash
 # ENCRYPTION_KEY and CRON_SECRET (can differ in dev; use distinct values in prod)
 openssl rand -base64 32
-
-# VAPID (optional — only if testing browser push)
-npx web-push generate-vapid-keys
 ```
 
 ### Mercado Livre (dev)
@@ -122,7 +119,6 @@ Copy `.env.example` → `.env`. Full reference is in that file.
 | `ENCRYPTION_KEY` | ✓ | ✓ | Encrypts ML tokens in the database |
 | `CRON_SECRET` | optional | ✓ | Protects `/api/cron/catalog-competition` |
 | `CRON_ML_USER_ID` | — | optional | Fixed seller for cron (multiple sellers) |
-| `VAPID_*` | optional | optional | Browser push (dashboard bell icon) |
 | `MERCADOLIBRE_AUTH_BASE` | — | — | Override (default: Brazil) |
 | `MERCADOLIBRE_API_BASE` | — | — | Override (default: `api.mercadolibre.com`) |
 
@@ -145,7 +141,6 @@ Connect the repository and set **Environment Variables** (Production):
 - `MERCADOLIBRE_REDIRECT_URI` → `https://YOUR-DOMAIN.vercel.app/api/auth/mercadolibre/callback`
 - `ENCRYPTION_KEY` → generate **before** the first prod login
 - `CRON_SECRET`
-- `VAPID_*` → only if you want browser push
 
 **Build:** the project runs `prisma generate` on `postinstall`. Migrations do **not** run automatically. After the first deploy, apply the schema:
 
@@ -206,10 +201,6 @@ Each poll:
    - **seller or price-to-win changed** vs latest snapshot (even if status is the same)
 
 Timelines at `/dashboard/catalog-report/[itemId]` use snapshots plus a baseline before the selected window.
-
-### Browser push (optional)
-
-With `VAPID_*` configured, the dashboard bell enables OS-level alerts in the browser. Not tied to the catalog cron.
 
 ---
 

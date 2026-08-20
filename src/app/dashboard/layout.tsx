@@ -4,7 +4,6 @@ import Link from "next/link";
 import { LogOut } from "lucide-react";
 import { DashboardNav } from "@/components/dashboard-nav";
 import { fetchMe } from "@/lib/mercadolibre/api";
-import { PushNotificationToggle } from "@/components/push-notification-toggle";
 import { MobileDashboardMenu } from "@/components/mobile-dashboard-menu";
 import { readSession } from "@/lib/mercadolibre/session";
 import { Button } from "@/components/ui/button";
@@ -55,7 +54,6 @@ export default async function DashboardLayout({
               </span>
             </Link>
             <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-              <PushNotificationToggle />
               <span
                 className="hidden max-w-[10rem] truncate text-sm text-[var(--muted-foreground)] lg:inline xl:max-w-[12rem]"
                 title={nickname}

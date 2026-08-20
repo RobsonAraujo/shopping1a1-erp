@@ -52,7 +52,6 @@ Algumas tabelas já usam `sellerId` / `mlUserId`:
 |--------|--------|
 | `TaxReportMonthSnapshot` | `@@unique([sellerId, year, month])` |
 | `MlSellerCredentials` | PK `mlUserId` |
-| `PushSubscription` | `mlUserId` + endpoint |
 
 O restante do app **não** isola dados entre sellers: dois logins ML no mesmo DB veriam o mesmo catálogo de produtos e o mesmo DRE.
 
@@ -97,7 +96,7 @@ Detalhes dos modelos: [tenant-data-model.md](tenant-data-model.md).
 | **Referência global** (compartilhável) | `CbsIbsVigencia`, `TaxpayerVerificationCache` |
 | **Referência editável** (hoje global; pode virar override por org) | `IcmsInternalRate` |
 | **Por tenant** (hoje sem coluna — precisa `organizationId`) | `Product`, `CompanyTaxSettings`, `Listing`, `WarehouseStock`, `ReplenishmentCycle`, `CatalogCompetitionSnapshot`, `StockAttentionAcknowledgement`, `DreCostItem`, `DreCostMonthValue`, `DreMonthSnapshot`, `DreProductCostLeveling`, `CatalogCompetitionPollRun` |
-| **Parcial ML** (seller como proxy) | `TaxReportMonthSnapshot`, `MlSellerCredentials`, `PushSubscription` |
+| **Parcial ML** (seller como proxy) | `TaxReportMonthSnapshot`, `MlSellerCredentials` |
 
 ---
 
@@ -167,6 +166,17 @@ Detalhes dos modelos: [tenant-data-model.md](tenant-data-model.md).
 ## Registro de features
 
 Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templates/feature-saas-impact.md).
+
+### Remoção do alerta push de catálogo — 2026-08-20
+
+- **Tabelas novas/alteradas:** `push_subscriptions` removida (migration `20260820120000_drop_push_subscriptions`); `CatalogCompetitionSnapshot` inalterada
+- **Precisa `organizationId`?** não aplicável — feature removida
+- **APIs afetadas:** `DELETE /api/push/subscriptions/*` (rota removida); webhook `POST /api/ml/notifications/catalog-competition` mantido, mas perdeu o envio de Web Push — só grava snapshot/atualiza `Listing`
+- **Assume singleton?** não aplicável
+- **Cron/background:** nenhum
+- **Dados globais vs por org:** nenhum impacto — a página `dashboard/catalog-report` (relatório) continua intacta, lendo `CatalogCompetitionSnapshot`
+- **Código já tenant-ready?** não aplicável
+- **Ação futura na migração:** nenhuma — remove um bloqueador a menos da lista (modelo `PushSubscription` não existe mais); se notificações voltarem no futuro, desenhar já com `organizationId`
 
 ### Badge "Fora do PMA" na lista de Lucratividade — 2026-08-12
 

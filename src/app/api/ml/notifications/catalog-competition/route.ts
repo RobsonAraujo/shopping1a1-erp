@@ -9,7 +9,6 @@ import {
 import { fetchItemById, fetchItemPriceToWin } from "@/lib/mercadolibre/api";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import { resolveSellerAccessToken } from "@/lib/mercadolibre/persist-seller-tokens";
-import { canSendWebPush, sendWebPushNotification } from "@/lib/push/webpush";
 import { logServerError } from "@/lib/server-public-error";
 import { isEncryptionKeyConfigured } from "@/lib/app-secret-crypto";
 
@@ -61,109 +60,6 @@ function webhookLog(message: string, details: Record<string, unknown>) {
 
 function webhookWarn(message: string, details: Record<string, unknown>) {
   console.warn("[catalog-competition-webhook]", message, details);
-}
-
-function shouldSendCompetitionPushAlert(
-  previousStatus: CompetitionStatus | null,
-  status: CompetitionStatus,
-) {
-  if (status === "losing") {
-    return previousStatus === "winning" || previousStatus === "shared";
-  }
-  return (
-    status === "winning" &&
-    (previousStatus === "shared" || previousStatus === "losing")
-  );
-}
-
-function pushPayloadForStatus(
-  itemId: string,
-  itemTitle: string | null,
-  itemUrl: string | null,
-  previousStatus: CompetitionStatus | null,
-  status: CompetitionStatus,
-  snapshotAt: Date,
-) {
-  const itemLabel = itemTitle?.trim() || itemId;
-  const url = itemUrl?.trim() || `/dashboard/catalog-report/${encodeURIComponent(itemId)}`;
-
-  if (status === "winning") {
-    const body =
-      previousStatus === "losing"
-        ? `${itemLabel} voltou a ganhar no catálogo às ${snapshotAt.toLocaleTimeString("pt-BR")}.`
-        : `${itemLabel} saiu de compartilhando e passou a ganhar às ${snapshotAt.toLocaleTimeString("pt-BR")}.`;
-
-    return {
-      title: "Anúncio ganhou no catálogo",
-      body,
-      url,
-      tag: `catalog-winning-${itemId}`,
-    };
-  }
-
-  return {
-    title: "Anúncio perdendo no catálogo",
-    body: `${itemLabel} passou a perder às ${snapshotAt.toLocaleTimeString("pt-BR")}.`,
-    url,
-    tag: `catalog-losing-${itemId}`,
-  };
-}
-
-async function sendCompetitionPushAlert(
-  mlUserId: number,
-  itemId: string,
-  itemTitle: string | null,
-  itemUrl: string | null,
-  previousStatus: CompetitionStatus | null,
-  status: CompetitionStatus,
-  snapshotAt: Date,
-) {
-  if (!canSendWebPush()) {
-    webhookWarn("webpush not configured", { mlUserId, itemId });
-    return;
-  }
-
-  const subscriptions = await prisma.pushSubscription.findMany({
-    where: { mlUserId },
-    select: { endpoint: true, p256dh: true, auth: true },
-  });
-  if (subscriptions.length === 0) return;
-
-  const payload = pushPayloadForStatus(
-    itemId,
-    itemTitle,
-    itemUrl,
-    previousStatus,
-    status,
-    snapshotAt,
-  );
-
-  for (const subscription of subscriptions) {
-    try {
-      await sendWebPushNotification(subscription, payload);
-    } catch (error) {
-      const statusCode =
-        typeof error === "object" &&
-        error !== null &&
-        "statusCode" in error &&
-        typeof (error as { statusCode?: unknown }).statusCode === "number"
-          ? (error as { statusCode: number }).statusCode
-          : null;
-
-      if (statusCode === 404 || statusCode === 410) {
-        await prisma.pushSubscription.deleteMany({
-          where: { mlUserId, endpoint: subscription.endpoint },
-        });
-        continue;
-      }
-
-      webhookWarn("failed to send push", {
-        mlUserId,
-        itemId,
-        endpoint: subscription.endpoint,
-      });
-    }
-  }
 }
 
 async function createSnapshotWithRetry(data: {
@@ -340,17 +236,11 @@ export async function POST(request: NextRequest) {
   const sellerPrice = extractSellerPrice(pricePayload, itemDetails);
 
   try {
-    const [latest, existingListing] = await Promise.all([
-      prisma.catalogCompetitionSnapshot.findFirst({
-        where: { mlItemId: itemId },
-        select: { status: true, snapshotAt: true },
-        orderBy: { snapshotAt: "desc" },
-      }),
-      prisma.listing.findUnique({
-        where: { mlItemId: itemId },
-        select: { titleSnapshot: true },
-      }),
-    ]);
+    const latest = await prisma.catalogCompetitionSnapshot.findFirst({
+      where: { mlItemId: itemId },
+      select: { status: true, snapshotAt: true },
+      orderBy: { snapshotAt: "desc" },
+    });
 
     const previousStatus = latest?.status ?? null;
     if (previousStatus === status) {
@@ -403,22 +293,6 @@ export async function POST(request: NextRequest) {
       rawResponse,
     });
 
-    const pushNotificationTriggered = shouldSendCompetitionPushAlert(
-      previousStatus,
-      status,
-    );
-    if (pushNotificationTriggered) {
-      await sendCompetitionPushAlert(
-        mlUserId,
-        itemId,
-        itemDetails?.title ?? existingListing?.titleSnapshot ?? null,
-        itemDetails?.permalink ?? null,
-        previousStatus,
-        status,
-        snapshotAt,
-      );
-    }
-
     webhookLog("inserted snapshot", {
       itemId,
       mlUserId,
@@ -432,7 +306,6 @@ export async function POST(request: NextRequest) {
       inserted: true,
       status,
       snapshotAt: snapshotAt.toISOString(),
-      pushNotificationTriggered,
     });
   } catch (e) {
     logServerError("api/ml/notifications/catalog-competition", e);
