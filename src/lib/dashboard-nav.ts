@@ -145,12 +145,6 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
         description: "Apuração fiscal mensal por venda e SKU",
         icon: Scale,
       },
-      {
-        href: "/dashboard/simulacao-filial",
-        label: "Simulação de filial",
-        description: "Compare o ICMS atual com o de uma filial em outro estado",
-        icon: Building2,
-      },
     ],
   },
   {

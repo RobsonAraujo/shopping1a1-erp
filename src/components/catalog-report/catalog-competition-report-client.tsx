@@ -19,6 +19,7 @@ import {
 } from "@/components/show-paused-listings-switch";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { UserFeedback } from "@/components/ui/user-feedback";
 import { filterByItemListSearch } from "@/lib/item-list-search";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-is-mobile";
@@ -228,13 +229,7 @@ export function CatalogCompetitionReportClient() {
         </div>
       )}
 
-      {error ? (
-        <Card className="border-red-200 bg-red-50/70">
-          <CardContent className="pt-6 text-sm text-red-900">
-            {error}
-          </CardContent>
-        </Card>
-      ) : null}
+      {error ? <UserFeedback>{error}</UserFeedback> : null}
 
       <Card>
         <CardHeader className="space-y-4">

@@ -6,6 +6,7 @@ import { reportsConfig } from "@/config/reports";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { UserFeedback } from "@/components/ui/user-feedback";
 
 type DetailResponse = {
   from: string;
@@ -310,11 +311,7 @@ export function CatalogCompetitionItemReportClient({ itemId }: { itemId: string 
         </Button>
       </div>
 
-      {error ? (
-        <Card className="border-red-200 bg-red-50/70">
-          <CardContent className="pt-6 text-sm text-red-900">{error}</CardContent>
-        </Card>
-      ) : null}
+      {error ? <UserFeedback>{error}</UserFeedback> : null}
 
       {data ? (
         <Card>

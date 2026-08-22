@@ -190,11 +190,22 @@ Plano de execução detalhado (arquivos e código concretos): ver plano de imple
 
 Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templates/feature-saas-impact.md).
 
+### Remoção da Simulação de filial — 2026-08-22
+
+- **Tabelas novas/alteradas:** nenhuma
+- **Precisa `organizationId`?** não — feature removida (página, menu, API e motor de cálculo)
+- **APIs afetadas:** `GET/POST /api/tax-report/branch-simulation` deixam de existir
+- **Assume singleton?** não
+- **Cron/background:** nenhum
+- **Dados globais vs por org:** n/a
+- **Código já tenant-ready?** n/a
+- **Ação futura na migração:** nenhuma
+
 ### Suporte a Simples Nacional (v1 — regime + campos de produto + hub de Configurações) — 2026-08-22
 
 - **Tabelas novas/alteradas:** `company_tax_settings` ganha `simples_aliquota_efetiva_percent` (nullable, migration `20260822215916_company_tax_settings_simples_nacional`); `products` inalterada (sem migration — `purchase_icms_percent`/`sale_icms_percent` continuam `NOT NULL`; campo fiscal omitido no PATCH preserva o valor já gravado em vez de exigir 0)
 - **Precisa `organizationId`?** sim — `company_tax_settings` já é `organizationId`-scoped (Fase 7 concluída); o campo novo nasce tenant-ready sem esforço extra
-- **APIs afetadas:** `PATCH /api/tax-config` (campo novo, ainda `.partial()`), `GET/POST /api/products` e `GET/PATCH /api/products/[sku]` (campos fiscais de Lucro Real viram opcionais no payload; response ganha `taxRegime`/`simplesAliquotaEfetivaPercent`), `GET/POST /api/tax-report/branch-simulation` (guard de regime novo — antes não existia)
+- **APIs afetadas:** `PATCH /api/tax-config` (campo novo, ainda `.partial()`), `GET/POST /api/products` e `GET/PATCH /api/products/[sku]` (campos fiscais de Lucro Real viram opcionais no payload; response ganha `taxRegime`/`simplesAliquotaEfetivaPercent`)
 - **Assume singleton?** não
 - **Cron/background:** nenhum
 - **Dados globais vs por org:** tudo por org (config fiscal, produtos)

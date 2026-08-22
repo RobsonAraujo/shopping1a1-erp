@@ -8,6 +8,7 @@ import { DashboardOperationsSummary } from "@/components/home/dashboard-operatio
 import { DashboardPmaAlertPanel } from "@/components/home/dashboard-pma-alert-panel";
 import { DashboardSummaryClient } from "@/components/home/dashboard-summary-client";
 import { Card, CardContent } from "@/components/ui/card";
+import { UserFeedback } from "@/components/ui/user-feedback";
 import { fetchMe } from "@/lib/mercadolibre/api";
 import { readSession } from "@/lib/mercadolibre/session";
 import { getOrganizationContext } from "@/lib/organizations/context";
@@ -17,6 +18,7 @@ import {
 } from "@/lib/mercadolibre/seller-reputation";
 import { loadOperationsSummaryFromDb } from "@/lib/replenishment-cycle-data";
 import { loadPmaAlerts } from "@/lib/home/pma-alert-data";
+import { publicPageLoadMessage } from "@/lib/server-public-error";
 import { cn } from "@/lib/utils";
 
 async function PmaAlertSection({
@@ -190,14 +192,18 @@ export default async function DashboardPage() {
   try {
     operationsSummary = await loadOperationsSummaryFromDb(orgContext.organization.id);
   } catch (e) {
-    loadError = e instanceof Error ? e.message : "Erro ao carregar início";
+    loadError = publicPageLoadMessage(
+      "dashboard/home",
+      e,
+      "Não foi possível carregar o início agora. Tente de novo em instantes.",
+    );
   }
 
   if (loadError) {
     return (
-      <Card className="border-red-200 bg-red-50/50">
-        <CardContent className="pt-6 text-red-900">{loadError}</CardContent>
-      </Card>
+      <UserFeedback title="Não foi possível carregar o início">
+        {loadError}
+      </UserFeedback>
     );
   }
 

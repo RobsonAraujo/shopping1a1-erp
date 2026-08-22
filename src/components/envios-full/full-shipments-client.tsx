@@ -8,6 +8,7 @@ import { formatShipmentDate } from "@/components/envios-full/full-shipments-tabl
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { UserFeedback } from "@/components/ui/user-feedback";
 import { DatePicker } from "@/components/ui/date-picker";
 import { FormSelect } from "@/components/ui/form-select";
 import {
@@ -27,7 +28,6 @@ import {
 import { formatFinancialMoney } from "@/lib/financial-margin";
 import { getZonedYearMonth } from "@/lib/mercadolibre/revenue-periods";
 import { TAX_REPORT_MONTH_NAMES } from "@/lib/tax-report/routes";
-import { cn } from "@/lib/utils";
 
 type FullShipmentsClientProps = {
   initialShipments: FullShipmentRecord[];
@@ -495,26 +495,20 @@ export function FullShipmentsClient({
         </div>
       </header>
 
-      {error ? (
-        <Card className="border-red-200 bg-red-50/70 p-4 text-sm text-red-800">
-          {error}
-        </Card>
-      ) : null}
+      {error ? <UserFeedback>{error}</UserFeedback> : null}
 
       {importMessage ? (
-        <Card
-          className={cn(
-            "p-4 text-sm",
-            importMessageTone === "success" &&
-              "border-emerald-200 bg-emerald-50/70 text-emerald-900",
-            importMessageTone === "warning" &&
-              "border-amber-200 bg-amber-50/70 text-amber-950",
-            importMessageTone === "info" &&
-              "border-sky-200 bg-sky-50/70 text-sky-950",
-          )}
+        <UserFeedback
+          tone={
+            importMessageTone === "success"
+              ? "success"
+              : importMessageTone === "warning"
+                ? "warning"
+                : "info"
+          }
         >
           {importMessage}
-        </Card>
+        </UserFeedback>
       ) : null}
 
       <Card className="p-4 shadow-sm">

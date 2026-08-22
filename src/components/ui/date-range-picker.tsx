@@ -8,6 +8,7 @@ import type { DateRange } from "react-day-picker";
 
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
+import { UserFeedback } from "@/components/ui/user-feedback";
 import {
   Popover,
   PopoverContent,
@@ -57,6 +58,8 @@ type DateRangePickerProps = {
   numberOfMonths?: number;
   /** When true, dates after today cannot be selected. Default true. */
   disableFuture?: boolean;
+  /** Inclusive max span in days. Selection beyond this is ignored with a hint. */
+  maxDays?: number;
 };
 
 export function DateRangePicker({
@@ -67,8 +70,10 @@ export function DateRangePicker({
   className,
   numberOfMonths = 2,
   disableFuture = true,
+  maxDays,
 }: DateRangePickerProps) {
   const [open, setOpen] = React.useState(false);
+  const [rangeHint, setRangeHint] = React.useState<string | null>(null);
   const isMobile = useIsMobile();
   const selected: DateRange | undefined = React.useMemo(() => {
     const from = ymdToLocalDate(fromYmd);
@@ -110,21 +115,43 @@ export function DateRangePicker({
   );
 
   const calendar = (
-    <Calendar
-      mode="range"
-      locale={ptBR}
-      defaultMonth={selected?.from ?? selected?.to ?? new Date()}
-      selected={selected}
-      onSelect={(range) => {
-        if (!range?.from) return;
-        const from = localDateToYmd(range.from);
-        const to = localDateToYmd(range.to ?? range.from);
-        onChange(from, to);
-      }}
-      numberOfMonths={isMobile ? 1 : numberOfMonths}
-      disabled={disableFuture ? { after: new Date() } : undefined}
-      className="mx-auto"
-    />
+    <div className="space-y-2">
+      <Calendar
+        mode="range"
+        locale={ptBR}
+        defaultMonth={selected?.from ?? selected?.to ?? new Date()}
+        selected={selected}
+        onSelect={(range) => {
+          if (!range?.from) return;
+          const from = localDateToYmd(range.from);
+          const toDate = range.to ?? range.from;
+          const to = localDateToYmd(toDate);
+          if (maxDays != null) {
+            const diffDays = Math.round(
+              (toDate.getTime() - range.from.getTime()) / 86_400_000,
+            );
+            if (diffDays > maxDays) {
+              setRangeHint(
+                `O período pode ter no máximo ${maxDays} dias. Ajuste as datas e tente de novo.`,
+              );
+              return;
+            }
+          }
+          setRangeHint(null);
+          onChange(from, to);
+        }}
+        numberOfMonths={isMobile ? 1 : numberOfMonths}
+        disabled={disableFuture ? { after: new Date() } : undefined}
+        className="mx-auto"
+      />
+      {rangeHint ? (
+        <div className="px-3 pb-3">
+          <UserFeedback tone="warning" title="Período longo demais">
+            {rangeHint}
+          </UserFeedback>
+        </div>
+      ) : null}
+    </div>
   );
 
   if (isMobile) {

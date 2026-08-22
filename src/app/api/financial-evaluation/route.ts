@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
   if (hasPeriod) {
     if (!fromParam || !toParam || !calendarYmdRangeToUtc(fromParam, toParam)) {
       return NextResponse.json(
-        { error: "Parâmetro from/to inválido. Use YYYY-MM-DD." },
+        { error: "invalid_date_range" },
         { status: 400 },
       );
     }

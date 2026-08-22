@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FormInput } from "@/components/ui/form-input";
 import { FormSelect } from "@/components/ui/form-select";
+import { UserFeedback } from "@/components/ui/user-feedback";
 import { readApiError } from "@/lib/api-client-error";
 import type { TaxCompanyConfig } from "@/lib/tax-report/types";
 
@@ -101,14 +102,12 @@ export function CompanyRegimeClient() {
   return (
     <div className="space-y-6">
       {error ? (
-        <Card className="border-red-200 bg-red-50/70 p-4 text-sm text-red-800">
-          {error}
-        </Card>
+        <UserFeedback>{error}</UserFeedback>
       ) : null}
       {message ? (
-        <Card className="border-emerald-200 bg-emerald-50/70 p-4 text-sm text-emerald-900">
+        <UserFeedback tone="success" title="Salvo">
           {message}
-        </Card>
+        </UserFeedback>
       ) : null}
 
       <Card className="overflow-hidden p-0">
@@ -157,8 +156,8 @@ export function CompanyRegimeClient() {
               específicos de Lucro Real deixam de aparecer no cadastro de
               produtos enquanto o regime for Simples Nacional (os valores já
               salvos ficam preservados e voltam a aparecer se o regime mudar de
-              novo). O Relatório Tributário Mensal e a Simulação de Filial não
-              estão disponíveis para Simples Nacional nesta versão.
+              novo). O Relatório Tributário Mensal não está disponível para
+              Simples Nacional nesta versão.
             </Card>
           ) : null}
 

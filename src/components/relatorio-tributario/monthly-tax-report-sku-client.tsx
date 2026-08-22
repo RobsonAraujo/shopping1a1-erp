@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { UserFeedback } from "@/components/ui/user-feedback";
 import { FormInput } from "@/components/ui/form-input";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { VirtualizedTaxReportTransactionTable } from "@/components/relatorio-tributario/tax-report-transaction-table";
@@ -196,9 +197,9 @@ export function MonthlyTaxReportSkuClient({
 
   if (error) {
     return (
-      <Card className="border-red-200 bg-red-50/70 p-4 text-sm text-red-800">
+      <UserFeedback title="Não foi possível carregar as vendas">
         {error}
-      </Card>
+      </UserFeedback>
     );
   }
 

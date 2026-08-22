@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { readApiError } from "@/lib/api-client-error";
+import { formatApiErrorMessage, readApiError } from "@/lib/api-client-error";
 
 export type ApiResourceState<T> = {
   data: T | null;
@@ -49,7 +49,11 @@ export function useApiResource<T>(
         setData(json);
       } catch (e) {
         if (requestId !== requestIdRef.current) return;
-        setError(e instanceof Error ? e.message : "Erro de rede");
+        setError(
+          formatApiErrorMessage(
+            e instanceof Error ? e.message : "request_failed",
+          ),
+        );
       } finally {
         if (requestId === requestIdRef.current) setLoading(false);
       }

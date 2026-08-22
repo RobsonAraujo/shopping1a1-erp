@@ -20,8 +20,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FormSelect } from "@/components/ui/form-select";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { UserFeedback } from "@/components/ui/user-feedback";
 import { consumeSSEStream } from "@/hooks/use-sse-stream";
-import { readApiError } from "@/lib/api-client-error";
+import { formatApiErrorMessage, readApiError } from "@/lib/api-client-error";
 import {
   formatFinancialMoney,
   formatFinancialPercent,
@@ -244,7 +245,9 @@ export function DreClient() {
             return;
           }
           if (event.type === "error") {
-            setError(event.message || "dre_sync_failed");
+            setError(
+              formatApiErrorMessage(event.message || "dre_sync_failed"),
+            );
             return;
           }
           if (event.type === "complete") {
@@ -839,12 +842,7 @@ export function DreClient() {
         </div>
 
         {error ? (
-          <div
-            className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200"
-            role="alert"
-          >
-            {error}
-          </div>
+          <UserFeedback>{error}</UserFeedback>
         ) : null}
 
         {loading && !data ? (

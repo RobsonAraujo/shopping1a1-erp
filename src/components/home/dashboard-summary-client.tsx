@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ExternalLink, ImageOff, Tag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { UserFeedback } from "@/components/ui/user-feedback";
 import { formatFinancialMoney } from "@/lib/financial-margin";
 import type {
   PromotionSummaryPayload,
@@ -179,30 +180,19 @@ export function DashboardSummaryClient() {
 
   return (
     <div className="space-y-3">
-      {error ? (
-        <Card className="border-red-200 bg-red-50/50">
-          <CardContent className="pt-6 text-sm text-red-900">
-            {error}
-          </CardContent>
-        </Card>
-      ) : null}
+      {error ? <UserFeedback>{error}</UserFeedback> : null}
 
       {data?.warnings?.length ? (
-        <Card className="border-amber-200 bg-amber-50/40">
-          <CardContent className="pt-6 text-sm text-amber-950">
-            <p className="font-medium">
-              Alguns dados não puderam ser carregados:
-            </p>
-            <ul className="mt-2 list-disc space-y-1 pl-5">
-              {data.warnings.slice(0, 5).map((warning) => (
-                <li key={warning}>{warning}</li>
-              ))}
-              {data.warnings.length > 5 ? (
-                <li>… e mais {data.warnings.length - 5} aviso(s).</li>
-              ) : null}
-            </ul>
-          </CardContent>
-        </Card>
+        <UserFeedback tone="warning" title="Alguns dados não chegaram">
+          <ul className="list-disc space-y-1 pl-4">
+            {data.warnings.slice(0, 5).map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+            {data.warnings.length > 5 ? (
+              <li>… e mais {data.warnings.length - 5} aviso(s).</li>
+            ) : null}
+          </ul>
+        </UserFeedback>
       ) : null}
 
       {loading && !data ? (

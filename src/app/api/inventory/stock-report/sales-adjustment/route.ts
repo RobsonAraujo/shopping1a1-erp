@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
 
   if (!snapshotParam) {
     return NextResponse.json(
-      { error: "snapshot query param required (YYYY-MM-DD)" },
+      { error: "invalid_date_range" },
       { status: 400 },
     );
   }
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
   const snapshotDate = parseStockReportSnapshotDateInput(snapshotParam);
   if (!snapshotDate) {
     return NextResponse.json(
-      { error: "Invalid snapshot date (expected YYYY-MM-DD)" },
+      { error: "invalid_date_range" },
       { status: 400 },
     );
   }

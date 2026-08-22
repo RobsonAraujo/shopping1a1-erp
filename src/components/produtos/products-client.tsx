@@ -17,6 +17,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { ProductsTable } from "@/components/produtos/products-table";
+import { UserFeedback } from "@/components/ui/user-feedback";
 import type { ProductSortKey } from "@/components/produtos/products-table/types";
 import { useTableSort } from "@/hooks/use-table-sort";
 import {
@@ -301,7 +302,7 @@ function ProductSkuAliasesEditor({ canonicalSku }: { canonicalSku: string }) {
         </Button>
       </div>
 
-      {error ? <p className="text-xs text-red-700">{error}</p> : null}
+      {error ? <UserFeedback className="mt-2">{error}</UserFeedback> : null}
     </div>
   );
 }
@@ -512,7 +513,7 @@ function ProductFormModal({
           </div>
           {isEdit ? <ProductSkuAliasesEditor canonicalSku={form.sku} /> : null}
           {error ? (
-            <p className="mt-4 text-sm text-red-700">{error}</p>
+            <UserFeedback className="mt-4">{error}</UserFeedback>
           ) : null}
         </SheetBody>
         <SheetFooter>
@@ -847,9 +848,7 @@ export function ProductsClient() {
       />
 
       {error ? (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
-          {error}
-        </p>
+        <UserFeedback>{error}</UserFeedback>
       ) : null}
 
       <ProductsTable

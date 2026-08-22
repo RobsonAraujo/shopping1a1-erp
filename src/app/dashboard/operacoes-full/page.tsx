@@ -4,10 +4,11 @@ import { cookies } from "next/headers";
 import { Kanban } from "lucide-react";
 import { OperationsKanban } from "@/components/operacoes-full/operations-kanban";
 import { OperationsKanbanSkeleton } from "@/components/operacoes-full/operations-kanban-skeleton";
-import { Card, CardContent } from "@/components/ui/card";
+import { UserFeedback } from "@/components/ui/user-feedback";
 import { loadOperationsBoards } from "@/lib/replenishment-cycle-data";
 import { readSession } from "@/lib/mercadolibre/session";
 import { getOrganizationContext } from "@/lib/organizations/context";
+import { publicPageLoadMessage } from "@/lib/server-public-error";
 
 async function OperacoesFullDataSection({
   token,
@@ -24,17 +25,19 @@ async function OperacoesFullDataSection({
   try {
     boards = await loadOperationsBoards(token, userId, organizationId);
   } catch (e) {
-    loadError =
-      e instanceof Error ? e.message : "Erro ao carregar operações Full";
+    loadError = publicPageLoadMessage(
+      "dashboard/operacoes-full",
+      e,
+      "Não foi possível carregar as operações Full agora. Tente de novo em instantes.",
+    );
   }
 
   if (loadError || !boards) {
     return (
-      <Card className="border-red-200 bg-red-50/50">
-        <CardContent className="pt-6 text-red-900">
-          {loadError ?? "Erro ao carregar operações Full"}
-        </CardContent>
-      </Card>
+      <UserFeedback title="Não foi possível carregar as operações Full">
+        {loadError ??
+          "Não foi possível carregar as operações Full agora. Tente de novo em instantes."}
+      </UserFeedback>
     );
   }
 

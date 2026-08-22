@@ -12,9 +12,10 @@ import {
 import { decodeSupplierParam, supplierPathSegment } from "@/lib/purchase-analysis";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { SupplierPurchaseAnalysisView } from "@/components/compras/supplier-purchase-analysis-view";
-import { Card, CardContent } from "@/components/ui/card";
+import { UserFeedback } from "@/components/ui/user-feedback";
 import { readSession } from "@/lib/mercadolibre/session";
 import { getOrganizationContext } from "@/lib/organizations/context";
+import { publicPageLoadMessage } from "@/lib/server-public-error";
 
 type PageProps = {
   params: Promise<{ supplier: string }>;
@@ -62,8 +63,11 @@ export default async function SupplierPurchasePage({ params }: PageProps) {
       }
     }
   } catch (e) {
-    loadError =
-      e instanceof Error ? e.message : "Erro ao carregar análise do fornecedor";
+    loadError = publicPageLoadMessage(
+      "dashboard/compras/[supplier]",
+      e,
+      "Não foi possível carregar a análise deste fornecedor. Tente de novo em instantes.",
+    );
   }
 
   if (supplierMissing) {
@@ -72,9 +76,9 @@ export default async function SupplierPurchasePage({ params }: PageProps) {
 
   if (loadError) {
     return (
-      <Card className="border-red-200 bg-red-50/50">
-        <CardContent className="pt-6 text-red-900">{loadError}</CardContent>
-      </Card>
+      <UserFeedback title="Não foi possível carregar a análise">
+        {loadError}
+      </UserFeedback>
     );
   }
 

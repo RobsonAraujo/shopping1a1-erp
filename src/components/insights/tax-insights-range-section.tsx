@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Map, PieChart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { UserFeedback } from "@/components/ui/user-feedback";
 import { InsightExpandableCard } from "@/components/insights/insight-expandable-card";
 import { DifalMapCard } from "@/components/insights/difal-map-card";
 import { ParetoCard } from "@/components/insights/pareto-card";
@@ -135,12 +136,17 @@ export function TaxInsightsRangeSection({
           toYmd={toDate}
           onChange={applyCustomRange}
           disabled={loading}
+          maxDays={90}
         />
         {loading && (
           <span className="text-xs text-[var(--muted-foreground)]">Carregando…</span>
         )}
       </div>
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && (
+        <UserFeedback title="Não foi possível carregar o período">
+          {error}
+        </UserFeedback>
+      )}
 
       <InsightExpandableCard
         title="Margem por estado (DIFAL)"

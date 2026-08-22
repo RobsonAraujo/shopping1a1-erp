@@ -5,6 +5,7 @@ import { stockPlanningConfig } from "@/config/stock-planning";
 import { InventoryStockTable, type InventoryRow } from "@/components/inventory/inventory-stock-table";
 import { InventoryStockTableSkeleton } from "@/components/inventory/inventory-stock-table-skeleton";
 import { Card, CardContent } from "@/components/ui/card";
+import { UserFeedback } from "@/components/ui/user-feedback";
 import {
   enrichItemsWithFulfillmentStock,
   fetchOperationalListings,
@@ -21,6 +22,7 @@ import type { StockReportProductInfo } from "@/lib/inventory/inventory-stock-rep
 import { prisma } from "@/lib/db";
 import { readSession } from "@/lib/mercadolibre/session";
 import { getOrganizationContext } from "@/lib/organizations/context";
+import { publicPageLoadMessage } from "@/lib/server-public-error";
 
 function stockUnits(value: number | null | undefined): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return 0;
@@ -136,11 +138,13 @@ async function InventoryDataSection({
       .filter((sku): sku is string => Boolean(sku?.trim()));
     productsBySku = await loadStockReportProductsBySku(organizationId, skus);
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Erro ao carregar anúncios";
+    const msg = publicPageLoadMessage(
+      "dashboard/inventory",
+      e,
+      "Não foi possível carregar o estoque agora. Tente de novo em instantes.",
+    );
     return (
-      <Card className="border-red-200 bg-red-50/50">
-        <CardContent className="pt-6 text-red-900">{msg}</CardContent>
-      </Card>
+      <UserFeedback title="Não foi possível carregar o estoque">{msg}</UserFeedback>
     );
   }
 

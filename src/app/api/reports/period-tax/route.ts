@@ -33,10 +33,7 @@ export async function GET(request: NextRequest) {
 
   const parsed = parseFromTo(request.nextUrl.searchParams);
   if (!parsed) {
-    return NextResponse.json(
-      { error: `from e to são obrigatórios (YYYY-MM-DD, from <= to, máx. ${MAX_RANGE_DAYS} dias)` },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "invalid_date_range" }, { status: 400 });
   }
 
   try {

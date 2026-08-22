@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { FormInput } from "@/components/ui/form-input";
 import { FormSelect } from "@/components/ui/form-select";
 import { Switch } from "@/components/ui/switch";
+import { UserFeedback } from "@/components/ui/user-feedback";
 import { readApiError } from "@/lib/api-client-error";
 import { BRAZILIAN_UF_OPTIONS } from "@/lib/tax-report/brazilian-ufs";
 import type { IcmsRateRow, TaxCompanyConfig } from "@/lib/tax-report/types";
@@ -161,14 +162,12 @@ export function TaxConfigClient() {
   return (
     <div className="space-y-6">
       {error ? (
-        <Card className="border-red-200 bg-red-50/70 p-4 text-sm text-red-800">
-          {error}
-        </Card>
+        <UserFeedback>{error}</UserFeedback>
       ) : null}
       {message ? (
-        <Card className="border-emerald-200 bg-emerald-50/70 p-4 text-sm text-emerald-900">
+        <UserFeedback tone="success" title="Salvo">
           {message}
-        </Card>
+        </UserFeedback>
       ) : null}
 
       <Card className="overflow-hidden p-0">

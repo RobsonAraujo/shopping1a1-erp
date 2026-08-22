@@ -1,11 +1,22 @@
 /**
  * Evita vazar detalhes de erros internos / respostas de APIs para o cliente em produção.
- * Em desenvolvimento, a mensagem ajuda a depurar.
+ * Em desenvolvimento, a mensagem ajuda a depurar no log do servidor — o cliente
+ * ainda passa por {@link formatApiErrorMessage}.
  */
 const isDev = process.env.NODE_ENV === "development";
 
 export function logServerError(context: string, error: unknown): void {
   console.error(`[${context}]`, error);
+}
+
+/** Mensagem amigável para páginas server-rendered; o detalhe fica só no log. */
+export function publicPageLoadMessage(
+  context: string,
+  error: unknown,
+  fallback: string,
+): string {
+  logServerError(context, error);
+  return fallback;
 }
 
 /** Mensagem segura para JSON de API (502, etc.). */

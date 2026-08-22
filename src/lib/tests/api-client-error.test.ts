@@ -19,15 +19,40 @@ describe("formatApiErrorMessage", () => {
     );
   });
 
-  it("returns the input unchanged for an unmapped code", () => {
-    assert.equal(formatApiErrorMessage("some_unknown_code"), "some_unknown_code");
+  it("returns a friendly fallback for unmapped technical codes", () => {
+    assert.equal(
+      formatApiErrorMessage("some_unknown_code"),
+      "Não foi possível concluir esta ação. Tente novamente em instantes.",
+    );
   });
 
   it("maps the shared 'Unauthorized' and 'Invalid JSON' messages", () => {
     assert.equal(formatApiErrorMessage("Unauthorized"), "Sessão expirada. Entre novamente.");
     assert.equal(
       formatApiErrorMessage("Invalid JSON"),
-      "Dados inválidos enviados ao servidor.",
+      "Os dados enviados não puderam ser lidos. Tente novamente.",
+    );
+  });
+
+  it("hides network and rate-limit jargon from the user", () => {
+    assert.equal(
+      formatApiErrorMessage("Failed to fetch"),
+      "Sem conexão no momento. Confira a internet e tente novamente.",
+    );
+    assert.equal(
+      formatApiErrorMessage("rate limit exceeded"),
+      "O Mercado Livre está ocupado no momento. Aguarde um pouco e tente de novo.",
+    );
+  });
+
+  it("explains invalid date ranges in plain language", () => {
+    assert.equal(
+      formatApiErrorMessage("from e to são obrigatórios (YYYY-MM-DD, from <= to, máx. 90 dias)"),
+      "Escolha um período válido: a data inicial precisa ser anterior ou igual à final, com no máximo 90 dias.",
+    );
+    assert.equal(
+      formatApiErrorMessage("invalid_date_range"),
+      "Escolha um período válido: a data inicial precisa ser anterior ou igual à final, com no máximo 90 dias.",
     );
   });
 });

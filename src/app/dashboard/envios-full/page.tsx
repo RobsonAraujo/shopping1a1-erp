@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { FullShipmentsClient } from "@/components/envios-full/full-shipments-client";
-import { Card, CardContent } from "@/components/ui/card";
+import { UserFeedback } from "@/components/ui/user-feedback";
 import {
   listFullShipmentsForPeriod,
   listImportedBillingPeriods,
@@ -9,6 +9,7 @@ import {
 import { getZonedYearMonth } from "@/lib/mercadolibre/revenue-periods";
 import { readSession } from "@/lib/mercadolibre/session";
 import { getOrganizationContext } from "@/lib/organizations/context";
+import { publicPageLoadMessage } from "@/lib/server-public-error";
 
 export const metadata: Metadata = {
   title: "Relatório de Envios",
@@ -43,14 +44,18 @@ export default async function EnviosFullPage() {
     ]);
     data = { year, month, shipments, importedPeriods };
   } catch (e) {
-    errorMsg = e instanceof Error ? e.message : "Erro ao carregar envios Full";
+    errorMsg = publicPageLoadMessage(
+      "dashboard/envios-full",
+      e,
+      "Não foi possível carregar os envios Full agora. Tente de novo em instantes.",
+    );
   }
 
   if (!data) {
     return (
-      <Card className="border-red-200 bg-red-50/50">
-        <CardContent className="pt-6 text-red-900">{errorMsg}</CardContent>
-      </Card>
+      <UserFeedback title="Não foi possível carregar os envios">
+        {errorMsg}
+      </UserFeedback>
     );
   }
 

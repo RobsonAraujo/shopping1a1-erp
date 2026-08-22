@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { UserFeedback } from "@/components/ui/user-feedback";
 import {
   Sheet,
   SheetBody,
@@ -763,11 +764,7 @@ export function FinancialEvaluationClient() {
             />
           ) : null}
 
-          {error ? (
-            <p className="text-sm text-red-600" role="alert">
-              {error}
-            </p>
-          ) : null}
+          {error ? <UserFeedback className="mb-3">{error}</UserFeedback> : null}
 
           {loading && !data ? (
             <p className="text-sm text-[var(--muted-foreground)]">
@@ -818,9 +815,7 @@ export function FinancialEvaluationClient() {
                     </p>
                   ) : null}
                   {minPriceError ? (
-                    <p className="text-xs text-red-600" role="alert">
-                      {minPriceError}
-                    </p>
+                    <UserFeedback className="mt-2">{minPriceError}</UserFeedback>
                   ) : null}
                 </div>
                 <div className="flex flex-wrap items-end gap-2">
@@ -1194,9 +1189,7 @@ function WholesalePricesSection({
           </div>
         ) : null}
         {applyError ? (
-          <p className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-            {applyError}
-          </p>
+          <UserFeedback className="mb-3">{applyError}</UserFeedback>
         ) : null}
 
         <div className="mb-3 flex flex-wrap justify-end gap-2">

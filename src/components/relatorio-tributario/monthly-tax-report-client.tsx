@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw, Scale, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { UserFeedback } from "@/components/ui/user-feedback";
 import { FormSelect } from "@/components/ui/form-select";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { TaxReportApuracaoPanel } from "@/components/relatorio-tributario/tax-report-apuracao-panel";
@@ -332,6 +333,7 @@ export function MonthlyTaxReportClient() {
                   fromYmd={fromDate}
                   toYmd={toDate}
                   disabled={loading}
+                  maxDays={90}
                   onChange={(from, to) => {
                     setRangePreset("custom");
                     setFromDate(from);
@@ -443,20 +445,20 @@ export function MonthlyTaxReportClient() {
         ) : null}
 
         {error ? (
-          <Card className="border-red-200 bg-red-50/70 p-4 text-sm text-red-800">
+          <UserFeedback title="Não foi possível carregar o relatório">
             {error}
-          </Card>
+          </UserFeedback>
         ) : null}
 
         {isPeriodMode && missingMonths.length > 0 ? (
-          <Card className="border-amber-200 bg-amber-50/60 p-4 text-sm text-amber-950">
+          <UserFeedback tone="warning" title="Período incompleto">
             Sem relatório gerado para{" "}
             {missingMonths
               .map((m) => `${TAX_REPORT_MONTH_NAMES[m.month - 1]}/${m.year}`)
               .join(", ")}
-            {" — "}parte do período pode estar incompleta. Gere esse(s) mês(es)
-            no modo &quot;Mês&quot;.
-          </Card>
+            . Parte do período pode estar incompleta — gere esses meses no modo
+            “Mês”.
+          </UserFeedback>
         ) : null}
 
         {!report && !loading && !generating && !error ? (

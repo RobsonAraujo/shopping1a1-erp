@@ -8,6 +8,7 @@ import {
 } from "@/components/item-list-search";
 import { OperationsKanbanBoard } from "@/components/operacoes-full/operations-kanban-board";
 import { Button } from "@/components/ui/button";
+import { UserFeedback } from "@/components/ui/user-feedback";
 import type {
   OperationsBoardCard,
   OperationsBoardsData,
@@ -161,11 +162,7 @@ export function OperationsKanban({ initialData, kind }: OperationsKanbanProps) {
         </Button>
       </div>
 
-      {error ? (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
-          {error}
-        </p>
-      ) : null}
+      {error ? <UserFeedback>{error}</UserFeedback> : null}
 
       {activeCards.length > 0 && filteredActive.length === 0 ? (
         <p className="text-sm text-[var(--muted-foreground)]">
