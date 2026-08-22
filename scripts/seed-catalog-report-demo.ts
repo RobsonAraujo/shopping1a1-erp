@@ -133,7 +133,7 @@ async function main() {
   });
   if (!organization) {
     throw new Error(
-      "Nenhuma Organization encontrada — rode `npm run backfill:default-organization` primeiro.",
+      "Nenhuma Organization encontrada — faça login OAuth (cria a org) e rode o seed de novo.",
     );
   }
   const organizationId = organization.id;

@@ -294,9 +294,7 @@ enum TaxRegime {
 
 /// Cadastro fiscal/comercial por SKU (chave = SKU do anúncio ML).
 /// PK sintética (`id`) + unique composto `(organizationId, sku)` — dois
-/// vendedores diferentes podem usar o mesmo SKU. Requer que a organização de
-/// produção já tenha sido backfillada (`organization_id` 100% preenchido)
-/// antes de aplicar esta migration lá — ver scripts/backfill-saas-default-organization.ts.
+/// vendedores diferentes podem usar o mesmo SKU.
 model Product {
   id                  String   @id @default(cuid())
   organizationId      String   @map("organization_id")

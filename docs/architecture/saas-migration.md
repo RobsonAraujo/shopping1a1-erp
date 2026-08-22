@@ -199,7 +199,7 @@ Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templ
 - **Cron/background:** nenhum
 - **Dados globais vs por org:** nenhuma mudança de comportamento — só remove a lacuna de integridade que restava no schema
 - **Código já tenant-ready?** sim — era o objetivo desta fase
-- **Ação futura na migração:** `scripts/backfill-saas-default-organization.ts` foi simplificado (perdeu o loop de backfill por tabela, agora redundante com o backfill embutido nas migrations); `scripts/seed-catalog-report-demo.ts` passou a resolver `organizationId` da primeira `Organization` do banco
+- **Ação futura na migração:** nenhuma — script de backfill da org default já rodou em prod e foi removido; `scripts/seed-catalog-report-demo.ts` resolve `organizationId` da primeira `Organization` do banco
 
 ### Remoção do alerta push de catálogo — 2026-08-20
 
