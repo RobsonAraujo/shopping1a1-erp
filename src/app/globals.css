@@ -41,6 +41,7 @@
 
 html {
   overscroll-behavior-y: contain;
+  scroll-behavior: smooth;
 }
 
 body {

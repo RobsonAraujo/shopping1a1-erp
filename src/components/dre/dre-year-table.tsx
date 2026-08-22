@@ -493,11 +493,10 @@ function DreInlineMoneyCell({
     };
   }, [editing, isMobile]);
 
+  const hasEditorPanel = panelStyle !== null;
+
   useEffect(() => {
-    if (!editing || isMobile || !panelStyle) {
-      setPanelEntered(false);
-      return;
-    }
+    if (!editing || isMobile || !hasEditorPanel) return;
     // Dois rAFs: monta em opacity-0 e só então anima até o estado final.
     let raf2 = 0;
     const raf1 = requestAnimationFrame(() => {
@@ -507,7 +506,7 @@ function DreInlineMoneyCell({
       cancelAnimationFrame(raf1);
       cancelAnimationFrame(raf2);
     };
-  }, [editing, isMobile, panelStyle !== null]);
+  }, [editing, isMobile, hasEditorPanel]);
 
   useEffect(() => {
     if (!editing) {

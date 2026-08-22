@@ -25,7 +25,7 @@ export const metadata: Metadata = {
     default: "ERP 1a1 — Mercado Livre",
     template: "%s · ERP 1a1",
   },
-  description: "Dashboard de anúncios e estoque",
+  description: "Lucratividade e apuração de lucro real para vendedores Mercado Livre",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [

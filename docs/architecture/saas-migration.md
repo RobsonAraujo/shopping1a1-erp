@@ -190,6 +190,17 @@ Plano de execução detalhado (arquivos e código concretos): ver plano de imple
 
 Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templates/feature-saas-impact.md).
 
+### Landing de conversão (pré-login) — 2026-08-22
+
+- **Tabelas novas/alteradas:** nenhuma
+- **Precisa `organizationId`?** não — página pública, zero query Prisma
+- **APIs afetadas:** nenhuma; CTA continua `GET /api/auth/mercadolibre/signin`
+- **Assume singleton?** não
+- **Cron/background:** nenhum
+- **Dados globais vs por org:** demos com dados fictícios; trial ao conectar (`Organization.status = trialing`) inalterado
+- **Código já tenant-ready?** sim — não toca dado de tenant
+- **Ação futura na migração:** tabela de preço / gateway quando billing deixar de ser manual
+
 ### Fase 7 — Hardening `organizationId NOT NULL` — 2026-08-21
 
 - **Tabelas novas/alteradas:** `organization_id` virou `NOT NULL` em 15 tabelas (`listings`, `kits`, `warehouse_stock`, `replenishment_cycles`, `catalog_competition_snapshots`, `catalog_competition_poll_runs`, `stock_attention_acknowledgements`, `full_shipments`, `dre_cost_items`, `dre_cost_month_values`, `tax_fixed_cost_items`, `tax_fixed_cost_month_values`, `tax_fixed_cost_month_exclusions`, `tax_report_month_snapshots`, `revenue_simulations`) — migration `20260821213929_saas_tenant_hardening_not_null`, com backfill defensivo idempotente embutido (mesmo padrão das migrations da Fase 2)

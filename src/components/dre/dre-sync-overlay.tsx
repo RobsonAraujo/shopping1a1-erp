@@ -1,10 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { dreMonthShortLabel } from "@/lib/dre/dre-table-rows";
+
+const emptySubscribe = () => () => {};
+
+function useIsClient() {
+  return useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
+}
 
 export type DreSyncOverlayItem = {
   month: number;
@@ -20,11 +30,7 @@ export function DreSyncOverlay({
   items: DreSyncOverlayItem[];
   syncingAll?: boolean;
 }) {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useIsClient();
 
   const title =
     syncingAll || items.length > 1

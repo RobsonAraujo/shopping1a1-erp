@@ -1,30 +1,20 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import Image from "next/image";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { ArrowRight } from "lucide-react";
 import {
   getSessionAccessState,
   refreshSessionPath,
 } from "@/lib/mercadolibre/session";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { MarketingLanding } from "@/components/marketing/landing";
 
 export const metadata: Metadata = {
-  title: "Conecte sua loja",
+  title: "Painel para vendedores Mercado Livre — margem, imposto e DRE",
   description:
-    "Conecte sua conta do Mercado Livre para gerenciar anúncios, estoque, compras e relatórios tributários num só painel.",
+    "Lucratividade (margem e pós ADS), apuração de lucro real, catálogo, DRE com sync da fatura, Full e compras. Teste grátis com sua conta do Mercado Livre.",
   openGraph: {
-    title: "ERP 1a1 — Mercado Livre",
+    title: "ERP 1a1 — lucratividade e lucro real no Mercado Livre",
     description:
-      "Conecte sua conta do Mercado Livre para gerenciar anúncios, estoque, compras e relatórios tributários num só painel.",
+      "Veja se cada anúncio sobra depois da tarifa ML e do imposto. Apuração pensada para lucro real. Teste grátis, sem cartão.",
     images: ["/logo-bg-blue.png"],
   },
 };
@@ -47,90 +37,17 @@ export default async function Home({ searchParams }: PageProps) {
     redirect(`/api/auth/mercadolibre/callback?${q.toString()}`);
   }
 
-  const err = sp.error;
   const cookieStore = await cookies();
   const session = getSessionAccessState(cookieStore);
-  const isLoggedIn = session.isLoggedIn;
   const dashboardHref = session.needsRefresh
     ? refreshSessionPath("/dashboard")
     : "/dashboard";
 
   return (
-    <div className="flex min-h-full flex-1 flex-col bg-[var(--background)]">
-      <header className="border-b border-[var(--border)] bg-[var(--card)]/90 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-4 sm:px-6">
-          <div className="flex items-center gap-2">
-            <Image
-              src="/logo-bg-blue.png"
-              alt=""
-              width={36}
-              height={36}
-              className="h-9 w-9 rounded-lg object-cover shadow-sm"
-              priority
-            />
-            <span className="text-lg font-semibold tracking-tight text-[var(--primary)]">
-              ERP 1a1
-            </span>
-          </div>
-          {isLoggedIn ? (
-            <Button size="sm" asChild>
-              <Link href={dashboardHref} className="gap-2">
-                Dashboard
-                <ArrowRight className="size-4" />
-              </Link>
-            </Button>
-          ) : null}
-        </div>
-      </header>
-
-      <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col justify-center px-4 py-12 sm:px-6 sm:py-16">
-        <Card className="shadow-md">
-          <CardHeader className="space-y-2 pb-2">
-            <CardTitle className="text-3xl font-bold text-[var(--primary)]">
-              Conecte sua loja
-            </CardTitle>
-            <CardDescription className="text-base leading-relaxed">
-              Use sua conta do Mercado Livre para ver anúncios e estoque neste
-              painel. O acesso usa OAuth de forma segura; credenciais ficam no
-              servidor.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6 pt-2">
-            {err ? (
-              <div
-                className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900"
-                role="alert"
-              >
-                <p className="font-medium">Não foi possível concluir o login.</p>
-                <p className="mt-1 break-all opacity-90">{err}</p>
-              </div>
-            ) : null}
-
-            <div className="flex flex-wrap gap-3">
-              {isLoggedIn ? (
-                <Button size="lg" asChild>
-                  <Link href={dashboardHref} className="gap-2">
-                    Ir para o dashboard
-                    <ArrowRight className="size-4" />
-                  </Link>
-                </Button>
-              ) : (
-                <Button size="lg" asChild>
-                  <a href="/api/auth/mercadolibre/signin" className="gap-2">
-                    Conectar com Mercado Livre
-                    <ArrowRight className="size-4" />
-                  </a>
-                </Button>
-              )}
-            </div>
-
-            <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
-              O redirect de OAuth precisa coincidir com o cadastro no app do
-              Mercado Livre (incluindo caminho e HTTPS).
-            </p>
-          </CardContent>
-        </Card>
-      </main>
-    </div>
+    <MarketingLanding
+      isLoggedIn={session.isLoggedIn}
+      dashboardHref={dashboardHref}
+      error={sp.error}
+    />
   );
 }
