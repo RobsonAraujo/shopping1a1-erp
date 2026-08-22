@@ -9,7 +9,7 @@ const STEPS = [
   {
     n: "02",
     title: "Cadastre o que a ML não sabe",
-    body: "Custo de nota, ST e regime (lucro real) no cadastro. Lucratividade e tributário passam a usar o mesmo número — sem planilha paralela.",
+    body: "Custo de nota, ST e regime (lucro real ou simples nacional) no cadastro. Lucratividade e tributário passam a usar o mesmo número — sem planilha paralela.",
   },
   {
     n: "03",

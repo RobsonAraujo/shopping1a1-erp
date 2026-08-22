@@ -32,6 +32,10 @@ export async function loadTaxCompanyConfig(
       : DEFAULT_COFINS_RATE,
     excludeIcmsFromPisCofinsBase: row?.excludeIcmsFromPisCofinsBase ?? true,
     considerIcmsStRecuperavel: row?.considerIcmsStRecuperavel ?? true,
+    simplesAliquotaEfetivaPercent:
+      row?.simplesAliquotaEfetivaPercent != null
+        ? decimalToNumber(row.simplesAliquotaEfetivaPercent)
+        : null,
   };
 }
 
@@ -74,6 +78,7 @@ export type TaxConfigUpdateInput = {
   excludeIcmsFromPisCofinsBase?: boolean;
   considerIcmsStRecuperavel?: boolean;
   irpjAdditionalThreshold?: number;
+  simplesAliquotaEfetivaPercent?: number | null;
 };
 
 export async function updateTaxCompanyConfig(
@@ -93,6 +98,7 @@ export async function updateTaxCompanyConfig(
       considerIcmsStRecuperavel: input.considerIcmsStRecuperavel ?? true,
       irpjAdditionalThreshold:
         input.irpjAdditionalThreshold ?? DEFAULT_IRPJ_ADDITIONAL_THRESHOLD,
+      simplesAliquotaEfetivaPercent: input.simplesAliquotaEfetivaPercent ?? null,
     },
     update: {
       ...(input.taxRegime !== undefined ? { taxRegime: input.taxRegime } : {}),
@@ -112,6 +118,9 @@ export async function updateTaxCompanyConfig(
       ...(input.irpjAdditionalThreshold !== undefined
         ? { irpjAdditionalThreshold: input.irpjAdditionalThreshold }
         : {}),
+      ...(input.simplesAliquotaEfetivaPercent !== undefined
+        ? { simplesAliquotaEfetivaPercent: input.simplesAliquotaEfetivaPercent }
+        : {}),
     },
   });
 
@@ -122,6 +131,10 @@ export async function updateTaxCompanyConfig(
     cofinsRatePercent: decimalToNumber(row.cofinsRatePercent),
     excludeIcmsFromPisCofinsBase: row.excludeIcmsFromPisCofinsBase,
     considerIcmsStRecuperavel: row.considerIcmsStRecuperavel,
+    simplesAliquotaEfetivaPercent:
+      row.simplesAliquotaEfetivaPercent != null
+        ? decimalToNumber(row.simplesAliquotaEfetivaPercent)
+        : null,
   };
 }
 

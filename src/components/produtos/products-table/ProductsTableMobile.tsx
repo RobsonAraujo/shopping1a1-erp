@@ -25,6 +25,7 @@ export function ProductsTableMobile({
   searchQuery,
   formatPricingCostExplainer,
   taxPercentExplainer,
+  showFiscalFlags = true,
   onEdit,
   onDelete,
 }: ProductsTableProps) {
@@ -107,7 +108,8 @@ export function ProductsTableMobile({
               </div>
             </div>
 
-            {product.hasIcmsSt || product.isMonophasic || product.isImported ? (
+            {showFiscalFlags &&
+            (product.hasIcmsSt || product.isMonophasic || product.isImported) ? (
               <div className="mt-3 flex flex-wrap gap-1.5">
                 <FlagBadge label="ICMS-ST" active={product.hasIcmsSt} />
                 <FlagBadge label="Monofásico" active={product.isMonophasic} />

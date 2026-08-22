@@ -259,6 +259,8 @@ export type TaxCompanyConfig = {
   excludeIcmsFromPisCofinsBase: boolean;
   /** Credita ICMS-ST recuperável (venda interestadual de produto com ST) na apuração. */
   considerIcmsStRecuperavel: boolean;
+  /** Alíquota efetiva do DAS (Simples Nacional), informada manualmente. `null` = ainda não configurada. */
+  simplesAliquotaEfetivaPercent: number | null;
 };
 
 export type IcmsRateRow = {

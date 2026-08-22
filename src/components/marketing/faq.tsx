@@ -15,7 +15,7 @@ const FAQ = [
   },
   {
     q: "Serve só para lucro real?",
-    a: "O módulo tributário foi pensado para lucro real (PIS, COFINS, ICMS, créditos de tarifa e ADS). Lucratividade, catálogo, DRE, Full e compras servem a qualquer regime.",
+    a: "Não. Você escolhe o regime da empresa — Lucro Real ou Simples Nacional — em Configurações. No Simples, o painel usa a alíquota efetiva do DAS que você informa para calcular margem e precificação, sem pedir ICMS, ST ou monofásico (que não se aplicam a esse regime). A apuração fiscal detalhada por venda e SKU (débitos, créditos, ICMS-DIFAL) continua específica do Lucro Real. Lucratividade, catálogo, DRE, Full e compras servem a qualquer regime.",
   },
   {
     q: "Meus dados ficam misturados com os de outro vendedor?",

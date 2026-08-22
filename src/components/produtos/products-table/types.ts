@@ -12,6 +12,8 @@ export type ProductsTableProps = {
   onSortChange: (key: ProductSortKey) => void;
   formatPricingCostExplainer: (product: ProductView) => string;
   taxPercentExplainer: (product: ProductView) => string;
+  /** false para empresas Simples Nacional — oculta colunas/badges fiscais de Lucro Real. */
+  showFiscalFlags?: boolean;
   onEdit: (product: ProductView) => void;
   onDelete: (sku: string) => void;
 };

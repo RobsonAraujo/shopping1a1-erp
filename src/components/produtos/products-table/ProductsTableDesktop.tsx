@@ -19,9 +19,11 @@ export function ProductsTableDesktop({
   onSortChange,
   formatPricingCostExplainer,
   taxPercentExplainer,
+  showFiscalFlags = true,
   onEdit,
   onDelete,
 }: ProductsTableProps) {
+  const columnCount = showFiscalFlags ? 8 : 5;
   return (
     <Card className="overflow-hidden p-0 shadow-sm">
       <div className="overflow-x-auto">
@@ -60,24 +62,28 @@ export function ProductsTableDesktop({
                 align="right"
                 className="px-4 py-3 font-semibold uppercase tracking-wide"
               />
-              <th className="px-4 py-3 text-center font-semibold uppercase tracking-wide">ST</th>
-              <th className="px-4 py-3 text-center font-semibold uppercase tracking-wide">Mono</th>
-              <th className="px-4 py-3 text-center font-semibold uppercase tracking-wide">
-                Import.
-              </th>
+              {showFiscalFlags ? (
+                <>
+                  <th className="px-4 py-3 text-center font-semibold uppercase tracking-wide">ST</th>
+                  <th className="px-4 py-3 text-center font-semibold uppercase tracking-wide">Mono</th>
+                  <th className="px-4 py-3 text-center font-semibold uppercase tracking-wide">
+                    Import.
+                  </th>
+                </>
+              ) : null}
               <th className="px-4 py-3 text-right font-semibold uppercase tracking-wide">Ações</th>
             </tr>
           </thead>
           <tbody className="bg-[var(--card)]">
             {loading ? (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-[var(--muted-foreground)]">
+                <td colSpan={columnCount} className="px-4 py-10 text-center text-[var(--muted-foreground)]">
                   Carregando…
                 </td>
               </tr>
             ) : filteredProducts.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-[var(--muted-foreground)]">
+                <td colSpan={columnCount} className="px-4 py-10 text-center text-[var(--muted-foreground)]">
                   {sortedProducts.length === 0
                     ? "Nenhum produto cadastrado. Importe SKUs dos anúncios ou crie um novo."
                     : itemListSearchEmptyMessage(searchQuery, "produto")}
@@ -109,21 +115,25 @@ export function ProductsTableDesktop({
                       <PlanningInfoTrigger content={taxPercentExplainer(product)} />
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-center">
-                    <Badge variant={product.hasIcmsSt ? "secondary" : "muted"} className="min-w-[2.5rem]">
-                      {product.hasIcmsSt ? "Sim" : "Não"}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <Badge variant={product.isMonophasic ? "secondary" : "muted"} className="min-w-[2.5rem]">
-                      {product.isMonophasic ? "Sim" : "Não"}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <Badge variant={product.isImported ? "secondary" : "muted"} className="min-w-[2.5rem]">
-                      {product.isImported ? "Sim" : "Não"}
-                    </Badge>
-                  </td>
+                  {showFiscalFlags ? (
+                    <>
+                      <td className="px-4 py-3 text-center">
+                        <Badge variant={product.hasIcmsSt ? "secondary" : "muted"} className="min-w-[2.5rem]">
+                          {product.hasIcmsSt ? "Sim" : "Não"}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <Badge variant={product.isMonophasic ? "secondary" : "muted"} className="min-w-[2.5rem]">
+                          {product.isMonophasic ? "Sim" : "Não"}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <Badge variant={product.isImported ? "secondary" : "muted"} className="min-w-[2.5rem]">
+                          {product.isImported ? "Sim" : "Não"}
+                        </Badge>
+                      </td>
+                    </>
+                  ) : null}
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
                       <Button

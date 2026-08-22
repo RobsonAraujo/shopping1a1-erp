@@ -151,10 +151,23 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
         description: "Compare o ICMS atual com o de uma filial em outro estado",
         icon: Building2,
       },
+    ],
+  },
+  {
+    id: "configuracoes",
+    label: "Configurações",
+    kind: "dropdown",
+    items: [
       {
-        href: "/dashboard/configuracoes-tributarias",
+        href: "/dashboard/configuracoes/empresa",
+        label: "Empresa",
+        description: "Regime tributário (Lucro Real ou Simples Nacional)",
+        icon: Building2,
+      },
+      {
+        href: "/dashboard/configuracoes/tributario",
         label: "Config. tributária",
-        description: "Regime, PIS/COFINS e alíquotas ICMS",
+        description: "PIS/COFINS, ICMS interno e CBS/IBS",
         icon: Settings,
       },
     ],

@@ -42,6 +42,7 @@ const patchBodySchema = z.object({
       cofinsRatePercent: z.number().finite(),
       excludeIcmsFromPisCofinsBase: z.boolean(),
       considerIcmsStRecuperavel: z.boolean(),
+      simplesAliquotaEfetivaPercent: z.number().finite().min(0).max(100).nullable(),
     })
     .partial()
     .optional(),

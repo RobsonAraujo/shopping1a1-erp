@@ -388,6 +388,11 @@ model CompanyTaxSettings {
   wholesaleLevel1MinPurchaseUnit  Int       @default(1) @map("wholesale_level1_min_purchase_unit")
   wholesaleLevel2MinPurchaseUnit  Int       @default(5) @map("wholesale_level2_min_purchase_unit")
   wholesaleLevel3MinPurchaseUnit  Int       @default(10) @map("wholesale_level3_min_purchase_unit")
+  /// Alíquota efetiva do DAS (Simples Nacional), informada manualmente pela
+  /// empresa — v1 não implementa as tabelas oficiais de Anexo/Faixa/Fator R
+  /// (LC 123/2006). `null` = regime Simples selecionado mas alíquota ainda
+  /// não configurada; nunca usar 0 como default silencioso desse estado.
+  simplesAliquotaEfetivaPercent   Decimal?  @map("simples_aliquota_efetiva_percent") @db.Decimal(8, 4)
   updatedAt                       DateTime  @updatedAt @map("updated_at")
 
   @@unique([organizationId])

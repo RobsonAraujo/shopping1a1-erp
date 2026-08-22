@@ -86,6 +86,7 @@ export function MonthlyTaxReportClient() {
   const [searchQuery, setSearchQuery] = useState("");
   const [fixedCostModalOpen, setFixedCostModalOpen] = useState(false);
   const [fixedCostItems, setFixedCostItems] = useState<TaxFixedCostItemRow[]>([]);
+  const [companyTaxRegime, setCompanyTaxRegime] = useState<string | null>(null);
   const isPeriodMode = mode === "period";
 
   const applyPreset = useCallback((days: 7 | 15 | 30) => {
@@ -206,6 +207,21 @@ export function MonthlyTaxReportClient() {
     void loadReport();
   }, [loadReport]);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/tax-config")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json: { company?: { taxRegime?: string } } | null) => {
+        if (!cancelled && json?.company?.taxRegime) {
+          setCompanyTaxRegime(json.company.taxRegime);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const years = useMemo(() => {
     const current = now.year;
     return [current - 1, current, current + 1];
@@ -249,6 +265,23 @@ export function MonthlyTaxReportClient() {
       })),
     [report?.porSku, searchQuery],
   );
+
+  if (companyTaxRegime && companyTaxRegime !== "LUCRO_REAL") {
+    return (
+      <Card className="p-6 text-center">
+        <Scale className="mx-auto size-8 text-[var(--muted-foreground)]" aria-hidden />
+        <h2 className="mt-3 text-sm font-semibold">
+          Relatório Tributário Mensal não disponível para Simples Nacional
+        </h2>
+        <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
+          Esta apuração por venda e SKU (débito/crédito de ICMS, PIS/COFINS) é
+          específica do regime Lucro Real. Empresas no Simples pagam um DAS
+          único mensal — essa funcionalidade está prevista para uma versão
+          futura.
+        </p>
+      </Card>
+    );
+  }
 
   return (
     <TooltipProvider delayDuration={200}>

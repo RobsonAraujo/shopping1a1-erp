@@ -76,7 +76,7 @@ export function MarketingLanding({
                   Lucratividade
                 </Badge>
                 <Badge className="border-emerald-300/40 bg-emerald-400/20 text-emerald-100">
-                  Lucro real
+                  Lucro real e Simples
                 </Badge>
                 <Badge className="border-white/20 bg-white/10 text-white">
                   Catálogo · DRE · Full
@@ -177,6 +177,10 @@ export function MarketingLanding({
               </p>
               <p className="mt-2 text-sm text-[var(--muted-foreground)]">
                 Apoio à apuração: não substitui contador nem emite nota fiscal.
+                Empresas do Simples Nacional configuram o regime e a alíquota
+                efetiva do DAS em Configurações — a margem e a precificação já
+                usam esse número; a apuração por SKU acima é específica do
+                Lucro Real.
               </p>
             </div>
             <DemoTributario />

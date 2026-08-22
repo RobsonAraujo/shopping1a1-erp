@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, Save, Trash2, Truck } from "lucide-react";
+import { ChevronDown, ChevronRight, Save, Scale, Trash2, Truck } from "lucide-react";
 import {
   ItemListSearch,
   itemListSearchEmptyMessage,
@@ -784,6 +784,7 @@ export function BranchSimulationClient() {
   const skuTableRef = useRef<HTMLDivElement>(null);
   const [periods, setPeriods] = useState<Period[]>([]);
   const [supportedUfs, setSupportedUfs] = useState<string[]>([]);
+  const [regimeSupported, setRegimeSupported] = useState(true);
   const [selectedPeriods, setSelectedPeriods] = useState<Set<string>>(new Set());
   const [targetUf, setTargetUf] = useState("SC");
   const [creditoPresumidoByUf, setCreditoPresumidoByUf] = useState<
@@ -835,10 +836,12 @@ export function BranchSimulationClient() {
         const json = (await res.json()) as {
           periods: Period[];
           supportedUfs: string[];
+          regimeSupported?: boolean;
         };
         if (cancelled) return;
         setPeriods(json.periods);
         setSupportedUfs(json.supportedUfs);
+        setRegimeSupported(json.regimeSupported ?? true);
         setSelectedPeriods(new Set(json.periods.map(periodKey)));
       } catch (e) {
         if (!cancelled) {
@@ -1076,6 +1079,24 @@ export function BranchSimulationClient() {
       .sort((a, b) => a.economia - b.economia)
       .slice(0, 5);
   }, [result]);
+
+  if (!loadingPeriods && !regimeSupported) {
+    return (
+      <div className="space-y-5">
+        <Card className="p-6 text-center">
+          <Scale className="mx-auto size-8 text-[var(--muted-foreground)]" aria-hidden />
+          <h2 className="mt-3 text-sm font-semibold">
+            Simulação de filial não disponível para Simples Nacional
+          </h2>
+          <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
+            Esta simulação compara alíquotas de ICMS entre estados — específico
+            do regime Lucro Real. Empresas no Simples pagam um DAS único
+            mensal — essa funcionalidade está prevista para uma versão futura.
+          </p>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">

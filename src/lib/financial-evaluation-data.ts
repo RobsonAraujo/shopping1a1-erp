@@ -32,7 +32,7 @@ import {
 } from "@/lib/mercadolibre/product-ads-metrics";
 import { fetchSellerShippingCost } from "@/lib/mercadolibre/seller-shipping-cost";
 import type { ItemBody, OrderSearchOrder } from "@/lib/mercadolibre/types";
-import { loadProductsMapBySku } from "@/lib/product-data";
+import { getCompanySettings, loadProductsMapBySku } from "@/lib/product-data";
 import {
   loadKitsByMlItemId,
   resolveKitPricing,
@@ -900,17 +900,29 @@ export async function loadFinancialEvaluationRows(
     .map((item) => getItemSku(item))
     .filter((sku): sku is string => Boolean(sku))
     .concat(kitComponentSkus);
-  const [pricingBySku, taxFromReport, productsWithPma] = await Promise.all([
-    loadProductsMapBySku(organizationId, skus),
-    loadProductTaxFromLatestReport(userId),
-    prisma.product.findMany({
-      where: { organizationId, sku: { in: skus }, pmaPrice: { not: null } },
-      select: { sku: true, pmaPrice: true },
-    }),
-  ]);
-  const taxBySku = new Map(
-    [...taxFromReport.bySku].map(([sku, entry]) => [sku, entry.taxPercent]),
-  );
+  const [pricingBySku, taxFromReport, productsWithPma, companySettings] =
+    await Promise.all([
+      loadProductsMapBySku(organizationId, skus),
+      loadProductTaxFromLatestReport(userId),
+      prisma.product.findMany({
+        where: { organizationId, sku: { in: skus }, pmaPrice: { not: null } },
+        select: { sku: true, pmaPrice: true },
+      }),
+      getCompanySettings(organizationId),
+    ]);
+  const taxBySku =
+    companySettings.taxRegime === "SIMPLES"
+      ? new Map(
+          companySettings.simplesAliquotaEfetivaPercent != null
+            ? skus.map((sku) => [
+                normalizeProductSku(sku),
+                companySettings.simplesAliquotaEfetivaPercent!,
+              ])
+            : [],
+        )
+      : new Map(
+          [...taxFromReport.bySku].map(([sku, entry]) => [sku, entry.taxPercent]),
+        );
   const pmaBySku = new Map<string, number>();
   for (const product of productsWithPma) {
     if (product.pmaPrice == null) continue;
@@ -1065,17 +1077,29 @@ export async function loadFinancialEvaluationRowsForPeriod(
     .map((item) => getItemSku(item))
     .filter((sku): sku is string => Boolean(sku))
     .concat(kitComponentSkus);
-  const [pricingBySku, taxFromReport, productsWithPma] = await Promise.all([
-    loadProductsMapBySku(organizationId, skus),
-    loadProductTaxFromLatestReport(userId),
-    prisma.product.findMany({
-      where: { organizationId, sku: { in: skus }, pmaPrice: { not: null } },
-      select: { sku: true, pmaPrice: true },
-    }),
-  ]);
-  const taxBySku = new Map(
-    [...taxFromReport.bySku].map(([sku, entry]) => [sku, entry.taxPercent]),
-  );
+  const [pricingBySku, taxFromReport, productsWithPma, companySettings] =
+    await Promise.all([
+      loadProductsMapBySku(organizationId, skus),
+      loadProductTaxFromLatestReport(userId),
+      prisma.product.findMany({
+        where: { organizationId, sku: { in: skus }, pmaPrice: { not: null } },
+        select: { sku: true, pmaPrice: true },
+      }),
+      getCompanySettings(organizationId),
+    ]);
+  const taxBySku =
+    companySettings.taxRegime === "SIMPLES"
+      ? new Map(
+          companySettings.simplesAliquotaEfetivaPercent != null
+            ? skus.map((sku) => [
+                normalizeProductSku(sku),
+                companySettings.simplesAliquotaEfetivaPercent!,
+              ])
+            : [],
+        )
+      : new Map(
+          [...taxFromReport.bySku].map(([sku, entry]) => [sku, entry.taxPercent]),
+        );
   const pmaBySku = new Map<string, number>();
   for (const product of productsWithPma) {
     if (product.pmaPrice == null) continue;

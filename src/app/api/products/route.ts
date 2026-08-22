@@ -16,14 +16,14 @@ const productWriteSchema = z.object({
   sku: z.string().min(1, "SKU é obrigatório"),
   ncm: z.string().nullable().optional(),
   unitCostNf: z.coerce.number().finite(),
-  purchaseIcmsPercent: z.coerce.number().finite(),
-  hasIcmsSt: z.boolean().default(false),
+  purchaseIcmsPercent: z.coerce.number().finite().optional(),
+  hasIcmsSt: z.boolean().optional(),
   purchaseCostWithSt: z.coerce.number().finite().nullable().optional(),
-  ipiPercent: z.coerce.number().finite().default(0),
+  ipiPercent: z.coerce.number().finite().optional(),
   extraCosts: z.coerce.number().finite().default(0),
-  isMonophasic: z.boolean().default(false),
-  isImported: z.boolean().default(false),
-  saleIcmsPercent: z.coerce.number().finite(),
+  isMonophasic: z.boolean().optional(),
+  isImported: z.boolean().optional(),
+  saleIcmsPercent: z.coerce.number().finite().optional(),
   pmaPrice: z.coerce.number().finite().nullable().optional(),
 });
 
@@ -40,11 +40,17 @@ export async function GET() {
       prisma.product.findMany({ where: { organizationId }, orderBy: { sku: "asc" } }),
       loadProductTaxFromLatestReport(userId),
     ]);
+    const companyTaxContext = {
+      taxRegime: settings.taxRegime,
+      simplesAliquotaEfetivaPercent: settings.simplesAliquotaEfetivaPercent,
+    };
     return NextResponse.json({
       pisCofinsPercent: settings.pisCofinsPercent,
+      taxRegime: settings.taxRegime,
+      simplesAliquotaEfetivaPercent: settings.simplesAliquotaEfetivaPercent,
       taxReportGeneratedAt: taxFromReport.generatedAt,
       products: products.map((p) =>
-        buildProductView(p, settings.pisCofinsPercent, taxFromReport),
+        buildProductView(p, settings.pisCofinsPercent, taxFromReport, companyTaxContext),
       ),
     });
   } catch (e) {
@@ -76,7 +82,10 @@ export async function POST(request: NextRequest) {
     const data = productWriteToPrismaData(organizationId, parsed);
     const product = await prisma.product.create({ data });
     return NextResponse.json({
-      product: buildProductView(product, settings.pisCofinsPercent),
+      product: buildProductView(product, settings.pisCofinsPercent, undefined, {
+        taxRegime: settings.taxRegime,
+        simplesAliquotaEfetivaPercent: settings.simplesAliquotaEfetivaPercent,
+      }),
     });
   } catch (e) {
     logServerError("api/products POST", e);

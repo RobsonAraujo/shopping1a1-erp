@@ -10,6 +10,7 @@ const config: TaxCompanyConfig = {
   cofinsRatePercent: 7.6,
   excludeIcmsFromPisCofinsBase: true,
   considerIcmsStRecuperavel: true,
+  simplesAliquotaEfetivaPercent: null,
 };
 
 function tx(overrides: Partial<TransacaoVenda> = {}): TransacaoVenda {

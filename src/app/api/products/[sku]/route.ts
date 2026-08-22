@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import {
   buildProductView,
   ensureCompanySettings,
-  productWriteToPrismaData,
+  productPatchToPrismaData,
   validateProductInput,
 } from "@/lib/product-data";
 import { listAliasesForCanonicalSku } from "@/lib/product-sku-alias-data";
@@ -18,14 +18,14 @@ type RouteContext = { params: Promise<{ sku: string }> };
 const productPatchBodySchema = z.object({
   ncm: z.string().nullable().optional(),
   unitCostNf: z.coerce.number().finite(),
-  purchaseIcmsPercent: z.coerce.number().finite(),
-  hasIcmsSt: z.boolean().default(false),
+  purchaseIcmsPercent: z.coerce.number().finite().optional(),
+  hasIcmsSt: z.boolean().optional(),
   purchaseCostWithSt: z.coerce.number().finite().nullable().optional(),
-  ipiPercent: z.coerce.number().finite().default(0),
+  ipiPercent: z.coerce.number().finite().optional(),
   extraCosts: z.coerce.number().finite().default(0),
-  isMonophasic: z.boolean().default(false),
-  isImported: z.boolean().default(false),
-  saleIcmsPercent: z.coerce.number().finite(),
+  isMonophasic: z.boolean().optional(),
+  isImported: z.boolean().optional(),
+  saleIcmsPercent: z.coerce.number().finite().optional(),
   pmaPrice: z.coerce.number().finite().nullable().optional(),
 });
 
@@ -48,9 +48,14 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
     const aliases = await listAliasesForCanonicalSku(organizationId, sku);
+    const companyTaxContext = {
+      taxRegime: settings.taxRegime,
+      simplesAliquotaEfetivaPercent: settings.simplesAliquotaEfetivaPercent,
+    };
     return NextResponse.json({
-      product: buildProductView(product, settings.pisCofinsPercent),
+      product: buildProductView(product, settings.pisCofinsPercent, undefined, companyTaxContext),
       pisCofinsPercent: settings.pisCofinsPercent,
+      taxRegime: settings.taxRegime,
       aliases,
     });
   } catch (e) {
@@ -82,25 +87,16 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   try {
     const settings = await ensureCompanySettings(organizationId);
-    const data = productWriteToPrismaData(organizationId, parsed);
+    const data = productPatchToPrismaData(parsed);
     const product = await prisma.product.update({
       where: { organizationId_sku: { organizationId, sku } },
-      data: {
-        ncm: data.ncm,
-        unitCostNf: data.unitCostNf,
-        purchaseIcmsPercent: data.purchaseIcmsPercent,
-        hasIcmsSt: data.hasIcmsSt,
-        purchaseCostWithSt: data.purchaseCostWithSt,
-        ipiPercent: data.ipiPercent,
-        extraCosts: data.extraCosts,
-        isMonophasic: data.isMonophasic,
-        isImported: data.isImported,
-        saleIcmsPercent: data.saleIcmsPercent,
-        pmaPrice: data.pmaPrice,
-      },
+      data,
     });
     return NextResponse.json({
-      product: buildProductView(product, settings.pisCofinsPercent),
+      product: buildProductView(product, settings.pisCofinsPercent, undefined, {
+        taxRegime: settings.taxRegime,
+        simplesAliquotaEfetivaPercent: settings.simplesAliquotaEfetivaPercent,
+      }),
     });
   } catch (e) {
     logServerError("api/products/[sku] PATCH", e);

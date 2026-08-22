@@ -60,6 +60,7 @@ const CONFIG: TaxCompanyConfig = {
   cofinsRatePercent: 7.6,
   excludeIcmsFromPisCofinsBase: true,
   considerIcmsStRecuperavel: true,
+  simplesAliquotaEfetivaPercent: null,
 };
 
 function icmsBreakdown(

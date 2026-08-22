@@ -204,6 +204,11 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json(
       settingsResponse({
         pisCofinsPercent: Number(row.pisCofinsPercent),
+        taxRegime: row.taxRegime,
+        simplesAliquotaEfetivaPercent:
+          row.simplesAliquotaEfetivaPercent != null
+            ? Number(row.simplesAliquotaEfetivaPercent)
+            : null,
         level1ReductionPercent: Number(row.wholesaleLevel1ReductionPercent),
         level2ReductionPercent: Number(row.wholesaleLevel2ReductionPercent),
         level3ReductionPercent: Number(row.wholesaleLevel3ReductionPercent),

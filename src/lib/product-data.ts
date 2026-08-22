@@ -23,6 +23,7 @@ import {
   type StockReportProductInfo,
 } from "@/lib/inventory/inventory-stock-report";
 import type { CompanyTaxSettings, Product } from "@/generated/prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 
 function decimalToNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null;
@@ -64,9 +65,14 @@ export function buildProductView(
   product: Product,
   pisCofinsPercent: number,
   taxFromReport?: ProductTaxReportLookup,
+  companyTaxContext?: {
+    taxRegime: CompanySettings["taxRegime"];
+    simplesAliquotaEfetivaPercent: number | null;
+  },
 ): ProductView {
   const record = productToPricingRecord(product);
   const resolved = resolveProductPricing(record, pisCofinsPercent);
+  const isSimples = companyTaxContext?.taxRegime === "SIMPLES";
   const reportTax = taxFromReport?.bySku.get(normalizeProductSku(product.sku));
   return {
     sku: product.sku,
@@ -74,10 +80,12 @@ export function buildProductView(
     ...record,
     isImported: product.isImported,
     pricingCost: resolved?.pricingCost ?? null,
-    taxPercent: reportTax?.taxPercent ?? null,
-    taxPercentGeneratedAt: reportTax?.generatedAt ?? null,
-    taxPercentYear: reportTax?.year ?? null,
-    taxPercentMonth: reportTax?.month ?? null,
+    taxPercent: isSimples
+      ? (companyTaxContext?.simplesAliquotaEfetivaPercent ?? null)
+      : (reportTax?.taxPercent ?? null),
+    taxPercentGeneratedAt: isSimples ? null : (reportTax?.generatedAt ?? null),
+    taxPercentYear: isSimples ? null : (reportTax?.year ?? null),
+    taxPercentMonth: isSimples ? null : (reportTax?.month ?? null),
     pmaPrice: decimalToNumber(product.pmaPrice),
     createdAt: product.createdAt.toISOString(),
     updatedAt: product.updatedAt.toISOString(),
@@ -86,12 +94,16 @@ export function buildProductView(
 
 export type CompanySettings = {
   pisCofinsPercent: number;
+  taxRegime: "LUCRO_REAL" | "LUCRO_PRESUMIDO" | "SIMPLES";
+  simplesAliquotaEfetivaPercent: number | null;
 } & WholesaleReductionSettings;
 
 function rowToCompanySettings(row: CompanyTaxSettings): CompanySettings {
   return {
     pisCofinsPercent:
       decimalToNumber(row.pisCofinsPercent) ?? DEFAULT_PIS_COFINS_PERCENT,
+    taxRegime: row.taxRegime as CompanySettings["taxRegime"],
+    simplesAliquotaEfetivaPercent: decimalToNumber(row.simplesAliquotaEfetivaPercent),
     level1ReductionPercent:
       decimalToNumber(row.wholesaleLevel1ReductionPercent) ??
       DEFAULT_WHOLESALE_REDUCTIONS.level1ReductionPercent,
@@ -128,6 +140,8 @@ export async function getCompanySettings(
   if (!row) {
     return {
       pisCofinsPercent: DEFAULT_PIS_COFINS_PERCENT,
+      taxRegime: "LUCRO_REAL",
+      simplesAliquotaEfetivaPercent: null,
       ...DEFAULT_WHOLESALE_REDUCTIONS,
     };
   }
@@ -256,14 +270,16 @@ export type ProductWriteInput = {
   sku: string;
   ncm?: string | null;
   unitCostNf: number;
-  purchaseIcmsPercent: number;
-  hasIcmsSt: boolean;
+  /** Campos fiscais de Lucro Real — opcionais: omitidos numa edição preservam o
+   * valor já gravado (empresa Simples Nacional não os expõe no formulário). */
+  purchaseIcmsPercent?: number;
+  hasIcmsSt?: boolean;
   purchaseCostWithSt?: number | null;
-  ipiPercent: number;
+  ipiPercent?: number;
   extraCosts: number;
-  isMonophasic: boolean;
-  isImported: boolean;
-  saleIcmsPercent: number;
+  isMonophasic?: boolean;
+  isImported?: boolean;
+  saleIcmsPercent?: number;
   pmaPrice?: number | null;
 };
 
@@ -275,12 +291,14 @@ export function validateProductInput(
   if (!Number.isFinite(input.unitCostNf) || input.unitCostNf < 0) {
     return "Custo unitário NF inválido";
   }
-  if (
-    !Number.isFinite(input.purchaseIcmsPercent) ||
-    input.purchaseIcmsPercent < 0 ||
-    input.purchaseIcmsPercent > 100
-  ) {
-    return "ICMS de compra inválido";
+  if (input.purchaseIcmsPercent !== undefined) {
+    if (
+      !Number.isFinite(input.purchaseIcmsPercent) ||
+      input.purchaseIcmsPercent < 0 ||
+      input.purchaseIcmsPercent > 100
+    ) {
+      return "ICMS de compra inválido";
+    }
   }
   if (input.hasIcmsSt) {
     if (
@@ -292,18 +310,22 @@ export function validateProductInput(
       return "Informe o custo com ICMS-ST";
     }
   }
-  if (!Number.isFinite(input.ipiPercent) || input.ipiPercent < 0) {
-    return "IPI inválido";
+  if (input.ipiPercent !== undefined) {
+    if (!Number.isFinite(input.ipiPercent) || input.ipiPercent < 0) {
+      return "IPI inválido";
+    }
   }
   if (!Number.isFinite(input.extraCosts) || input.extraCosts < 0) {
     return "Custos extras inválidos";
   }
-  if (
-    !Number.isFinite(input.saleIcmsPercent) ||
-    input.saleIcmsPercent < 0 ||
-    input.saleIcmsPercent > 100
-  ) {
-    return "ICMS de venda inválido";
+  if (input.saleIcmsPercent !== undefined) {
+    if (
+      !Number.isFinite(input.saleIcmsPercent) ||
+      input.saleIcmsPercent < 0 ||
+      input.saleIcmsPercent > 100
+    ) {
+      return "ICMS de venda inválido";
+    }
   }
   if (
     input.pmaPrice !== null &&
@@ -315,24 +337,54 @@ export function validateProductInput(
   return null;
 }
 
+/** Para criação (POST) — campo omitido vira 0/false explícito no registro novo. */
 export function productWriteToPrismaData(
   organizationId: string,
   input: ProductWriteInput,
 ) {
   const sku = normalizeProductSku(input.sku);
+  const hasIcmsSt = input.hasIcmsSt ?? false;
   return {
     organizationId,
     sku,
     ncm: input.ncm?.trim() || null,
     unitCostNf: input.unitCostNf,
-    purchaseIcmsPercent: input.purchaseIcmsPercent,
-    hasIcmsSt: input.hasIcmsSt,
-    purchaseCostWithSt: input.hasIcmsSt ? input.purchaseCostWithSt : null,
-    ipiPercent: input.ipiPercent,
+    purchaseIcmsPercent: input.purchaseIcmsPercent ?? 0,
+    hasIcmsSt,
+    purchaseCostWithSt: hasIcmsSt ? (input.purchaseCostWithSt ?? null) : null,
+    ipiPercent: input.ipiPercent ?? 0,
     extraCosts: input.extraCosts,
-    isMonophasic: input.isMonophasic,
-    isImported: input.isImported,
-    saleIcmsPercent: input.saleIcmsPercent,
+    isMonophasic: input.isMonophasic ?? false,
+    isImported: input.isImported ?? false,
+    saleIcmsPercent: input.saleIcmsPercent ?? 0,
     pmaPrice: input.pmaPrice ?? null,
   };
+}
+
+/**
+ * Para edição (PATCH) — campo omitido não entra no objeto `data`, então o
+ * Prisma não toca a coluna e o valor já gravado é preservado (ex.: empresa
+ * migrou de Lucro Real para Simples Nacional e não reenvia mais esses campos).
+ */
+export function productPatchToPrismaData(
+  input: ProductWriteInput,
+): Prisma.ProductUpdateInput {
+  const data: Prisma.ProductUpdateInput = {
+    unitCostNf: input.unitCostNf,
+    extraCosts: input.extraCosts,
+  };
+  if (input.ncm !== undefined) data.ncm = input.ncm?.trim() || null;
+  if (input.purchaseIcmsPercent !== undefined) {
+    data.purchaseIcmsPercent = input.purchaseIcmsPercent;
+  }
+  if (input.hasIcmsSt !== undefined) {
+    data.hasIcmsSt = input.hasIcmsSt;
+    data.purchaseCostWithSt = input.hasIcmsSt ? (input.purchaseCostWithSt ?? null) : null;
+  }
+  if (input.ipiPercent !== undefined) data.ipiPercent = input.ipiPercent;
+  if (input.isMonophasic !== undefined) data.isMonophasic = input.isMonophasic;
+  if (input.isImported !== undefined) data.isImported = input.isImported;
+  if (input.saleIcmsPercent !== undefined) data.saleIcmsPercent = input.saleIcmsPercent;
+  if (input.pmaPrice !== undefined) data.pmaPrice = input.pmaPrice ?? null;
+  return data;
 }

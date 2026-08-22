@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { Building2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -110,7 +111,6 @@ export function TaxConfigClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           company: {
-            taxRegime: "LUCRO_REAL",
             originUf: draft.originUf.toUpperCase(),
             pisRatePercent: Number(draft.pisRate.replace(",", ".")),
             cofinsRatePercent: Number(draft.cofinsRate.replace(",", ".")),
@@ -156,6 +156,7 @@ export function TaxConfigClient() {
   }
 
   const company = data?.company;
+  const isSimples = company?.taxRegime === "SIMPLES";
 
   return (
     <div className="space-y-6">
@@ -177,13 +178,14 @@ export function TaxConfigClient() {
               <Building2 className="size-5" aria-hidden />
             </span>
             <div>
-              <h2 className="text-sm font-semibold">Empresa (Lucro Real)</h2>
+              <h2 className="text-sm font-semibold">Parâmetros Lucro Real</h2>
               <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                Outros regimes serão habilitados em versões futuras.
+                UF de origem, PIS/COFINS e créditos usados na apuração do
+                Lucro Real.
               </p>
             </div>
           </div>
-          {!editingCompany && company ? (
+          {!isSimples && !editingCompany && company ? (
             <Button
               type="button"
               variant="outline"
@@ -198,7 +200,22 @@ export function TaxConfigClient() {
         </div>
 
         <div className="px-4 py-4 sm:px-5">
-          {editingCompany ? (
+          {isSimples ? (
+            <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
+              A empresa está no regime Simples Nacional — esses parâmetros
+              (usados na apuração do Lucro Real) não se aplicam e ficam
+              ocultos. Os valores continuam salvos e voltam a aparecer aqui se
+              o regime mudar de volta para Lucro Real. Configure a alíquota
+              efetiva do Simples em{" "}
+              <Link
+                href="/dashboard/configuracoes/empresa"
+                className="text-[var(--primary)] underline"
+              >
+                Configurações &gt; Empresa
+              </Link>
+              .
+            </p>
+          ) : editingCompany ? (
             <div className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <FormSelect
@@ -320,20 +337,22 @@ export function TaxConfigClient() {
         </div>
       </Card>
 
-      <Card className="p-4">
-        <h2 className="text-sm font-semibold">ICMS interno + FCP por UF</h2>
-        <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-          Valores iniciais devem ser validados com CONFAZ/RICMS. Alíquota total =
-          base + FCP.
-        </p>
-        <div className="mt-4">
-          <IcmsRatesTable
-            rows={data?.icmsRates ?? []}
-            saving={saving}
-            onSave={saveIcmsRow}
-          />
-        </div>
-      </Card>
+      {!isSimples ? (
+        <Card className="p-4">
+          <h2 className="text-sm font-semibold">ICMS interno + FCP por UF</h2>
+          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+            Valores iniciais devem ser validados com CONFAZ/RICMS. Alíquota
+            total = base + FCP.
+          </p>
+          <div className="mt-4">
+            <IcmsRatesTable
+              rows={data?.icmsRates ?? []}
+              saving={saving}
+              onSave={saveIcmsRow}
+            />
+          </div>
+        </Card>
+      ) : null}
 
       <Card className="p-4">
         <h2 className="text-sm font-semibold">CBS / IBS (informativo)</h2>

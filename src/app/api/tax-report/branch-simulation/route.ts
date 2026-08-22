@@ -24,11 +24,18 @@ export async function GET() {
   if (!auth.ok) {
     return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
-  const sellerId = auth.ctx.userId;
+  const { userId: sellerId, organizationId } = auth.ctx;
 
   try {
-    const periods = await listTaxReportSnapshotPeriods(sellerId);
-    return NextResponse.json({ periods, supportedUfs: SOUTH_SOUTHEAST_ORIGIN_UFS });
+    const [periods, config] = await Promise.all([
+      listTaxReportSnapshotPeriods(sellerId),
+      loadTaxCompanyConfig(organizationId),
+    ]);
+    return NextResponse.json({
+      periods,
+      supportedUfs: SOUTH_SOUTHEAST_ORIGIN_UFS,
+      regimeSupported: config.taxRegime === "LUCRO_REAL",
+    });
   } catch (e) {
     logServerError("api/tax-report/branch-simulation GET", e);
     return NextResponse.json(
@@ -97,6 +104,16 @@ export async function POST(request: NextRequest) {
         periods.map((p) => loadTaxReportSnapshot(sellerId, p.year, p.month)),
       ),
     ]);
+
+    if (config.taxRegime !== "LUCRO_REAL") {
+      return NextResponse.json(
+        {
+          error:
+            "Simulação de filial disponível apenas para Lucro Real na v1. Ajuste o regime em Configurações.",
+        },
+        { status: 409 },
+      );
+    }
 
     const detalhes: DetalhamentoTributario[] = payloads
       .filter((p): p is NonNullable<typeof p> => p !== null)

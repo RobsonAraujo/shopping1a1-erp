@@ -30,9 +30,13 @@ import { formatFinancialMoney, formatFinancialPercent } from "@/lib/financial-ma
 import { TAX_REPORT_MONTH_NAMES } from "@/lib/tax-report/routes";
 import { cn } from "@/lib/utils";
 
+type TaxRegime = "LUCRO_REAL" | "LUCRO_PRESUMIDO" | "SIMPLES";
+
 type ProductsResponse = {
   products: ProductView[];
   pisCofinsPercent: number;
+  taxRegime: TaxRegime;
+  simplesAliquotaEfetivaPercent: number | null;
   taxReportGeneratedAt: string | null;
 };
 
@@ -302,14 +306,26 @@ function ProductSkuAliasesEditor({ canonicalSku }: { canonicalSku: string }) {
   );
 }
 
+const SIMPLES_HIDDEN_FIELD_KEYS = [
+  "purchaseIcmsPercent",
+  "hasIcmsSt",
+  "purchaseCostWithSt",
+  "ipiPercent",
+  "isMonophasic",
+  "isImported",
+  "saleIcmsPercent",
+] as const;
+
 function ProductFormModal({
   initial,
   title,
+  taxRegime,
   onClose,
   onSaved,
 }: {
   initial: ProductFormState;
   title: string;
+  taxRegime: TaxRegime;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -317,6 +333,7 @@ function ProductFormModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isEdit = Boolean(initial.sku && initial.unitCostNf !== null);
+  const isSimples = taxRegime === "SIMPLES";
 
   useEffect(() => {
     setForm(initial);
@@ -337,10 +354,14 @@ function ProductFormModal({
       const url = isEdit
         ? `/api/products/${encodeURIComponent(form.sku)}`
         : "/api/products";
+      const payload: Record<string, unknown> = { ...form };
+      if (isSimples) {
+        for (const key of SIMPLES_HIDDEN_FIELD_KEYS) delete payload[key];
+      }
       const res = await fetch(url, {
         method: isEdit ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         setError(
@@ -393,83 +414,95 @@ function ProductFormModal({
               value={form.unitCostNf}
               onValueChange={(v) => setForm((f) => ({ ...f, unitCostNf: v }))}
             />
-            <div>
-              <MaskedPercentField
-                id="purchase-icms"
-                label="ICMS da compra"
-                value={form.purchaseIcmsPercent}
-                onValueChange={(v) =>
-                  setForm((f) => ({ ...f, purchaseIcmsPercent: v }))
-                }
-              />
-              {form.hasIcmsSt ? (
-                <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                  Para produtos com ICMS-ST, esse valor só vira crédito nas
-                  vendas interestaduais em que o ICMS-ST for tratado como
-                  recuperável (config. tributária).
-                </p>
-              ) : null}
-            </div>
-            <FormSwitchRow
-              id="has-icms-st"
-              label="ICMS-ST"
-              description="Substituição tributária na compra — usa o custo com ST no cálculo."
-              checked={form.hasIcmsSt}
-              onCheckedChange={(checked) =>
-                setForm((f) => ({ ...f, hasIcmsSt: checked }))
-              }
-              className="sm:col-span-2"
-            />
-            {form.hasIcmsSt ? (
-              <MaskedMoneyField
-                id="purchase-cost-st"
-                label="Custo de compra somado ICMS-ST"
-                value={form.purchaseCostWithSt}
-                onValueChange={(v) =>
-                  setForm((f) => ({ ...f, purchaseCostWithSt: v }))
-                }
-              />
-            ) : null}
-            <MaskedPercentField
-              id="ipi"
-              label="IPI"
-              value={form.ipiPercent}
-              onValueChange={(v) => setForm((f) => ({ ...f, ipiPercent: v }))}
-            />
             <MaskedMoneyField
               id="extra-costs"
               label="Custos extras"
               value={form.extraCosts}
               onValueChange={(v) => setForm((f) => ({ ...f, extraCosts: v }))}
             />
-            <FormSwitchRow
-              id="is-monophasic"
-              label="Monofásico"
-              description="Sem PIS/COFINS no crédito de compra nem na precificação."
-              checked={form.isMonophasic}
-              onCheckedChange={(checked) =>
-                setForm((f) => ({ ...f, isMonophasic: checked }))
-              }
-              className="sm:col-span-2"
-            />
-            <FormSwitchRow
-              id="is-imported"
-              label="Produto importado"
-              description="Em vendas interestaduais, usa alíquota de ICMS interestadual de 4% (Resolução do Senado 13/2012)."
-              checked={form.isImported}
-              onCheckedChange={(checked) =>
-                setForm((f) => ({ ...f, isImported: checked }))
-              }
-              className="sm:col-span-2"
-            />
-            <MaskedPercentField
-              id="sale-icms"
-              label="Imposto venda ICMS"
-              value={form.saleIcmsPercent}
-              onValueChange={(v) =>
-                setForm((f) => ({ ...f, saleIcmsPercent: v }))
-              }
-            />
+            {isSimples ? (
+              <p className="text-xs leading-relaxed text-[var(--muted-foreground)] sm:col-span-2">
+                Campos fiscais de Lucro Real (ICMS compra/venda, ICMS-ST, IPI,
+                monofásico, importado) não se aplicam ao Simples Nacional e
+                ficam ocultos. Se este produto já teve esses dados cadastrados
+                antes (ex.: empresa migrou de Lucro Real), eles continuam
+                salvos e voltam a aparecer se o regime mudar de novo.
+              </p>
+            ) : (
+              <>
+                <div>
+                  <MaskedPercentField
+                    id="purchase-icms"
+                    label="ICMS da compra"
+                    value={form.purchaseIcmsPercent}
+                    onValueChange={(v) =>
+                      setForm((f) => ({ ...f, purchaseIcmsPercent: v }))
+                    }
+                  />
+                  {form.hasIcmsSt ? (
+                    <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                      Para produtos com ICMS-ST, esse valor só vira crédito nas
+                      vendas interestaduais em que o ICMS-ST for tratado como
+                      recuperável (config. tributária).
+                    </p>
+                  ) : null}
+                </div>
+                <FormSwitchRow
+                  id="has-icms-st"
+                  label="ICMS-ST"
+                  description="Substituição tributária na compra — usa o custo com ST no cálculo."
+                  checked={form.hasIcmsSt}
+                  onCheckedChange={(checked) =>
+                    setForm((f) => ({ ...f, hasIcmsSt: checked }))
+                  }
+                  className="sm:col-span-2"
+                />
+                {form.hasIcmsSt ? (
+                  <MaskedMoneyField
+                    id="purchase-cost-st"
+                    label="Custo de compra somado ICMS-ST"
+                    value={form.purchaseCostWithSt}
+                    onValueChange={(v) =>
+                      setForm((f) => ({ ...f, purchaseCostWithSt: v }))
+                    }
+                  />
+                ) : null}
+                <MaskedPercentField
+                  id="ipi"
+                  label="IPI"
+                  value={form.ipiPercent}
+                  onValueChange={(v) => setForm((f) => ({ ...f, ipiPercent: v }))}
+                />
+                <FormSwitchRow
+                  id="is-monophasic"
+                  label="Monofásico"
+                  description="Sem PIS/COFINS no crédito de compra nem na precificação."
+                  checked={form.isMonophasic}
+                  onCheckedChange={(checked) =>
+                    setForm((f) => ({ ...f, isMonophasic: checked }))
+                  }
+                  className="sm:col-span-2"
+                />
+                <FormSwitchRow
+                  id="is-imported"
+                  label="Produto importado"
+                  description="Em vendas interestaduais, usa alíquota de ICMS interestadual de 4% (Resolução do Senado 13/2012)."
+                  checked={form.isImported}
+                  onCheckedChange={(checked) =>
+                    setForm((f) => ({ ...f, isImported: checked }))
+                  }
+                  className="sm:col-span-2"
+                />
+                <MaskedPercentField
+                  id="sale-icms"
+                  label="Imposto venda ICMS"
+                  value={form.saleIcmsPercent}
+                  onValueChange={(v) =>
+                    setForm((f) => ({ ...f, saleIcmsPercent: v }))
+                  }
+                />
+              </>
+            )}
             <MaskedMoneyField
               id="pma-price"
               label="PMA (preço máximo autorizado de venda)"
@@ -642,10 +675,38 @@ export function ProductsClient() {
     <div className="space-y-6">
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">PIS/COFINS da empresa</CardTitle>
+          <CardTitle className="text-base">
+            {data?.taxRegime === "SIMPLES"
+              ? "Alíquota efetiva do Simples Nacional"
+              : "PIS/COFINS da empresa"}
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          {editingPisCofins ? (
+          {data?.taxRegime === "SIMPLES" ? (
+            <div>
+              <p className="text-sm text-[var(--muted-foreground)]">
+                Alíquota efetiva do DAS
+              </p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums text-[var(--foreground)]">
+                {loading && data === null
+                  ? "—"
+                  : formatFinancialPercent(data.simplesAliquotaEfetivaPercent)}
+              </p>
+              <p className="mt-3 text-xs text-[var(--muted-foreground)]">
+                {data.simplesAliquotaEfetivaPercent == null
+                  ? "Ainda não configurada — Imposto e margem ficam indisponíveis até configurar. "
+                  : ""}
+                Edite em{" "}
+                <Link
+                  href="/dashboard/configuracoes/empresa"
+                  className="font-medium text-[var(--primary)] underline underline-offset-2"
+                >
+                  Configurações &gt; Empresa
+                </Link>
+                .
+              </p>
+            </div>
+          ) : editingPisCofins ? (
             <div className="flex flex-wrap items-end gap-3">
               <div className="min-w-[12rem] flex-1">
                 <MaskedPercentField
@@ -704,14 +765,16 @@ export function ProductsClient() {
               </Button>
             </div>
           )}
-          <p className="mt-3 text-xs text-[var(--muted-foreground)]">
-            Usada no cálculo de crédito na compra e no imposto para precificar,
-            exceto em produtos monofásicos.
-          </p>
+          {data?.taxRegime !== "SIMPLES" ? (
+            <p className="mt-3 text-xs text-[var(--muted-foreground)]">
+              Usada no cálculo de crédito na compra e no imposto para
+              precificar, exceto em produtos monofásicos.
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 
-      {data?.taxReportGeneratedAt ? (
+      {data?.taxRegime !== "SIMPLES" && data?.taxReportGeneratedAt ? (
         <p className="text-xs text-[var(--muted-foreground)]">
           Coluna Imposto calculada a partir do relatório tributário gerado em{" "}
           {DATE_TIME_FORMATTER.format(new Date(data.taxReportGeneratedAt))}{" "}
@@ -797,13 +860,16 @@ export function ProductsClient() {
         sort={productsSort}
         onSortChange={onProductsSortChange}
         formatPricingCostExplainer={formatPricingCostExplainer}
+        showFiscalFlags={data?.taxRegime !== "SIMPLES"}
         taxPercentExplainer={(product) =>
-          product.taxPercent !== null &&
-          product.taxPercentGeneratedAt &&
-          product.taxPercentYear !== null &&
-          product.taxPercentMonth !== null
-            ? `Média % operacional de imposto apurada no relatório tributário de ${taxReportPeriodLabel(product.taxPercentYear, product.taxPercentMonth)} (recalculado em ${DATE_TIME_FORMATTER.format(new Date(product.taxPercentGeneratedAt))}, ${daysSince(product.taxPercentGeneratedAt)} dia(s) atrás). Se houve vendas ou mudanças fiscais recentes, recalcule o relatório tributário para atualizar este valor.`
-            : "Este SKU ainda não aparece em nenhum relatório tributário calculado. Gere/recalcule o relatório tributário para obter o imposto médio deste produto."
+          data?.taxRegime === "SIMPLES"
+            ? "Alíquota efetiva do Simples Nacional (DAS), informada manualmente em Configurações > Empresa — aplicada da mesma forma a todos os produtos (o Simples não apura ICMS/PIS/COFINS por SKU)."
+            : product.taxPercent !== null &&
+                product.taxPercentGeneratedAt &&
+                product.taxPercentYear !== null &&
+                product.taxPercentMonth !== null
+              ? `Média % operacional de imposto apurada no relatório tributário de ${taxReportPeriodLabel(product.taxPercentYear, product.taxPercentMonth)} (recalculado em ${DATE_TIME_FORMATTER.format(new Date(product.taxPercentGeneratedAt))}, ${daysSince(product.taxPercentGeneratedAt)} dia(s) atrás). Se houve vendas ou mudanças fiscais recentes, recalcule o relatório tributário para atualizar este valor.`
+              : "Este SKU ainda não aparece em nenhum relatório tributário calculado. Gere/recalcule o relatório tributário para obter o imposto médio deste produto."
         }
         onEdit={(product) =>
           setModal({ mode: "edit", form: formFromProduct(product) })
@@ -815,6 +881,7 @@ export function ProductsClient() {
         <ProductFormModal
           initial={modal.form}
           title={modal.mode === "create" ? "Novo produto" : `Editar ${modal.form.sku}`}
+          taxRegime={data?.taxRegime ?? "LUCRO_REAL"}
           onClose={() => setModal(null)}
           onSaved={() => void load()}
         />
