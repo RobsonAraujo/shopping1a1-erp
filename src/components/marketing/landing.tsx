@@ -49,6 +49,10 @@ export function MarketingLanding({
       <main id="topo">
         <section className="relative overflow-hidden bg-gradient-to-br from-[#0f1a45] via-[#1b2d6f] to-[#243a8a] px-4 py-16 text-white sm:px-6 sm:py-24">
           <div
+            className="marketing-hero-grid pointer-events-none absolute inset-0"
+            aria-hidden
+          />
+          <div
             className="pointer-events-none absolute -right-24 -top-24 size-80 rounded-full bg-amber-400/20 blur-3xl"
             aria-hidden
           />
@@ -106,6 +110,7 @@ export function MarketingLanding({
                   isLoggedIn={isLoggedIn}
                   dashboardHref={dashboardHref}
                   onDark
+                  className="h-14 px-10 text-base [&_svg]:size-5"
                 />
                 {!isLoggedIn ? (
                   <p className="text-sm text-white/65">

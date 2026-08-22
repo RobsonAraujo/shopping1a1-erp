@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 const SIGNIN = "/api/auth/mercadolibre/signin";
 
@@ -9,22 +10,24 @@ export function OAuthCta({
   dashboardHref,
   size = "lg",
   onDark = false,
+  className,
 }: {
   isLoggedIn: boolean;
   dashboardHref: string;
   size?: "sm" | "lg";
   onDark?: boolean;
+  className?: string;
 }) {
   if (isLoggedIn) {
     return (
       <Button
         size={size}
         asChild
-        className={
-          onDark
-            ? "bg-white text-[#1b2d6f] shadow-md hover:bg-white/90 hover:text-[#1b2d6f]"
-            : undefined
-        }
+        className={cn(
+          onDark &&
+            "bg-white text-[#1b2d6f] shadow-md hover:bg-white/90 hover:text-[#1b2d6f]",
+          className,
+        )}
       >
         <Link href={dashboardHref} className="gap-2">
           Ir para o dashboard
@@ -38,7 +41,10 @@ export function OAuthCta({
     <Button
       size={size}
       asChild
-      className="bg-amber-400 text-slate-900 shadow-md hover:bg-amber-300 hover:text-slate-900"
+      className={cn(
+        "bg-amber-400 text-slate-900 shadow-md hover:bg-amber-300 hover:text-slate-900",
+        className,
+      )}
     >
       <a href={SIGNIN} className="gap-2">
         Testar grátis

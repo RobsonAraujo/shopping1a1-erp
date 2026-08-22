@@ -1,0 +1,15 @@
+---
+description: Sempre rodar ESLint e tsc depois de alterar código
+alwaysApply: true
+---
+
+# Verificação obrigatória
+
+Depois de qualquer alteração de código neste repo, **antes de responder que terminou**:
+
+1. `npm run lint`
+2. `npx tsc --noEmit`
+
+Corrigir erros introduzidos (ou que o lint/tsc apontar nos arquivos que você tocou). O warning de `useVirtualizer` em `tax-report-transaction-table.tsx` já existia — não precisa “resolver” se você não mexeu nisso.
+
+Não encerrar a tarefa só com o editor/lints do IDE.

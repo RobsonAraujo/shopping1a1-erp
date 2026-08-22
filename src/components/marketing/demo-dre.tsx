@@ -164,6 +164,7 @@ export function DemoDre() {
               }
 
               const dreRow = row.source;
+              if (dreRow.type !== "static") return null;
               const bg = rowBackgroundClass(dreRow);
               const colored = isColoredRow(dreRow);
               const detailPos = (
