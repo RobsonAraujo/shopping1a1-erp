@@ -63,6 +63,7 @@ function webhookWarn(message: string, details: Record<string, unknown>) {
 }
 
 async function createSnapshotWithRetry(data: {
+  organizationId: string;
   mlItemId: string;
   status: CompetitionStatus;
   source: "webhook";
@@ -79,6 +80,7 @@ async function createSnapshotWithRetry(data: {
     try {
       return await prisma.catalogCompetitionSnapshot.create({
         data: {
+          organizationId: data.organizationId,
           mlItemId: data.mlItemId,
           status: data.status,
           source: data.source,
@@ -168,6 +170,62 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Gate de organização/pagamento — checado ANTES de qualquer chamada à API
+  // do ML ou escrita de negócio. Resolve sempre (leitura barata, indexada
+  // por PK); só a decisão de bloquear é pulada em simulação de debug, pra
+  // não exigir uma organização real de teste pra exercitar o resto do fluxo.
+  const sellerLink = await prisma.organizationMlSeller.findUnique({
+    where: { mlUserId },
+    include: { organization: true },
+  });
+
+  if (!isDebugSimulation) {
+    if (!sellerLink) {
+      webhookWarn("no organization linked", { topic, itemId, mlUserId });
+      return NextResponse.json(
+        {
+          ok: true,
+          skipped: "no_organization",
+          hint: "Nenhuma organização vinculada a este mlUserId ainda (seller nunca fez login).",
+          itemId,
+          mlUserId,
+        },
+        { status: 200 },
+      );
+    }
+    if (!["trialing", "active"].includes(sellerLink.organization.status)) {
+      webhookLog("organization not active", {
+        topic,
+        itemId,
+        mlUserId,
+        status: sellerLink.organization.status,
+      });
+      return NextResponse.json(
+        {
+          ok: true,
+          skipped: "organization_not_active",
+          itemId,
+          mlUserId,
+        },
+        { status: 200 },
+      );
+    }
+  }
+
+  const organizationId = sellerLink?.organizationId ?? null;
+  if (!organizationId) {
+    // Só chega aqui em simulação de debug sem organização de teste vinculada.
+    webhookWarn("debug simulation without linked organization", {
+      topic,
+      itemId,
+      mlUserId,
+    });
+    return NextResponse.json(
+      { ok: true, skipped: "no_organization_debug", itemId, mlUserId },
+      { status: 200 },
+    );
+  }
+
   let token: string | null = null;
   if (!isDebugSimulation) {
     const storedCredentials = await prisma.mlSellerCredentials.findUnique({
@@ -237,7 +295,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const latest = await prisma.catalogCompetitionSnapshot.findFirst({
-      where: { mlItemId: itemId },
+      where: { mlItemId: itemId, organizationId },
       select: { status: true, snapshotAt: true },
       orderBy: { snapshotAt: "desc" },
     });
@@ -263,6 +321,7 @@ export async function POST(request: NextRequest) {
     await prisma.listing.upsert({
       where: { mlItemId: itemId },
       create: {
+        organizationId,
         mlItemId: itemId,
         titleSnapshot: itemDetails?.title ?? null,
         catalogListing: true,
@@ -284,6 +343,7 @@ export async function POST(request: NextRequest) {
     });
 
     await createSnapshotWithRetry({
+      organizationId,
       mlItemId: itemId,
       status,
       source: "webhook",

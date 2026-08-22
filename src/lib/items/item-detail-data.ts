@@ -54,10 +54,11 @@ function decimalToNumber(value: unknown): number | null {
 export async function loadItemDetailContext(input: {
   accessToken: string;
   userId: number;
+  organizationId: string;
   itemId: string;
   item: ItemBody;
 }): Promise<ItemDetailContext> {
-  const { accessToken, userId, itemId, item } = input;
+  const { accessToken, userId, organizationId, itemId, item } = input;
   const windowDays = stockPlanningConfig.salesAverageWindowDays;
   const dateField = stockPlanningConfig.salesWindowDateField;
   const mlStock = mlAvailableStockUnits(item);
@@ -104,7 +105,9 @@ export async function loadItemDetailContext(input: {
       orderBy: { updatedAt: "desc" },
       select: { id: true, kind: true, status: true },
     }),
-    loadFinancialEvaluationRows(accessToken, userId, { itemIds: [itemId] }),
+    loadFinancialEvaluationRows(accessToken, userId, organizationId, {
+      itemIds: [itemId],
+    }),
     item.category_id
       ? fetchCategoryById(accessToken, item.category_id).catch(() => null)
       : Promise.resolve(null),

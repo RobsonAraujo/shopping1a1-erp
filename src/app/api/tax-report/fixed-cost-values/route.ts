@@ -5,7 +5,7 @@ import {
   upsertTaxFixedCostMonthValue,
 } from "@/lib/tax-report/tax-fixed-cost-data";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { parseJsonBody } from "@/lib/api-validation";
 
 const fixedCostValueSchema = z.object({
@@ -16,21 +16,28 @@ const fixedCostValueSchema = z.object({
 });
 
 export async function PUT(request: NextRequest) {
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
+  const { organizationId } = auth.ctx;
 
   const parsedBody = await parseJsonBody(request, fixedCostValueSchema);
   if (!parsedBody.ok) return parsedBody.response;
   const { costItemId, year, month, amount } = parsedBody.data;
 
   try {
-    await upsertTaxFixedCostMonthValue({
+    await upsertTaxFixedCostMonthValue(organizationId, {
       costItemId,
       year,
       month,
       amount: amount ?? null,
     });
-    const items = await loadTaxFixedCostItemsWithMonthValue(year, month);
+    const items = await loadTaxFixedCostItemsWithMonthValue(
+      organizationId,
+      year,
+      month,
+    );
     return NextResponse.json({ items });
   } catch (e) {
     logServerError("api/tax-report/fixed-cost-values PUT", e);

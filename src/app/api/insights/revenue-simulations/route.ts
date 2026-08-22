@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { parseJsonBody } from "@/lib/api-validation";
 
 const revenueSimulationPayloadSchema = z.object({
@@ -18,9 +18,11 @@ const createSimulationSchema = z.object({
 });
 
 export async function GET() {
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
-  const sellerId = auth.userId;
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
+  const sellerId = auth.ctx.userId;
 
   try {
     const simulations = await prisma.revenueSimulation.findMany({
@@ -38,9 +40,11 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
-  const sellerId = auth.userId;
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
+  const { userId: sellerId, organizationId } = auth.ctx;
 
   const parsedBody = await parseJsonBody(request, createSimulationSchema);
   if (!parsedBody.ok) return parsedBody.response;
@@ -48,7 +52,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const simulation = await prisma.revenueSimulation.create({
-      data: { sellerId, name, payload },
+      data: { organizationId, sellerId, name, payload },
       select: { id: true, name: true, createdAt: true, updatedAt: true },
     });
     return NextResponse.json({ simulation });

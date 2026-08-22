@@ -1,30 +1,23 @@
-import { cookies } from "next/headers";
 import Image from "next/image";
 import Link from "next/link";
 import { LogOut } from "lucide-react";
 import { DashboardNav } from "@/components/dashboard-nav";
-import { fetchMe } from "@/lib/mercadolibre/api";
 import { MobileDashboardMenu } from "@/components/mobile-dashboard-menu";
-import { readSession } from "@/lib/mercadolibre/session";
 import { Button } from "@/components/ui/button";
+import { AccountBlockedNotice } from "@/components/account-blocked-notice";
+import { getOrganizationContext } from "@/lib/organizations/context";
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const cookieStore = await cookies();
-  const session = readSession(cookieStore);
+  const orgContext = await getOrganizationContext();
 
-  let nickname = "Conta";
-  if (session.accessToken) {
-    try {
-      const me = await fetchMe(session.accessToken);
-      nickname = me.nickname || `ID ${me.id}`;
-    } catch {
-      // keep default label
-    }
-  }
+  const nickname =
+    orgContext.status === "active" || orgContext.status === "blocked"
+      ? orgContext.organization.name
+      : "Conta";
 
   return (
     <div className="flex min-h-full flex-col bg-[var(--background)]">
@@ -85,7 +78,17 @@ export default async function DashboardLayout({
         id="main-content"
         className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 pb-[max(2rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-10"
       >
-        {children}
+        {orgContext.status === "active" ? (
+          children
+        ) : orgContext.status === "blocked" ? (
+          <AccountBlockedNotice organization={orgContext.organization} />
+        ) : (
+          // "unauthenticated"/"no_organization": middleware já deveria ter
+          // redirecionado antes de chegar aqui; casca mínima como último recurso.
+          <p className="text-center text-sm text-[var(--muted-foreground)]">
+            Não foi possível carregar sua conta. Tente sair e entrar novamente.
+          </p>
+        )}
       </main>
     </div>
   );

@@ -128,6 +128,16 @@ function buildDaySales(dayOffset: number, now: Date): SaleSeed[] {
 }
 
 async function main() {
+  const organization = await prisma.organization.findFirst({
+    orderBy: { createdAt: "asc" },
+  });
+  if (!organization) {
+    throw new Error(
+      "Nenhuma Organization encontrada — rode `npm run backfill:default-organization` primeiro.",
+    );
+  }
+  const organizationId = organization.id;
+
   const itemId = process.argv[2]?.trim() || DEFAULT_ITEM_ID;
   const now = new Date();
   const snapshots: SnapshotSeed[] = [];
@@ -142,6 +152,7 @@ async function main() {
     where: { mlItemId: itemId },
     create: {
       mlItemId: itemId,
+      organizationId,
       titleSnapshot: "Demo catálogo — timeline + vendas mock",
       skuSnapshot: `SKU-DEMO-${itemId.slice(-6)}`,
       imageUrlSnapshot: null,
@@ -166,6 +177,7 @@ async function main() {
     await prisma.catalogCompetitionSnapshot.create({
       data: {
         mlItemId: itemId,
+        organizationId,
         status: point.status,
         source: "manual_poll",
         snapshotAt: point.at,

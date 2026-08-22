@@ -14,6 +14,7 @@ import { Breadcrumbs } from "@/components/breadcrumbs";
 import { SupplierPurchaseAnalysisView } from "@/components/compras/supplier-purchase-analysis-view";
 import { Card, CardContent } from "@/components/ui/card";
 import { readSession } from "@/lib/mercadolibre/session";
+import { getOrganizationContext } from "@/lib/organizations/context";
 
 type PageProps = {
   params: Promise<{ supplier: string }>;
@@ -38,11 +39,20 @@ export default async function SupplierPurchasePage({ params }: PageProps) {
     return null;
   }
 
+  const orgContext = await getOrganizationContext();
+  if (orgContext.status !== "active") {
+    return null;
+  }
+
   let loadError: string | null = null;
   let supplierRows: PurchaseAnalysisItemRow[] = [];
   let supplierMissing = false;
   try {
-    const data = await loadDashboardPurchaseData(token, userId);
+    const data = await loadDashboardPurchaseData(
+      token,
+      userId,
+      orgContext.organization.id,
+    );
     supplierRows = filterRowsBySupplier(data.rows, supplierParam);
 
     if (supplierRows.length === 0) {

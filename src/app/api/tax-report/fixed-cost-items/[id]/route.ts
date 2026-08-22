@@ -6,7 +6,7 @@ import {
   updateTaxFixedCostItem,
 } from "@/lib/tax-report/tax-fixed-cost-data";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { parseJsonBody } from "@/lib/api-validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -23,9 +23,11 @@ const patchBodySchema = z.object({
 });
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
-  if (!(await requireAuth())) {
-    return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
+  const { organizationId } = auth.ctx;
 
   const { id } = await context.params;
   const parsedBody = await parseJsonBody(request, patchBodySchema);
@@ -35,7 +37,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   if (body.end) {
     const { year, month } = body.end;
     try {
-      const item = await endTaxFixedCostItem(id, year, month);
+      const item = await endTaxFixedCostItem(organizationId, id, year, month);
       return NextResponse.json({ item });
     } catch (e) {
       logServerError("api/tax-report/fixed-cost-items PATCH (end)", e);
@@ -62,7 +64,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 
   try {
-    const item = await updateTaxFixedCostItem(id, update);
+    const item = await updateTaxFixedCostItem(organizationId, id, update);
     return NextResponse.json({ item });
   } catch (e) {
     logServerError("api/tax-report/fixed-cost-items PATCH", e);
@@ -74,14 +76,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 }
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {
-  if (!(await requireAuth())) {
-    return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
 
   const { id } = await context.params;
 
   try {
-    await deactivateTaxFixedCostItem(id);
+    await deactivateTaxFixedCostItem(auth.ctx.organizationId, id);
     return NextResponse.json({ ok: true });
   } catch (e) {
     logServerError("api/tax-report/fixed-cost-items DELETE", e);

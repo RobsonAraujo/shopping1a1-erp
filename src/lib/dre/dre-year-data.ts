@@ -190,7 +190,10 @@ function buildEffectiveCostMaps(
   return { valuesByMonth, overridesByMonth };
 }
 
-export async function loadDreYearView(year: number): Promise<DreYearView> {
+export async function loadDreYearView(
+  organizationId: string,
+  year: number,
+): Promise<DreYearView> {
   const [
     allCostItems,
     snapshots,
@@ -199,7 +202,7 @@ export async function loadDreYearView(year: number): Promise<DreYearView> {
     importedBillingPeriods,
   ] = await Promise.all([
     prisma.dreCostItem.findMany({
-      where: { active: true },
+      where: { organizationId, active: true },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       select: {
         id: true,
@@ -210,14 +213,14 @@ export async function loadDreYearView(year: number): Promise<DreYearView> {
       },
     }),
     prisma.dreMonthSnapshot.findMany({
-      where: { year },
+      where: { organizationId, year },
     }),
     prisma.dreCostMonthValue.findMany({
-      where: { year: { in: [year, year - 1] } },
+      where: { organizationId, year: { in: [year, year - 1] } },
       select: { costItemId: true, year: true, month: true, amount: true },
     }),
-    listFullShipmentActivityMonthsForYear(year),
-    listImportedBillingPeriods(),
+    listFullShipmentActivityMonthsForYear(organizationId, year),
+    listImportedBillingPeriods(organizationId),
   ]);
 
   const importedBillingMonths = new Set(

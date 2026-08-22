@@ -7,7 +7,7 @@ import {
 } from "@/lib/tax-report/service/generate-monthly-report";
 import type { ManualFiscalOverride } from "@/lib/tax-report/types";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { stripTransacoesForResponse } from "@/lib/tax-report/strip-transacoes-for-response";
 
 export const maxDuration = 300;
@@ -31,9 +31,11 @@ function parseYearMonth(searchParams: URLSearchParams): {
 }
 
 export async function GET(request: NextRequest) {
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
-  const { userId } = auth;
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
+  const { userId } = auth.ctx;
 
   const parsed = parseYearMonth(request.nextUrl.searchParams);
   if (!parsed) {
@@ -76,9 +78,11 @@ function sseLine(data: unknown): string {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
-  const { token, userId } = auth;
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
+  const { token, userId, organizationId } = auth.ctx;
 
   let body: PostBody = {};
   try {
@@ -162,6 +166,7 @@ export async function POST(request: NextRequest) {
             const payload = await generateMonthlyTaxReport({
               accessToken: token,
               sellerId: userId,
+              organizationId,
               year,
               month,
               overrides: body.overrides ?? {},
@@ -173,7 +178,7 @@ export async function POST(request: NextRequest) {
               message: "Salvando snapshot…",
             });
 
-            await saveTaxReportSnapshot(userId, payload);
+            await saveTaxReportSnapshot(organizationId, userId, payload);
 
             controller.enqueue(
               encoder.encode(sseLine({ type: "complete" })),
@@ -203,12 +208,13 @@ export async function POST(request: NextRequest) {
     const payload = await generateMonthlyTaxReport({
       accessToken: token,
       sellerId: userId,
+      organizationId,
       year,
       month,
       overrides: body.overrides ?? {},
     });
 
-    await saveTaxReportSnapshot(userId, payload);
+    await saveTaxReportSnapshot(organizationId, userId, payload);
     return NextResponse.json(payload);
   } catch (e) {
     logServerError("api/reports/monthly-tax POST", e);

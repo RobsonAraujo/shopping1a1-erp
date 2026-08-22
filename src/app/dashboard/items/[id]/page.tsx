@@ -17,6 +17,7 @@ import { fetchItemById } from "@/lib/mercadolibre/api";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { getItemSku } from "@/lib/mercadolibre/item-sku";
 import { readSession } from "@/lib/mercadolibre/session";
+import { getOrganizationContext } from "@/lib/organizations/context";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -47,6 +48,11 @@ export default async function ItemDetailPage({ params }: PageProps) {
     return null;
   }
 
+  const orgContext = await getOrganizationContext();
+  if (orgContext.status !== "active") {
+    return null;
+  }
+
   let item;
   try {
     item = await fetchItemById(token, id);
@@ -61,6 +67,7 @@ export default async function ItemDetailPage({ params }: PageProps) {
   const context = await loadItemDetailContext({
     accessToken: token,
     userId,
+    organizationId: orgContext.organization.id,
     itemId: id,
     item,
   });

@@ -8,7 +8,7 @@ import {
 } from "@/lib/envios-full/full-shipment-data";
 import { FullShipmentValidationError } from "@/lib/envios-full/full-shipment";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { parseJsonBody } from "@/lib/api-validation";
 
 const createShipmentSchema = z.object({
@@ -19,14 +19,16 @@ const createShipmentSchema = z.object({
 });
 
 export async function GET(request: NextRequest) {
-  if (!(await requireAuth())) {
-    return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
+  const { organizationId } = auth.ctx;
 
   try {
     const yearRaw = request.nextUrl.searchParams.get("year");
     const monthRaw = request.nextUrl.searchParams.get("month");
-    const importedPeriods = await listImportedBillingPeriods();
+    const importedPeriods = await listImportedBillingPeriods(organizationId);
 
     if (yearRaw != null && monthRaw != null) {
       const year = Number(yearRaw);
@@ -43,11 +45,11 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      const shipments = await listFullShipmentsForPeriod(year, month);
+      const shipments = await listFullShipmentsForPeriod(organizationId, year, month);
       return NextResponse.json({ shipments, year, month, importedPeriods });
     }
 
-    const shipments = await listFullShipments();
+    const shipments = await listFullShipments(organizationId);
     return NextResponse.json({ shipments, importedPeriods });
   } catch (e) {
     logServerError("api/full-shipments GET", e);
@@ -58,8 +60,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  if (!(await requireAuth())) {
-    return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
 
   const parsedBody = await parseJsonBody(request, createShipmentSchema);
@@ -67,7 +70,7 @@ export async function POST(request: NextRequest) {
   const { shippedAt, totalCost, totalUnits, notes } = parsedBody.data;
 
   try {
-    const shipment = await createFullShipment({
+    const shipment = await createFullShipment(auth.ctx.organizationId, {
       shippedAt,
       totalCost,
       totalUnits,

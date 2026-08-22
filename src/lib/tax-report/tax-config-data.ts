@@ -16,9 +16,11 @@ function decimalToNumber(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-export async function loadTaxCompanyConfig(): Promise<TaxCompanyConfig> {
+export async function loadTaxCompanyConfig(
+  organizationId: string,
+): Promise<TaxCompanyConfig> {
   const row = await prisma.companyTaxSettings.findUnique({
-    where: { id: "default" },
+    where: { organizationId },
   });
 
   return {
@@ -75,11 +77,13 @@ export type TaxConfigUpdateInput = {
 };
 
 export async function updateTaxCompanyConfig(
+  organizationId: string,
   input: TaxConfigUpdateInput,
 ): Promise<TaxCompanyConfig> {
   const row = await prisma.companyTaxSettings.upsert({
-    where: { id: "default" },
+    where: { organizationId },
     create: {
+      organizationId,
       pisCofinsPercent: (input.pisRatePercent ?? DEFAULT_PIS_RATE) + (input.cofinsRatePercent ?? DEFAULT_COFINS_RATE),
       taxRegime: input.taxRegime ?? "LUCRO_REAL",
       originUf: input.originUf ?? DEFAULT_ORIGIN_UF,

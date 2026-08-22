@@ -148,14 +148,10 @@ export async function fetchItemPriceToWin(
   itemId: string,
 ): Promise<ItemPriceToWinResponse> {
   const { apiBase } = getMercadoLibreConfig();
-  const res = await fetch(`${apiBase}/items/${itemId}/price_to_win`, {
+  const res = await fetchWithRetry(`${apiBase}/items/${itemId}/price_to_win`, {
     headers: { Authorization: `Bearer ${accessToken}` },
     cache: "no-store",
   });
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`items/${itemId}/price_to_win failed: ${res.status} ${t}`);
-  }
   return res.json() as Promise<ItemPriceToWinResponse>;
 }
 
@@ -841,11 +837,15 @@ export async function fetchAllUserItemIds(
 export async function fetchOperationalListingIds(
   accessToken: string,
   userId: number,
+  organizationId: string,
 ): Promise<string[]> {
   const [activeIds, pausedIds, warehouseRows] = await Promise.all([
     fetchAllUserItemIds(accessToken, userId, { status: "active" }),
     fetchAllUserItemIds(accessToken, userId, { status: "paused" }),
-    prisma.warehouseStock.findMany({ select: { mlItemId: true } }),
+    prisma.warehouseStock.findMany({
+      where: { organizationId },
+      select: { mlItemId: true },
+    }),
   ]);
   const warehouseIds = warehouseRows.map((row) => row.mlItemId);
   return [...new Set([...activeIds, ...pausedIds, ...warehouseIds])];
@@ -854,8 +854,9 @@ export async function fetchOperationalListingIds(
 export async function fetchOperationalListings(
   accessToken: string,
   userId: number,
+  organizationId: string,
 ): Promise<ItemBody[]> {
-  const ids = await fetchOperationalListingIds(accessToken, userId);
+  const ids = await fetchOperationalListingIds(accessToken, userId, organizationId);
   if (ids.length === 0) return [];
   return fetchItemsByIdsBatched(accessToken, ids);
 }
@@ -863,8 +864,9 @@ export async function fetchOperationalListings(
 export async function fetchSellerFulfillmentInventoryIds(
   accessToken: string,
   userId: number,
+  organizationId: string,
 ): Promise<string[]> {
-  const items = await fetchOperationalListings(accessToken, userId);
+  const items = await fetchOperationalListings(accessToken, userId, organizationId);
   const ids = new Set<string>();
   for (const item of items) {
     if (!isFulfillmentListing(item)) continue;

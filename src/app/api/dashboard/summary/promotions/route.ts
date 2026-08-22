@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dashboardSummaryConfig } from "@/config/dashboard-summary";
 import { loadPromotionSummary } from "@/lib/home/promotion-summary-data";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 
 function parseExpiringSoonDays(value: string | null): number {
@@ -14,9 +14,11 @@ function parseExpiringSoonDays(value: string | null): number {
 }
 
 export async function GET(request: NextRequest) {
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
-  const { token, userId } = auth;
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
+  const { token, userId } = auth.ctx;
 
   const expiringSoonDays = parseExpiringSoonDays(
     request.nextUrl.searchParams.get("days"),

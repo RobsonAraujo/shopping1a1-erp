@@ -13,6 +13,7 @@ import {
   readOAuthState,
   setSessionCookies,
 } from "@/lib/mercadolibre/session";
+import { ensureOrganizationForMlSeller } from "@/lib/organizations/ensure-organization";
 
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
@@ -48,6 +49,10 @@ export async function GET(request: NextRequest) {
     const me = await fetchMe(tokensForSession.access_token);
 
     await upsertSellerCredentials(me.id, tokensForSession);
+    await ensureOrganizationForMlSeller(me.id, {
+      email: me.email,
+      nickname: me.nickname,
+    });
 
     const res = NextResponse.redirect(new URL("/dashboard", request.url));
     clearOAuthStateCookie(res.cookies);

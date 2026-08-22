@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { parseJsonBody } from "@/lib/api-validation";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 import {
@@ -36,8 +36,9 @@ function levelingErrorResponse(e: DreProductCostLevelingError) {
 }
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
-  if (!(await requireAuth())) {
-    return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
 
   const { id } = await context.params;
@@ -45,7 +46,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   if (!parsedBody.ok) return parsedBody.response;
 
   try {
-    const item = await updateDreProductCostLeveling(id, parsedBody.data);
+    const item = await updateDreProductCostLeveling(
+      auth.ctx.organizationId,
+      id,
+      parsedBody.data,
+    );
     return NextResponse.json({ item });
   } catch (e) {
     if (e instanceof DreProductCostLevelingError) {
@@ -60,14 +65,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 }
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {
-  if (!(await requireAuth())) {
-    return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
 
   const { id } = await context.params;
 
   try {
-    await deleteDreProductCostLeveling(id);
+    await deleteDreProductCostLeveling(auth.ctx.organizationId, id);
     return NextResponse.json({ ok: true });
   } catch (e) {
     if (e instanceof DreProductCostLevelingError) {

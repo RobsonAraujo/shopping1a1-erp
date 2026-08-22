@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 import { parseJsonBody } from "@/lib/api-validation";
 import { collectDetalhes } from "@/lib/tax-report/repair-snapshot-apuracao";
@@ -20,9 +20,11 @@ import {
 import type { DetalhamentoTributario } from "@/lib/tax-report/types";
 
 export async function GET() {
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
-  const sellerId = auth.userId;
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
+  const sellerId = auth.ctx.userId;
 
   try {
     const periods = await listTaxReportSnapshotPeriods(sellerId);
@@ -54,9 +56,11 @@ const postBodySchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
-  const sellerId = auth.userId;
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
+  const { userId: sellerId, organizationId } = auth.ctx;
 
   const parsedBody = await parseJsonBody(request, postBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
@@ -87,7 +91,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const [config, icmsRates, payloads] = await Promise.all([
-      loadTaxCompanyConfig(),
+      loadTaxCompanyConfig(organizationId),
       loadIcmsRatesMap(),
       Promise.all(
         periods.map((p) => loadTaxReportSnapshot(sellerId, p.year, p.month)),

@@ -7,19 +7,22 @@ import { OperationsKanbanSkeleton } from "@/components/operacoes-full/operations
 import { Card, CardContent } from "@/components/ui/card";
 import { loadOperationsBoards } from "@/lib/replenishment-cycle-data";
 import { readSession } from "@/lib/mercadolibre/session";
+import { getOrganizationContext } from "@/lib/organizations/context";
 
 async function OperacoesFullDataSection({
   token,
   userId,
+  organizationId,
 }: {
   token: string;
   userId: number;
+  organizationId: string;
 }) {
   let loadError: string | null = null;
   let boards: Awaited<ReturnType<typeof loadOperationsBoards>> | null = null;
 
   try {
-    boards = await loadOperationsBoards(token, userId);
+    boards = await loadOperationsBoards(token, userId, organizationId);
   } catch (e) {
     loadError =
       e instanceof Error ? e.message : "Erro ao carregar operações Full";
@@ -50,6 +53,11 @@ export default async function OperacoesFullPage() {
     return null;
   }
 
+  const orgContext = await getOrganizationContext();
+  if (orgContext.status !== "active") {
+    return null;
+  }
+
   return (
     <div className="space-y-6">
       <header className="flex items-start gap-4">
@@ -68,7 +76,11 @@ export default async function OperacoesFullPage() {
       </header>
 
       <Suspense fallback={<OperationsKanbanSkeleton />}>
-        <OperacoesFullDataSection token={token} userId={userId} />
+        <OperacoesFullDataSection
+          token={token}
+          userId={userId}
+          organizationId={orgContext.organization.id}
+        />
       </Suspense>
     </div>
   );

@@ -4,8 +4,11 @@ import type { SkuAliasMap } from "@/lib/product-sku-alias";
 
 export type { SkuAliasMap } from "@/lib/product-sku-alias";
 
-export async function loadSkuAliasMap(): Promise<SkuAliasMap> {
+export async function loadSkuAliasMap(
+  organizationId: string,
+): Promise<SkuAliasMap> {
   const rows = await prisma.productSkuAlias.findMany({
+    where: { organizationId },
     select: { aliasSku: true, canonicalSku: true },
   });
   const map: SkuAliasMap = new Map();
@@ -16,12 +19,13 @@ export async function loadSkuAliasMap(): Promise<SkuAliasMap> {
 }
 
 export async function listAliasesForCanonicalSku(
+  organizationId: string,
   canonicalSku: string,
 ): Promise<string[]> {
   const canonical = normalizeProductSku(canonicalSku);
   if (!canonical) return [];
   const rows = await prisma.productSkuAlias.findMany({
-    where: { canonicalSku: canonical },
+    where: { organizationId, canonicalSku: canonical },
     select: { aliasSku: true },
     orderBy: { aliasSku: "asc" },
   });
@@ -32,10 +36,13 @@ export type CreateSkuAliasResult =
   | { ok: true; aliasSku: string; canonicalSku: string }
   | { ok: false; error: string };
 
-export async function createSkuAlias(input: {
-  canonicalSku: string;
-  aliasSku: string;
-}): Promise<CreateSkuAliasResult> {
+export async function createSkuAlias(
+  organizationId: string,
+  input: {
+    canonicalSku: string;
+    aliasSku: string;
+  },
+): Promise<CreateSkuAliasResult> {
   const canonicalSku = normalizeProductSku(input.canonicalSku);
   const aliasSku = normalizeProductSku(input.aliasSku);
 
@@ -46,7 +53,7 @@ export async function createSkuAlias(input: {
   }
 
   const product = await prisma.product.findUnique({
-    where: { sku: canonicalSku },
+    where: { organizationId_sku: { organizationId, sku: canonicalSku } },
     select: { sku: true },
   });
   if (!product) {
@@ -54,7 +61,7 @@ export async function createSkuAlias(input: {
   }
 
   const aliasAsProduct = await prisma.product.findUnique({
-    where: { sku: aliasSku },
+    where: { organizationId_sku: { organizationId, sku: aliasSku } },
     select: { sku: true },
   });
   if (aliasAsProduct) {
@@ -66,7 +73,7 @@ export async function createSkuAlias(input: {
   }
 
   const existing = await prisma.productSkuAlias.findUnique({
-    where: { aliasSku },
+    where: { organizationId_aliasSku: { organizationId, aliasSku } },
     select: { canonicalSku: true },
   });
   if (existing) {
@@ -80,22 +87,25 @@ export async function createSkuAlias(input: {
   }
 
   await prisma.productSkuAlias.create({
-    data: { aliasSku, canonicalSku },
+    data: { organizationId, aliasSku, canonicalSku },
   });
 
   return { ok: true, aliasSku, canonicalSku };
 }
 
-export async function deleteSkuAlias(input: {
-  canonicalSku: string;
-  aliasSku: string;
-}): Promise<boolean> {
+export async function deleteSkuAlias(
+  organizationId: string,
+  input: {
+    canonicalSku: string;
+    aliasSku: string;
+  },
+): Promise<boolean> {
   const canonicalSku = normalizeProductSku(input.canonicalSku);
   const aliasSku = normalizeProductSku(input.aliasSku);
   if (!canonicalSku || !aliasSku) return false;
 
   const result = await prisma.productSkuAlias.deleteMany({
-    where: { aliasSku, canonicalSku },
+    where: { organizationId, aliasSku, canonicalSku },
   });
   return result.count > 0;
 }

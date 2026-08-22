@@ -6,7 +6,7 @@ import {
   loadFinancialEvaluationRowsForPeriod,
   type FinancialEvaluationRow,
 } from "@/lib/financial-evaluation-data";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 
 export const maxDuration = 300;
@@ -43,9 +43,11 @@ function sseLine(data: unknown): string {
 }
 
 export async function GET(request: NextRequest) {
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
-  const { token, userId } = auth;
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
+  const { token, userId, organizationId } = auth.ctx;
 
   const itemIdsParam = request.nextUrl.searchParams.get("itemIds");
   const itemIds = itemIdsParam
@@ -87,12 +89,13 @@ export async function GET(request: NextRequest) {
         };
 
         try {
-          const companySettings = await ensureCompanySettings();
+          const companySettings = await ensureCompanySettings(organizationId);
 
           if (hasPeriod && fromParam && toParam) {
             const periodResult = await loadFinancialEvaluationRowsForPeriod(
               token,
               userId,
+              organizationId,
               fromParam,
               toParam,
               { onRow: sendRow },
@@ -111,7 +114,7 @@ export async function GET(request: NextRequest) {
               ),
             );
           } else {
-            await loadFinancialEvaluationRows(token, userId, {
+            await loadFinancialEvaluationRows(token, userId, organizationId, {
               itemIds,
               targetMarginPercent:
                 targetMarginPercent !== undefined &&
@@ -152,11 +155,17 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const companySettingsPromise = ensureCompanySettings();
+    const companySettingsPromise = ensureCompanySettings(organizationId);
 
     if (hasPeriod && fromParam && toParam) {
       const [periodResult, companySettings] = await Promise.all([
-        loadFinancialEvaluationRowsForPeriod(token, userId, fromParam, toParam),
+        loadFinancialEvaluationRowsForPeriod(
+          token,
+          userId,
+          organizationId,
+          fromParam,
+          toParam,
+        ),
         companySettingsPromise,
       ]);
       return NextResponse.json({
@@ -171,7 +180,7 @@ export async function GET(request: NextRequest) {
     }
 
     const [items, companySettings] = await Promise.all([
-      loadFinancialEvaluationRows(token, userId, {
+      loadFinancialEvaluationRows(token, userId, organizationId, {
         itemIds,
         targetMarginPercent:
           targetMarginPercent !== undefined &&

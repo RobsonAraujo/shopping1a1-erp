@@ -9,7 +9,7 @@ import {
   restoreDreMonthLine,
 } from "@/lib/dre/dre-month-data";
 import { loadDreYearView } from "@/lib/dre/dre-year-data";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { parseJsonBody } from "@/lib/api-validation";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 import { isFutureCalendarMonth } from "@/lib/mercadolibre/revenue-periods";
@@ -38,8 +38,10 @@ const linePatchSchema = z
   });
 
 export async function PATCH(request: NextRequest) {
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
 
   const parsedBody = await parseJsonBody(request, linePatchSchema);
   if (!parsedBody.ok) return parsedBody.response;
@@ -54,11 +56,11 @@ export async function PATCH(request: NextRequest) {
 
   try {
     if (action === "restore") {
-      await restoreDreMonthLine(year, month, lineKey);
+      await restoreDreMonthLine(auth.ctx.organizationId, year, month, lineKey);
     } else {
-      await patchDreMonthLine(year, month, lineKey, amount!);
+      await patchDreMonthLine(auth.ctx.organizationId, year, month, lineKey, amount!);
     }
-    const yearView = await loadDreYearView(year);
+    const yearView = await loadDreYearView(auth.ctx.organizationId, year);
     return NextResponse.json({ year: yearView });
   } catch (e) {
     logServerError("api/dre/lines PATCH", e);

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { parseJsonBody } from "@/lib/api-validation";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 import {
@@ -34,12 +34,13 @@ function levelingErrorResponse(e: DreProductCostLevelingError) {
 }
 
 export async function GET() {
-  if (!(await requireAuth())) {
-    return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
 
   try {
-    const items = await listDreProductCostLevelings();
+    const items = await listDreProductCostLevelings(auth.ctx.organizationId);
     return NextResponse.json({ items });
   } catch (e) {
     logServerError("api/dre/product-cost-leveling GET", e);
@@ -51,15 +52,19 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  if (!(await requireAuth())) {
-    return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
 
   const parsedBody = await parseJsonBody(request, levelingBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
 
   try {
-    const item = await createDreProductCostLeveling(parsedBody.data);
+    const item = await createDreProductCostLeveling(
+      auth.ctx.organizationId,
+      parsedBody.data,
+    );
     return NextResponse.json({ item });
   } catch (e) {
     if (e instanceof DreProductCostLevelingError) {

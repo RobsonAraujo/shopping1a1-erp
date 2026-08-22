@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { normalizeProductSku } from "@/lib/product-pricing";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { parseJsonBody } from "@/lib/api-validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -25,9 +25,11 @@ const kitItemsSchema = z.object({
 });
 
 export async function PUT(request: NextRequest, context: RouteContext) {
-  if (!(await requireAuth())) {
-    return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
+  const { organizationId } = auth.ctx;
 
   const { id: mlItemId } = await context.params;
 
@@ -37,13 +39,14 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
   try {
     const kit = await prisma.$transaction(async (tx) => {
-      await tx.kitItem.deleteMany({ where: { kitId: mlItemId } });
+      await tx.kitItem.deleteMany({ where: { kitId: mlItemId, organizationId } });
       return tx.kit.update({
-        where: { mlItemId },
+        where: { mlItemId, organizationId },
         data: {
           title: parsed.title,
           items: {
             create: parsed.items.map((item) => ({
+              organizationId,
               sku: item.sku,
               quantity: item.quantity,
             })),
@@ -62,14 +65,16 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 }
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {
-  if (!(await requireAuth())) {
-    return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
+  const { organizationId } = auth.ctx;
 
   const { id: mlItemId } = await context.params;
 
   try {
-    await prisma.kit.delete({ where: { mlItemId } });
+    await prisma.kit.delete({ where: { mlItemId, organizationId } });
     return NextResponse.json({ ok: true });
   } catch (e) {
     logServerError("api/kits/[id] DELETE", e);

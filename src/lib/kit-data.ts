@@ -13,11 +13,12 @@ export type KitPricingResolution = {
 
 /** Cadastro manual mlItemId → SKUs componentes, usado quando o item é um kit sem SKU próprio. */
 export async function loadKitsByMlItemId(
+  organizationId: string,
   mlItemIds: string[],
 ): Promise<Map<string, KitComponent[]>> {
   if (mlItemIds.length === 0) return new Map();
   const kits = await prisma.kit.findMany({
-    where: { mlItemId: { in: mlItemIds } },
+    where: { organizationId, mlItemId: { in: mlItemIds } },
     include: { items: true },
   });
   return new Map(

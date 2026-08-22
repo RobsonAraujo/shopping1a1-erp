@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loadFinancialEvaluationRows } from "@/lib/financial-evaluation-data";
 import type { MarginBasis } from "@/lib/financial-margin";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 
 export async function GET(request: NextRequest) {
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
-  const { token, userId } = auth;
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
+  const { token, userId, organizationId } = auth.ctx;
 
   const targetMarginParam =
     request.nextUrl.searchParams.get("targetMarginPercent");
@@ -32,7 +34,7 @@ export async function GET(request: NextRequest) {
     : undefined;
 
   try {
-    const rows = await loadFinancialEvaluationRows(token, userId, {
+    const rows = await loadFinancialEvaluationRows(token, userId, organizationId, {
       itemIds,
       targetMarginPercent,
       marginBasis,

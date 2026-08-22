@@ -20,7 +20,7 @@ import {
   wholesaleReductionsToTuple,
 } from "@/lib/wholesale-pricing";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -41,9 +41,11 @@ function normalizeLevels(levels: number[] | undefined): Array<1 | 2 | 3> {
 
 export async function POST(request: NextRequest, context: RouteContext) {
   const { id: mlItemId } = await context.params;
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
-  const { token, userId } = auth;
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
+  const { token, userId, organizationId } = auth.ctx;
 
   const text = await request.text();
   let rawBody: unknown = {};
@@ -73,8 +75,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     const [companySettings, rows] = await Promise.all([
-      ensureCompanySettings(),
-      loadFinancialEvaluationRows(token, userId, { itemIds: [mlItemId] }),
+      ensureCompanySettings(organizationId),
+      loadFinancialEvaluationRows(token, userId, organizationId, {
+        itemIds: [mlItemId],
+      }),
     ]);
 
     const row = rows[0];

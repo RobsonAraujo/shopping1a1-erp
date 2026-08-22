@@ -119,9 +119,11 @@ export function validateWholesaleReductionPercent(value: unknown): string | null
   return null;
 }
 
-export async function getCompanySettings(): Promise<CompanySettings> {
+export async function getCompanySettings(
+  organizationId: string,
+): Promise<CompanySettings> {
   const row = await prisma.companyTaxSettings.findUnique({
-    where: { id: "default" },
+    where: { organizationId },
   });
   if (!row) {
     return {
@@ -132,15 +134,18 @@ export async function getCompanySettings(): Promise<CompanySettings> {
   return rowToCompanySettings(row);
 }
 
-export async function ensureCompanySettings(): Promise<CompanySettings> {
+export async function ensureCompanySettings(
+  organizationId: string,
+): Promise<CompanySettings> {
   const existing = await prisma.companyTaxSettings.findUnique({
-    where: { id: "default" },
+    where: { organizationId },
   });
   if (existing) {
     return rowToCompanySettings(existing);
   }
   const created = await prisma.companyTaxSettings.create({
     data: {
+      organizationId,
       pisCofinsPercent: DEFAULT_PIS_COFINS_PERCENT,
       wholesaleLevel1ReductionPercent:
         DEFAULT_WHOLESALE_REDUCTIONS.level1ReductionPercent,
@@ -159,17 +164,15 @@ export async function ensureCompanySettings(): Promise<CompanySettings> {
   return rowToCompanySettings(created);
 }
 
-export async function getCompanyPisCofinsPercent(): Promise<number> {
-  const settings = await getCompanySettings();
-  return settings.pisCofinsPercent;
-}
-
-export async function ensureCompanyTaxSettings(): Promise<number> {
-  const settings = await ensureCompanySettings();
+export async function getCompanyPisCofinsPercent(
+  organizationId: string,
+): Promise<number> {
+  const settings = await getCompanySettings(organizationId);
   return settings.pisCofinsPercent;
 }
 
 export async function loadProductsMapBySku(
+  organizationId: string,
   skus: string[],
   aliasMap?: SkuAliasMap,
 ): Promise<Map<string, ResolvedProductPricing>> {
@@ -178,14 +181,14 @@ export async function loadProductsMapBySku(
   ];
   if (normalized.length === 0) return new Map();
 
-  const map = aliasMap ?? (await loadSkuAliasMap());
+  const map = aliasMap ?? (await loadSkuAliasMap(organizationId));
   const canonicalSkus = [
     ...new Set(normalized.map((sku) => resolveCanonicalSku(sku, map))),
   ].filter(Boolean);
 
-  const pisCofins = await getCompanyPisCofinsPercent();
+  const pisCofins = await getCompanyPisCofinsPercent(organizationId);
   const products = await prisma.product.findMany({
-    where: { sku: { in: canonicalSkus } },
+    where: { organizationId, sku: { in: canonicalSkus } },
   });
 
   const byCanonical = new Map<string, ResolvedProductPricing>();
@@ -200,6 +203,7 @@ export async function loadProductsMapBySku(
 }
 
 export async function loadStockReportProductsBySku(
+  organizationId: string,
   skus: string[],
 ): Promise<Record<string, StockReportProductInfo>> {
   const normalized = [
@@ -207,13 +211,13 @@ export async function loadStockReportProductsBySku(
   ];
   if (normalized.length === 0) return {};
 
-  const aliasMap = await loadSkuAliasMap();
+  const aliasMap = await loadSkuAliasMap(organizationId);
   const canonicalSkus = [
     ...new Set(normalized.map((sku) => resolveCanonicalSku(sku, aliasMap))),
   ].filter(Boolean);
 
   const products = await prisma.product.findMany({
-    where: { sku: { in: canonicalSkus } },
+    where: { organizationId, sku: { in: canonicalSkus } },
     select: {
       sku: true,
       ncm: true,
@@ -311,9 +315,13 @@ export function validateProductInput(
   return null;
 }
 
-export function productWriteToPrismaData(input: ProductWriteInput) {
+export function productWriteToPrismaData(
+  organizationId: string,
+  input: ProductWriteInput,
+) {
   const sku = normalizeProductSku(input.sku);
   return {
+    organizationId,
     sku,
     ncm: input.ncm?.trim() || null,
     unitCostNf: input.unitCostNf,

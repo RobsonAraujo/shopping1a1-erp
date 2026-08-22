@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchItemById } from "@/lib/mercadolibre/api";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -10,11 +10,13 @@ export async function GET(
   context: RouteContext,
 ) {
   const { id } = await context.params;
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
 
   try {
-    const item = await fetchItemById(auth.token, id);
+    const item = await fetchItemById(auth.ctx.token, id);
     if (!item) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }

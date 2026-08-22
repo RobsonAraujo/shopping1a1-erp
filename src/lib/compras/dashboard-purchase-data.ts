@@ -111,7 +111,10 @@ type LatestPurchaseCycleRow = {
  * (nunca purgado, cresce sem limite) a cada carregamento do dashboard de
  * Compras. Mesmo padrão de loadLatestCatalogCompetitionSnapshots.
  */
-async function loadLatestPurchaseCyclesByItem(mlItemIds: string[]) {
+async function loadLatestPurchaseCyclesByItem(
+  organizationId: string,
+  mlItemIds: string[],
+) {
   if (mlItemIds.length === 0) return [];
 
   const columns = Prisma.sql`
@@ -121,7 +124,8 @@ async function loadLatestPurchaseCyclesByItem(mlItemIds: string[]) {
   const rows = await prisma.$queryRaw<LatestPurchaseCycleRow[]>(Prisma.sql`
     (SELECT DISTINCT ON (ml_item_id) ${columns}
     FROM replenishment_cycles
-    WHERE ml_item_id IN (${Prisma.join(mlItemIds)})
+    WHERE organization_id = ${organizationId}
+      AND ml_item_id IN (${Prisma.join(mlItemIds)})
       AND kind::text = 'purchase'
       AND status::text != 'completed'
     ORDER BY ml_item_id, updated_at DESC)
@@ -130,7 +134,8 @@ async function loadLatestPurchaseCyclesByItem(mlItemIds: string[]) {
 
     (SELECT DISTINCT ON (ml_item_id) ${columns}
     FROM replenishment_cycles
-    WHERE ml_item_id IN (${Prisma.join(mlItemIds)})
+    WHERE organization_id = ${organizationId}
+      AND ml_item_id IN (${Prisma.join(mlItemIds)})
       AND kind::text = 'purchase'
       AND status::text = 'completed'
     ORDER BY ml_item_id, updated_at DESC)
@@ -191,11 +196,12 @@ function buildCyclesByItem(
 export async function loadDashboardPurchaseData(
   token: string,
   userId: number,
+  organizationId: string,
 ) {
   const windowDays = stockPlanningConfig.salesAverageWindowDays;
   const dateField = stockPlanningConfig.salesWindowDateField;
 
-  const allIds = await fetchOperationalListingIds(token, userId);
+  const allIds = await fetchOperationalListingIds(token, userId, organizationId);
   const [rawItems, salesByItem, warehouseStocks, replenishmentCycles, latestSnapshotById] =
     await Promise.all([
       fetchItemsByIdsBatched(token, allIds),
@@ -207,7 +213,7 @@ export async function loadDashboardPurchaseData(
         dateField,
       ),
       prisma.warehouseStock.findMany({
-        where: { mlItemId: { in: allIds } },
+        where: { organizationId, mlItemId: { in: allIds } },
         select: {
           mlItemId: true,
           quantity: true,
@@ -215,7 +221,7 @@ export async function loadDashboardPurchaseData(
           targetCoverageDays: true,
         },
       }),
-      loadLatestPurchaseCyclesByItem(allIds),
+      loadLatestPurchaseCyclesByItem(organizationId, allIds),
       loadLatestCatalogCompetitionSnapshots(allIds),
     ]);
   const items = rawItems.filter((item) => !isKitItem(item));

@@ -846,6 +846,7 @@ async function fetchFullInboundShipmentsBillingFallback(
 export async function fetchFullInboundShipmentsForPeriod(
   accessToken: string,
   sellerId: number,
+  organizationId: string,
   year: number,
   month: number,
   options?: { fullDetailsCache?: FullBillingDetailsCache },
@@ -854,6 +855,7 @@ export async function fetchFullInboundShipmentsForPeriod(
   const inventoryIds = await fetchSellerFulfillmentInventoryIds(
     accessToken,
     sellerId,
+    organizationId,
   );
   const cache = options?.fullDetailsCache;
 

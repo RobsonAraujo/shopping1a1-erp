@@ -87,9 +87,10 @@ export async function buildPmaAlertRows(
 export async function loadPmaAlerts(
   accessToken: string,
   userId: number,
+  organizationId: string,
 ): Promise<PmaAlertRow[]> {
   const productsWithPma = await prisma.product.findMany({
-    where: { pmaPrice: { not: null } },
+    where: { organizationId, pmaPrice: { not: null } },
     select: { sku: true, pmaPrice: true },
   });
   if (productsWithPma.length === 0) return [];
@@ -101,8 +102,8 @@ export async function loadPmaAlerts(
   }
 
   const [aliasMap, items] = await Promise.all([
-    loadSkuAliasMap(),
-    fetchOperationalListings(accessToken, userId),
+    loadSkuAliasMap(organizationId),
+    fetchOperationalListings(accessToken, userId, organizationId),
   ]);
 
   return buildPmaAlertRows(accessToken, pmaBySku, items, aliasMap);

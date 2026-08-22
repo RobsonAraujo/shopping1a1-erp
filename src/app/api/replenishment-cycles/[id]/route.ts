@@ -9,7 +9,7 @@ import {
 import {
   isValidStatusForKind,
 } from "@/lib/replenishment-cycle";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 import { parseJsonBody } from "@/lib/api-validation";
 import { prisma } from "@/lib/db";
@@ -24,17 +24,19 @@ const patchBodySchema = z.object({
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   const { id: cycleId } = await context.params;
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
-  const { token, userId } = auth;
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
+  const { token, userId, organizationId } = auth.ctx;
 
   const parsedBody = await parseJsonBody(request, patchBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data;
 
   try {
-    const cycle = await prisma.replenishmentCycle.findUnique({
-      where: { id: cycleId },
+    const cycle = await prisma.replenishmentCycle.findFirst({
+      where: { id: cycleId, organizationId },
       select: { kind: true, status: true },
     });
     if (!cycle) {
@@ -42,8 +44,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     if (body.advance === true) {
-      const nextStatus = await advanceReplenishmentCycle(cycleId, { accessToken: token });
-      const boards = await loadOperationsBoards(token, userId);
+      const nextStatus = await advanceReplenishmentCycle(organizationId, cycleId, {
+        accessToken: token,
+      });
+      const boards = await loadOperationsBoards(token, userId, organizationId);
       return NextResponse.json({ ok: true, nextStatus, ...boards });
     }
 
@@ -62,11 +66,16 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       });
     }
 
-    await transitionReplenishmentCycle(cycleId, status as ReplenishmentStatus, {
-      notes: typeof body.notes === "string" ? body.notes : undefined,
-      accessToken: token,
-    });
-    const boards = await loadOperationsBoards(token, userId);
+    await transitionReplenishmentCycle(
+      organizationId,
+      cycleId,
+      status as ReplenishmentStatus,
+      {
+        notes: typeof body.notes === "string" ? body.notes : undefined,
+        accessToken: token,
+      },
+    );
+    const boards = await loadOperationsBoards(token, userId, organizationId);
     return NextResponse.json({ ok: true, ...boards });
   } catch (e) {
     logServerError("api/replenishment-cycles/[id] PATCH", e);

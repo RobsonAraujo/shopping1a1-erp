@@ -5,16 +5,18 @@ import {
 } from "@/lib/catalog-report/catalog-competition-poll";
 import { recordCatalogPollRun } from "@/lib/catalog-report/catalog-competition-poll-stats";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 
 const bodySchema = z.object({
   itemIds: z.array(z.string()).optional(),
 });
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
-  const { token, userId } = auth;
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
+  const { token, userId, organizationId } = auth.ctx;
 
   let itemIds: string[] | undefined;
   try {
@@ -29,11 +31,13 @@ export async function POST(request: NextRequest) {
     const result = await pollCatalogCompetitionForSeller(
       token,
       userId,
+      organizationId,
       "manual_poll",
       itemIds,
     );
 
     await recordCatalogPollRun({
+      organizationId,
       source: "manual_poll",
       itemsChecked: result.checked,
       itemsChanged: result.changed,

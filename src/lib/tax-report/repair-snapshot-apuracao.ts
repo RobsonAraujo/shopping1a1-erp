@@ -1,3 +1,4 @@
+import { prisma } from "@/lib/db";
 import { normalizeProductSku } from "@/lib/product-pricing";
 import { resolveCanonicalSku, type SkuAliasMap } from "@/lib/product-sku-alias";
 import { loadSkuAliasMap } from "@/lib/product-sku-alias-data";
@@ -151,16 +152,31 @@ function needsApuracaoRepair(
   );
 }
 
+/**
+ * `sellerId` (não `organizationId`) porque os snapshots de relatório
+ * tributário (`TaxReportMonthSnapshot`) continuam escopados por seller ML,
+ * não por organização — resolve a org internamente via `OrganizationMlSeller`
+ * pra não propagar `organizationId` explícito por toda a cadeia de leitura
+ * de snapshot (loadTaxReportSnapshot e afins, chamadas em muitos lugares).
+ */
 export async function repairTaxReportPayload(
+  sellerId: number,
   payload: TaxReportPayload,
 ): Promise<TaxReportPayload> {
+  const link = await prisma.organizationMlSeller.findUnique({
+    where: { mlUserId: sellerId },
+    select: { organizationId: true },
+  });
+  if (!link) return repairTaxReportPayloadSync(payload);
+  const organizationId = link.organizationId;
+
   const synced = repairTaxReportPayloadSync(payload);
-  const aliasMap = await loadSkuAliasMap();
+  const aliasMap = await loadSkuAliasMap(organizationId);
   const detalhes = collectDetalhes(synced);
   if (detalhes.length === 0) return synced;
 
   const skus = [...new Set(detalhes.map((d) => d.transacao.sku).filter(Boolean))];
-  const custoBySku = await loadCustoBySkuMap(skus, aliasMap);
+  const custoBySku = await loadCustoBySkuMap(organizationId, skus, aliasMap);
   const needsCostRepair = needsCostEnrichmentRepair(
     detalhes.filter((d) => d.incluidoNaApuracao),
     custoBySku,
@@ -170,7 +186,7 @@ export async function repairTaxReportPayload(
   if (!needsApuracaoRepair(synced, aliasMap) && !needsCostRepair) return synced;
 
   const [config, icmsRates, cbsIbsVigencia] = await Promise.all([
-    loadTaxCompanyConfig(),
+    loadTaxCompanyConfig(organizationId),
     loadIcmsRatesMap(),
     loadCbsIbsVigencia(synced.year),
   ]);

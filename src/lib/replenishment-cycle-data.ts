@@ -46,27 +46,36 @@ function listingUpsertData(item: ItemBody) {
   };
 }
 
-function listingCreateData(item: ItemBody) {
+function listingCreateData(organizationId: string, item: ItemBody) {
   return {
+    organizationId,
     mlItemId: item.id,
     ...listingUpsertData(item),
   };
 }
 
-async function upsertListingForItem(item: ItemBody): Promise<void> {
+async function upsertListingForItem(
+  organizationId: string,
+  item: ItemBody,
+): Promise<void> {
   if (!item.id) return;
   await prisma.listing.upsert({
     where: { mlItemId: item.id },
-    create: listingCreateData(item),
+    create: listingCreateData(organizationId, item),
     update: listingUpsertData(item),
   });
 }
 
-async function ensureListingsForItems(items: ItemBody[]): Promise<void> {
+async function ensureListingsForItems(
+  organizationId: string,
+  items: ItemBody[],
+): Promise<void> {
   const chunkSize = 25;
   for (let i = 0; i < items.length; i += chunkSize) {
     const chunk = items.slice(i, i + chunkSize);
-    await Promise.all(chunk.map((item) => upsertListingForItem(item)));
+    await Promise.all(
+      chunk.map((item) => upsertListingForItem(organizationId, item)),
+    );
   }
 }
 
@@ -262,6 +271,7 @@ function rowToCycle(
  * identificado como fonte de egress alto no Supabase.
  */
 async function getLatestCyclesByItemAndKind(
+  organizationId: string,
   mlItemIds: string[],
   kind: OperationCycleKind,
 ): Promise<Map<string, CycleEntry>> {
@@ -280,7 +290,8 @@ async function getLatestCyclesByItemAndKind(
   const rows = await prisma.$queryRaw<LatestCycleRow[]>(Prisma.sql`
     (SELECT DISTINCT ON (ml_item_id) ${columns}
     FROM replenishment_cycles
-    WHERE ml_item_id IN (${Prisma.join(mlItemIds)})
+    WHERE organization_id = ${organizationId}
+      AND ml_item_id IN (${Prisma.join(mlItemIds)})
       AND kind::text = ${kind}
       AND status::text != 'completed'
     ORDER BY ml_item_id, updated_at DESC)
@@ -289,7 +300,8 @@ async function getLatestCyclesByItemAndKind(
 
     (SELECT DISTINCT ON (ml_item_id) ${columns}
     FROM replenishment_cycles
-    WHERE ml_item_id IN (${Prisma.join(mlItemIds)})
+    WHERE organization_id = ${organizationId}
+      AND ml_item_id IN (${Prisma.join(mlItemIds)})
       AND kind::text = ${kind}
       AND status::text = 'completed'
     ORDER BY ml_item_id, updated_at DESC)
@@ -310,6 +322,7 @@ async function getLatestCyclesByItemAndKind(
 }
 
 async function createCycleForItem(
+  organizationId: string,
   kind: OperationCycleKind,
   ctx: ItemPlanningContext,
   snapshot: ReplenishmentSnapshot,
@@ -321,11 +334,12 @@ async function createCycleForItem(
   await prisma.$transaction(async (tx) => {
     await tx.listing.upsert({
       where: { mlItemId },
-      create: listingCreateData({ ...ctx.item, id: mlItemId }),
+      create: listingCreateData(organizationId, { ...ctx.item, id: mlItemId }),
       update: listingUpsertData(ctx.item),
     });
     await tx.replenishmentCycle.create({
       data: {
+        organizationId,
         mlItemId,
         kind,
         status: initialStatus,
@@ -343,6 +357,7 @@ async function createCycleForItem(
 }
 
 async function maybeAutoCompletePurchaseCycle(
+  organizationId: string,
   active: NonNullable<CycleEntry["active"]>,
   ctx: ItemPlanningContext,
   snapshot: ReplenishmentSnapshot,
@@ -359,13 +374,14 @@ async function maybeAutoCompletePurchaseCycle(
   }
 
   await prisma.replenishmentCycle.update({
-    where: { id: active.id },
+    where: { id: active.id, organizationId },
     data: buildStatusTransition(record, "completed", snapshot),
   });
   return true;
 }
 
 async function maybeAutoCompleteFullCycle(
+  organizationId: string,
   active: NonNullable<CycleEntry["active"]>,
   ctx: ItemPlanningContext,
   snapshot: ReplenishmentSnapshot,
@@ -382,13 +398,14 @@ async function maybeAutoCompleteFullCycle(
   }
 
   await prisma.replenishmentCycle.update({
-    where: { id: active.id },
+    where: { id: active.id, organizationId },
     data: buildStatusTransition(record, "completed", snapshot),
   });
   return true;
 }
 
 export async function syncPurchaseCyclesForItems(
+  organizationId: string,
   items: ItemBody[],
   salesByItem: Record<string, number>,
   warehouseById: Record<
@@ -407,6 +424,7 @@ export async function syncPurchaseCyclesForItems(
   });
 
   const cycleMap = await getLatestCyclesByItemAndKind(
+    organizationId,
     items.map((item) => item.id),
     "purchase",
   );
@@ -421,7 +439,7 @@ export async function syncPurchaseCyclesForItems(
     );
 
     if (active) {
-      await maybeAutoCompletePurchaseCycle(active, ctx, snapshot);
+      await maybeAutoCompletePurchaseCycle(organizationId, active, ctx, snapshot);
       continue;
     }
 
@@ -437,11 +455,12 @@ export async function syncPurchaseCyclesForItems(
 
     if (!shouldCreate || !ctx.item.id.trim()) continue;
 
-    await createCycleForItem("purchase", ctx, snapshot, "attention");
+    await createCycleForItem(organizationId, "purchase", ctx, snapshot, "attention");
   }
 }
 
 export async function syncFullCyclesForItems(
+  organizationId: string,
   items: ItemBody[],
   salesByItem: Record<string, number>,
   warehouseById: Record<
@@ -460,6 +479,7 @@ export async function syncFullCyclesForItems(
   });
 
   const cycleMap = await getLatestCyclesByItemAndKind(
+    organizationId,
     items.map((item) => item.id),
     "full",
   );
@@ -474,7 +494,7 @@ export async function syncFullCyclesForItems(
     );
 
     if (active) {
-      await maybeAutoCompleteFullCycle(active, ctx, snapshot);
+      await maybeAutoCompleteFullCycle(organizationId, active, ctx, snapshot);
       continue;
     }
 
@@ -488,11 +508,12 @@ export async function syncFullCyclesForItems(
 
     if (!shouldCreate || !ctx.item.id.trim()) continue;
 
-    await createCycleForItem("full", ctx, snapshot, "attention");
+    await createCycleForItem(organizationId, "full", ctx, snapshot, "attention");
   }
 }
 
 export async function syncOperationCyclesForItems(
+  organizationId: string,
   items: ItemBody[],
   salesByItem: Record<string, number>,
   warehouseById: Record<
@@ -502,31 +523,21 @@ export async function syncOperationCyclesForItems(
 ): Promise<void> {
   return withReplenishmentSyncLock(async () => {
     if (items.length === 0) return;
-    await ensureListingsForItems(items);
-    await syncPurchaseCyclesForItems(items, salesByItem, warehouseById);
-    await syncFullCyclesForItems(items, salesByItem, warehouseById);
+    await ensureListingsForItems(organizationId, items);
+    await syncPurchaseCyclesForItems(organizationId, items, salesByItem, warehouseById);
+    await syncFullCyclesForItems(organizationId, items, salesByItem, warehouseById);
   });
 }
 
-/** @deprecated Use syncOperationCyclesForItems */
-export async function syncReplenishmentCyclesForItems(
-  items: ItemBody[],
-  salesByItem: Record<string, number>,
-  warehouseById: Record<
-    string,
-    { quantity: number; purchaseLeadTimeDays: number | null }
-  >,
-): Promise<void> {
-  return syncOperationCyclesForItems(items, salesByItem, warehouseById);
-}
-
 export async function syncPurchaseCycleFromWarehouse(
+  organizationId: string,
   mlItemId: string,
   warehouseQty: number,
   options?: { needsPurchaseAttention?: boolean },
 ): Promise<void> {
   const active = await prisma.replenishmentCycle.findFirst({
     where: {
+      organizationId,
       mlItemId,
       kind: "purchase",
       status: { not: "completed" },
@@ -561,17 +572,9 @@ export async function syncPurchaseCycleFromWarehouse(
   }
 
   await prisma.replenishmentCycle.update({
-    where: { id: active.id },
+    where: { id: active.id, organizationId },
     data: buildStatusTransition(record, "completed", snapshot),
   });
-}
-
-/** @deprecated Use syncPurchaseCycleFromWarehouse */
-export async function syncReplenishmentFromWarehouse(
-  mlItemId: string,
-  warehouseQty: number,
-): Promise<void> {
-  return syncPurchaseCycleFromWarehouse(mlItemId, warehouseQty);
 }
 
 function buildCardFromCycle(
@@ -621,6 +624,8 @@ async function resolveCycleSnapshot(
   },
   accessToken?: string,
 ): Promise<ReplenishmentSnapshot> {
+  // mlItemId já é único por org (item ML pertence a 1 seller, que pertence a
+  // no máximo 1 org) — sem risco de cross-tenant mesmo sem filtro aqui.
   const warehouse = await prisma.warehouseStock.findUnique({
     where: { mlItemId: cycle.mlItemId },
     select: { quantity: true, purchaseLeadTimeDays: true },
@@ -649,10 +654,11 @@ async function resolveCycleSnapshot(
 export async function loadOperationsBoards(
   token: string,
   userId: number,
+  organizationId: string,
 ): Promise<OperationsBoardsData> {
   const windowDays = stockPlanningConfig.salesAverageWindowDays;
   const dateField = stockPlanningConfig.salesWindowDateField;
-  const listingIds = await fetchOperationalListingIds(token, userId);
+  const listingIds = await fetchOperationalListingIds(token, userId, organizationId);
 
   const [rawItems, salesByItem, warehouseStocks] = await Promise.all([
     fetchItemsByIdsBatched(token, listingIds),
@@ -664,7 +670,7 @@ export async function loadOperationsBoards(
       dateField,
     ),
     prisma.warehouseStock.findMany({
-      where: { mlItemId: { in: listingIds } },
+      where: { organizationId, mlItemId: { in: listingIds } },
       select: {
         mlItemId: true,
         quantity: true,
@@ -684,10 +690,11 @@ export async function loadOperationsBoards(
     ]),
   );
 
-  await syncOperationCyclesForItems(items, salesByItem, warehouseById);
+  await syncOperationCyclesForItems(organizationId, items, salesByItem, warehouseById);
 
   const activeCycles = await prisma.replenishmentCycle.findMany({
     where: {
+      organizationId,
       mlItemId: { in: listingIds },
       status: { not: "completed" },
     },
@@ -754,37 +761,24 @@ export async function loadOperationsBoards(
   };
 }
 
-/** @deprecated Use loadOperationsBoards */
-export async function loadReplenishmentBoard(
-  token: string,
-  userId: number,
-): Promise<OperationsBoardsData> {
-  return loadOperationsBoards(token, userId);
-}
-
-export async function loadOperationsSummaryFromDb(): Promise<OperationsSummaryCounts> {
+export async function loadOperationsSummaryFromDb(
+  organizationId: string,
+): Promise<OperationsSummaryCounts> {
   const cycles = await prisma.replenishmentCycle.findMany({
-    where: { status: { not: "completed" } },
+    where: { organizationId, status: { not: "completed" } },
     select: { kind: true, status: true },
   });
   return summarizeOperationsCounts(cycles);
 }
 
-export async function loadOperationsSummary(
-  token: string,
-  userId: number,
-): Promise<OperationsSummaryCounts> {
-  const boards = await loadOperationsBoards(token, userId);
-  return boards.summary;
-}
-
 export async function transitionReplenishmentCycle(
+  organizationId: string,
   cycleId: string,
   nextStatus: ReplenishmentStatus,
   options?: { notes?: string | null; accessToken?: string },
 ): Promise<void> {
-  const cycle = await prisma.replenishmentCycle.findUnique({
-    where: { id: cycleId },
+  const cycle = await prisma.replenishmentCycle.findFirst({
+    where: { id: cycleId, organizationId },
   });
   if (!cycle) {
     throw new Error("Cycle not found");
@@ -802,7 +796,7 @@ export async function transitionReplenishmentCycle(
   );
 
   await prisma.replenishmentCycle.update({
-    where: { id: cycleId },
+    where: { id: cycleId, organizationId },
     data: {
       ...patch,
       ...(options?.notes !== undefined ? { notes: options.notes } : {}),
@@ -811,11 +805,12 @@ export async function transitionReplenishmentCycle(
 }
 
 export async function advanceReplenishmentCycle(
+  organizationId: string,
   cycleId: string,
   options?: { accessToken?: string },
 ): Promise<ReplenishmentStatus | null> {
-  const cycle = await prisma.replenishmentCycle.findUnique({
-    where: { id: cycleId },
+  const cycle = await prisma.replenishmentCycle.findFirst({
+    where: { id: cycleId, organizationId },
   });
   if (!cycle || !isActiveReplenishmentStatus(cycle.status)) {
     throw new Error("Cycle not found or inactive");
@@ -824,7 +819,7 @@ export async function advanceReplenishmentCycle(
   const nextStatus = nextStatusForKind(cycle.kind, cycle.status);
   if (!nextStatus) return null;
 
-  await transitionReplenishmentCycle(cycleId, nextStatus, {
+  await transitionReplenishmentCycle(organizationId, cycleId, nextStatus, {
     accessToken: options?.accessToken,
   });
   return nextStatus;

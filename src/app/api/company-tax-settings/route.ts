@@ -14,7 +14,7 @@ import {
   type WholesaleReductionSettings,
 } from "@/lib/wholesale-pricing";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { parseJsonBody } from "@/lib/api-validation";
 
 function wholesaleReductionsResponse(
@@ -46,12 +46,13 @@ function settingsResponse(settings: CompanySettings) {
 }
 
 export async function GET() {
-  if (!(await requireAuth())) {
-    return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
 
   try {
-    const settings = await ensureCompanySettings();
+    const settings = await ensureCompanySettings(auth.ctx.organizationId);
     return NextResponse.json(settingsResponse(settings));
   } catch (e) {
     logServerError("api/company-tax-settings GET", e);
@@ -76,15 +77,17 @@ const patchBodySchema = z.object({
 });
 
 export async function PATCH(request: NextRequest) {
-  if (!(await requireAuth())) {
-    return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
+  const { organizationId } = auth.ctx;
 
   const parsedBody = await parseJsonBody(request, patchBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data;
 
-  const current = await ensureCompanySettings();
+  const current = await ensureCompanySettings(organizationId);
 
   let pisCofinsPercent = current.pisCofinsPercent;
   if (body.pisCofinsPercent !== undefined) {
@@ -176,8 +179,9 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const row = await prisma.companyTaxSettings.upsert({
-      where: { id: "default" },
+      where: { organizationId },
       create: {
+        organizationId,
         pisCofinsPercent: pisCofinsPercent ?? DEFAULT_PIS_COFINS_PERCENT,
         wholesaleLevel1ReductionPercent: level1,
         wholesaleLevel2ReductionPercent: level2,

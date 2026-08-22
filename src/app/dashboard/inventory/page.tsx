@@ -20,6 +20,7 @@ import { loadStockReportProductsBySku } from "@/lib/product-data";
 import type { StockReportProductInfo } from "@/lib/inventory/inventory-stock-report";
 import { prisma } from "@/lib/db";
 import { readSession } from "@/lib/mercadolibre/session";
+import { getOrganizationContext } from "@/lib/organizations/context";
 
 function stockUnits(value: number | null | undefined): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return 0;
@@ -29,9 +30,11 @@ function stockUnits(value: number | null | undefined): number {
 async function InventoryDataSection({
   token,
   userId,
+  organizationId,
 }: {
   token: string;
   userId: number;
+  organizationId: string;
 }) {
   let total = 0;
   let statusCounts = { active: 0, paused: 0, other: 0 };
@@ -40,7 +43,9 @@ async function InventoryDataSection({
   let rows: InventoryRow[] = [];
 
   try {
-    const items = (await fetchOperationalListings(token, userId)).filter(
+    const items = (
+      await fetchOperationalListings(token, userId, organizationId)
+    ).filter(
       (item) => !isKitItem(item),
     );
     const fulfillmentStockByItem = await enrichItemsWithFulfillmentStock(
@@ -61,7 +66,7 @@ async function InventoryDataSection({
     let leadTimeById: Record<string, number | null> = {};
     try {
       const stocks = await prisma.warehouseStock.findMany({
-        where: { mlItemId: { in: ids } },
+        where: { organizationId, mlItemId: { in: ids } },
         select: {
           mlItemId: true,
           quantity: true,
@@ -129,7 +134,7 @@ async function InventoryDataSection({
     const skus = rows
       .map((row) => row.sku)
       .filter((sku): sku is string => Boolean(sku?.trim()));
-    productsBySku = await loadStockReportProductsBySku(skus);
+    productsBySku = await loadStockReportProductsBySku(organizationId, skus);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro ao carregar anúncios";
     return (
@@ -180,6 +185,11 @@ export default async function InventoryPage() {
     return null;
   }
 
+  const orgContext = await getOrganizationContext();
+  if (orgContext.status !== "active") {
+    return null;
+  }
+
   return (
     <div className="space-y-8">
       <div>
@@ -199,7 +209,11 @@ export default async function InventoryPage() {
       </div>
 
       <Suspense fallback={<InventoryStockTableSkeleton />}>
-        <InventoryDataSection token={token} userId={userId} />
+        <InventoryDataSection
+          token={token}
+          userId={userId}
+          organizationId={orgContext.organization.id}
+        />
       </Suspense>
     </div>
   );

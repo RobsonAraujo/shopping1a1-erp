@@ -69,6 +69,7 @@ import { slimTaxReportPayloadForStorage } from "@/lib/tax-report/service/snapsho
 export async function generateMonthlyTaxReport(input: {
   accessToken: string;
   sellerId: number;
+  organizationId: string;
   year: number;
   month: number;
   overrides?: Record<string, ManualFiscalOverride>;
@@ -159,8 +160,9 @@ export async function generateMonthlyTaxReport(input: {
   });
 
   const allSkus = collectSkusFromOrders(orders, itemById);
-  const aliasMap = await loadSkuAliasMap();
+  const aliasMap = await loadSkuAliasMap(input.organizationId);
   const custoBySku: Map<string, CustoProduto> = await loadCustoBySkuMap(
+    input.organizationId,
     allSkus,
     aliasMap,
   );
@@ -171,7 +173,7 @@ export async function generateMonthlyTaxReport(input: {
   });
 
   const [config, icmsRates, cbsIbsVigencia] = await Promise.all([
-    loadTaxCompanyConfig(),
+    loadTaxCompanyConfig(input.organizationId),
     loadIcmsRatesMap(),
     loadCbsIbsVigencia(input.year),
   ]);
@@ -258,9 +260,9 @@ export async function generateMonthlyTaxReport(input: {
 
   const [fixedCostItems, fixedCostExplicitValues, fixedCostExcludedMonths] =
     await Promise.all([
-      loadTaxFixedCostItems(),
-      loadTaxFixedCostExplicitValues(input.year),
-      loadTaxFixedCostExcludedMonths(input.year),
+      loadTaxFixedCostItems(input.organizationId),
+      loadTaxFixedCostExplicitValues(input.organizationId, input.year),
+      loadTaxFixedCostExcludedMonths(input.organizationId, input.year),
     ]);
   const fixedCostResolution = resolveFixedCostCreditForMonth({
     items: fixedCostItems.map((item) => ({
@@ -325,6 +327,7 @@ export async function generateMonthlyTaxReport(input: {
 }
 
 export async function saveTaxReportSnapshot(
+  organizationId: string,
   sellerId: number,
   payload: TaxReportPayload,
 ): Promise<void> {
@@ -341,6 +344,7 @@ export async function saveTaxReportSnapshot(
       },
     },
     create: {
+      organizationId,
       sellerId,
       year: payload.year,
       month: payload.month,
@@ -366,7 +370,7 @@ export async function loadTaxReportSnapshot(
   });
   if (!row) return null;
   const payload = row.payload as unknown as TaxReportPayload;
-  return repairTaxReportPayload(payload);
+  return repairTaxReportPayload(sellerId, payload);
 }
 
 export type TaxReportSnapshotPeriod = {
@@ -400,7 +404,7 @@ export async function loadLatestTaxReportSnapshot(
   });
   if (!row) return null;
   const payload = row.payload as unknown as TaxReportPayload;
-  return repairTaxReportPayload(payload);
+  return repairTaxReportPayload(sellerId, payload);
 }
 
 /** Últimos `limit` snapshots do seller, do mais recente ao mais antigo. */
@@ -415,7 +419,7 @@ export async function loadRecentTaxReportSnapshots(
   });
   return Promise.all(
     rows.map((row) =>
-      repairTaxReportPayload(row.payload as unknown as TaxReportPayload),
+      repairTaxReportPayload(sellerId, row.payload as unknown as TaxReportPayload),
     ),
   );
 }
@@ -443,7 +447,7 @@ export async function loadRecentTaxReportSnapshotsUpTo(
   });
   return Promise.all(
     rows.map((row) =>
-      repairTaxReportPayload(row.payload as unknown as TaxReportPayload),
+      repairTaxReportPayload(sellerId, row.payload as unknown as TaxReportPayload),
     ),
   );
 }

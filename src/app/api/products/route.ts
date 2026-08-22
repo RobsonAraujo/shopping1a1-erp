@@ -9,7 +9,7 @@ import {
 } from "@/lib/product-data";
 import { loadProductTaxFromLatestReport } from "@/lib/product-tax-from-report";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { parseJsonBody } from "@/lib/api-validation";
 
 const productWriteSchema = z.object({
@@ -28,16 +28,17 @@ const productWriteSchema = z.object({
 });
 
 export async function GET() {
-  const auth = await requireAuth();
-  if (!auth) {
-    return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
+  const { userId, organizationId } = auth.ctx;
 
   try {
     const [settings, products, taxFromReport] = await Promise.all([
-      ensureCompanySettings(),
-      prisma.product.findMany({ orderBy: { sku: "asc" } }),
-      loadProductTaxFromLatestReport(auth.userId),
+      ensureCompanySettings(organizationId),
+      prisma.product.findMany({ where: { organizationId }, orderBy: { sku: "asc" } }),
+      loadProductTaxFromLatestReport(userId),
     ]);
     return NextResponse.json({
       pisCofinsPercent: settings.pisCofinsPercent,
@@ -55,9 +56,11 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  if (!(await requireAuth())) {
-    return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
+  const { organizationId } = auth.ctx;
 
   const parsedBody = await parseJsonBody(request, productWriteSchema);
   if (!parsedBody.ok) return parsedBody.response;
@@ -69,8 +72,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const settings = await ensureCompanySettings();
-    const data = productWriteToPrismaData(parsed);
+    const settings = await ensureCompanySettings(organizationId);
+    const data = productWriteToPrismaData(organizationId, parsed);
     const product = await prisma.product.create({ data });
     return NextResponse.json({
       product: buildProductView(product, settings.pisCofinsPercent),

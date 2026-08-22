@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { normalizeProductSku } from "@/lib/product-pricing";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { parseJsonBody } from "@/lib/api-validation";
 
 const kitWriteSchema = z.object({
@@ -24,12 +24,15 @@ const kitWriteSchema = z.object({
 });
 
 export async function GET() {
-  if (!(await requireAuth())) {
-    return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
+  const { organizationId } = auth.ctx;
 
   try {
     const kits = await prisma.kit.findMany({
+      where: { organizationId },
       orderBy: { createdAt: "desc" },
       include: { items: true },
     });
@@ -43,9 +46,11 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  if (!(await requireAuth())) {
-    return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
+  const { organizationId } = auth.ctx;
 
   const parsedBody = await parseJsonBody(request, kitWriteSchema);
   if (!parsedBody.ok) return parsedBody.response;
@@ -54,10 +59,12 @@ export async function POST(request: NextRequest) {
   try {
     const kit = await prisma.kit.create({
       data: {
+        organizationId,
         mlItemId: parsed.mlItemId,
         title: parsed.title,
         items: {
           create: parsed.items.map((item) => ({
+            organizationId,
             sku: item.sku,
             quantity: item.quantity,
           })),

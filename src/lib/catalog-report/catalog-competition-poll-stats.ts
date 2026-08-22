@@ -64,6 +64,7 @@ export function getTodayRangeInTimezone(
 }
 
 export async function getCatalogPollStats(
+  organizationId: string,
   timeZone: string = reportsConfig.catalogCompetitionTimezone,
 ) {
   try {
@@ -76,12 +77,13 @@ export async function getCatalogPollStats(
     const [todayCount, lastRun] = await Promise.all([
       pollRun.count({
         where: {
+          organizationId,
           ranAt: { gte: from, lte: to },
           ok: true,
         },
       }),
       pollRun.findFirst({
-        where: { ok: true },
+        where: { organizationId, ok: true },
         orderBy: { ranAt: "desc" },
         select: { ranAt: true, source: true },
       }),
@@ -100,6 +102,7 @@ export async function getCatalogPollStats(
 }
 
 export async function recordCatalogPollRun(params: {
+  organizationId: string;
   source: "cron" | "manual_poll";
   itemsChecked: number;
   itemsChanged: number;
@@ -114,6 +117,7 @@ export async function recordCatalogPollRun(params: {
     }
     return await pollRun.create({
       data: {
+        organizationId: params.organizationId,
         source: params.source,
         itemsChecked: params.itemsChecked,
         itemsChanged: params.itemsChanged,

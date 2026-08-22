@@ -5,7 +5,7 @@ import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import { prisma } from "@/lib/db";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { parseJsonBody } from "@/lib/api-validation";
 
 type RouteContext = { params: Promise<{ mlItemId: string }> };
@@ -33,9 +33,11 @@ function listingUpsertData(item: ItemBody) {
 
 export async function POST(request: NextRequest, context: RouteContext) {
   const { mlItemId } = await context.params;
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
-  const { token, userId } = auth;
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
+  const { token, userId, organizationId } = auth.ctx;
 
   const parsedBody = await parseJsonBody(request, ackBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
@@ -63,6 +65,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       await tx.listing.upsert({
         where: { mlItemId },
         create: {
+          organizationId,
           mlItemId,
           ...listingUpsertData(item),
         },
@@ -74,6 +77,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           mlItemId_kind: { mlItemId, kind },
         },
         create: {
+          organizationId,
           mlItemId,
           kind,
           mlAvailableQuantity,

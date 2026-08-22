@@ -4,7 +4,7 @@ import { fetchOperationalListings } from "@/lib/mercadolibre/api";
 import { isKitItem } from "@/lib/mercadolibre/item-sku";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 
 export type KitCandidate = {
   mlItemId: string;
@@ -13,16 +13,18 @@ export type KitCandidate = {
 };
 
 export async function GET() {
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
-  const { token, userId } = auth;
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
+  const { token, userId, organizationId } = auth.ctx;
 
   try {
-    const items = await fetchOperationalListings(token, userId);
+    const items = await fetchOperationalListings(token, userId, organizationId);
     const kitItems = items.filter((item) => isKitItem(item));
 
     const registered = await prisma.kit.findMany({
-      where: { mlItemId: { in: kitItems.map((item) => item.id) } },
+      where: { organizationId, mlItemId: { in: kitItems.map((item) => item.id) } },
       select: { mlItemId: true },
     });
     const registeredSet = new Set(registered.map((row) => row.mlItemId));

@@ -10,6 +10,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { readSession } from "@/lib/mercadolibre/session";
+import { getOrganizationContext } from "@/lib/organizations/context";
 import { loadDashboardPurchaseData } from "@/lib/compras/dashboard-purchase-data";
 import { loadLatestTaxReportSnapshot } from "@/lib/tax-report/service/generate-monthly-report";
 import { mapToSlowMoverRows } from "@/lib/insights/slow-movers";
@@ -32,12 +33,14 @@ function plural(n: number, singular: string, plural_: string) {
 async function InsightsDataSection({
   token,
   userId,
+  organizationId,
 }: {
   token: string;
   userId: number;
+  organizationId: string;
 }) {
   const [purchaseData, taxSnapshot] = await Promise.all([
-    loadDashboardPurchaseData(token, userId).catch(() => null),
+    loadDashboardPurchaseData(token, userId, organizationId).catch(() => null),
     loadLatestTaxReportSnapshot(userId).catch(() => null),
   ]);
 
@@ -169,6 +172,9 @@ export default async function InsightsPage() {
 
   if (!token || userId === undefined) return null;
 
+  const orgContext = await getOrganizationContext();
+  if (orgContext.status !== "active") return null;
+
   return (
     <div className="space-y-8">
       <header className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-6 py-7 sm:px-8">
@@ -181,7 +187,11 @@ export default async function InsightsPage() {
       </header>
 
       <Suspense fallback={<InsightsPageSkeleton />}>
-        <InsightsDataSection token={token} userId={userId} />
+        <InsightsDataSection
+          token={token}
+          userId={userId}
+          organizationId={orgContext.organization.id}
+        />
       </Suspense>
     </div>
   );

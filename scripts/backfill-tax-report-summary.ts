@@ -32,7 +32,7 @@ async function main() {
 
   for (const row of rows) {
     const payload = row.payload as unknown as TaxReportPayload;
-    const repaired = await repairTaxReportPayload(payload);
+    const repaired = await repairTaxReportPayload(row.seller_id, payload);
     const summary = stripTransacoesForResponse(repaired);
 
     await prisma.taxReportMonthSnapshot.update({

@@ -10,6 +10,7 @@ import { DashboardSummaryClient } from "@/components/home/dashboard-summary-clie
 import { Card, CardContent } from "@/components/ui/card";
 import { fetchMe } from "@/lib/mercadolibre/api";
 import { readSession } from "@/lib/mercadolibre/session";
+import { getOrganizationContext } from "@/lib/organizations/context";
 import {
   buildSellerReputationBadge,
   type SellerReputationBadge,
@@ -21,11 +22,13 @@ import { cn } from "@/lib/utils";
 async function PmaAlertSection({
   token,
   userId,
+  organizationId,
 }: {
   token: string;
   userId: number;
+  organizationId: string;
 }) {
-  const rows = await loadPmaAlerts(token, userId).catch(() => []);
+  const rows = await loadPmaAlerts(token, userId, organizationId).catch(() => []);
   return <DashboardPmaAlertPanel rows={rows} />;
 }
 
@@ -174,13 +177,18 @@ export default async function DashboardPage() {
     return null;
   }
 
+  const orgContext = await getOrganizationContext();
+  if (orgContext.status !== "active") {
+    return null;
+  }
+
   let operationsSummary: Awaited<
     ReturnType<typeof loadOperationsSummaryFromDb>
   > | null = null;
   let loadError: string | null = null;
 
   try {
-    operationsSummary = await loadOperationsSummaryFromDb();
+    operationsSummary = await loadOperationsSummaryFromDb(orgContext.organization.id);
   } catch (e) {
     loadError = e instanceof Error ? e.message : "Erro ao carregar início";
   }
@@ -237,7 +245,11 @@ export default async function DashboardPage() {
           )}
 
           <Suspense fallback={<PmaAlertSkeleton />}>
-            <PmaAlertSection token={token} userId={userId} />
+            <PmaAlertSection
+              token={token}
+              userId={userId}
+              organizationId={orgContext.organization.id}
+            />
           </Suspense>
 
           <section className="space-y-3">

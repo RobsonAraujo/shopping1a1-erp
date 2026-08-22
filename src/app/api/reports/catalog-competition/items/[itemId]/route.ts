@@ -10,7 +10,7 @@ import {
   type CompetitionPoint,
   type CompetitionStatus,
 } from "@/lib/catalog-competition";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import {
   countItemSaleEventsBetween,
   fetchItemSaleEventsInDateRange,
@@ -157,9 +157,11 @@ function snapshotToPoint(
 
 export async function GET(request: NextRequest, context: RouteContext) {
   const { itemId } = await context.params;
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
-  const { token, userId } = auth;
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
+  const { token, userId, organizationId } = auth.ctx;
 
   const tz = request.nextUrl.searchParams.get("tz") ?? reportsConfig.catalogCompetitionTimezone;
   const fromDateOnly = parseDateOnlyParamInTz(
@@ -183,7 +185,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   try {
     const listing = await prisma.listing.findUnique({
-      where: { mlItemId: itemId },
+      where: { mlItemId: itemId, organizationId },
       select: {
         mlItemId: true,
         titleSnapshot: true,
@@ -202,7 +204,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     const [baseline, snapshots] = await Promise.all([
       prisma.catalogCompetitionSnapshot.findFirst({
-        where: { mlItemId: itemId, snapshotAt: { lt: from } },
+        where: { mlItemId: itemId, organizationId, snapshotAt: { lt: from } },
         select: {
           snapshotAt: true,
           status: true,
@@ -213,7 +215,11 @@ export async function GET(request: NextRequest, context: RouteContext) {
         orderBy: { snapshotAt: "desc" },
       }),
       prisma.catalogCompetitionSnapshot.findMany({
-        where: { mlItemId: itemId, snapshotAt: { gte: from, lte: to } },
+        where: {
+          mlItemId: itemId,
+          organizationId,
+          snapshotAt: { gte: from, lte: to },
+        },
         select: {
           snapshotAt: true,
           status: true,

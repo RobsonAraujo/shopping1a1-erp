@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { parseJsonBody } from "@/lib/api-validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -19,9 +19,11 @@ const patchBodySchema = z
   });
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
-  if (!(await requireAuth())) {
-    return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
+  const { organizationId } = auth.ctx;
 
   const { id } = await context.params;
   const parsedBody = await parseJsonBody(request, patchBodySchema);
@@ -30,7 +32,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   try {
     const item = await prisma.dreCostItem.update({
-      where: { id },
+      where: { id, organizationId },
       data,
       select: { id: true, name: true, sortOrder: true, recurring: true },
     });
@@ -44,15 +46,17 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 }
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {
-  if (!(await requireAuth())) {
-    return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
+  const { organizationId } = auth.ctx;
 
   const { id } = await context.params;
 
   try {
     await prisma.dreCostItem.update({
-      where: { id },
+      where: { id, organizationId },
       data: { active: false },
     });
     return NextResponse.json({ ok: true });

@@ -8,7 +8,7 @@ Documento de **design futuro**. Nenhum destes modelos existe no Prisma hoje. Ser
 - **User** = pessoa que acessa o ERP (vários por organização, com papéis)
 - **OrganizationMlSeller** = conta Mercado Livre vinculada à organização (1 org : N sellers ML)
 
-O login do ERP **não** será apenas OAuth do ML. O ML permanece como integração para buscar pedidos, anúncios e billing.
+**Decidido (2026-08-21):** o login do ERP continua sendo só OAuth do ML — sem email/senha nem SSO nesta fase. O ML é ao mesmo tempo a identidade de login (`mlUserId`) e a integração para buscar pedidos/anúncios/billing. Os modelos abaixo (`User`, `OrganizationMember`) são implementados mesmo assim, para deixar o schema pronto para multiusuário (dono + contador, por exemplo) sem precisar de outra migração grande depois — mas na prática, hoje, cada organização só tem 1 `User` (o dono), criado automaticamente no primeiro login.
 
 ## Diagrama de relacionamento
 
@@ -53,12 +53,20 @@ erDiagram
 ### Organization
 
 ```prisma
+enum OrganizationStatus { trialing active past_due canceled }
+
 model Organization {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id              String             @id @default(cuid())
+  name            String
+  slug            String             @unique
+  /// Status de pagamento — trocado manualmente por enquanto (rota admin ou
+  /// Prisma Studio). Desenhado para um gateway real (Mercado Pago/Stripe)
+  /// escrever aqui via webhook no futuro, sem nova migration.
+  status          OrganizationStatus @default(trialing)
+  statusUpdatedAt DateTime           @default(now()) @map("status_updated_at")
+  statusNote      String?            @map("status_note") @db.Text
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
 
   members     OrganizationMember[]
   mlSellers   OrganizationMlSeller[]
@@ -68,12 +76,17 @@ model Organization {
 }
 ```
 
+Regra central de gate: org com `status` fora de `[trialing, active]` consegue logar e ver a casca do dashboard, mas nenhuma página renderiza dado de negócio e nenhuma rota de API roda query pesada ou chamada ao Mercado Livre — ver `requireOrganization()` no plano de implementação.
+
 ### User
 
 ```prisma
 model User {
   id        String   @id @default(cuid())
-  email     String   @unique
+  /// Nullable: a resposta de /users/me do ML (UserMe.email?: string) não garante
+  /// e-mail. Não é usado para autenticação — login é sempre por mlUserId via
+  /// OrganizationMlSeller.
+  email     String?  @unique
   name      String?
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -119,6 +132,8 @@ model OrganizationMlSeller {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@id([organizationId, mlUserId])
+  @@unique([mlUserId]) // fix (2026-08-21): PK composta sozinha não impede o
+                       // mesmo mlUserId em 2 orgs — precisa do unique isolado
   @@map("organization_ml_sellers")
 }
 ```
@@ -143,19 +158,16 @@ Tabelas que ganham `organizationId` (FK obrigatório após backfill):
 
 | Tabela atual | Mudança de unique |
 |--------------|-------------------|
-| `products` | `@@unique([organizationId, sku])` |
-| `company_tax_settings` | uma linha por org (remover `id: "default"`) |
+| `products` | PK vira `id` sintético (cuid); `sku` deixa de ser `@id`; `@@unique([organizationId, sku])`. `kit_items`, `product_sku_aliases`, `dre_product_cost_levelings` trocam a FK para a chave composta `[organizationId, sku]` |
+| `company_tax_settings` | uma linha por org (remover `id: "default"`); `@@unique([organizationId])` |
 | `dre_month_snapshots` | `@@unique([organizationId, year, month])` |
-| `listings` | `organizationId` + índice (PK `ml_item_id` pode permanecer) |
-| `warehouse_stock` | via listing ou `organizationId` |
-| `dre_cost_items` | `organizationId` |
-| `tax_report_month_snapshots` | considerar `@@unique([organizationId, sellerId, year, month])` |
+| `listings`, `kits`, `warehouse_stock`, `replenishment_cycles`, `catalog_competition_snapshots`, `stock_attention_acknowledgements` | `organizationId` como coluna simples (PK natural `ml_item_id` já é única por seller, que já é único por org — sem virar chave composta) |
+| `dre_cost_items`, `dre_cost_month_values`, `tax_fixed_cost_items`, `tax_fixed_cost_month_values`, `tax_fixed_cost_month_exclusions`, `full_shipments`, `catalog_competition_poll_runs`, `revenue_simulations` | `organizationId` (PK cuid já existe) |
+| `tax_report_month_snapshots` | `@@unique([organizationId, sellerId, year, month])` (mantém `sellerId` — útil se uma org tiver >1 seller) |
 
-Tabelas que podem permanecer **globais** (referência nacional):
+Tabelas que permanecem **globais**, sem override por org (referência nacional): `cbs_ibs_vigencia`, `taxpayer_verification_cache`, `flex_distance_tiers`.
 
-- `cbs_ibs_vigencia`
-- `taxpayer_verification_cache`
-- `icms_internal_rates` (seed) + futura tabela de override por org, se necessário
+`icms_internal_rates`: fica **global por padrão, com override opcional por org** — ganha `organizationId` nullable (PK muda de `uf` para `id` sintético, `@@unique([organizationId, uf])`); lookup tenta o override da org primeiro, cai para a linha `organizationId: null` (padrão nacional). Sem UI de edição do override ainda, só a capacidade no schema.
 
 ## Backfill da instância atual
 
@@ -168,7 +180,11 @@ Na primeira migração multi-tenant:
 
 ## Decisões em aberto
 
-- Formato de login ERP (email/senha, magic link, SSO)
-- URL com prefixo `/org/[slug]/...` vs org implícita na sessão
-- Billing e limites por plano (fase posterior)
-- Um seller ML pode pertencer a mais de uma org? (recomendação: **não**)
+- URL com prefixo `/org/[slug]/...` vs org implícita na sessão — **por enquanto: implícita na sessão** (v1, sem seletor de org)
+- Billing automático via gateway (Stripe/Mercado Pago) e limites por plano — fase posterior; hoje o status é manual (`Organization.status`)
+- Override de `IcmsInternalRate` por organização — schema pronto (`organizationId` opcional), sem UI ainda
+
+## Decisões fechadas (2026-08-21)
+
+- **Formato de login ERP: só OAuth do Mercado Livre.** Sem email/senha, sem magic link, sem SSO nesta fase.
+- **Um seller ML pode pertencer a mais de uma org? Não** — reforçado por `@@unique([mlUserId])` em `OrganizationMlSeller` (ver acima).

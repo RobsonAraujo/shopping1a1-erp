@@ -9,9 +9,96 @@ datasource db {
   provider = "postgresql"
 }
 
+enum OrganizationRole {
+  owner
+  admin
+  member
+}
+
+enum OrganizationStatus {
+  trialing
+  active
+  past_due
+  canceled
+}
+
+/// Cliente SaaS (empresa que usa o ERP). Login continua sendo só OAuth do
+/// Mercado Livre — `Organization` é resolvida a partir do `mlUserId` da
+/// sessão via `OrganizationMlSeller`, não por um login próprio do ERP.
+model Organization {
+  id              String             @id @default(cuid())
+  name            String
+  slug            String             @unique
+  /// Status de pagamento — trocado manualmente por enquanto (rota admin ou
+  /// Prisma Studio). Desenhado para um gateway real (Mercado Pago/Stripe)
+  /// escrever aqui via webhook no futuro, sem nova migration.
+  status          OrganizationStatus @default(trialing)
+  statusUpdatedAt DateTime           @default(now()) @map("status_updated_at")
+  statusNote      String?            @map("status_note") @db.Text
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  members   OrganizationMember[]
+  mlSellers OrganizationMlSeller[]
+
+  @@map("organizations")
+}
+
+/// Pessoa com acesso ao ERP. Hoje só existe 1 User por Organization (o dono,
+/// criado automaticamente no primeiro login OAuth do ML) — o modelo já vem
+/// pronto para múltiplos usuários por organização numa fase futura.
+model User {
+  id        String   @id @default(cuid())
+  /// Nullable: a resposta de /users/me do ML (UserMe.email?: string) não
+  /// garante e-mail. Não é usado para autenticação — login é sempre por
+  /// mlUserId via OrganizationMlSeller.
+  email     String?  @unique
+  name      String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  memberships OrganizationMember[]
+
+  @@map("users")
+}
+
+model OrganizationMember {
+  organizationId String           @map("organization_id")
+  userId         String           @map("user_id")
+  role           OrganizationRole @default(owner)
+  createdAt      DateTime         @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId, userId])
+  @@map("organization_members")
+}
+
+/// Vínculo entre uma organização e uma conta ML. `mlUserId` é único: 1 seller
+/// ML pertence a no máximo 1 organização.
+model OrganizationMlSeller {
+  organizationId          String    @map("organization_id")
+  mlUserId                Int       @map("ml_user_id")
+  isPrimary               Boolean   @default(true) @map("is_primary")
+  linkedAt                DateTime  @default(now()) @map("linked_at")
+  /// Última vez que o cron de catálogo processou este seller — usado pra
+  /// rotacionar o lote a cada execução (mais antigo primeiro), sem precisar
+  /// de uma tabela de cursor separada. Atualizado mesmo em caso de erro, pra
+  /// um seller com falha não travar a rotação dos outros.
+  lastCatalogCronPolledAt DateTime? @map("last_catalog_cron_polled_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId, mlUserId])
+  @@unique([mlUserId])
+  @@map("organization_ml_sellers")
+}
+
 /// Anúncio sincronizado do Mercado Livre (chave = ml_item_id, ex. MLB…).
 model Listing {
   mlItemId           String                    @id @map("ml_item_id")
+  organizationId     String                    @map("organization_id")
   titleSnapshot      String?                   @map("title_snapshot")
   skuSnapshot        String?                   @map("sku_snapshot")
   imageUrlSnapshot   String?                   @map("image_url_snapshot")
@@ -34,6 +121,7 @@ model Listing {
   replenishmentCycles            ReplenishmentCycle[]
 
   @@index([activeOnMl])
+  @@index([organizationId])
   @@map("listings")
 }
 
@@ -79,6 +167,7 @@ enum FullShipmentSource {
 /// Envio de estoque ao Mercado Livre Full (coleta) com custo e unidades.
 model FullShipment {
   id                String             @id @default(cuid())
+  organizationId    String             @map("organization_id")
   shippedAt         DateTime           @map("shipped_at")
   totalCost         Decimal            @map("total_cost") @db.Decimal(18, 2)
   nonComplianceCost Decimal            @default(0) @map("non_compliance_cost") @db.Decimal(18, 2)
@@ -96,12 +185,14 @@ model FullShipment {
 
   @@index([shippedAt])
   @@index([billingYear, billingMonth])
+  @@index([organizationId])
   @@map("full_shipments")
 }
 
 /// Ciclo operacional por anúncio (compra ou envio Full), independente por kind.
 model ReplenishmentCycle {
   id                    String              @id @default(cuid())
+  organizationId        String              @map("organization_id")
   mlItemId              String              @map("ml_item_id")
   kind                  OperationCycleKind
   status                ReplenishmentStatus
@@ -125,44 +216,50 @@ model ReplenishmentCycle {
 
   @@index([mlItemId, kind, status])
   @@index([status])
+  @@index([organizationId])
   @@map("replenishment_cycles")
 }
 
 model CatalogCompetitionSnapshot {
-  id          String                   @id @default(cuid())
-  mlItemId    String                   @map("ml_item_id")
-  status      CatalogCompetitionStatus
-  sellerPrice Decimal?                 @map("seller_price") @db.Decimal(18, 2)
-  priceToWin  Decimal?                 @map("price_to_win") @db.Decimal(18, 2)
-  snapshotAt  DateTime                 @default(now()) @map("snapshot_at")
-  source      CatalogCompetitionSource @default(manual_poll)
-  rawResponse Json                     @map("raw_response")
+  id             String                   @id @default(cuid())
+  organizationId String                   @map("organization_id")
+  mlItemId       String                   @map("ml_item_id")
+  status         CatalogCompetitionStatus
+  sellerPrice    Decimal?                 @map("seller_price") @db.Decimal(18, 2)
+  priceToWin     Decimal?                 @map("price_to_win") @db.Decimal(18, 2)
+  snapshotAt     DateTime                 @default(now()) @map("snapshot_at")
+  source         CatalogCompetitionSource @default(manual_poll)
+  rawResponse    Json                     @map("raw_response")
 
   listing Listing @relation(fields: [mlItemId], references: [mlItemId], onDelete: Cascade)
 
   @@unique([mlItemId, snapshotAt])
   @@index([snapshotAt(sort: Desc)])
   @@index([mlItemId, snapshotAt(sort: Desc)])
+  @@index([organizationId])
   @@map("catalog_competition_snapshots")
 }
 
 /// Log de execuções do poll de competição de catálogo (cron ou manual).
 model CatalogCompetitionPollRun {
-  id           String                   @id @default(cuid())
-  ranAt        DateTime                 @default(now()) @map("ran_at")
-  source       CatalogCompetitionSource
-  itemsChecked Int                      @default(0) @map("items_checked")
-  itemsChanged Int                      @default(0) @map("items_changed")
-  ok           Boolean                  @default(true)
-  errorSummary String?                  @map("error_summary") @db.Text
+  id             String                   @id @default(cuid())
+  organizationId String                   @map("organization_id")
+  ranAt          DateTime                 @default(now()) @map("ran_at")
+  source         CatalogCompetitionSource
+  itemsChecked   Int                      @default(0) @map("items_checked")
+  itemsChanged   Int                      @default(0) @map("items_changed")
+  ok             Boolean                  @default(true)
+  errorSummary   String?                  @map("error_summary") @db.Text
 
   @@index([ranAt(sort: Desc)])
+  @@index([organizationId])
   @@map("catalog_competition_poll_runs")
 }
 
 /// Estoque físico no galpão (1:1 com listing).
 model WarehouseStock {
   mlItemId             String   @id @map("ml_item_id")
+  organizationId       String   @map("organization_id")
   quantity             Int      @default(0)
   /// Prazo compra → chegada no galpão (dias inteiros; UI pode informar em semanas).
   purchaseLeadTimeDays Int?     @map("purchase_lead_time_days")
@@ -173,10 +270,12 @@ model WarehouseStock {
 
   listing Listing @relation(fields: [mlItemId], references: [mlItemId], onDelete: Cascade)
 
+  @@index([organizationId])
   @@map("warehouse_stock")
 }
 
 /// Faixas de custo Flex por distância (tabela pré-existente, capturada aqui para alinhar com o schema).
+/// Global — definida pelo próprio Mercado Livre, igual para todo seller. Sem organizationId.
 model FlexDistanceTier {
   id          String   @id
   name        String
@@ -194,8 +293,14 @@ enum TaxRegime {
 }
 
 /// Cadastro fiscal/comercial por SKU (chave = SKU do anúncio ML).
+/// PK sintética (`id`) + unique composto `(organizationId, sku)` — dois
+/// vendedores diferentes podem usar o mesmo SKU. Requer que a organização de
+/// produção já tenha sido backfillada (`organization_id` 100% preenchido)
+/// antes de aplicar esta migration lá — ver scripts/backfill-saas-default-organization.ts.
 model Product {
-  sku                 String   @id
+  id                  String   @id @default(cuid())
+  organizationId      String   @map("organization_id")
+  sku                 String
   ncm                 String?
   unitCostNf          Decimal  @map("unit_cost_nf") @db.Decimal(18, 2)
   purchaseIcmsPercent Decimal  @map("purchase_icms_percent") @db.Decimal(8, 4)
@@ -210,54 +315,67 @@ model Product {
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
-  skuAliases          ProductSkuAlias[]        @relation("ProductCanonicalSku")
-  kitItems            KitItem[]
-  dreCostLevelings    DreProductCostLeveling[]
+  skuAliases       ProductSkuAlias[]        @relation("ProductCanonicalSku")
+  kitItems         KitItem[]
+  dreCostLevelings DreProductCostLeveling[]
 
+  @@unique([organizationId, sku])
   @@map("products")
 }
 
 /// Anúncio "kit" do Mercado Livre (sem SKU próprio) cadastrado manualmente com
 /// os SKUs componentes, pois a API do ML não expõe essa composição.
 model Kit {
-  mlItemId  String   @id @map("ml_item_id")
-  title     String?
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  mlItemId       String   @id @map("ml_item_id")
+  organizationId String   @map("organization_id")
+  title          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   items KitItem[]
 
+  @@index([organizationId])
   @@map("kits")
 }
 
 model KitItem {
-  kitId    String  @map("kit_id")
-  sku      String
-  quantity Decimal @default(1) @db.Decimal(18, 4)
+  kitId          String  @map("kit_id")
+  sku            String
+  organizationId String  @map("organization_id")
+  quantity       Decimal @default(1) @db.Decimal(18, 4)
 
   kit     Kit     @relation(fields: [kitId], references: [mlItemId], onDelete: Cascade)
-  product Product @relation(fields: [sku], references: [sku], onDelete: Cascade)
+  product Product @relation(fields: [organizationId, sku], references: [organizationId, sku], onDelete: Cascade)
 
   @@id([kitId, sku])
   @@index([sku])
+  @@index([organizationId])
   @@map("kit_items")
 }
 
 /// SKU antigo/alternativo que aponta para o cadastro canônico em products.
+/// `aliasSku` também deixa de ser globalmente único pelo mesmo motivo do
+/// `Product.sku` — dois vendedores podem ter usado o mesmo SKU antigo.
 model ProductSkuAlias {
-  aliasSku     String   @id @map("alias_sku")
-  canonicalSku String   @map("canonical_sku")
-  createdAt    DateTime @default(now()) @map("created_at")
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  aliasSku       String   @map("alias_sku")
+  canonicalSku   String   @map("canonical_sku")
+  createdAt      DateTime @default(now()) @map("created_at")
 
-  product Product @relation("ProductCanonicalSku", fields: [canonicalSku], references: [sku], onDelete: Cascade)
+  product Product @relation("ProductCanonicalSku", fields: [organizationId, canonicalSku], references: [organizationId, sku], onDelete: Cascade)
 
+  @@unique([organizationId, aliasSku])
   @@index([canonicalSku])
   @@map("product_sku_aliases")
 }
 
-/// PIS/COFINS global da empresa (uma linha).
+/// Configuração fiscal — uma linha por organização (o antigo singleton
+/// `id: "default"` deixou de existir; `id` agora é um cuid qualquer,
+/// `organizationId` é a chave de negócio real).
 model CompanyTaxSettings {
-  id                              String    @id @default("default")
+  id                              String    @id @default(cuid())
+  organizationId                  String    @map("organization_id")
   pisCofinsPercent                Decimal   @map("pis_cofins_percent") @db.Decimal(8, 4)
   taxRegime                       TaxRegime @default(LUCRO_REAL) @map("tax_regime")
   originUf                        String    @default("SP") @map("origin_uf")
@@ -274,10 +392,16 @@ model CompanyTaxSettings {
   wholesaleLevel3MinPurchaseUnit  Int       @default(10) @map("wholesale_level3_min_purchase_unit")
   updatedAt                       DateTime  @updatedAt @map("updated_at")
 
+  @@unique([organizationId])
   @@map("company_tax_settings")
 }
 
 /// Alíquota interna de ICMS + FCP por UF de destino (configurável).
+/// Global por padrão hoje (referência nacional). Design futuro (não
+/// implementado ainda — sem cliente pedindo): ganhar `organizationId`
+/// opcional para permitir override por organização com regime fiscal
+/// especial, mantendo as linhas atuais como padrão nacional
+/// (`organizationId: null`). Ver docs/architecture/tenant-data-model.md.
 model IcmsInternalRate {
   uf           String   @id
   aliquotaBase Decimal  @map("aliquota_base") @db.Decimal(8, 4)
@@ -287,7 +411,8 @@ model IcmsInternalRate {
   @@map("icms_internal_rates")
 }
 
-/// Vigência CBS/IBS por ano (informativo / reforma tributária).
+/// Vigência CBS/IBS por ano (informativo / reforma tributária). Global —
+/// alíquotas legais, iguais para qualquer empresa. Sem organizationId.
 model CbsIbsVigencia {
   year             Int      @id
   cbsRate          Decimal? @map("cbs_rate") @db.Decimal(8, 4)
@@ -301,38 +426,43 @@ model CbsIbsVigencia {
 
 /// Snapshot mensal do relatório tributário por vendedor ML.
 model TaxReportMonthSnapshot {
-  id          String   @id @default(cuid())
-  sellerId    Int      @map("seller_id")
-  year        Int
-  month       Int
-  generatedAt DateTime @map("generated_at")
-  payload     Json
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  sellerId       Int      @map("seller_id")
+  year           Int
+  month          Int
+  generatedAt    DateTime @map("generated_at")
+  payload        Json
   /// Mesmo payload, mas com `porSku[].transacoes` removido — usado por leituras
   /// "ao vivo" (Produtos, DRE, Avaliação Financeira) que só precisam de agregados
   /// por SKU, evitando trafegar o detalhamento por venda do banco. Nullable para
   /// snapshots antigos ainda não migrados (backfill).
-  payloadSummary Json? @map("payload_summary")
+  payloadSummary Json?    @map("payload_summary")
 
   @@unique([sellerId, year, month])
   @@index([year, month])
+  @@index([organizationId])
   @@map("tax_report_month_snapshots")
 }
 
 /// Simulação salva de potencial de faturamento / capital de giro (overrides,
 /// exclusões e configurações de capital de giro), por vendedor ML.
 model RevenueSimulation {
-  id        String   @id @default(cuid())
-  sellerId  Int      @map("seller_id")
-  name      String
-  payload   Json
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  sellerId       Int      @map("seller_id")
+  name           String
+  payload        Json
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   @@index([sellerId])
+  @@index([organizationId])
   @@map("revenue_simulations")
 }
 
-/// Cache de verificação de contribuinte ICMS por CNPJ.
+/// Cache de verificação de contribuinte ICMS por CNPJ. Global — é sobre o
+/// CNPJ consultado, não sobre o tenant que consultou. Sem organizationId.
 model TaxpayerVerificationCache {
   cnpj          String   @id
   isContributor Boolean  @map("is_contributor")
@@ -347,6 +477,7 @@ model TaxpayerVerificationCache {
 /// Avisos de estoque que já receberam ação operacional (ex.: compra feita).
 model StockAttentionAcknowledgement {
   id                   String             @id @default(cuid())
+  organizationId       String             @map("organization_id")
   mlItemId             String             @map("ml_item_id")
   kind                 StockAttentionKind
   mlAvailableQuantity  Int                @map("ml_available_quantity")
@@ -359,11 +490,14 @@ model StockAttentionAcknowledgement {
 
   @@unique([mlItemId, kind])
   @@index([kind])
+  @@index([organizationId])
   @@map("stock_attention_acknowledgements")
 }
 
 /// Tokens OAuth do vendedor ML (até 1 linha por `ml_user_id`) para chamadas server-side (ex.: webhook).
 /// `refresh_enc` / `access_enc` são texto cifrado (AES-256-GCM) com `ENCRYPTION_KEY`.
+/// Global por design — storage de token por conta ML, não por org;
+/// `OrganizationMlSeller` é a ponte entre esta tabela e a organização.
 model MlSellerCredentials {
   mlUserId        Int       @id @map("ml_user_id")
   refreshEnc      String    @map("refresh_enc") @db.Text
@@ -376,18 +510,20 @@ model MlSellerCredentials {
 
 /// Item de custo manual do DRE (fixo ou operacional; valor por mês em DreCostMonthValue).
 model DreCostItem {
-  id          String              @id @default(cuid())
-  name        String
-  section     DreCostSection      @default(FIXED)
-  sortOrder   Int                 @default(0) @map("sort_order")
-  active      Boolean             @default(true)
+  id             String              @id @default(cuid())
+  organizationId String              @map("organization_id")
+  name           String
+  section        DreCostSection      @default(FIXED)
+  sortOrder      Int                 @default(0) @map("sort_order")
+  active         Boolean             @default(true)
   /// true = valor informado se replica nos meses seguintes; false = só vale no mês com valor explícito.
-  recurring   Boolean             @default(true)
-  createdAt   DateTime            @default(now()) @map("created_at")
-  updatedAt   DateTime            @updatedAt @map("updated_at")
-  monthValues DreCostMonthValue[]
+  recurring      Boolean             @default(true)
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+  monthValues    DreCostMonthValue[]
 
   @@index([section, active])
+  @@index([organizationId])
   @@map("dre_cost_items")
 }
 
@@ -398,74 +534,84 @@ enum DreCostSection {
 }
 
 model DreCostMonthValue {
-  id         String      @id @default(cuid())
-  costItemId String      @map("cost_item_id")
-  year       Int
-  month      Int
-  amount     Decimal     @db.Decimal(18, 2)
-  costItem   DreCostItem @relation(fields: [costItemId], references: [id], onDelete: Cascade)
+  id             String      @id @default(cuid())
+  organizationId String      @map("organization_id")
+  costItemId     String      @map("cost_item_id")
+  year           Int
+  month          Int
+  amount         Decimal     @db.Decimal(18, 2)
+  costItem       DreCostItem @relation(fields: [costItemId], references: [id], onDelete: Cascade)
 
   @@unique([costItemId, year, month])
   @@index([year, month])
+  @@index([organizationId])
   @@map("dre_cost_month_values")
 }
 
 /// Item de custo fixo cadastrado pra gerar crédito de PIS/COFINS (ex.: aluguel).
 model TaxFixedCostItem {
-  id          String                       @id @default(cuid())
-  name        String
-  sortOrder   Int                          @default(0) @map("sort_order")
-  active      Boolean                      @default(true)
+  id             String                       @id @default(cuid())
+  organizationId String                       @map("organization_id")
+  name           String
+  sortOrder      Int                          @default(0) @map("sort_order")
+  active         Boolean                      @default(true)
   /// true = repete todo mês até ser alterado/removido; false = só vale nos meses com valor explícito.
-  recurring   Boolean                      @default(true)
+  recurring      Boolean                      @default(true)
   /// Se setado, o item deixa de se aplicar a partir de (endYear, endMonth) inclusive — "Encerrar gasto fixo".
-  endYear     Int?                         @map("end_year")
-  endMonth    Int?                         @map("end_month")
-  createdAt   DateTime                     @default(now()) @map("created_at")
-  updatedAt   DateTime                     @updatedAt @map("updated_at")
-  monthValues TaxFixedCostMonthValue[]
-  exclusions  TaxFixedCostMonthExclusion[]
+  endYear        Int?                         @map("end_year")
+  endMonth       Int?                         @map("end_month")
+  createdAt      DateTime                     @default(now()) @map("created_at")
+  updatedAt      DateTime                     @updatedAt @map("updated_at")
+  monthValues    TaxFixedCostMonthValue[]
+  exclusions     TaxFixedCostMonthExclusion[]
 
   @@index([active])
+  @@index([organizationId])
   @@map("tax_fixed_cost_items")
 }
 
 model TaxFixedCostMonthValue {
-  id         String           @id @default(cuid())
-  costItemId String           @map("cost_item_id")
-  year       Int
-  month      Int
-  amount     Decimal          @db.Decimal(18, 2)
-  costItem   TaxFixedCostItem @relation(fields: [costItemId], references: [id], onDelete: Cascade)
+  id             String           @id @default(cuid())
+  organizationId String           @map("organization_id")
+  costItemId     String           @map("cost_item_id")
+  year           Int
+  month          Int
+  amount         Decimal          @db.Decimal(18, 2)
+  costItem       TaxFixedCostItem @relation(fields: [costItemId], references: [id], onDelete: Cascade)
 
   @@unique([costItemId, year, month])
   @@index([year, month])
+  @@index([organizationId])
   @@map("tax_fixed_cost_month_values")
 }
 
 /// Marca um mês específico como excluído do crédito pra um item recorrente,
 /// sem interromper a herança de valor pros meses seguintes ("Remover valor deste mês").
 model TaxFixedCostMonthExclusion {
-  id         String           @id @default(cuid())
-  costItemId String           @map("cost_item_id")
-  year       Int
-  month      Int
-  costItem   TaxFixedCostItem @relation(fields: [costItemId], references: [id], onDelete: Cascade)
+  id             String           @id @default(cuid())
+  organizationId String           @map("organization_id")
+  costItemId     String           @map("cost_item_id")
+  year           Int
+  month          Int
+  costItem       TaxFixedCostItem @relation(fields: [costItemId], references: [id], onDelete: Cascade)
 
   @@unique([costItemId, year, month])
   @@index([year, month])
+  @@index([organizationId])
   @@map("tax_fixed_cost_month_exclusions")
 }
 
-/// Snapshot mensal do DRE após sync (linhas ML + ERP + ADS).
+/// Snapshot mensal do DRE após sync (linhas ML + ERP + ADS). O unique global
+/// `[year, month]` vira `[organizationId, year, month]` na Fase 2.
 model DreMonthSnapshot {
-  id       String   @id @default(cuid())
-  year     Int
-  month    Int
-  syncedAt DateTime @map("synced_at")
-  payload  Json
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  year           Int
+  month          Int
+  syncedAt       DateTime @map("synced_at")
+  payload        Json
 
-  @@unique([year, month])
+  @@unique([organizationId, year, month])
   @@index([year, month])
   @@map("dre_month_snapshots")
 }
@@ -474,6 +620,7 @@ model DreMonthSnapshot {
 /// Fora do intervalo, o sync continua com o cadastro atual em `Product`.
 model DreProductCostLeveling {
   id                 String   @id @default(cuid())
+  organizationId     String   @map("organization_id")
   sku                String
   startDate          DateTime @map("start_date") @db.Date
   endDate            DateTime @map("end_date") @db.Date
@@ -484,9 +631,10 @@ model DreProductCostLeveling {
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
-  product Product @relation(fields: [sku], references: [sku], onDelete: Cascade)
+  product Product @relation(fields: [organizationId, sku], references: [organizationId, sku], onDelete: Cascade)
 
   @@index([sku])
   @@index([startDate, endDate])
+  @@index([organizationId])
   @@map("dre_product_cost_levelings")
 }

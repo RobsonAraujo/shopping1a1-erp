@@ -8,7 +8,7 @@ import { prisma } from "@/lib/db";
 import { syncPurchaseCycleFromWarehouse } from "@/lib/replenishment-cycle-data";
 import { computeStockPlanningDisplay } from "@/lib/stock-planning";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { parseJsonBody } from "@/lib/api-validation";
 
 type RouteContext = { params: Promise<{ mlItemId: string }> };
@@ -30,9 +30,11 @@ function listingUpsertData(item: ItemBody) {
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { mlItemId } = await context.params;
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
-  const { token, userId } = auth;
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
+  const { token, userId, organizationId } = auth.ctx;
 
   try {
     const item = await fetchItemById(token, mlItemId);
@@ -50,6 +52,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
         const listingRow = await tx.listing.upsert({
           where: { mlItemId },
           create: {
+            organizationId,
             mlItemId,
             ...listingData,
           },
@@ -58,7 +61,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
         const stockRow = await tx.warehouseStock.upsert({
           where: { mlItemId },
-          create: { mlItemId, quantity: 0 },
+          create: { organizationId, mlItemId, quantity: 0 },
           update: {},
         });
 
@@ -92,9 +95,11 @@ const patchBodySchema = z.object({
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   const { mlItemId } = await context.params;
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
-  const { token, userId } = auth;
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
+  const { token, userId, organizationId } = auth.ctx;
 
   const parsedBody = await parseJsonBody(request, patchBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
@@ -123,6 +128,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         const listingRow = await tx.listing.upsert({
           where: { mlItemId },
           create: {
+            organizationId,
             mlItemId,
             ...listingData,
           },
@@ -136,6 +142,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         const stockRow = await tx.warehouseStock.upsert({
           where: { mlItemId },
           create: {
+            organizationId,
             mlItemId,
             quantity: quantity ?? 0,
             notes: notes ?? null,
@@ -175,9 +182,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         stockPlanningConfig,
         purchaseLead,
       );
-      await syncPurchaseCycleFromWarehouse(mlItemId, warehouseStock.quantity, {
-        needsPurchaseAttention: purchasePlan.needsPurchaseAttention,
-      });
+      await syncPurchaseCycleFromWarehouse(
+        organizationId,
+        mlItemId,
+        warehouseStock.quantity,
+        { needsPurchaseAttention: purchasePlan.needsPurchaseAttention },
+      );
     }
 
     return NextResponse.json({ listing, warehouseStock });

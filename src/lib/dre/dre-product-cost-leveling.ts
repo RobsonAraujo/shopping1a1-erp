@@ -107,12 +107,14 @@ function toView(row: {
 }
 
 async function assertNoOverlap(
+  organizationId: string,
   sku: string,
   period: { startDate: string; endDate: string },
   excludeId?: string,
 ) {
   const existing = await prisma.dreProductCostLeveling.findMany({
     where: {
+      organizationId,
       sku,
       ...(excludeId ? { id: { not: excludeId } } : {}),
     },
@@ -137,16 +139,18 @@ async function assertNoOverlap(
   }
 }
 
-export async function listDreProductCostLevelings(): Promise<
-  DreProductCostLevelingView[]
-> {
+export async function listDreProductCostLevelings(
+  organizationId: string,
+): Promise<DreProductCostLevelingView[]> {
   const rows = await prisma.dreProductCostLeveling.findMany({
+    where: { organizationId },
     orderBy: [{ sku: "asc" }, { startDate: "asc" }],
   });
   return rows.map(toView);
 }
 
 export async function createDreProductCostLeveling(
+  organizationId: string,
   raw: DreProductCostLevelingInput,
 ): Promise<DreProductCostLevelingView> {
   const sku = normalizeProductSku(raw.sku);
@@ -154,7 +158,7 @@ export async function createDreProductCostLeveling(
   assertCostInput(input);
 
   const product = await prisma.product.findUnique({
-    where: { sku },
+    where: { organizationId_sku: { organizationId, sku } },
     select: { sku: true },
   });
   if (!product) {
@@ -164,10 +168,11 @@ export async function createDreProductCostLeveling(
     );
   }
 
-  await assertNoOverlap(sku, input);
+  await assertNoOverlap(organizationId, sku, input);
 
   const row = await prisma.dreProductCostLeveling.create({
     data: {
+      organizationId,
       sku,
       startDate: new Date(`${input.startDate}T00:00:00.000Z`),
       endDate: new Date(`${input.endDate}T00:00:00.000Z`),
@@ -181,11 +186,12 @@ export async function createDreProductCostLeveling(
 }
 
 export async function updateDreProductCostLeveling(
+  organizationId: string,
   id: string,
   raw: DreProductCostLevelingInput,
 ): Promise<DreProductCostLevelingView> {
-  const existing = await prisma.dreProductCostLeveling.findUnique({
-    where: { id },
+  const existing = await prisma.dreProductCostLeveling.findFirst({
+    where: { id, organizationId },
     select: { id: true },
   });
   if (!existing) {
@@ -200,7 +206,7 @@ export async function updateDreProductCostLeveling(
   assertCostInput(input);
 
   const product = await prisma.product.findUnique({
-    where: { sku },
+    where: { organizationId_sku: { organizationId, sku } },
     select: { sku: true },
   });
   if (!product) {
@@ -210,7 +216,7 @@ export async function updateDreProductCostLeveling(
     );
   }
 
-  await assertNoOverlap(sku, input, id);
+  await assertNoOverlap(organizationId, sku, input, id);
 
   const row = await prisma.dreProductCostLeveling.update({
     where: { id },
@@ -227,10 +233,14 @@ export async function updateDreProductCostLeveling(
   return toView(row);
 }
 
-export async function deleteDreProductCostLeveling(id: string): Promise<void> {
-  try {
-    await prisma.dreProductCostLeveling.delete({ where: { id } });
-  } catch {
+export async function deleteDreProductCostLeveling(
+  organizationId: string,
+  id: string,
+): Promise<void> {
+  const result = await prisma.dreProductCostLeveling.deleteMany({
+    where: { id, organizationId },
+  });
+  if (result.count === 0) {
     throw new DreProductCostLevelingError(
       "Nivelamento não encontrado.",
       "not_found",
@@ -242,6 +252,7 @@ export async function deleteDreProductCostLeveling(id: string): Promise<void> {
  * Nivelamentos cujo intervalo de datas intersecta o mês civil.
  */
 export async function loadLevelingsOverlappingMonth(
+  organizationId: string,
   year: number,
   month: number,
 ): Promise<DreProductCostLevelingPricing[]> {
@@ -252,6 +263,7 @@ export async function loadLevelingsOverlappingMonth(
 
   const rows = await prisma.dreProductCostLeveling.findMany({
     where: {
+      organizationId,
       startDate: { lte: monthEnd },
       endDate: { gte: monthStart },
     },

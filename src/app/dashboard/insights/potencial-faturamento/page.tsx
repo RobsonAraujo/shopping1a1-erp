@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { cookies } from "next/headers";
 import { Card, CardContent } from "@/components/ui/card";
 import { readSession } from "@/lib/mercadolibre/session";
+import { getOrganizationContext } from "@/lib/organizations/context";
 import { loadRevenuePotentialData } from "@/lib/insights/revenue-potential";
 import { RevenuePotentialView } from "@/components/insights/revenue-potential-view";
 import { RevenuePotentialSkeleton } from "@/components/insights/revenue-potential-skeleton";
@@ -10,11 +11,15 @@ import { RevenuePotentialSkeleton } from "@/components/insights/revenue-potentia
 async function RevenuePotentialSection({
   token,
   userId,
+  organizationId,
 }: {
   token: string;
   userId: number;
+  organizationId: string;
 }) {
-  const data = await loadRevenuePotentialData(token, userId).catch(() => null);
+  const data = await loadRevenuePotentialData(token, userId, organizationId).catch(
+    () => null,
+  );
 
   if (!data) {
     return (
@@ -40,6 +45,9 @@ export default async function PotencialFaturamentoPage() {
 
   if (!token || userId === undefined) return null;
 
+  const orgContext = await getOrganizationContext();
+  if (orgContext.status !== "active") return null;
+
   return (
     <div className="space-y-8">
       <header className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-6 py-7 sm:px-8">
@@ -58,7 +66,11 @@ export default async function PotencialFaturamentoPage() {
       </header>
 
       <Suspense fallback={<RevenuePotentialSkeleton />}>
-        <RevenuePotentialSection token={token} userId={userId} />
+        <RevenuePotentialSection
+          token={token}
+          userId={userId}
+          organizationId={orgContext.organization.id}
+        />
       </Suspense>
     </div>
   );

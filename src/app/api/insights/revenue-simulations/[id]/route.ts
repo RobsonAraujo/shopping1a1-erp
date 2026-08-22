@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { parseJsonBody } from "@/lib/api-validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -20,9 +20,11 @@ const patchSimulationSchema = z.object({
 });
 
 export async function GET(_request: NextRequest, context: RouteContext) {
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
-  const sellerId = auth.userId;
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
+  const sellerId = auth.ctx.userId;
 
   const { id } = await context.params;
 
@@ -44,9 +46,11 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 }
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
-  const sellerId = auth.userId;
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
+  const sellerId = auth.ctx.userId;
 
   const { id } = await context.params;
 
@@ -78,9 +82,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 }
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
-  const sellerId = auth.userId;
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
+  const sellerId = auth.ctx.userId;
 
   const { id } = await context.params;
 

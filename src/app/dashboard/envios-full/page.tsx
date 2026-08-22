@@ -8,6 +8,7 @@ import {
 } from "@/lib/envios-full/full-shipment-data";
 import { getZonedYearMonth } from "@/lib/mercadolibre/revenue-periods";
 import { readSession } from "@/lib/mercadolibre/session";
+import { getOrganizationContext } from "@/lib/organizations/context";
 
 export const metadata: Metadata = {
   title: "Relatório de Envios",
@@ -18,6 +19,11 @@ export default async function EnviosFullPage() {
   const { accessToken: token, userId } = readSession(cookieStore);
 
   if (!token || userId === undefined) {
+    return null;
+  }
+
+  const orgContext = await getOrganizationContext();
+  if (orgContext.status !== "active") {
     return null;
   }
 
@@ -32,8 +38,8 @@ export default async function EnviosFullPage() {
   try {
     const { year, month } = getZonedYearMonth();
     const [shipments, importedPeriods] = await Promise.all([
-      listFullShipmentsForPeriod(year, month),
-      listImportedBillingPeriods(),
+      listFullShipmentsForPeriod(orgContext.organization.id, year, month),
+      listImportedBillingPeriods(orgContext.organization.id),
     ]);
     data = { year, month, shipments, importedPeriods };
   } catch (e) {

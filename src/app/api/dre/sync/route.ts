@@ -11,7 +11,7 @@ import {
   type DreSyncProgress,
 } from "@/lib/dre/dre-month-data";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { parseJsonBody } from "@/lib/api-validation";
 import { isDreMonthSyncable } from "@/lib/mercadolibre/revenue-periods";
 
@@ -47,31 +47,39 @@ type DreSyncCompletePayload = {
 async function runDreSync(args: {
   token: string;
   userId: number;
+  organizationId: string;
   year: number;
   month: number;
   preserveLineKeys: DreEditableLineKey[];
   onProgress?: (progress: DreSyncProgress) => void;
 }): Promise<DreSyncCompletePayload> {
-  const { token, userId, year, month, preserveLineKeys, onProgress } = args;
+  const { token, userId, organizationId, year, month, preserveLineKeys, onProgress } =
+    args;
 
   onProgress?.({
     phase: "billing",
     message: "Iniciando sincronização do mês…",
   });
 
-  const payload = await buildDreMonthSnapshot(token, userId, year, month, {
-    onProgress,
-  });
+  const payload = await buildDreMonthSnapshot(
+    token,
+    userId,
+    organizationId,
+    year,
+    month,
+    { onProgress },
+  );
 
   onProgress?.({ phase: "persist", message: "Salvando snapshot do DRE…" });
 
   const syncedAt = await persistDreMonthSnapshot(
+    organizationId,
     year,
     month,
     payload,
     preserveLineKeys,
   );
-  const yearView = await loadDreYearView(year);
+  const yearView = await loadDreYearView(organizationId, year);
   const monthView = yearView.months.find((row) => row.month === month);
 
   onProgress?.({ phase: "done", message: "Sincronização concluída." });
@@ -85,9 +93,14 @@ async function runDreSync(args: {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
-  const { token, userId } = auth;
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json(
+      { error: auth.reason },
+      { status: auth.status },
+    );
+  }
+  const { token, userId, organizationId } = auth.ctx;
 
   const parsedBody = await parseJsonBody(request, syncBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
@@ -116,6 +129,7 @@ export async function POST(request: NextRequest) {
           const result = await runDreSync({
             token,
             userId,
+            organizationId,
             year,
             month,
             preserveLineKeys,
@@ -153,6 +167,7 @@ export async function POST(request: NextRequest) {
     const result = await runDreSync({
       token,
       userId,
+      organizationId,
       year,
       month,
       preserveLineKeys,

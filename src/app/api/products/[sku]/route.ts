@@ -10,7 +10,7 @@ import {
 import { listAliasesForCanonicalSku } from "@/lib/product-sku-alias-data";
 import { normalizeProductSku } from "@/lib/product-pricing";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { parseJsonBody } from "@/lib/api-validation";
 
 type RouteContext = { params: Promise<{ sku: string }> };
@@ -30,20 +30,24 @@ const productPatchBodySchema = z.object({
 });
 
 export async function GET(_request: NextRequest, context: RouteContext) {
-  if (!(await requireAuth())) {
-    return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
+  const { organizationId } = auth.ctx;
 
   const { sku: skuParam } = await context.params;
   const sku = normalizeProductSku(decodeURIComponent(skuParam));
 
   try {
-    const settings = await ensureCompanySettings();
-    const product = await prisma.product.findUnique({ where: { sku } });
+    const settings = await ensureCompanySettings(organizationId);
+    const product = await prisma.product.findUnique({
+      where: { organizationId_sku: { organizationId, sku } },
+    });
     if (!product) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
-    const aliases = await listAliasesForCanonicalSku(sku);
+    const aliases = await listAliasesForCanonicalSku(organizationId, sku);
     return NextResponse.json({
       product: buildProductView(product, settings.pisCofinsPercent),
       pisCofinsPercent: settings.pisCofinsPercent,
@@ -58,9 +62,11 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 }
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
-  if (!(await requireAuth())) {
-    return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
+  const { organizationId } = auth.ctx;
 
   const { sku: skuParam } = await context.params;
   const sku = normalizeProductSku(decodeURIComponent(skuParam));
@@ -75,10 +81,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 
   try {
-    const settings = await ensureCompanySettings();
-    const data = productWriteToPrismaData(parsed);
+    const settings = await ensureCompanySettings(organizationId);
+    const data = productWriteToPrismaData(organizationId, parsed);
     const product = await prisma.product.update({
-      where: { sku },
+      where: { organizationId_sku: { organizationId, sku } },
       data: {
         ncm: data.ncm,
         unitCostNf: data.unitCostNf,
@@ -105,15 +111,19 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 }
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {
-  if (!(await requireAuth())) {
-    return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
+  const { organizationId } = auth.ctx;
 
   const { sku: skuParam } = await context.params;
   const sku = normalizeProductSku(decodeURIComponent(skuParam));
 
   try {
-    await prisma.product.delete({ where: { sku } });
+    await prisma.product.delete({
+      where: { organizationId_sku: { organizationId, sku } },
+    });
     return NextResponse.json({ ok: true });
   } catch (e) {
     logServerError("api/products/[sku] DELETE", e);

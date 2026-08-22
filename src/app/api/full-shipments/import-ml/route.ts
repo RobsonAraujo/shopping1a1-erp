@@ -3,15 +3,15 @@ import { importFullCollectChargesFromBilling } from "@/lib/envios-full/full-ship
 import { FullShipmentValidationError } from "@/lib/envios-full/full-shipment";
 import { MlApiFetchError } from "@/lib/mercadolibre/fetch-with-retry";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { parseJsonBody, yearMonthSchema } from "@/lib/api-validation";
 
 export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAuth();
-  if (!auth) {
-    return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
 
   const parsedBody = await parseJsonBody(request, yearMonthSchema);
@@ -20,8 +20,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const result = await importFullCollectChargesFromBilling(
-      auth.token,
-      auth.userId,
+      auth.ctx.token,
+      auth.ctx.userId,
+      auth.ctx.organizationId,
       year,
       month,
     );

@@ -59,6 +59,15 @@ async function resolveMlUserId(): Promise<number> {
   return row.mlUserId;
 }
 
+async function resolveOrganizationId(mlUserId: number): Promise<string> {
+  const link = await prisma.organizationMlSeller.findUnique({
+    where: { mlUserId },
+    select: { organizationId: true },
+  });
+  if (!link) throw new Error(`No organization linked to mlUserId=${mlUserId}.`);
+  return link.organizationId;
+}
+
 async function fetchAllFullDetails(
   token: string,
   key: string,
@@ -174,12 +183,17 @@ function nextCalendarMonth(year: number, month: number) {
 async function scanActivityMonth(
   token: string,
   sellerId: number,
+  organizationId: string,
   year: number,
   month: number,
 ): Promise<void> {
   console.log(`\n=== Activity month scan ${year}-${String(month).padStart(2, "0")} ===\n`);
 
-  const inventoryIds = await fetchSellerFulfillmentInventoryIds(token, sellerId);
+  const inventoryIds = await fetchSellerFulfillmentInventoryIds(
+    token,
+    sellerId,
+    organizationId,
+  );
   console.log(`Fulfillment inventory_ids: ${inventoryIds.length}`);
 
   const discoveries = await fetchInboundReceptionsForActivityMonth(
@@ -219,6 +233,7 @@ async function scanActivityMonth(
   const merged = await fetchFullInboundShipmentsForPeriod(
     token,
     sellerId,
+    organizationId,
     year,
     month,
   );
@@ -254,11 +269,12 @@ async function main() {
   }
 
   const mlUserId = await resolveMlUserId();
+  const organizationId = await resolveOrganizationId(mlUserId);
   const token = await resolveSellerAccessToken(mlUserId);
   if (!token) throw new Error(`No token for seller ${mlUserId}`);
 
   if (inboundTarget === "scan") {
-    await scanActivityMonth(token, mlUserId, year, month);
+    await scanActivityMonth(token, mlUserId, organizationId, year, month);
     return;
   }
 

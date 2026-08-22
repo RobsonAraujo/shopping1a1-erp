@@ -11,13 +11,16 @@ import { ComprasPageSkeleton } from "@/components/compras/compras-page-skeleton"
 import { Card, CardContent } from "@/components/ui/card";
 import { loadOperationsBoards } from "@/lib/replenishment-cycle-data";
 import { readSession } from "@/lib/mercadolibre/session";
+import { getOrganizationContext } from "@/lib/organizations/context";
 
 async function ComprasDataSection({
   token,
   userId,
+  organizationId,
 }: {
   token: string;
   userId: number;
+  organizationId: string;
 }) {
   let loadError: string | null = null;
   let summaries: ReturnType<typeof buildSupplierSummaries> = [];
@@ -26,8 +29,8 @@ async function ComprasDataSection({
 
   try {
     const [purchaseData, operationsBoards] = await Promise.all([
-      loadDashboardPurchaseData(token, userId),
-      loadOperationsBoards(token, userId),
+      loadDashboardPurchaseData(token, userId, organizationId),
+      loadOperationsBoards(token, userId, organizationId),
     ]);
     summaries = buildSupplierSummaries(
       purchaseData.rows,
@@ -66,6 +69,11 @@ export default async function ComprasPage() {
     return null;
   }
 
+  const orgContext = await getOrganizationContext();
+  if (orgContext.status !== "active") {
+    return null;
+  }
+
   return (
     <div className="space-y-8">
       <header className="flex items-start gap-4">
@@ -84,7 +92,11 @@ export default async function ComprasPage() {
       </header>
 
       <Suspense fallback={<ComprasPageSkeleton />}>
-        <ComprasDataSection token={token} userId={userId} />
+        <ComprasDataSection
+          token={token}
+          userId={userId}
+          organizationId={orgContext.organization.id}
+        />
       </Suspense>
     </div>
   );

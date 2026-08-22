@@ -38,12 +38,12 @@ describe("validateProductInput — pmaPrice", () => {
 
 describe("productWriteToPrismaData — pmaPrice", () => {
   it("maps pmaPrice through when present", () => {
-    const data = productWriteToPrismaData(baseInput({ pmaPrice: 120 }));
+    const data = productWriteToPrismaData("org-1", baseInput({ pmaPrice: 120 }));
     assert.equal(data.pmaPrice, 120);
   });
 
   it("defaults pmaPrice to null when absent", () => {
-    const data = productWriteToPrismaData(baseInput());
+    const data = productWriteToPrismaData("org-1", baseInput());
     assert.equal(data.pmaPrice, null);
   });
 });

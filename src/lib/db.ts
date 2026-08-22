@@ -1,5 +1,6 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/generated/prisma";
+import { tenantGuardExtension } from "@/lib/db-tenant-guard";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -40,4 +41,4 @@ function getPrismaClient(): PrismaClient {
   return client;
 }
 
-export const prisma = getPrismaClient();
+export const prisma = getPrismaClient().$extends(tenantGuardExtension);

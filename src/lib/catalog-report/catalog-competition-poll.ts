@@ -5,7 +5,6 @@ import {
   extractSellerPrice,
   loadLatestCatalogCompetitionSnapshots,
   shouldRecordCatalogSnapshot,
-  type LatestCatalogSnapshot,
 } from "@/lib/catalog-competition";
 import { prisma } from "@/lib/db";
 import {
@@ -37,6 +36,7 @@ function decimalOrNull(value: number | null): string | null {
 export async function pollCatalogCompetitionForSeller(
   accessToken: string,
   mlUserId: number,
+  organizationId: string,
   source: CatalogPollSource,
   itemIds?: string[],
 ): Promise<CatalogPollResult> {
@@ -92,6 +92,7 @@ export async function pollCatalogCompetitionForSeller(
         await tx.listing.upsert({
           where: { mlItemId: itemId },
           create: {
+            organizationId,
             mlItemId: itemId,
             titleSnapshot: item?.title ?? null,
             skuSnapshot: sku,
@@ -134,6 +135,7 @@ export async function pollCatalogCompetitionForSeller(
           try {
             await tx.catalogCompetitionSnapshot.create({
               data: {
+                organizationId,
                 mlItemId: itemId,
                 status,
                 sellerPrice: decimalOrNull(sellerPrice),
@@ -148,6 +150,7 @@ export async function pollCatalogCompetitionForSeller(
             if (msg.includes("Unique constraint")) {
               await tx.catalogCompetitionSnapshot.create({
                 data: {
+                  organizationId,
                   mlItemId: itemId,
                   status,
                   sellerPrice: decimalOrNull(sellerPrice),
@@ -175,14 +178,28 @@ export async function pollCatalogCompetitionForSeller(
   return { checked: ids.length, changed, errors };
 }
 
-export async function resolveCronMlUserId(): Promise<number | null> {
-  const fromEnv = process.env.CRON_ML_USER_ID?.trim();
-  if (fromEnv) {
-    const n = Number(fromEnv);
-    if (Number.isFinite(n) && n > 0) return n;
-  }
-  const row = await prisma.mlSellerCredentials.findFirst({
-    select: { mlUserId: true },
+export type CronSellerBatchEntry = {
+  organizationId: string;
+  mlUserId: number;
+};
+
+/**
+ * Lote de sellers de organizações pagantes pra o cron processar nesta
+ * execução — os que têm `lastCatalogCronPolledAt` mais antigo (ou nunca
+ * processados) primeiro. Sem tabela de cursor: cada execução simplesmente
+ * pega os mais "atrasados", o que naturalmente rotaciona por todos os
+ * sellers pagantes ao longo do dia e se autocorrige se uma execução falhar
+ * no meio (`lastCatalogCronPolledAt` é atualizado mesmo em erro — ver
+ * cron/catalog-competition/route.ts).
+ */
+export async function resolvePayingOrgSellersForCronBatch(
+  limit: number,
+): Promise<CronSellerBatchEntry[]> {
+  const rows = await prisma.organizationMlSeller.findMany({
+    where: { organization: { status: { in: ["trialing", "active"] } } },
+    select: { organizationId: true, mlUserId: true },
+    orderBy: [{ lastCatalogCronPolledAt: { sort: "asc", nulls: "first" } }],
+    take: limit,
   });
-  return row?.mlUserId ?? null;
+  return rows;
 }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { parseJsonBody } from "@/lib/api-validation";
 
 const costItemBodySchema = z.object({
@@ -18,13 +18,14 @@ const SECTION_MAP = {
 } as const;
 
 export async function GET() {
-  if (!(await requireAuth())) {
-    return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
 
   try {
     const items = await prisma.dreCostItem.findMany({
-      where: { active: true },
+      where: { organizationId: auth.ctx.organizationId, active: true },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       select: { id: true, name: true, sortOrder: true, recurring: true },
     });
@@ -38,9 +39,11 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  if (!(await requireAuth())) {
-    return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
+  const { organizationId } = auth.ctx;
 
   const parsedBody = await parseJsonBody(request, costItemBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
@@ -49,11 +52,12 @@ export async function POST(request: NextRequest) {
 
   try {
     const maxSort = await prisma.dreCostItem.aggregate({
-      where: { section, active: true },
+      where: { organizationId, section, active: true },
       _max: { sortOrder: true },
     });
     const item = await prisma.dreCostItem.create({
       data: {
+        organizationId,
         name,
         section,
         recurring,

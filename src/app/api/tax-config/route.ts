@@ -9,16 +9,18 @@ import {
   upsertIcmsInternalRate,
 } from "@/lib/tax-report/tax-config-data";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { parseJsonBody } from "@/lib/api-validation";
 
 export async function GET() {
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
 
   try {
     const [company, icmsRates, cbsIbs] = await Promise.all([
-      loadTaxCompanyConfig(),
+      loadTaxCompanyConfig(auth.ctx.organizationId),
       listIcmsInternalRates(),
       listCbsIbsVigencia(),
     ]);
@@ -62,8 +64,11 @@ const patchBodySchema = z.object({
 });
 
 export async function PATCH(request: NextRequest) {
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
+  const { organizationId } = auth.ctx;
 
   const parsedBody = await parseJsonBody(request, patchBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
@@ -71,7 +76,7 @@ export async function PATCH(request: NextRequest) {
 
   try {
     if (body.company) {
-      await updateTaxCompanyConfig(body.company);
+      await updateTaxCompanyConfig(organizationId, body.company);
     }
     if (body.icmsRate) {
       await upsertIcmsInternalRate(body.icmsRate);
@@ -84,7 +89,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const [company, icmsRates, cbsIbs] = await Promise.all([
-      loadTaxCompanyConfig(),
+      loadTaxCompanyConfig(organizationId),
       listIcmsInternalRates(),
       listCbsIbsVigencia(),
     ]);

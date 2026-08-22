@@ -5,7 +5,7 @@ import {
   loadTaxFixedCostItemsWithMonthValue,
 } from "@/lib/tax-report/tax-fixed-cost-data";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { parseJsonBody } from "@/lib/api-validation";
 
 const createFixedCostItemSchema = z
@@ -25,8 +25,9 @@ const createFixedCostItemSchema = z
   );
 
 export async function GET(request: NextRequest) {
-  if (!(await requireAuth())) {
-    return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
 
   const year = Number(request.nextUrl.searchParams.get("year"));
@@ -45,7 +46,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const items = await loadTaxFixedCostItemsWithMonthValue(year, month);
+    const items = await loadTaxFixedCostItemsWithMonthValue(
+      auth.ctx.organizationId,
+      year,
+      month,
+    );
     return NextResponse.json({ items });
   } catch (e) {
     logServerError("api/tax-report/fixed-cost-items GET", e);
@@ -57,8 +62,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  if (!(await requireAuth())) {
-    return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
 
   const parsedBody = await parseJsonBody(request, createFixedCostItemSchema);
@@ -71,7 +77,12 @@ export async function POST(request: NextRequest) {
       : null;
 
   try {
-    const item = await createTaxFixedCostItem(name, recurring, initialAmount);
+    const item = await createTaxFixedCostItem(
+      auth.ctx.organizationId,
+      name,
+      recurring,
+      initialAmount,
+    );
     return NextResponse.json({ item });
   } catch (e) {
     logServerError("api/tax-report/fixed-cost-items POST", e);

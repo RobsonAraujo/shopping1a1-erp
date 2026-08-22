@@ -859,6 +859,7 @@ async function applyMinPriceRefinement(
 export async function loadFinancialEvaluationRows(
   accessToken: string,
   userId: number,
+  organizationId: string,
   options?: {
     itemIds?: string[];
     targetMarginPercent?: number;
@@ -870,7 +871,7 @@ export async function loadFinancialEvaluationRows(
   const listingIds =
     options?.itemIds && options.itemIds.length > 0
       ? [...new Set(options.itemIds)]
-      : await fetchOperationalListingIds(accessToken, userId);
+      : await fetchOperationalListingIds(accessToken, userId, organizationId);
 
   if (listingIds.length === 0) return [];
 
@@ -890,7 +891,7 @@ export async function loadFinancialEvaluationRows(
   const kitItemIds = operationalItems
     .filter((item) => !getItemSku(item) && isKitItem(item))
     .map((item) => item.id);
-  const kitsByMlItemId = await loadKitsByMlItemId(kitItemIds);
+  const kitsByMlItemId = await loadKitsByMlItemId(organizationId, kitItemIds);
   const kitComponentSkus = [...kitsByMlItemId.values()].flatMap((components) =>
     components.map((c) => c.sku),
   );
@@ -900,10 +901,10 @@ export async function loadFinancialEvaluationRows(
     .filter((sku): sku is string => Boolean(sku))
     .concat(kitComponentSkus);
   const [pricingBySku, taxFromReport, productsWithPma] = await Promise.all([
-    loadProductsMapBySku(skus),
+    loadProductsMapBySku(organizationId, skus),
     loadProductTaxFromLatestReport(userId),
     prisma.product.findMany({
-      where: { sku: { in: skus }, pmaPrice: { not: null } },
+      where: { organizationId, sku: { in: skus }, pmaPrice: { not: null } },
       select: { sku: true, pmaPrice: true },
     }),
   ]);
@@ -1011,6 +1012,7 @@ export type FinancialEvaluationPeriodResult = {
 export async function loadFinancialEvaluationRowsForPeriod(
   accessToken: string,
   userId: number,
+  organizationId: string,
   fromYmd: string,
   toYmd: string,
   options?: {
@@ -1055,7 +1057,7 @@ export async function loadFinancialEvaluationRowsForPeriod(
   const kitItemIds = items
     .filter((item) => !getItemSku(item) && isKitItem(item))
     .map((item) => item.id);
-  const kitsByMlItemId = await loadKitsByMlItemId(kitItemIds);
+  const kitsByMlItemId = await loadKitsByMlItemId(organizationId, kitItemIds);
   const kitComponentSkus = [...kitsByMlItemId.values()].flatMap((components) =>
     components.map((c) => c.sku),
   );
@@ -1064,10 +1066,10 @@ export async function loadFinancialEvaluationRowsForPeriod(
     .filter((sku): sku is string => Boolean(sku))
     .concat(kitComponentSkus);
   const [pricingBySku, taxFromReport, productsWithPma] = await Promise.all([
-    loadProductsMapBySku(skus),
+    loadProductsMapBySku(organizationId, skus),
     loadProductTaxFromLatestReport(userId),
     prisma.product.findMany({
-      where: { sku: { in: skus }, pmaPrice: { not: null } },
+      where: { organizationId, sku: { in: skus }, pmaPrice: { not: null } },
       select: { sku: true, pmaPrice: true },
     }),
   ]);

@@ -20,6 +20,7 @@ export { custoProdutoFromView } from "@/lib/tax-report/enrichment/custo-produto"
 
 /** Carrega custos de todos os SKUs em batch (settings + products + aliases). */
 export async function loadCustoBySkuMap(
+  organizationId: string,
   skus: string[],
   aliasMap?: SkuAliasMap,
 ): Promise<Map<string, CustoProduto>> {
@@ -28,14 +29,14 @@ export async function loadCustoBySkuMap(
   ];
   if (normalized.length === 0) return new Map();
 
-  const map = aliasMap ?? (await loadSkuAliasMap());
+  const map = aliasMap ?? (await loadSkuAliasMap(organizationId));
   const canonicalSkus = [
     ...new Set(normalized.map((sku) => resolveCanonicalSku(sku, map))),
   ].filter(Boolean);
 
-  const pisCofins = await getCompanyPisCofinsPercent();
+  const pisCofins = await getCompanyPisCofinsPercent(organizationId);
   const products = await prisma.product.findMany({
-    where: { sku: { in: canonicalSkus } },
+    where: { organizationId, sku: { in: canonicalSkus } },
   });
 
   const byCanonical = new Map<string, CustoProduto>();
@@ -56,9 +57,10 @@ export async function loadCustoBySkuMap(
 
 // TODO: integrar com o serviço real de precificação se divergir do cadastro de produtos.
 export async function obterCustoPorSku(
+  organizationId: string,
   sku: string | null,
 ): Promise<CustoProduto | null> {
   if (!sku) return null;
-  const map = await loadCustoBySkuMap([sku]);
+  const map = await loadCustoBySkuMap(organizationId, [sku]);
   return map.get(normalizeProductSku(sku)) ?? null;
 }

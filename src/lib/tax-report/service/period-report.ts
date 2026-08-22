@@ -80,6 +80,7 @@ export function buildPeriodReportPayload(
 }
 
 export async function loadTaxReportForPeriod(
+  organizationId: string,
   sellerId: number,
   fromYmd: string,
   toYmd: string,
@@ -87,7 +88,7 @@ export async function loadTaxReportForPeriod(
   const months = monthsInRange(fromYmd, toYmd);
 
   const [aliasMap, snapshots] = await Promise.all([
-    loadSkuAliasMap(),
+    loadSkuAliasMap(organizationId),
     Promise.all(
       months.map((m) =>
         loadTaxReportSnapshot(sellerId, m.year, m.month).then((payload) => ({

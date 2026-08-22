@@ -36,12 +36,13 @@ function dayKey(date: Date): string {
 export async function loadRevenuePotentialData(
   token: string,
   userId: number,
+  organizationId: string,
 ) {
   const dateField = stockPlanningConfig.salesWindowDateField;
   const now = new Date();
   const lookbackStart = new Date(now.getTime() - LOOKBACK_DAYS * MS_PER_DAY);
 
-  const allIds = await fetchOperationalListingIds(token, userId);
+  const allIds = await fetchOperationalListingIds(token, userId, organizationId);
 
   const [rawItems, dailyByItem] = await Promise.all([
     fetchItemsByIdsBatched(token, allIds),
@@ -60,7 +61,7 @@ export async function loadRevenuePotentialData(
   const skus = items
     .map((item) => getItemSku(item))
     .filter((sku): sku is string => Boolean(sku?.trim()));
-  const productsBySku = await loadStockReportProductsBySku(skus);
+  const productsBySku = await loadStockReportProductsBySku(organizationId, skus);
 
   const rows: RevenuePotentialRow[] = items.map((item) => {
     const sku = getItemSku(item);

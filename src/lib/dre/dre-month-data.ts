@@ -114,6 +114,7 @@ export type BuildDreMonthSnapshotOptions = {
 async function computeErpCostsFromOrderLines(
   accessToken: string,
   sellerId: number,
+  organizationId: string,
   orderLines: Array<{
     itemId: string;
     quantity: number;
@@ -141,7 +142,7 @@ async function computeErpCostsFromOrderLines(
   const kitItemIds = items
     .filter((item) => !getItemSku(item) && isKitItem(item))
     .map((item) => item.id);
-  const kitsByMlItemId = await loadKitsByMlItemId(kitItemIds);
+  const kitsByMlItemId = await loadKitsByMlItemId(organizationId, kitItemIds);
   const kitComponentSkus = [...kitsByMlItemId.values()].flatMap((components) =>
     components.map((c) => c.sku),
   );
@@ -151,9 +152,9 @@ async function computeErpCostsFromOrderLines(
     .map((sku) => normalizeProductSku(sku))
     .concat(kitComponentSkus);
   const [pricingBySkuBase, taxFromReport, levelings] = await Promise.all([
-    loadProductsMapBySku(skus),
+    loadProductsMapBySku(organizationId, skus),
     loadProductTaxFromLatestReport(sellerId, undefined, { year, month }),
-    loadLevelingsOverlappingMonth(year, month),
+    loadLevelingsOverlappingMonth(organizationId, year, month),
   ]);
   const taxPercentBySku = new Map(
     [...taxFromReport.bySku].map(([sku, entry]) => [sku, entry.taxPercent]),
@@ -642,6 +643,7 @@ async function fetchOrderDataForRange(
 export async function buildDreMonthSnapshot(
   accessToken: string,
   sellerId: number,
+  organizationId: string,
   year: number,
   month: number,
   options: BuildDreMonthSnapshotOptions = {},
@@ -776,13 +778,14 @@ export async function buildDreMonthSnapshot(
     computeErpCostsFromOrderLines(
       accessToken,
       sellerId,
+      organizationId,
       orderLines,
       year,
       month,
     ),
   ]);
 
-  let { adsCost, adsCostBreakdown } = adsResult;
+  const { adsCost, adsCostBreakdown } = adsResult;
 
   report({ phase: "ml_costs", message: "Mapeando custos ML…" });
 
@@ -958,7 +961,11 @@ export async function buildDreMonthSnapshot(
 
   let fullReportSourced = false;
   try {
-    let fullShipmentRecords = await listFullShipmentsForPeriod(year, month);
+    let fullShipmentRecords = await listFullShipmentsForPeriod(
+      organizationId,
+      year,
+      month,
+    );
     let autoImported = false;
 
     if (fullShipmentRecords.length === 0) {
@@ -970,6 +977,7 @@ export async function buildDreMonthSnapshot(
         const imported = await importFullCollectChargesFromBilling(
           accessToken,
           sellerId,
+          organizationId,
           year,
           month,
           { fullDetailsCache },
@@ -1059,6 +1067,7 @@ export async function buildDreMonthSnapshot(
       const cancelledErpCosts = await computeErpCostsFromOrderLines(
         accessToken,
         sellerId,
+        organizationId,
         cancelledLines,
         year,
         month,
@@ -1120,6 +1129,7 @@ export async function buildDreMonthSnapshot(
 }
 
 export async function persistDreMonthSnapshot(
+  organizationId: string,
   year: number,
   month: number,
   payload: DreMonthSnapshotPayload,
@@ -1128,7 +1138,7 @@ export async function persistDreMonthSnapshot(
   const syncedAt = new Date();
 
   const existing = await prisma.dreMonthSnapshot.findUnique({
-    where: { year_month: { year, month } },
+    where: { organizationId_year_month: { organizationId, year, month } },
     select: { payload: true },
   });
   const previous = existing ? parseSnapshotPayload(existing.payload) : null;
@@ -1139,8 +1149,9 @@ export async function persistDreMonthSnapshot(
   );
 
   await prisma.dreMonthSnapshot.upsert({
-    where: { year_month: { year, month } },
+    where: { organizationId_year_month: { organizationId, year, month } },
     create: {
+      organizationId,
       year,
       month,
       syncedAt,
@@ -1187,6 +1198,7 @@ export function emptyDreMonthSnapshotPayload(): DreMonthSnapshotPayload {
  * Marca a linha como ajustada manualmente (vs baseline do último sync).
  */
 export async function patchDreMonthLine(
+  organizationId: string,
   year: number,
   month: number,
   lineKey: DreEditableLineKey,
@@ -1200,7 +1212,7 @@ export async function patchDreMonthLine(
   }
 
   const existing = await prisma.dreMonthSnapshot.findUnique({
-    where: { year_month: { year, month } },
+    where: { organizationId_year_month: { organizationId, year, month } },
   });
 
   const base =
@@ -1211,8 +1223,9 @@ export async function patchDreMonthLine(
 
   const syncedAt = existing?.syncedAt ?? new Date();
   await prisma.dreMonthSnapshot.upsert({
-    where: { year_month: { year, month } },
+    where: { organizationId_year_month: { organizationId, year, month } },
     create: {
+      organizationId,
       year,
       month,
       syncedAt,
@@ -1230,6 +1243,7 @@ export async function patchDreMonthLine(
  * Não altera `syncedAt`.
  */
 export async function restoreDreMonthLine(
+  organizationId: string,
   year: number,
   month: number,
   lineKey: DreEditableLineKey,
@@ -1239,7 +1253,7 @@ export async function restoreDreMonthLine(
   }
 
   const existing = await prisma.dreMonthSnapshot.findUnique({
-    where: { year_month: { year, month } },
+    where: { organizationId_year_month: { organizationId, year, month } },
   });
   if (!existing) {
     throw new Error("Mês sem snapshot para restaurar.");
@@ -1256,7 +1270,7 @@ export async function restoreDreMonthLine(
   }
 
   await prisma.dreMonthSnapshot.update({
-    where: { year_month: { year, month } },
+    where: { organizationId_year_month: { organizationId, year, month } },
     data: { payload: next as object },
   });
   return existing.syncedAt;

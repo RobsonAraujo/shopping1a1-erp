@@ -1,11 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   pollCatalogCompetitionForSeller,
-  resolveCronMlUserId,
+  resolvePayingOrgSellersForCronBatch,
 } from "@/lib/catalog-report/catalog-competition-poll";
 import { recordCatalogPollRun } from "@/lib/catalog-report/catalog-competition-poll-stats";
 import { resolveSellerAccessToken } from "@/lib/mercadolibre/persist-seller-tokens";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
+import { logServerError } from "@/lib/server-public-error";
+import { prisma } from "@/lib/db";
+
+/**
+ * Roda 1x/hora (cron-job.org — configuração externa, não muda por tenant).
+ * O fan-out por organização acontece aqui dentro: processa um lote pequeno
+ * de sellers pagantes por execução (os mais atrasados primeiro) e continua
+ * de onde parou na próxima hora — sem fila/worker novo, sem precisar
+ * reconfigurar nada no cron-job.org quando um cliente entra ou sai.
+ *
+ * É só o heartbeat de segurança: o webhook (api/ml/notifications/catalog-competition)
+ * já cobre o caso real-time barato pra cada seller.
+ */
+const CRON_BATCH_SIZE = 10;
 
 function authorizeCron(request: NextRequest): boolean {
   const secret = process.env.CRON_SECRET?.trim();
@@ -20,56 +33,85 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const mlUserId = await resolveCronMlUserId();
-  if (mlUserId === null) {
-    return NextResponse.json(
-      { error: "No ML seller configured (CRON_ML_USER_ID or credentials)" },
-      { status: 503 },
-    );
+  const sellers = await resolvePayingOrgSellersForCronBatch(CRON_BATCH_SIZE);
+  if (sellers.length === 0) {
+    return NextResponse.json({ ok: true, processedSellers: 0, results: [] });
   }
 
-  const token = await resolveSellerAccessToken(mlUserId);
-  if (!token) {
-    return NextResponse.json(
-      { error: "Could not resolve ML access token" },
-      { status: 503 },
-    );
+  const results: Array<{
+    mlUserId: number;
+    organizationId: string;
+    ok: boolean;
+    checked?: number;
+    changed?: number;
+    error?: string;
+  }> = [];
+
+  for (const { mlUserId, organizationId } of sellers) {
+    try {
+      const token = await resolveSellerAccessToken(mlUserId);
+      if (!token) {
+        results.push({
+          mlUserId,
+          organizationId,
+          ok: false,
+          error: "no_valid_token",
+        });
+        continue;
+      }
+
+      const result = await pollCatalogCompetitionForSeller(
+        token,
+        mlUserId,
+        organizationId,
+        "cron",
+      );
+
+      await recordCatalogPollRun({
+        organizationId,
+        source: "cron",
+        itemsChecked: result.checked,
+        itemsChanged: result.changed,
+        ok: result.errors.length === 0,
+        errorSummary:
+          result.errors.length > 0 ? result.errors.slice(0, 5).join("; ") : null,
+      });
+
+      results.push({
+        mlUserId,
+        organizationId,
+        ok: result.errors.length === 0,
+        checked: result.checked,
+        changed: result.changed,
+      });
+    } catch (e) {
+      logServerError(`api/cron/catalog-competition seller=${mlUserId}`, e);
+      results.push({
+        mlUserId,
+        organizationId,
+        ok: false,
+        error: e instanceof Error ? e.message : "cron_failed",
+      });
+    } finally {
+      // Atualiza mesmo em erro — um seller com falha não deve travar a
+      // rotação e ficar sempre em primeiro no próximo lote.
+      await prisma.organizationMlSeller
+        .update({
+          where: { organizationId_mlUserId: { organizationId, mlUserId } },
+          data: { lastCatalogCronPolledAt: new Date() },
+        })
+        .catch((e) =>
+          logServerError(
+            `api/cron/catalog-competition update-cursor seller=${mlUserId}`,
+            e,
+          ),
+        );
+    }
   }
 
-  try {
-    const result = await pollCatalogCompetitionForSeller(
-      token,
-      mlUserId,
-      "cron",
-    );
-
-    const run = await recordCatalogPollRun({
-      source: "cron",
-      itemsChecked: result.checked,
-      itemsChanged: result.changed,
-      ok: result.errors.length === 0,
-      errorSummary:
-        result.errors.length > 0 ? result.errors.slice(0, 5).join("; ") : null,
-    });
-
-    return NextResponse.json({
-      ok: result.errors.length === 0,
-      checked: result.checked,
-      changed: result.changed,
-      ranAt: run.ranAt.toISOString(),
-      errors: result.errors.length,
-    });
-  } catch (e) {
-    logServerError("api/cron/catalog-competition", e);
-    await recordCatalogPollRun({
-      source: "cron",
-      itemsChecked: 0,
-      itemsChanged: 0,
-      ok: false,
-      errorSummary: e instanceof Error ? e.message : "cron_failed",
-    });
-    return NextResponse.json(apiErrorPayload(e, "catalog_cron_failed"), {
-      status: 502,
-    });
-  }
+  return NextResponse.json({
+    ok: results.every((r) => r.ok),
+    processedSellers: results.length,
+    results,
+  });
 }

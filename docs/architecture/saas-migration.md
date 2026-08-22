@@ -57,14 +57,31 @@ O restante do app **não** isola dados entre sellers: dois logins ML no mesmo DB
 
 ### Bloqueadores críticos
 
-| Área | Problema | Arquivos |
-|------|----------|----------|
-| Config fiscal | Singleton `CompanyTaxSettings.id = "default"` | `src/lib/product-data.ts`, `src/lib/tax-report/tax-config-data.ts` |
-| Produtos | PK global `sku` | `prisma/schema.prisma`, `src/app/api/products/*` |
-| DRE | `@@unique([year, month])` — um snapshot/mês para todo o DB | `src/lib/dre-month-data.ts` |
-| Listings / estoque | Sem `organizationId` | `src/lib/dashboard-purchase-data.ts`, páginas de inventory |
-| Cron catálogo | Um seller (`CRON_ML_USER_ID` ou primeiro credential) | `src/lib/catalog-competition-poll.ts` |
-| App ML | Credenciais globais no `.env` | `src/lib/mercadolibre/config.ts` |
+Todos resolvidos em 2026-08-21 (ver plano de implementação), exceto o último:
+
+| Área | Problema | Status |
+|------|----------|--------|
+| Config fiscal | Singleton `CompanyTaxSettings.id = "default"` | ✅ uma linha por org, `@@unique([organizationId])` |
+| Produtos | PK global `sku` | ✅ PK sintética + `@@unique([organizationId, sku])` |
+| DRE | `@@unique([year, month])` — um snapshot/mês para todo o DB | ✅ `@@unique([organizationId, year, month])` |
+| Listings / estoque | Sem `organizationId` | ✅ escopado, `organizationId` `NOT NULL` (Fase 7, 2026-08-21) |
+| Cron catálogo | Um seller (`CRON_ML_USER_ID` ou primeiro credential) | ✅ redesenhado — fan-out por org pagante, lote rotativo (ver Fase 6) |
+| App ML | Credenciais globais no `.env` | ⬜ ainda global — 1 app ML compartilhado por todos os tenants; risco de rate limit conhecido, ver [Rate limit do app ML compartilhado](#rate-limit-do-app-ml-compartilhado) |
+
+### Rate limit do app ML compartilhado
+
+Investigado em 2026-08-21 (pesquisa na [doc oficial de rate limit da Mercado Livre](https://developers.mercadolibre.com.ar/es_ar/rate-limit-error-429), FAQ "¿El rate limit se aplica por IP, por Client ID o por usuario?"):
+
+- **Confirmado pela doc oficial:** o controle principal é **por Client ID (aplicação)**, não por seller/token — todos os tenants compartilham a mesma cota de `MERCADOLIBRE_CLIENT_ID` (`src/lib/mercadolibre/config.ts`). Um tenant com uso pesado (sync de catálogo grande, burst de chamadas) pode throttlar os outros — noisy-neighbor real, não teórico.
+- **Não há número público de cota** — a ML não documenta um valor único (números como "1500 req/min" que aparecem em blogs de terceiros não vieram de fonte oficial nesta pesquisa e não devem ser usados como referência).
+- **Caminho sancionado pra crescer:** a própria doc recomenda monitorar consumo por Client ID e solicitar aumento de cota ("equipe de integrações comerciais") com evidência de uso legítimo — é assim que integradores maiores (Bling, Tiny, Olist, etc.) operam, via "Developer Partner Program" da ML.
+- **Ainda não sabemos** se a cota atual aguenta a escala alvo (~50 sellers) — não dá pra saber sem medir. Próximos passos, quando isso virar prioridade:
+  1. Logar os headers de rate limit reais das respostas da API em `src/lib/mercadolibre/api.ts` pra ter o teto real do nosso `client_id` (não um número de blog).
+  2. Com o dado em mãos, projetar a carga em 50 sellers e comparar com o headroom observado.
+  3. Se estiver no limite, solicitar aumento de cota à ML antes de considerar qualquer redesenho de arquitetura (app por tenant é o plano B, só se a ML negar/limitar o aumento).
+- **Decisão consciente:** não vamos mexer nisso agora — mantido como item de atenção, não bloqueador, enquanto a base de tenants for pequena.
+
+Quando volume ou receita justificarem mudar cron, cota ML, billing ou isolamento: [saas-scale-triggers.md](saas-scale-triggers.md).
 
 ---
 
@@ -89,14 +106,17 @@ Detalhes dos modelos: [tenant-data-model.md](tenant-data-model.md).
 
 ---
 
-## Classificação das tabelas Prisma (hoje)
+## Classificação das tabelas Prisma (2026-08-21, atualizado na Fase 7)
 
 | Classificação | Modelos |
 |---------------|---------|
-| **Referência global** (compartilhável) | `CbsIbsVigencia`, `TaxpayerVerificationCache` |
-| **Referência editável** (hoje global; pode virar override por org) | `IcmsInternalRate` |
-| **Por tenant** (hoje sem coluna — precisa `organizationId`) | `Product`, `CompanyTaxSettings`, `Listing`, `WarehouseStock`, `ReplenishmentCycle`, `CatalogCompetitionSnapshot`, `StockAttentionAcknowledgement`, `DreCostItem`, `DreCostMonthValue`, `DreMonthSnapshot`, `DreProductCostLeveling`, `CatalogCompetitionPollRun` |
-| **Parcial ML** (seller como proxy) | `TaxReportMonthSnapshot`, `MlSellerCredentials` |
+| **Referência global** (compartilhável, nunca por org) | `CbsIbsVigencia`, `TaxpayerVerificationCache`, `FlexDistanceTier` |
+| **Global por padrão, override opcional por org** (schema pronto, sem UI ainda) | `IcmsInternalRate` |
+| **Por tenant — `organizationId` `NOT NULL`, todas as queries escopadas** | `Listing`, `WarehouseStock`, `ReplenishmentCycle`, `CatalogCompetitionSnapshot`, `StockAttentionAcknowledgement`, `DreCostItem`, `DreCostMonthValue`, `CatalogCompetitionPollRun`, `Kit`, `FullShipment`, `TaxFixedCostItem`, `TaxFixedCostMonthValue`, `TaxFixedCostMonthExclusion`, `Product`, `CompanyTaxSettings`, `KitItem`, `ProductSkuAlias`, `DreProductCostLeveling`, `DreMonthSnapshot` |
+| **Parcial ML** (seller como proxy — `sellerId` já é um limite de tenant válido, 1 seller : 1 org; `organizationId` também `NOT NULL` desde a Fase 7, mas a chave de negócio continua sendo `sellerId`) | `TaxReportMonthSnapshot`, `RevenueSimulation` |
+| **Storage de token, keyed por `mlUserId`** (não é dado de tenant) | `MlSellerCredentials` |
+
+Guard-rail ativo (`src/lib/db-tenant-guard.ts`) pra linha "Por tenant" acima (`TENANT_SCOPED_MODELS`) — lança erro em dev/CI/prod se uma query em lote (`findMany`/`updateMany`/`deleteMany`/`count`/`aggregate`/`groupBy`) não tiver `organizationId` no `where`. `TaxReportMonthSnapshot`/`RevenueSimulation` ficam de fora de propósito (ver comentário em `db-tenant-guard.ts`).
 
 ---
 
@@ -111,10 +131,9 @@ Detalhes dos modelos: [tenant-data-model.md](tenant-data-model.md).
 
 ### 2. Auth e sessão
 
-- Login ERP (decisão futura: email, magic link ou SSO)
-- ML OAuth = integração, não identidade principal
-- `requireOrganization(session)` centralizado
-- Sessão com `userId` + `organizationId` + `mlUserId` ativo
+- **Decidido (2026-08-21):** login continua sendo só OAuth do Mercado Livre — não haverá email/senha nem SSO nesta fase. `mlUserId` é a identidade de login; `Organization`/`User`/`OrganizationMember` existem no schema (multiusuário pronto para o futuro), mas hoje só o dono (1 `User` por org) é criado, automaticamente, no primeiro login OAuth.
+- `requireOrganization(session)` centralizado — resolve `organizationId` a partir do `mlUserId` da sessão via `OrganizationMlSeller`
+- Sessão com `userId` (ML) + `organizationId` resolvido a cada request (sem cache em cookie — ver plano de migração)
 
 ### 3. Libs / loaders
 
@@ -146,26 +165,41 @@ Detalhes dos modelos: [tenant-data-model.md](tenant-data-model.md).
 
 - Um deployment + PostgreSQL multi-tenant
 - `ENCRYPTION_KEY` global; tokens ML por seller (ok)
-- Billing e planos — fase posterior
+- **Decidido (2026-08-21):** pagamento é controlado manualmente por enquanto — `Organization.status` (`trialing | active | past_due | canceled`) trocado à mão (rota interna ou Prisma Studio). Gateway real (Stripe/Mercado Pago) e planos/limites — fase posterior; o campo já é desenhado para um webhook de gateway escrever nele sem nova migration
 
 ---
 
 ## Roadmap de fases
 
-| Fase | Escopo | Entregável |
-|------|--------|------------|
-| **0 — Doc** | Este documento + processo em AGENTS.md | Time alinhado |
-| **1 — Contexto** | Modelo `Organization` + helper `requireOrganization` | Código novo já tenant-aware |
-| **2 — Schema** | `organizationId` + backfill | Isolamento de dados |
-| **3 — APIs** | Escopar rotas e libs existentes | Sem vazamento entre orgs |
-| **4 — Auth ERP** | Users, convites, papéis | Produto vendável |
-| **5 — Produto SaaS** | Onboarding, billing | Go-to-market |
+| Fase | Escopo | Status |
+|------|--------|--------|
+| **0 — Doc** | Este documento + processo em AGENTS.md | ✅ |
+| **1 — Contexto** | Modelo `Organization` + helper `requireOrganization` | ✅ |
+| **2 — Schema** | `organizationId` + backfill | ✅ (chave composta nos modelos que precisavam; `NOT NULL` nos demais concluído na Fase 7) |
+| **3 — APIs** | Escopar rotas e libs existentes | ✅ completo — zero rota ainda em `requireAuth()` |
+| **4 — Auth ERP** | ~~Users, convites, papéis~~ — **simplificado (2026-08-21):** schema `User`/`OrganizationMember` pronto, mas só auto-provisionamento do dono no login ML; convite de 2º usuário fica pra depois | ✅ (versão simplificada) |
+| **5 — Produto SaaS** | Onboarding, gate de pagamento manual agora; billing automático (gateway) depois | 🟡 gate de pagamento manual funcionando; onboarding/billing automático seguem fora de escopo |
+| **6 — Cron multi-tenant** *(adicionada em 2026-08-21)* | Redesenho do cron de catálogo pra não escalar linearmente com tenants | ✅ |
+| **7 — Hardening** *(adicionada em 2026-08-21)* | Apertar `NOT NULL` nos modelos restantes após backfill em produção | ✅ (2026-08-21) — migration `20260821213929_saas_tenant_hardening_not_null`, backfill defensivo idempotente incluso; achou e corrigiu 2 write paths reais sem `organizationId` (`POST /api/insights/revenue-simulations`, `saveTaxReportSnapshot`) |
+
+Plano de execução detalhado (arquivos e código concretos): ver plano de implementação de 2026-08-21.
 
 ---
 
 ## Registro de features
 
 Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templates/feature-saas-impact.md).
+
+### Fase 7 — Hardening `organizationId NOT NULL` — 2026-08-21
+
+- **Tabelas novas/alteradas:** `organization_id` virou `NOT NULL` em 15 tabelas (`listings`, `kits`, `warehouse_stock`, `replenishment_cycles`, `catalog_competition_snapshots`, `catalog_competition_poll_runs`, `stock_attention_acknowledgements`, `full_shipments`, `dre_cost_items`, `dre_cost_month_values`, `tax_fixed_cost_items`, `tax_fixed_cost_month_values`, `tax_fixed_cost_month_exclusions`, `tax_report_month_snapshots`, `revenue_simulations`) — migration `20260821213929_saas_tenant_hardening_not_null`, com backfill defensivo idempotente embutido (mesmo padrão das migrations da Fase 2)
+- **Precisa `organizationId`?** já tinha a coluna (Fase 2); esta entrada só remove a nulabilidade
+- **APIs afetadas:** nenhuma rota nova; o typecheck pós-migration revelou 2 write paths reais sem `organizationId` que foram corrigidos: `POST /api/insights/revenue-simulations` (`prisma.revenueSimulation.create`) e `saveTaxReportSnapshot` (`src/lib/tax-report/service/generate-monthly-report.ts`, chamada por `POST /api/reports/monthly-tax`) — ambos já resolviam `organizationId` via `requireOrganization()` mas não estavam gravando na tabela
+- **Assume singleton?** não
+- **Cron/background:** nenhum
+- **Dados globais vs por org:** nenhuma mudança de comportamento — só remove a lacuna de integridade que restava no schema
+- **Código já tenant-ready?** sim — era o objetivo desta fase
+- **Ação futura na migração:** `scripts/backfill-saas-default-organization.ts` foi simplificado (perdeu o loop de backfill por tabela, agora redundante com o backfill embutido nas migrations); `scripts/seed-catalog-report-demo.ts` passou a resolver `organizationId` da primeira `Organization` do banco
 
 ### Remoção do alerta push de catálogo — 2026-08-20
 
@@ -464,19 +498,22 @@ Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templ
 
 ## Boas práticas ao desenvolver agora
 
-Mesmo antes da migração:
+A migração de escopo (Fases 1-6) está feita — a partir de agora, isto não é mais preparação, é o padrão obrigatório:
 
-1. **Evitar novos singletons** (`id: "default"`, tabelas sem FK de tenant)
-2. **Funções novas** em libs: aceitar `organizationId` opcional no tipo de input (preparar assinatura)
-3. **APIs novas**: documentar na seção Registro de features
-4. **Queries `findMany`**: anotar em comentário se precisarão filtro por org
-5. **Testes**: quando existir org, usar factory com `organizationId` de teste
+1. **Nunca criar um novo singleton** (`id: "default"`, tabela de negócio sem `organizationId`)
+2. **Toda função nova** em lib que toca modelo de negócio: `organizationId` é o primeiro parâmetro, **obrigatório** (não opcional)
+3. **Toda rota de API nova**: usar `requireOrganization()` (não `requireAuth()`), documentar na seção Registro de features
+4. **Toda query em lote nova** (`findMany`/`updateMany`/`deleteMany`/`count`/`aggregate`/`groupBy`) sobre modelo de negócio: incluir `organizationId` no `where` — o guard-rail (`src/lib/db-tenant-guard.ts`) lança erro em runtime se esquecer, mas é mais barato acertar de primeira. Se o modelo novo for tenant-scoped, adicionar seu nome em `TENANT_SCOPED_MODELS` assim que TODAS as queries dele já filtrarem por org.
+5. **Testes**: usar `organizationId` de teste nas factories
 
 ---
 
 ## Fora de escopo (por enquanto)
 
-- Implementação dos modelos Prisma e migração de dados
-- Billing (Stripe), planos e limites
-- UI de seleção de organização
+- Gateway de pagamento real (Stripe/Mercado Pago), planos e limites — status hoje é manual
+- Convite de segundo usuário por organização / login por email
+- UI de seleção de organização (desnecessária enquanto login = 1 org por sessão)
+- Override de `IcmsInternalRate` por org via UI (schema já suporta; sem tela ainda)
 - Subdomínios por tenant (`cliente.app.com`)
+
+Quando algum destes itens (ou o cron hora-a-hora para todos os orgs) virar prioridade: [saas-scale-triggers.md](saas-scale-triggers.md).

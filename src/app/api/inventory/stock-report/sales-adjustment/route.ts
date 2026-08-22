@@ -6,7 +6,7 @@ import {
   stockReportSalesAdjustmentRange,
 } from "@/lib/inventory/inventory-stock-report";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 
 function parseItemIds(value: string | null): string[] {
   if (!value?.trim()) return [];
@@ -21,9 +21,11 @@ function parseItemIds(value: string | null): string[] {
 }
 
 export async function GET(request: NextRequest) {
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
-  const { token, userId } = auth;
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
+  const { token, userId } = auth.ctx;
 
   const snapshotParam = request.nextUrl.searchParams.get("snapshot");
   const itemIds = parseItemIds(request.nextUrl.searchParams.get("itemIds"));

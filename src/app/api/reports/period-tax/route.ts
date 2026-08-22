@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loadTaxReportForPeriod } from "@/lib/tax-report/service/period-report";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { stripTransacoesForResponse } from "@/lib/tax-report/strip-transacoes-for-response";
 
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -25,9 +25,11 @@ function parseFromTo(searchParams: URLSearchParams): {
 }
 
 export async function GET(request: NextRequest) {
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
-  const { userId } = auth;
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
+  const { userId, organizationId } = auth.ctx;
 
   const parsed = parseFromTo(request.nextUrl.searchParams);
   if (!parsed) {
@@ -39,6 +41,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const { payload, missingMonths } = await loadTaxReportForPeriod(
+      organizationId,
       userId,
       parsed.from,
       parsed.to,

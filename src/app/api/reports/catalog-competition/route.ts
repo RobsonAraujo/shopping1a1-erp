@@ -2,16 +2,18 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCatalogPollStats } from "@/lib/catalog-report/catalog-competition-poll-stats";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 
 export async function GET() {
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
 
   try {
     const [listings, pollStats] = await Promise.all([
       prisma.listing.findMany({
-        where: { catalogListing: true },
+        where: { organizationId: auth.ctx.organizationId, catalogListing: true },
         select: {
           mlItemId: true,
           titleSnapshot: true,
@@ -24,7 +26,7 @@ export async function GET() {
           catalogPolledAt: true,
         },
       }),
-      getCatalogPollStats(),
+      getCatalogPollStats(auth.ctx.organizationId),
     ]);
 
     const items = listings

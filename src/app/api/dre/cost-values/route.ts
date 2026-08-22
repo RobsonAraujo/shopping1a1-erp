@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { loadDreYearView } from "@/lib/dre/dre-year-data";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireAuth, unauthorizedResponse } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api-auth";
 import { parseJsonBody } from "@/lib/api-validation";
 
 const costValueSchema = z.object({
@@ -14,8 +14,11 @@ const costValueSchema = z.object({
 });
 
 export async function PUT(request: NextRequest) {
-  const auth = await requireAuth();
-  if (!auth) return unauthorizedResponse();
+  const auth = await requireOrganization();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  }
+  const { organizationId } = auth.ctx;
 
   const parsedBody = await parseJsonBody(request, costValueSchema);
   if (!parsedBody.ok) return parsedBody.response;
@@ -23,7 +26,7 @@ export async function PUT(request: NextRequest) {
 
   try {
     const item = await prisma.dreCostItem.findFirst({
-      where: { id: costItemId, active: true },
+      where: { id: costItemId, organizationId, active: true },
     });
     if (!item) {
       return NextResponse.json({ error: "Cost item not found" }, { status: 404 });
@@ -31,7 +34,7 @@ export async function PUT(request: NextRequest) {
 
     if (amount === null || amount === undefined) {
       await prisma.dreCostMonthValue.deleteMany({
-        where: { costItemId, year, month },
+        where: { costItemId, organizationId, year, month },
       });
     } else {
       await prisma.dreCostMonthValue.upsert({
@@ -39,6 +42,7 @@ export async function PUT(request: NextRequest) {
           costItemId_year_month: { costItemId, year, month },
         },
         create: {
+          organizationId,
           costItemId,
           year,
           month,
@@ -48,7 +52,7 @@ export async function PUT(request: NextRequest) {
       });
     }
 
-    const yearView = await loadDreYearView(year);
+    const yearView = await loadDreYearView(organizationId, year);
     return NextResponse.json({ year: yearView });
   } catch (e) {
     logServerError("api/dre/cost-values PUT", e);

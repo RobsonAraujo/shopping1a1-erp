@@ -41,20 +41,25 @@ function toRecord(row: FullShipment): FullShipmentRecord {
   };
 }
 
-export async function listFullShipments(): Promise<FullShipmentRecord[]> {
+export async function listFullShipments(
+  organizationId: string,
+): Promise<FullShipmentRecord[]> {
   const rows = await prisma.fullShipment.findMany({
+    where: { organizationId },
     orderBy: [{ shippedAt: "desc" }, { createdAt: "desc" }],
   });
   return rows.map(toRecord);
 }
 
 export async function listFullShipmentsForPeriod(
+  organizationId: string,
   year: number,
   month: number,
 ): Promise<FullShipmentRecord[]> {
   const { start, end } = activityMonthBounds(year, month);
   const rows = await prisma.fullShipment.findMany({
     where: {
+      organizationId,
       shippedAt: { gte: start, lte: end },
     },
     orderBy: [{ shippedAt: "desc" }, { createdAt: "desc" }],
@@ -68,12 +73,13 @@ export async function listFullShipmentsForPeriod(
  * listagem em Relatório Full.
  */
 export async function listFullShipmentActivityMonthsForYear(
+  organizationId: string,
   year: number,
 ): Promise<Set<number>> {
   const { start } = activityMonthBounds(year, 1);
   const { end } = activityMonthBounds(year, 12);
   const rows = await prisma.fullShipment.findMany({
-    where: { shippedAt: { gte: start, lte: end } },
+    where: { organizationId, shippedAt: { gte: start, lte: end } },
     select: { shippedAt: true },
   });
 
@@ -88,11 +94,12 @@ export async function listFullShipmentActivityMonthsForYear(
   return months;
 }
 
-export async function listImportedBillingPeriods(): Promise<
-  Array<{ year: number; month: number }>
-> {
+export async function listImportedBillingPeriods(
+  organizationId: string,
+): Promise<Array<{ year: number; month: number }>> {
   const rows = await prisma.fullShipment.findMany({
     where: {
+      organizationId,
       source: "ml_billing",
       billingYear: { not: null },
       billingMonth: { not: null },
@@ -112,11 +119,13 @@ export async function listImportedBillingPeriods(): Promise<
 }
 
 export async function createFullShipment(
+  organizationId: string,
   input: FullShipmentWriteInput,
 ): Promise<FullShipmentRecord> {
   const normalized = normalizeFullShipmentInput(input);
   const row = await prisma.fullShipment.create({
     data: {
+      organizationId,
       shippedAt: normalized.shippedAt,
       totalCost: normalized.totalCost,
       nonComplianceCost: normalized.nonComplianceCost,
@@ -135,6 +144,7 @@ export async function createFullShipment(
 }
 
 export async function updateFullShipment(
+  organizationId: string,
   id: string,
   input: {
     shippedAt?: Date;
@@ -143,7 +153,9 @@ export async function updateFullShipment(
     notes?: string | null;
   },
 ): Promise<FullShipmentRecord> {
-  const existing = await prisma.fullShipment.findUnique({ where: { id } });
+  const existing = await prisma.fullShipment.findFirst({
+    where: { id, organizationId },
+  });
   if (!existing) {
     throw new FullShipmentValidationError("Envio não encontrado.");
   }
@@ -153,7 +165,7 @@ export async function updateFullShipment(
   const finalized = finalizeShipmentPatch(current, patch);
 
   const row = await prisma.fullShipment.update({
-    where: { id },
+    where: { id, organizationId },
     data: {
       ...patch,
       totalCost: finalized.totalCost,
@@ -164,8 +176,11 @@ export async function updateFullShipment(
   return toRecord(row);
 }
 
-export async function deleteFullShipment(id: string): Promise<void> {
-  await prisma.fullShipment.delete({ where: { id } });
+export async function deleteFullShipment(
+  organizationId: string,
+  id: string,
+): Promise<void> {
+  await prisma.fullShipment.delete({ where: { id, organizationId } });
 }
 
 export type ImportFullShipmentsResult = {
@@ -187,6 +202,7 @@ export type ImportFullShipmentsResult = {
 export async function importFullCollectChargesFromBilling(
   accessToken: string,
   sellerId: number,
+  organizationId: string,
   year: number,
   month: number,
   options?: {
@@ -196,6 +212,7 @@ export async function importFullCollectChargesFromBilling(
   const { shipments, probe } = await fetchFullInboundShipmentsForPeriod(
     accessToken,
     sellerId,
+    organizationId,
     year,
     month,
     { fullDetailsCache: options?.fullDetailsCache },
@@ -204,6 +221,7 @@ export async function importFullCollectChargesFromBilling(
   const { start, end } = activityMonthBounds(year, month);
   const replaced = await prisma.fullShipment.deleteMany({
     where: {
+      organizationId,
       source: "ml_billing",
       shippedAt: { gte: start, lte: end },
     },
@@ -239,6 +257,7 @@ export async function importFullCollectChargesFromBilling(
     });
 
     return {
+      organizationId,
       shippedAt: normalized.shippedAt,
       totalCost: normalized.totalCost,
       nonComplianceCost: normalized.nonComplianceCost,

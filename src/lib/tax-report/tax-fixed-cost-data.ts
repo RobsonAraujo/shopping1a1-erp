@@ -56,13 +56,14 @@ function statusFor(
 }
 
 export async function loadTaxFixedCostItemsWithMonthValue(
+  organizationId: string,
   year: number,
   month: number,
 ): Promise<TaxFixedCostItemWithMonthValue[]> {
   const [items, explicitValues, excludedMonths] = await Promise.all([
-    loadTaxFixedCostItems(),
-    loadTaxFixedCostExplicitValues(year),
-    loadTaxFixedCostExcludedMonths(year),
+    loadTaxFixedCostItems(organizationId),
+    loadTaxFixedCostExplicitValues(organizationId, year),
+    loadTaxFixedCostExcludedMonths(organizationId, year),
   ]);
 
   return items.map((item) => {
@@ -86,9 +87,11 @@ export async function loadTaxFixedCostItemsWithMonthValue(
   });
 }
 
-export async function loadTaxFixedCostItems(): Promise<TaxFixedCostItemView[]> {
+export async function loadTaxFixedCostItems(
+  organizationId: string,
+): Promise<TaxFixedCostItemView[]> {
   const items = await prisma.taxFixedCostItem.findMany({
-    where: { active: true },
+    where: { organizationId, active: true },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     select: ITEM_SELECT,
   });
@@ -97,10 +100,11 @@ export async function loadTaxFixedCostItems(): Promise<TaxFixedCostItemView[]> {
 
 /** Valores explícitos cadastrados no ano pedido e no anterior (pra permitir herança na virada de ano). */
 export async function loadTaxFixedCostExplicitValues(
+  organizationId: string,
   year: number,
 ): Promise<Map<string, number>> {
   const rows = await prisma.taxFixedCostMonthValue.findMany({
-    where: { year: { in: [year - 1, year] } },
+    where: { organizationId, year: { in: [year - 1, year] } },
     select: { costItemId: true, year: true, month: true, amount: true },
   });
   return buildExplicitFixedCostMap(rows);
@@ -108,16 +112,18 @@ export async function loadTaxFixedCostExplicitValues(
 
 /** Meses explicitamente excluídos ("Remover valor deste mês") no ano pedido e no anterior. */
 export async function loadTaxFixedCostExcludedMonths(
+  organizationId: string,
   year: number,
 ): Promise<Set<string>> {
   const rows = await prisma.taxFixedCostMonthExclusion.findMany({
-    where: { year: { in: [year - 1, year] } },
+    where: { organizationId, year: { in: [year - 1, year] } },
     select: { costItemId: true, year: true, month: true },
   });
   return buildExcludedMonthsSet(rows);
 }
 
 export async function createTaxFixedCostItem(
+  organizationId: string,
   name: string,
   recurring: boolean,
   initialAmount?: {
@@ -127,17 +133,23 @@ export async function createTaxFixedCostItem(
   } | null,
 ): Promise<TaxFixedCostItemView> {
   const maxSort = await prisma.taxFixedCostItem.aggregate({
-    where: { active: true },
+    where: { organizationId, active: true },
     _max: { sortOrder: true },
   });
   const item = await prisma.taxFixedCostItem.create({
-    data: { name, recurring, sortOrder: (maxSort._max.sortOrder ?? 0) + 1 },
+    data: {
+      organizationId,
+      name,
+      recurring,
+      sortOrder: (maxSort._max.sortOrder ?? 0) + 1,
+    },
     select: ITEM_SELECT,
   });
 
   if (initialAmount) {
     await prisma.taxFixedCostMonthValue.create({
       data: {
+        organizationId,
         costItemId: item.id,
         year: initialAmount.year,
         month: initialAmount.month,
@@ -150,11 +162,12 @@ export async function createTaxFixedCostItem(
 }
 
 export async function updateTaxFixedCostItem(
+  organizationId: string,
   id: string,
   input: { name?: string; recurring?: boolean },
 ): Promise<TaxFixedCostItemView> {
   return prisma.taxFixedCostItem.update({
-    where: { id },
+    where: { id, organizationId },
     data: {
       ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.recurring !== undefined ? { recurring: input.recurring } : {}),
@@ -165,33 +178,41 @@ export async function updateTaxFixedCostItem(
 
 /** "Encerrar gasto fixo": o item deixa de se aplicar a partir de (year, month) inclusive. Meses anteriores não são afetados. */
 export async function endTaxFixedCostItem(
+  organizationId: string,
   id: string,
   year: number,
   month: number,
 ): Promise<TaxFixedCostItemView> {
   return prisma.taxFixedCostItem.update({
-    where: { id },
+    where: { id, organizationId },
     data: { endYear: year, endMonth: month },
     select: ITEM_SELECT,
   });
 }
 
-export async function deactivateTaxFixedCostItem(id: string): Promise<void> {
+export async function deactivateTaxFixedCostItem(
+  organizationId: string,
+  id: string,
+): Promise<void> {
   await prisma.taxFixedCostItem.update({
-    where: { id },
+    where: { id, organizationId },
     data: { active: false },
   });
 }
 
-export async function upsertTaxFixedCostMonthValue(input: {
-  costItemId: string;
-  year: number;
-  month: number;
-  amount: number | null;
-}): Promise<void> {
+export async function upsertTaxFixedCostMonthValue(
+  organizationId: string,
+  input: {
+    costItemId: string;
+    year: number;
+    month: number;
+    amount: number | null;
+  },
+): Promise<void> {
   if (input.amount === null) {
     await prisma.taxFixedCostMonthValue.deleteMany({
       where: {
+        organizationId,
         costItemId: input.costItemId,
         year: input.year,
         month: input.month,
@@ -209,6 +230,7 @@ export async function upsertTaxFixedCostMonthValue(input: {
       },
     },
     create: {
+      organizationId,
       costItemId: input.costItemId,
       year: input.year,
       month: input.month,
@@ -220,17 +242,18 @@ export async function upsertTaxFixedCostMonthValue(input: {
 
 /** "Remover valor deste mês": exclui só esse mês do item, sem afetar a herança dos meses seguintes. */
 export async function excludeTaxFixedCostMonth(
+  organizationId: string,
   costItemId: string,
   year: number,
   month: number,
 ): Promise<void> {
   await prisma.$transaction([
     prisma.taxFixedCostMonthValue.deleteMany({
-      where: { costItemId, year, month },
+      where: { organizationId, costItemId, year, month },
     }),
     prisma.taxFixedCostMonthExclusion.upsert({
       where: { costItemId_year_month: { costItemId, year, month } },
-      create: { costItemId, year, month },
+      create: { organizationId, costItemId, year, month },
       update: {},
     }),
   ]);
