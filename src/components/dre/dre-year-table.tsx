@@ -89,8 +89,8 @@ const MAIN_ROW_DIVIDER_STYLE = {
   boxShadow: "inset 0 -1px 0 0 rgba(148, 163, 184, 0.35)",
 } as const;
 
-/** Zebra striping das linhas de detalhe (fundo branco/card) — só a cor #f4f2f7, sem borda extra. */
-const ALT_ROW_BG = "#f4f2f7";
+/** Zebra striping das linhas de detalhe. */
+const ALT_ROW_BG = "var(--muted)";
 
 const SELECTED_MONTH_CELL_CLASS = "relative";
 
@@ -1605,7 +1605,7 @@ function DreYearTableMobile({
         </ul>
       ) : null}
 
-      <div className="divide-y divide-[var(--border)] overflow-hidden rounded-lg border border-[var(--border)] bg-white">
+      <div className="divide-y divide-[var(--border)] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]">
         {rows.map((row, index) => {
           const detail = isDetailRow(row);
           const rowNode = (
@@ -1713,7 +1713,7 @@ function MonthHeaderCell({
         "relative cursor-pointer border-b border-[var(--border)] px-1 py-2 text-center font-normal transition-colors",
         selected
           ? "bg-[var(--primary)]/10"
-          : "bg-white hover:bg-[var(--muted)]/40",
+          : "bg-[var(--card)] hover:bg-[var(--muted)]/50",
         month.isFutureMonth && "opacity-45",
         dimmed && DIM_CLASS,
       )}
@@ -1733,7 +1733,7 @@ function MonthHeaderCell({
         <MonthSyncTooltip year={year} month={month}>
           <span
             className={cn(
-              "cursor-pointer text-[12.5px] font-bold tracking-wider text-[var(--muted-foreground)]",
+              "cursor-pointer text-[11px] font-semibold tracking-wide text-[var(--muted-foreground)]",
               month.isCurrentMonth && "text-[var(--primary)]",
               !month.syncedAt && !month.isFutureMonth && "text-amber-700",
               selected && "text-[var(--primary)]",
@@ -1872,10 +1872,10 @@ function DreYearTableDesktop({
 
   return (
     <TooltipProvider delayDuration={200}>
-      <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-white shadow-sm">
+      <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]">
         {onToggleDetails ? (
-          <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--muted)]/25 px-3 py-2">
-            <p className="relative min-h-[1.1rem] flex-1 text-[11px] text-[var(--muted-foreground)]">
+          <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-2.5">
+            <p className="relative min-h-[1.1rem] flex-1 text-xs text-[var(--muted-foreground)]">
               <span className="invisible" aria-hidden>
                 Exibindo linhas detalhadas (custos, tarifas, fretes…).
               </span>
@@ -1900,7 +1900,7 @@ function DreYearTableDesktop({
               type="button"
               variant={showDetails ? "outline" : "default"}
               size="sm"
-              className="h-7 shrink-0 text-[11px] font-semibold"
+              className="h-8 shrink-0 rounded-full text-[11px] font-medium"
               onClick={onToggleDetails}
             >
               {showDetails ? "Ocultar detalhes" : "Mostrar detalhes"}
@@ -1908,7 +1908,7 @@ function DreYearTableDesktop({
           </div>
         ) : null}
         <div className="overflow-x-auto">
-        <table className="w-full min-w-[64rem] table-fixed border-collapse text-[12.5px]">
+        <table className="w-full min-w-[64rem] table-fixed border-collapse text-xs">
           <colgroup>
             <col style={{ width: "8%" }} />
             {data.months.map((month) => (
@@ -1920,7 +1920,7 @@ function DreYearTableDesktop({
             <tr>
               <th
                 className={cn(
-                  "sticky left-0 z-20 border-b border-[var(--border)] bg-white px-3 py-2 text-left text-[12.5px] font-bold uppercase text-[var(--muted-foreground)]",
+                  "sticky left-0 z-20 border-b border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--muted-foreground)]",
                   (isEditing || columnFocusMonth !== null) && DIM_CLASS,
                 )}
               >
@@ -1952,7 +1952,7 @@ function DreYearTableDesktop({
               ))}
               <th
                 className={cn(
-                  "border-b border-[var(--border)] bg-[var(--muted)]/30 px-2 py-2 text-center text-[12.5px] font-bold uppercase text-[var(--muted-foreground)]",
+                  "border-b border-[var(--border)] bg-[var(--muted)]/40 px-2 py-2.5 text-center text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--muted-foreground)]",
                   (isEditing || columnFocusMonth !== null) && DIM_CLASS,
                 )}
               >
@@ -2022,14 +2022,14 @@ function DreYearTableDesktop({
                               ? cn(
                                   "relative z-30",
                                   SELECTED_MONTH_CELL_CLASS,
-                                  bg || "bg-white",
+                                  bg || "bg-[var(--card)]",
                                 )
                               : isEditing
                                 ? DIM_CLASS
                                 : month.month === columnFocusMonth
                                   ? cn(
                                       SELECTED_MONTH_CELL_CLASS,
-                                      bg || "bg-white",
+                                      bg || "bg-[var(--card)]",
                                     )
                                   : columnFocusMonth !== null && DIM_CLASS,
                           )}

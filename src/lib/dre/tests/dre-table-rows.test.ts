@@ -113,35 +113,32 @@ describe("buildDreTableRows", () => {
 });
 
 describe("rowBackgroundClass / rowLabelClass", () => {
-  it("highlights entrada-total/resultado rows in green with white text", () => {
+  it("highlights entrada-total/resultado rows in slate with white text", () => {
     const row = DRE_STATIC_ROWS.find((r) => r.id === "totalEntrada")!;
-    assert.match(rowBackgroundClass(row), /#1c573a/);
+    assert.match(rowBackgroundClass(row), /bg-slate-900/);
     assert.match(rowBackgroundClass(row), /text-white/);
   });
 
-  it("highlights custo-total rows in red with white text", () => {
+  it("highlights custo-total rows in zinc", () => {
     const row = DRE_STATIC_ROWS.find((r) => r.id === "totalCustoOperacional")!;
-    assert.match(rowBackgroundClass(row), /#d43b4f/);
-    assert.match(rowBackgroundClass(row), /text-white/);
+    assert.match(rowBackgroundClass(row), /bg-zinc-800/);
   });
 
-  it("uses bold uppercase white label class for resultado rows", () => {
+  it("uses semibold white label class for resultado rows", () => {
     const row = DRE_STATIC_ROWS.find((r) => r.id === "lucroOperacional")!;
-    assert.match(rowLabelClass(row), /font-bold/);
-    assert.match(rowLabelClass(row), /uppercase/);
+    assert.match(rowLabelClass(row), /font-semibold/);
     assert.match(rowLabelClass(row), /text-white/);
   });
 
-  it("uses bold uppercase white label class for total rows", () => {
+  it("uses semibold white label class for total rows", () => {
     const row = DRE_STATIC_ROWS.find((r) => r.id === "totalEntrada")!;
-    assert.match(rowLabelClass(row), /font-bold/);
-    assert.match(rowLabelClass(row), /uppercase/);
+    assert.match(rowLabelClass(row), /font-semibold/);
     assert.match(rowLabelClass(row), /text-white/);
   });
 
-  it("uses bold (non-uppercase) label class for detail rows", () => {
+  it("uses medium (non-uppercase) label class for detail rows", () => {
     const row = DRE_STATIC_ROWS.find((r) => r.id === "revenueMl")!;
-    assert.match(rowLabelClass(row), /font-bold/);
+    assert.match(rowLabelClass(row), /font-medium/);
     assert.doesNotMatch(rowLabelClass(row), /uppercase/);
   });
 });

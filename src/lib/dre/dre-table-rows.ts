@@ -383,29 +383,29 @@ export function rowBackgroundClass(row: DreTableRow): string {
     return "bg-[var(--card)]";
   }
   if (row.kind === "entrada-total" || row.kind === "resultado") {
-    return "bg-[#1c573a] text-white";
+    return "bg-slate-900 text-white";
   }
   if (row.kind === "custo-total") {
-    return "bg-[#d43b4f] text-white";
+    return "bg-zinc-800 text-zinc-50";
   }
   return "bg-[var(--card)]";
 }
 
 export function rowLabelClass(row: DreTableRow): string {
   if (isColoredRow(row)) {
-    return "text-[12.5px] font-bold uppercase leading-tight text-white";
+    return "text-[11px] font-semibold leading-tight tracking-wide text-white";
   }
   if (
     row.type === "fixed-cost" ||
     row.type === "operational-cost" ||
     row.type === "investment-cost"
   ) {
-    return "text-[12.5px] font-bold leading-tight";
+    return "text-[12px] font-medium leading-tight text-[var(--foreground)]";
   }
   if (row.kind === "entrada-detail" || row.kind === "custo-detail") {
-    return "text-[12.5px] font-bold leading-tight text-[var(--foreground)]";
+    return "text-[12px] font-medium leading-tight text-[var(--foreground)]";
   }
-  return "text-[12.5px] font-bold leading-tight";
+  return "text-[12px] font-medium leading-tight";
 }
 
 export function valueToneClass(value: number | null | undefined): string {

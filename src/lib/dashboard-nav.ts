@@ -136,7 +136,7 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
         href: "/dashboard/dre",
         label: "DRE",
         description:
-          "Demonstrativo de resultado mensal — ML, custos, impostos e ADS",
+          "Resultado mensal — faturamento, custos, impostos e ADS",
         icon: LineChart,
       },
       {

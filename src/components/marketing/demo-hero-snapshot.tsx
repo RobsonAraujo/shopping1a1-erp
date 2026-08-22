@@ -218,12 +218,12 @@ export function DemoHeroSnapshot() {
               <p className="bg-[var(--muted)]/40 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                 DRE · AGO
               </p>
-              <div className="marketing-hero-dre-row flex items-center justify-between bg-[#1c573a] px-3 py-2 text-white">
+              <div className="marketing-hero-dre-row flex items-center justify-between bg-slate-900 px-3 py-2 text-white">
                 <span>(=) Margem de Contribuição</span>
                 <span className="tabular-nums">R$ 50.100,00</span>
               </div>
               <div
-                className="marketing-hero-dre-row flex items-center justify-between bg-[#d43b4f] px-3 py-2 text-white"
+                className="marketing-hero-dre-row flex items-center justify-between bg-zinc-800 px-3 py-2 text-zinc-50"
                 style={{ animationDelay: "80ms" }}
               >
                 <span>(-) Custos Variáveis</span>
@@ -244,7 +244,7 @@ export function DemoHeroSnapshot() {
                 <span className="tabular-nums">−R$ 98.400,00</span>
               </div>
               <div
-                className="marketing-hero-dre-row flex items-center justify-between bg-[#1c573a] px-3 py-2 text-white"
+                className="marketing-hero-dre-row flex items-center justify-between bg-slate-900 px-3 py-2 text-white"
                 style={{ animationDelay: "320ms" }}
               >
                 <span>(=) Lucro Operacional</span>

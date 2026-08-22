@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download, Info, Plus, RefreshCw, Scale, X } from "lucide-react";
+import { ChevronDown, Download, HelpCircle, Plus, RefreshCw, Scale } from "lucide-react";
 import { DreCostItemsModal } from "@/components/dre/dre-fixed-costs-modal";
+import { DreOverview } from "@/components/dre/dre-overview";
 import { DreProductCostLevelingModal } from "@/components/dre/dre-product-cost-leveling-modal";
 import { DreSyncOverlay } from "@/components/dre/dre-sync-overlay";
 import { DreYearTable } from "@/components/dre/dre-year-table";
@@ -17,22 +18,22 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FormSelect } from "@/components/ui/form-select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { UserFeedback } from "@/components/ui/user-feedback";
 import { consumeSSEStream } from "@/hooks/use-sse-stream";
 import { formatApiErrorMessage, readApiError } from "@/lib/api-client-error";
 import {
   formatFinancialMoney,
-  formatFinancialPercent,
 } from "@/lib/financial-margin";
 import type { DreEditableLineKey } from "@/lib/dre/dre-calculations";
 import { downloadDreYearCsv } from "@/lib/dre/dre-export-csv";
-import {
-  dreEditableLineLabel,
-  dreMonthShortLabel,
-} from "@/lib/dre/dre-table-rows";
+import { dreEditableLineLabel } from "@/lib/dre/dre-table-rows";
 import type { DreYearView } from "@/lib/dre/dre-year-data";
 import type { DreSyncProgressPhase } from "@/lib/dre/dre-month-data";
 import {
@@ -128,6 +129,8 @@ export function DreClient() {
   const [sessionAdjustedByMonth, setSessionAdjustedByMonth] = useState<
     Record<number, DreEditableLineKey[]>
   >({});
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [cadastroOpen, setCadastroOpen] = useState(false);
 
   const yearOptions = useMemo(
     () =>
@@ -561,24 +564,11 @@ export function DreClient() {
     [year],
   );
 
-  const syncedCount = data?.months.filter((m) => m.syncedAt).length ?? 0;
   const syncConfirmMonthLabel =
     syncConfirm?.mode === "month"
       ? (data?.months.find((m) => m.month === syncConfirm.month)?.label ??
         `mês ${syncConfirm.month}`)
       : null;
-
-  const focusMonthView =
-    selectedMonth !== null
-      ? (data?.months.find((m) => m.month === selectedMonth) ?? null)
-      : null;
-  const focusTotals = focusMonthView
-    ? focusMonthView.totals
-    : (data?.yearTotals ?? null);
-  const monthFocused = selectedMonth !== null && focusMonthView !== null;
-  const focusCardClass = monthFocused
-    ? "origin-center scale-[1.04] shadow-[0_8px_24px_-4px_rgba(27,45,111,0.28),0_4px_10px_-2px_rgba(27,45,111,0.12)] transition-[transform,box-shadow] duration-[1800ms] ease-linear"
-    : "origin-center scale-100 shadow-sm transition-[transform,box-shadow] duration-[1800ms] ease-linear";
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -594,62 +584,83 @@ export function DreClient() {
             }))}
         />
       ) : null}
-      <div className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap items-end gap-2">
+      <div className="space-y-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
             <FormSelect
               id="dre-year"
               label="Ano"
               value={String(year)}
               onValueChange={(value) => setYear(Number(value))}
               options={yearOptions}
-              triggerClassName="h-9 w-[6.5rem] text-xs"
+              triggerClassName="h-10 w-[7rem] rounded-xl text-sm"
             />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-10 gap-1.5 text-xs"
+              onClick={() => setHelpOpen((open) => !open)}
+            >
+              <HelpCircle className="size-3.5" aria-hidden />
+              Como usar
+            </Button>
           </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="mr-1 hidden text-[11px] font-medium uppercase tracking-wide text-[var(--muted-foreground)] sm:inline">
-              Cadastrar
-            </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <Popover open={cadastroOpen} onOpenChange={setCadastroOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-10 gap-1.5 rounded-xl"
+                >
+                  <Plus className="size-3.5" aria-hidden />
+                  Cadastrar
+                  <ChevronDown className="size-3.5 opacity-60" aria-hidden />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-1.5" align="end">
+                <div className="flex flex-col">
+                  <button
+                    type="button"
+                    className="rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--muted)]"
+                    onClick={() => {
+                      setCadastroOpen(false);
+                      setOperationalCostsModalOpen(true);
+                    }}
+                  >
+                    Custos operacionais
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--muted)]"
+                    onClick={() => {
+                      setCadastroOpen(false);
+                      setFixedCostsModalOpen(true);
+                    }}
+                  >
+                    Custos fixos
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--muted)]"
+                    onClick={() => {
+                      setCadastroOpen(false);
+                      setInvestmentCostsModalOpen(true);
+                    }}
+                  >
+                    Investimentos
+                  </button>
+                </div>
+              </PopoverContent>
+            </Popover>
             <Button
               type="button"
-              variant="secondary"
+              variant="outline"
               size="sm"
-              className="h-8 gap-1 text-xs font-medium"
-              onClick={() => setOperationalCostsModalOpen(true)}
-              title="Cadastrar itens de custo operacional (depois informe o valor por mês na tabela)"
-            >
-              <Plus className="size-3.5" aria-hidden />
-              Custos operacionais
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="h-8 gap-1 text-xs font-medium"
-              onClick={() => setFixedCostsModalOpen(true)}
-              title="Cadastrar itens de custo fixo (depois informe o valor por mês na tabela)"
-            >
-              <Plus className="size-3.5" aria-hidden />
-              Custos fixos
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="h-8 gap-1 text-xs font-medium"
-              onClick={() => setInvestmentCostsModalOpen(true)}
-              title="Cadastrar itens de investimento (depois informe o valor por mês na tabela)"
-            >
-              <Plus className="size-3.5" aria-hidden />
-              Investimentos
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="h-8 gap-1 text-xs font-medium"
+              className="h-10 gap-1.5 rounded-xl"
               onClick={() => setLevelingModalOpen(true)}
-              title="Nivelar custo de produto por SKU e período (somente DRE)"
             >
               <Scale className="size-3.5" aria-hidden />
               Nivelar custos
@@ -658,22 +669,20 @@ export function DreClient() {
               type="button"
               variant="outline"
               size="sm"
-              className="h-8 gap-1 text-xs"
+              className="h-10 gap-1.5 rounded-xl"
               disabled={!data || loading}
               onClick={() => {
                 if (!data) return;
                 downloadDreYearCsv(data, showDetails);
               }}
-              title="Exportar a grade do DRE (CSV para Excel/Sheets)"
             >
               <Download className="size-3.5" aria-hidden />
-              Exportar CSV
+              CSV
             </Button>
             <Button
               type="button"
-              variant="default"
               size="sm"
-              className="h-8 text-xs"
+              className="h-10 rounded-xl"
               disabled={syncingAll || loading}
               onClick={() => requestSyncAll()}
             >
@@ -681,165 +690,42 @@ export function DreClient() {
                 className={syncingAll ? "size-4 animate-spin" : "size-4"}
                 aria-hidden
               />
-              Sincronizar todos
+              Sincronizar
             </Button>
           </div>
         </div>
 
-        {data ? (
-          <div className="space-y-2">
-            <div className="flex h-5 items-center gap-2">
-              {monthFocused ? (
-                <span className="inline-flex animate-in fade-in-0 items-center gap-1.5 text-[11px] font-medium text-[var(--muted-foreground)] duration-[1800ms]">
-                  Exibindo{" "}
-                  <span className="font-semibold text-[var(--foreground)]">
-                    {focusMonthView.label}
-                  </span>
-                  <button
-                    type="button"
-                    className="inline-flex size-4 items-center justify-center rounded-full text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
-                    aria-label="Voltar aos totais do ano"
-                    title="Voltar aos totais do ano"
-                    onClick={() => setSelectedMonth(null)}
-                  >
-                    <X className="size-3" aria-hidden />
-                  </button>
-                </span>
-              ) : (
-                <span className="text-[11px] text-transparent" aria-hidden>
-                  &nbsp;
-                </span>
-              )}
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              <Card className={focusCardClass}>
-                <CardHeader className="px-3 pb-1 pt-3">
-                  <CardTitle className="flex items-center gap-1.5 text-xs font-medium text-[var(--muted-foreground)]">
-                    Faturamento
-                    <span
-                      className={cn(
-                        "rounded px-1 py-px text-[10px] font-semibold uppercase tracking-wide",
-                        monthFocused
-                          ? "text-[var(--foreground)]"
-                          : "bg-[var(--muted)] text-[var(--muted-foreground)]",
-                      )}
-                    >
-                      {monthFocused && selectedMonth !== null
-                        ? dreMonthShortLabel(selectedMonth)
-                        : "ano"}
-                    </span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="px-3 pb-3 text-base font-semibold tabular-nums">
-                  {formatFinancialMoney(focusTotals?.totalEntrada ?? null)}
-                </CardContent>
-              </Card>
-              <Card className={focusCardClass}>
-                <CardHeader className="px-3 pb-1 pt-3">
-                  <CardTitle className="flex items-center gap-1.5 text-xs font-medium text-[var(--muted-foreground)]">
-                    Margem de contribuição
-                    {monthFocused && selectedMonth !== null ? (
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--foreground)]">
-                        {dreMonthShortLabel(selectedMonth)}
-                      </span>
-                    ) : null}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="px-3 pb-3 text-base font-semibold tabular-nums">
-                  {formatFinancialMoney(focusTotals?.margemContribuicao ?? null)}{" "}
-                  <span className="text-xs font-normal text-[var(--muted-foreground)]">
-                    ({formatFinancialPercent(
-                      focusTotals?.margemContribuicaoPercent ?? null,
-                    )}
-                    )
-                  </span>
-                </CardContent>
-              </Card>
-              <Card className={focusCardClass}>
-                <CardHeader className="px-3 pb-1 pt-3">
-                  <CardTitle className="flex items-center gap-1.5 text-xs font-medium text-[var(--muted-foreground)]">
-                    Lucro operacional
-                    {monthFocused && selectedMonth !== null ? (
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--foreground)]">
-                        {dreMonthShortLabel(selectedMonth)}
-                      </span>
-                    ) : null}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="px-3 pb-3 text-base font-semibold tabular-nums">
-                  {formatFinancialMoney(focusTotals?.lucroOperacional ?? null)}{" "}
-                  <span className="text-xs font-normal text-[var(--muted-foreground)]">
-                    ({formatFinancialPercent(
-                      focusTotals?.lucroOperacionalPercent ?? null,
-                    )}
-                    )
-                  </span>
-                </CardContent>
-              </Card>
-              <Card className="shadow-sm">
-                <CardHeader className="px-3 pb-1 pt-3">
-                  <CardTitle className="text-xs font-medium text-[var(--muted-foreground)]">
-                    Meses sincronizados
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="px-3 pb-3 text-base font-semibold">
-                  {syncedCount} / 12
-                </CardContent>
-              </Card>
-            </div>
+        {helpOpen ? (
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm leading-relaxed text-[var(--muted-foreground)]">
+            <p className="font-medium text-[var(--foreground)]">Atalhos da grade</p>
+            <ul className="mt-2 grid gap-1.5 sm:grid-cols-2">
+              <li>
+                <span className="font-medium text-[var(--foreground)]">Um clique</span>{" "}
+                no valor abre o detalhamento.
+              </li>
+              <li>
+                <span className="font-medium text-[var(--foreground)]">Dois cliques</span>{" "}
+                editam a célula. Enter salva, Esc cancela.
+              </li>
+              <li>
+                <span className="font-medium text-[var(--foreground)]">Cabeçalho do mês</span>{" "}
+                ou as pílulas acima focam aquele período nos cards.
+              </li>
+              <li>
+                <span className="font-medium text-[var(--foreground)]">Cadastrar</span>{" "}
+                cria o item; o valor entra com dois cliques na tabela.
+              </li>
+            </ul>
           </div>
         ) : null}
 
-        <div className="flex gap-2.5 rounded-lg border border-[var(--border)] bg-[var(--muted)]/30 px-3 py-2.5 text-xs leading-relaxed text-[var(--muted-foreground)]">
-          <Info
-            className="mt-0.5 size-3.5 shrink-0 text-[var(--foreground)]/70"
-            aria-hidden
+        {viewData ? (
+          <DreOverview
+            data={viewData}
+            selectedMonth={selectedMonth}
+            onSelectMonth={setSelectedMonth}
           />
-          <div className="space-y-1.5">
-            <p className="font-medium text-[var(--foreground)]">Bom saber</p>
-            <ol className="list-decimal space-y-1 pl-4">
-              <li>
-                <span className="font-medium text-[var(--foreground)]">
-                  Auditar:
-                </span>{" "}
-                clique uma vez em um valor (ex.: Faturamento, Custo produto,
-                Tarifa) para ver o detalhamento.
-              </li>
-              <li>
-                <span className="font-medium text-[var(--foreground)]">
-                  Editar:
-                </span>{" "}
-                dê dois cliques no valor, ajuste no campo e use{" "}
-                <span className="font-medium text-[var(--foreground)]">
-                  Aplicar
-                </span>{" "}
-                (ou Enter) para salvar, ou{" "}
-                <span className="font-medium text-[var(--foreground)]">
-                  Cancelar
-                </span>{" "}
-                (ou Esc) para desistir. Células ajustadas ficam marcadas; use
-                restaurar para voltar ao valor do último sync.
-              </li>
-              <li>
-                <span className="font-medium text-[var(--foreground)]">
-                  Destacar mês:
-                </span>{" "}
-                clique no cabeçalho do mês para focar a coluna — os cards do
-                topo passam a mostrar aquele mês. Totais e margens são
-                calculados automaticamente; sincronizar atualiza/substitui os
-                valores importados (custos fixos, operacionais e investimentos
-                cadastrados permanecem).
-              </li>
-              <li>
-                <span className="font-medium text-[var(--foreground)]">
-                  Cadastrar custos:
-                </span>{" "}
-                use os botões com “+” no topo para criar itens; depois dê
-                dois cliques na célula do mês para informar o valor.
-              </li>
-            </ol>
-          </div>
-        </div>
+        ) : null}
 
         {error ? (
           <UserFeedback>{error}</UserFeedback>
