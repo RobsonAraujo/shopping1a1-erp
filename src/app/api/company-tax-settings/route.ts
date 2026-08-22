@@ -63,7 +63,6 @@ export async function GET() {
 }
 
 const patchBodySchema = z.object({
-  pisCofinsPercent: z.unknown().optional(),
   wholesaleReductions: z
     .object({
       level1ReductionPercent: z.unknown().optional(),
@@ -88,18 +87,6 @@ export async function PATCH(request: NextRequest) {
   const body = parsedBody.data;
 
   const current = await ensureCompanySettings(organizationId);
-
-  let pisCofinsPercent = current.pisCofinsPercent;
-  if (body.pisCofinsPercent !== undefined) {
-    const n = Number(body.pisCofinsPercent);
-    if (!Number.isFinite(n) || n < 0 || n > 100) {
-      return NextResponse.json(
-        { error: "pisCofinsPercent must be between 0 and 100" },
-        { status: 400 },
-      );
-    }
-    pisCofinsPercent = n;
-  }
 
   let level1 = current.level1ReductionPercent;
   let level2 = current.level2ReductionPercent;
@@ -182,7 +169,7 @@ export async function PATCH(request: NextRequest) {
       where: { organizationId },
       create: {
         organizationId,
-        pisCofinsPercent: pisCofinsPercent ?? DEFAULT_PIS_COFINS_PERCENT,
+        pisCofinsPercent: current.pisCofinsPercent ?? DEFAULT_PIS_COFINS_PERCENT,
         wholesaleLevel1ReductionPercent: level1,
         wholesaleLevel2ReductionPercent: level2,
         wholesaleLevel3ReductionPercent: level3,
@@ -191,7 +178,6 @@ export async function PATCH(request: NextRequest) {
         wholesaleLevel3MinPurchaseUnit: min3,
       },
       update: {
-        pisCofinsPercent,
         wholesaleLevel1ReductionPercent: level1,
         wholesaleLevel2ReductionPercent: level2,
         wholesaleLevel3ReductionPercent: level3,

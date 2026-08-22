@@ -99,9 +99,14 @@ export type CompanySettings = {
 } & WholesaleReductionSettings;
 
 function rowToCompanySettings(row: CompanyTaxSettings): CompanySettings {
+  const fromRates =
+    (decimalToNumber(row.pisRatePercent) ?? 0) +
+    (decimalToNumber(row.cofinsRatePercent) ?? 0);
   return {
     pisCofinsPercent:
-      decimalToNumber(row.pisCofinsPercent) ?? DEFAULT_PIS_COFINS_PERCENT,
+      fromRates > 0
+        ? fromRates
+        : (decimalToNumber(row.pisCofinsPercent) ?? DEFAULT_PIS_COFINS_PERCENT),
     taxRegime: row.taxRegime as CompanySettings["taxRegime"],
     simplesAliquotaEfetivaPercent: decimalToNumber(row.simplesAliquotaEfetivaPercent),
     level1ReductionPercent:

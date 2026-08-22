@@ -85,15 +85,27 @@ export async function updateTaxCompanyConfig(
   organizationId: string,
   input: TaxConfigUpdateInput,
 ): Promise<TaxCompanyConfig> {
+  const current = await prisma.companyTaxSettings.findUnique({
+    where: { organizationId },
+  });
+  const nextPis =
+    input.pisRatePercent ??
+    (current ? decimalToNumber(current.pisRatePercent) : DEFAULT_PIS_RATE);
+  const nextCofins =
+    input.cofinsRatePercent ??
+    (current ? decimalToNumber(current.cofinsRatePercent) : DEFAULT_COFINS_RATE);
+  const syncPisCofins =
+    input.pisRatePercent !== undefined || input.cofinsRatePercent !== undefined;
+
   const row = await prisma.companyTaxSettings.upsert({
     where: { organizationId },
     create: {
       organizationId,
-      pisCofinsPercent: (input.pisRatePercent ?? DEFAULT_PIS_RATE) + (input.cofinsRatePercent ?? DEFAULT_COFINS_RATE),
+      pisCofinsPercent: nextPis + nextCofins,
       taxRegime: input.taxRegime ?? "LUCRO_REAL",
       originUf: input.originUf ?? DEFAULT_ORIGIN_UF,
-      pisRatePercent: input.pisRatePercent ?? DEFAULT_PIS_RATE,
-      cofinsRatePercent: input.cofinsRatePercent ?? DEFAULT_COFINS_RATE,
+      pisRatePercent: nextPis,
+      cofinsRatePercent: nextCofins,
       excludeIcmsFromPisCofinsBase: input.excludeIcmsFromPisCofinsBase ?? true,
       considerIcmsStRecuperavel: input.considerIcmsStRecuperavel ?? true,
       irpjAdditionalThreshold:
@@ -103,11 +115,12 @@ export async function updateTaxCompanyConfig(
     update: {
       ...(input.taxRegime !== undefined ? { taxRegime: input.taxRegime } : {}),
       ...(input.originUf !== undefined ? { originUf: input.originUf } : {}),
-      ...(input.pisRatePercent !== undefined
-        ? { pisRatePercent: input.pisRatePercent }
-        : {}),
-      ...(input.cofinsRatePercent !== undefined
-        ? { cofinsRatePercent: input.cofinsRatePercent }
+      ...(syncPisCofins
+        ? {
+            pisRatePercent: nextPis,
+            cofinsRatePercent: nextCofins,
+            pisCofinsPercent: nextPis + nextCofins,
+          }
         : {}),
       ...(input.excludeIcmsFromPisCofinsBase !== undefined
         ? { excludeIcmsFromPisCofinsBase: input.excludeIcmsFromPisCofinsBase }

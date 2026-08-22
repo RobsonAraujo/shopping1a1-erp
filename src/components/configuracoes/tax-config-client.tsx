@@ -324,6 +324,10 @@ export function TaxConfigClient() {
                 value={`${company.cofinsRatePercent}%`}
               />
               <CompanySettingView
+                label="PIS + COFINS (produtos)"
+                value={`${Number((company.pisRatePercent + company.cofinsRatePercent).toFixed(4))}%`}
+              />
+              <CompanySettingView
                 label="Excluir ICMS da base PIS/COFINS"
                 value={company.excludeIcmsFromPisCofinsBase ? "Sim" : "Não"}
               />

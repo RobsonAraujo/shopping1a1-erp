@@ -190,6 +190,17 @@ Plano de execução detalhado (arquivos e código concretos): ver plano de imple
 
 Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templates/feature-saas-impact.md).
 
+### PIS/COFINS só na Config. tributária — 2026-08-22
+
+- **Tabelas novas/alteradas:** nenhuma (`company_tax_settings.pis_rate_percent` + `cofins_rate_percent` continuam a fonte; `pis_cofins_percent` passa a ser espelho da soma)
+- **Precisa `organizationId`?** sim — já escopado
+- **APIs afetadas:** `PATCH /api/company-tax-settings` deixa de aceitar `pisCofinsPercent` (só atacado); `PATCH /api/tax-config` grava PIS/COFINS e sincroniza a soma
+- **Assume singleton?** não
+- **Cron/background:** nenhum
+- **Dados globais vs por org:** por org
+- **Código já tenant-ready?** sim
+- **Ação futura na migração:** nenhuma
+
 ### Remoção da Simulação de filial — 2026-08-22
 
 - **Tabelas novas/alteradas:** nenhuma

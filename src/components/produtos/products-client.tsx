@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Boxes, Pencil, Plus, RefreshCw, X } from "lucide-react";
+import { Boxes, Plus, RefreshCw, X } from "lucide-react";
 import { KitsModal } from "@/components/produtos/kits-modal";
 import { ItemListSearch } from "@/components/item-list-search";
 import Link from "next/link";
@@ -533,9 +533,6 @@ export function ProductsClient() {
   const [data, setData] = useState<ProductsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [pisCofinsDraft, setPisCofinsDraft] = useState<number | null>(null);
-  const [editingPisCofins, setEditingPisCofins] = useState(false);
-  const [savingTax, setSavingTax] = useState(false);
   const [modal, setModal] = useState<
     | { mode: "create"; form: ProductFormState }
     | { mode: "edit"; form: ProductFormState }
@@ -556,8 +553,6 @@ export function ProductsClient() {
       }
       const json = (await res.json()) as ProductsResponse;
       setData(json);
-      setPisCofinsDraft(json.pisCofinsPercent);
-      setEditingPisCofins(false);
     } catch {
       setError("Falha de rede ao carregar produtos.");
     } finally {
@@ -607,29 +602,6 @@ export function ProductsClient() {
     },
     { key: "sku", direction: "asc" },
   );
-
-  async function savePisCofins() {
-    if (pisCofinsDraft === null) return;
-    setSavingTax(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/company-tax-settings", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pisCofinsPercent: pisCofinsDraft }),
-      });
-      if (!res.ok) {
-        setError(await readApiError(res, "tax_settings_update_failed"));
-        return;
-      }
-      await load();
-      setEditingPisCofins(false);
-    } catch {
-      setError("Falha de rede ao salvar PIS/COFINS.");
-    } finally {
-      setSavingTax(false);
-    }
-  }
 
   async function importSkus() {
     setImporting(true);
@@ -707,71 +679,30 @@ export function ProductsClient() {
                 .
               </p>
             </div>
-          ) : editingPisCofins ? (
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="min-w-[12rem] flex-1">
-                <MaskedPercentField
-                  id="company-pis-cofins"
-                  label="Alíquota PIS/COFINS (%)"
-                  value={pisCofinsDraft}
-                  onValueChange={setPisCofinsDraft}
-                />
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  disabled={savingTax || pisCofinsDraft === null}
-                  onClick={() => void savePisCofins()}
-                >
-                  {savingTax ? "Salvando…" : "Salvar"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={savingTax}
-                  onClick={() => {
-                    setPisCofinsDraft(data?.pisCofinsPercent ?? null);
-                    setEditingPisCofins(false);
-                  }}
-                >
-                  Cancelar
-                </Button>
-              </div>
-            </div>
           ) : (
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <p className="text-sm text-[var(--muted-foreground)]">
-                  Alíquota PIS/COFINS
-                </p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums text-[var(--foreground)]">
-                  {loading && data === null
-                    ? "—"
-                    : formatFinancialPercent(data?.pisCofinsPercent ?? null)}
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-2"
-                disabled={loading}
-                onClick={() => {
-                  setPisCofinsDraft(data?.pisCofinsPercent ?? null);
-                  setEditingPisCofins(true);
-                }}
-              >
-                <Pencil className="size-4" aria-hidden />
-                Editar
-              </Button>
+            <div>
+              <p className="text-sm text-[var(--muted-foreground)]">
+                Alíquota PIS/COFINS
+              </p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums text-[var(--foreground)]">
+                {loading && data === null
+                  ? "—"
+                  : formatFinancialPercent(data?.pisCofinsPercent ?? null)}
+              </p>
+              <p className="mt-3 text-xs text-[var(--muted-foreground)]">
+                Usada no cálculo de crédito na compra e no imposto para
+                precificar, exceto em produtos monofásicos. Edite PIS e COFINS
+                em{" "}
+                <Link
+                  href="/dashboard/configuracoes/tributario"
+                  className="font-medium text-[var(--primary)] underline underline-offset-2"
+                >
+                  Configurações &gt; Config. tributária
+                </Link>
+                .
+              </p>
             </div>
           )}
-          {data?.taxRegime !== "SIMPLES" ? (
-            <p className="mt-3 text-xs text-[var(--muted-foreground)]">
-              Usada no cálculo de crédito na compra e no imposto para
-              precificar, exceto em produtos monofásicos.
-            </p>
-          ) : null}
         </CardContent>
       </Card>
 
