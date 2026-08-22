@@ -117,7 +117,6 @@ export function MarketingLanding({
                   isLoggedIn={isLoggedIn}
                   dashboardHref={dashboardHref}
                   onDark
-                  className="h-14 px-10 text-base [&_svg]:size-5"
                 />
                 {!isLoggedIn ? (
                   <p className="text-sm text-white/65">
@@ -197,10 +196,10 @@ export function MarketingLanding({
                 DRE que fecha sozinho
               </h2>
               <p className="mt-3 text-[15px] leading-relaxed text-[var(--muted-foreground)]">
-                Totais em verde e vermelho, com o detalhe de tarifa, CMV e ADS
-                direto da fatura do Mercado Livre — mês a mês, sem exportar
-                planilha para bater o número que já apareceu na lucratividade
-                e no tributário.
+                Demonstrativo do mês: receita, custos e resultado numa leitura
+                vertical. Tarifa, CMV e ADS vêm da fatura do Mercado Livre —
+                sem exportar planilha para bater o número que já apareceu na
+                lucratividade e no tributário.
               </p>
             </div>
             <DemoDre />

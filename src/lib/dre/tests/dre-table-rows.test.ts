@@ -113,32 +113,32 @@ describe("buildDreTableRows", () => {
 });
 
 describe("rowBackgroundClass / rowLabelClass", () => {
-  it("highlights entrada-total/resultado rows in slate with white text", () => {
+  it("uses a light muted band for entrada-total/resultado rows", () => {
     const row = DRE_STATIC_ROWS.find((r) => r.id === "totalEntrada")!;
-    assert.match(rowBackgroundClass(row), /bg-slate-900/);
-    assert.match(rowBackgroundClass(row), /text-white/);
+    assert.match(rowBackgroundClass(row), /muted/);
+    assert.doesNotMatch(rowBackgroundClass(row), /slate-900|text-white/);
   });
 
-  it("highlights custo-total rows in zinc", () => {
+  it("uses a lighter muted band for custo-total rows", () => {
     const row = DRE_STATIC_ROWS.find((r) => r.id === "totalCustoOperacional")!;
-    assert.match(rowBackgroundClass(row), /bg-zinc-800/);
+    assert.match(rowBackgroundClass(row), /muted/);
+    assert.doesNotMatch(rowBackgroundClass(row), /zinc-800/);
   });
 
-  it("uses semibold white label class for resultado rows", () => {
+  it("uses semibold foreground label for resultado rows", () => {
     const row = DRE_STATIC_ROWS.find((r) => r.id === "lucroOperacional")!;
     assert.match(rowLabelClass(row), /font-semibold/);
-    assert.match(rowLabelClass(row), /text-white/);
+    assert.doesNotMatch(rowLabelClass(row), /text-white/);
   });
 
-  it("uses semibold white label class for total rows", () => {
+  it("uses semibold foreground label for total rows", () => {
     const row = DRE_STATIC_ROWS.find((r) => r.id === "totalEntrada")!;
     assert.match(rowLabelClass(row), /font-semibold/);
-    assert.match(rowLabelClass(row), /text-white/);
   });
 
-  it("uses medium (non-uppercase) label class for detail rows", () => {
+  it("uses normal (non-uppercase) label class for detail rows", () => {
     const row = DRE_STATIC_ROWS.find((r) => r.id === "revenueMl")!;
-    assert.match(rowLabelClass(row), /font-medium/);
+    assert.match(rowLabelClass(row), /font-normal/);
     assert.doesNotMatch(rowLabelClass(row), /uppercase/);
   });
 });

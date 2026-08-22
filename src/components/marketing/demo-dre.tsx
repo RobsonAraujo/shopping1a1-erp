@@ -1,4 +1,6 @@
-import { Fragment } from "react";
+"use client";
+
+import { useState } from "react";
 import {
   formatFinancialMoney,
   formatFinancialPercent,
@@ -7,8 +9,9 @@ import {
   DRE_STATIC_ROWS,
   dreMonthShortLabel,
   isColoredRow,
-  rowBackgroundClass,
+  isDetailRow,
   rowLabelClass,
+  valueToneClass,
   type DreStaticRowId,
   type DreTableRow,
 } from "@/lib/dre/dre-table-rows";
@@ -54,7 +57,6 @@ type DisplayRow =
       source: "manual";
       label: string;
       amounts: [number, number];
-      zebra: boolean;
     };
 
 function staticRow(id: DreStaticRowId): DisplayRow {
@@ -75,7 +77,6 @@ const DISPLAY: DisplayRow[] = [
     source: "manual",
     label: "Aluguel Salão",
     amounts: [-9800, -9800],
-    zebra: false,
   },
   staticRow("lucroOperacionalAntesInvestimentos"),
   staticRow("totalInvestimento"),
@@ -84,157 +85,108 @@ const DISPLAY: DisplayRow[] = [
     source: "manual",
     label: "Software",
     amounts: [-4200, -1880],
-    zebra: false,
   },
   staticRow("lucroOperacional"),
 ];
 
-const ALT_ROW_BG = "#f4f2f7";
-
 export function DemoDre() {
+  const [monthIndex, setMonthIndex] = useState(1);
+  const month = MONTHS[monthIndex];
+
   return (
-    <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-white shadow-sm">
-      <div className="border-b border-[var(--border)] bg-[var(--muted)]/25 px-3 py-2">
-        <p className="text-[11px] text-[var(--muted-foreground)]">
-          Totais + alguns detalhes (tarifa, CMV, ADS, aluguel, software) ·
-          demonstração
-        </p>
+    <div className="mx-auto w-full max-w-xl overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
+            Demonstrativo
+          </p>
+          <p className="mt-0.5 text-sm font-semibold tracking-tight">
+            {dreMonthShortLabel(month)} · demonstração
+          </p>
+        </div>
+        <div className="inline-flex rounded-full bg-[var(--muted)] p-1">
+          {MONTHS.map((m, i) => (
+            <button
+              key={m}
+              type="button"
+              className={cn(
+                "cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold tracking-wide transition-colors",
+                i === monthIndex
+                  ? "bg-[var(--card)] text-[var(--foreground)] shadow-sm"
+                  : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
+              )}
+              onClick={() => setMonthIndex(i)}
+            >
+              {dreMonthShortLabel(m)}
+            </button>
+          ))}
+        </div>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[32rem] table-fixed border-collapse text-[12.5px]">
-          <colgroup>
-            <col style={{ width: "40%" }} />
-            <col style={{ width: "20%" }} />
-            <col style={{ width: "20%" }} />
-            <col style={{ width: "20%" }} />
-          </colgroup>
-          <thead>
-            <tr>
-              <th className="border-b border-[var(--border)] bg-white px-3 py-2 text-left text-[12.5px] font-bold uppercase text-[var(--muted-foreground)]">
-                Linha
-              </th>
-              {MONTHS.map((month) => (
-                <th
-                  key={month}
-                  className="border-b border-[var(--border)] bg-white px-1 py-2 text-center font-normal"
+
+      <div className="px-4 py-5 sm:px-5">
+          {DISPLAY.map((row) => {
+            if (row.source === "manual") {
+              const amount = row.amounts[monthIndex];
+              return (
+                <div
+                  key={row.key}
+                  className="flex items-center justify-between gap-4 rounded-xl py-1.5 pl-5 hover:bg-[var(--muted)]/40"
                 >
-                  <span
+                  <p className="text-[13px] font-normal leading-snug text-[var(--muted-foreground)]">
+                    {row.label}
+                  </p>
+                  <p
                     className={cn(
-                      "text-[12.5px] font-bold tracking-wider text-[var(--muted-foreground)]",
-                      month === 8 && "text-[var(--primary)]",
+                      "whitespace-nowrap text-right text-[15px] font-medium tabular-nums",
+                      valueToneClass(amount),
                     )}
                   >
-                    {dreMonthShortLabel(month)}
-                  </span>
-                </th>
-              ))}
-              <th className="border-b border-[var(--border)] bg-[var(--muted)]/30 px-2 py-2 text-center text-[12.5px] font-bold uppercase text-[var(--muted-foreground)]">
-                Total
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {DISPLAY.map((row) => {
-              if (row.source === "manual") {
-                const jul = row.amounts[0];
-                const ago = row.amounts[1];
-                const total = jul + ago;
-                const cellStyle = row.zebra
-                  ? { backgroundColor: ALT_ROW_BG }
-                  : { backgroundColor: "#fff" };
-                return (
-                  <tr key={row.key} style={cellStyle}>
-                    <td
-                      className="px-3 py-2 pl-6 text-[12.5px] font-bold leading-tight"
-                      style={cellStyle}
-                    >
-                      {row.label}
-                    </td>
-                    {[jul, ago, total].map((amount, i) => (
-                      <td
-                        key={i}
-                        className="px-1.5 py-2 text-center align-middle text-[12.5px] font-bold tabular-nums leading-tight text-[var(--foreground)]"
-                        style={cellStyle}
-                      >
-                        {formatFinancialMoney(amount)}
-                      </td>
-                    ))}
-                  </tr>
-                );
-              }
-
-              const dreRow = row.source;
-              if (dreRow.type !== "static") return null;
-              const bg = rowBackgroundClass(dreRow);
-              const colored = isColoredRow(dreRow);
-              const detailPos = (
-                ["saleFeeMl", "productCostErp", "adsCost"] as DreStaticRowId[]
-              ).indexOf(dreRow.id);
-              const isAltDetail = detailPos >= 0 && detailPos % 2 === 1;
-              const jul = row.amounts[0];
-              const ago = row.amounts[1];
-              const total = jul + ago;
-              const pct = PERCENTS[dreRow.id];
-              const cellStyle = isAltDetail
-                ? { backgroundColor: ALT_ROW_BG }
-                : undefined;
-              const indent = dreRow.indent;
-
-              return (
-                <Fragment key={row.key}>
-                  <tr className={isAltDetail ? undefined : bg} style={cellStyle}>
-                    <td
-                      className={cn(
-                        "px-3 py-2",
-                        indent && "pl-6",
-                        !isAltDetail && bg,
-                        rowLabelClass(dreRow),
-                      )}
-                      style={cellStyle}
-                    >
-                      {dreRow.label}
-                    </td>
-                    {[jul, ago, total].map((amount, i) => (
-                      <td
-                        key={i}
-                        className={cn(
-                          "px-1.5 py-2 text-center align-middle text-[12.5px] font-bold tabular-nums leading-tight",
-                          !isAltDetail && bg,
-                          indent && "text-[var(--foreground)]",
-                        )}
-                        style={cellStyle}
-                      >
-                        {formatFinancialMoney(amount)}
-                      </td>
-                    ))}
-                  </tr>
-                  {dreRow.showPercent && pct ? (
-                    <tr className={bg}>
-                      <td className={cn("px-3 py-1.5", bg)} />
-                      {[
-                        pct[0],
-                        pct[1],
-                        (pct[0] * Math.abs(jul) + pct[1] * Math.abs(ago)) /
-                          (Math.abs(jul) + Math.abs(ago)),
-                      ].map((percent, i) => (
-                        <td
-                          key={i}
-                          className={cn(
-                            "px-1.5 py-1.5 text-center align-middle text-[12.5px] font-bold tabular-nums leading-tight",
-                            bg,
-                            colored ? "text-white" : undefined,
-                          )}
-                        >
-                          {formatFinancialPercent(percent)}
-                        </td>
-                      ))}
-                    </tr>
-                  ) : null}
-                </Fragment>
+                    {formatFinancialMoney(amount)}
+                  </p>
+                </div>
               );
-            })}
-          </tbody>
-        </table>
+            }
+
+            const dreRow = row.source;
+            if (dreRow.type !== "static") return null;
+            const section = isColoredRow(dreRow);
+            const detail = isDetailRow(dreRow);
+            const amount = row.amounts[monthIndex];
+            const percent = PERCENTS[dreRow.id]?.[monthIndex] ?? null;
+
+            return (
+              <div
+                key={row.key}
+                className={cn(
+                  "flex items-center justify-between gap-4 rounded-xl px-2 transition-colors hover:bg-[var(--muted)]/40",
+                  section
+                    ? "mt-4 border-t border-[var(--border)] pt-3"
+                    : "py-1.5",
+                  detail && "pl-5",
+                )}
+              >
+                <p className={cn("min-w-0 flex-1 py-1", rowLabelClass(dreRow))}>
+                  {dreRow.label}
+                </p>
+                <div className="flex shrink-0 flex-col items-end">
+                  <p
+                    className={cn(
+                      "whitespace-nowrap text-right text-[15px] tabular-nums leading-tight",
+                      section ? "font-semibold" : "font-medium",
+                      valueToneClass(amount),
+                    )}
+                  >
+                    {formatFinancialMoney(amount)}
+                  </p>
+                  {dreRow.showPercent && percent != null ? (
+                    <p className="mt-0.5 text-[11px] text-[var(--muted-foreground)]">
+                      {formatFinancialPercent(percent)} da receita
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
       </div>
     </div>
   );

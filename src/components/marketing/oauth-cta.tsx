@@ -18,38 +18,33 @@ export function OAuthCta({
   onDark?: boolean;
   className?: string;
 }) {
-  if (isLoggedIn) {
-    return (
-      <Button
-        size={size}
-        asChild
-        className={cn(
-          onDark &&
-            "bg-white text-[#1b2d6f] shadow-md hover:bg-white/90 hover:text-[#1b2d6f]",
-          className,
-        )}
-      >
-        <Link href={dashboardHref} className="gap-2">
-          Ir para o dashboard
-          <ArrowRight className="size-4" />
-        </Link>
-      </Button>
-    );
-  }
+  const shape =
+    size === "sm"
+      ? "h-9 rounded-full px-4 text-sm font-semibold"
+      : "h-12 rounded-full px-7 text-[15px] font-semibold";
+
+  const appearance = isLoggedIn
+    ? onDark
+      ? "border-0 bg-white text-[#1b2d6f] shadow-none hover:bg-white/90"
+      : "border-0 bg-[#1b2d6f] text-white shadow-none hover:bg-[#152456]"
+    : "border-0 bg-amber-400 text-[#0f1a45] shadow-none hover:bg-amber-300";
+
+  const label = isLoggedIn ? "Ir para o dashboard" : "Testar grátis";
+  const href = isLoggedIn ? dashboardHref : SIGNIN;
 
   return (
-    <Button
-      size={size}
-      asChild
-      className={cn(
-        "border-2 border-amber-400 bg-white text-[#1b2d6f] shadow-md hover:border-amber-300 hover:bg-amber-50",
-        className,
+    <Button size={size} asChild className={cn(shape, appearance, className)}>
+      {isLoggedIn ? (
+        <Link href={href}>
+          {label}
+          <ArrowRight />
+        </Link>
+      ) : (
+        <a href={href}>
+          {label}
+          <ArrowRight />
+        </a>
       )}
-    >
-      <a href={SIGNIN} className="gap-2">
-        Testar grátis
-        <ArrowRight className="size-4" />
-      </a>
     </Button>
   );
 }

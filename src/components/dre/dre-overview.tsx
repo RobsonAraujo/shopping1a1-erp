@@ -123,7 +123,7 @@ export function DreOverview({
         {monthView ? (
           <button
             type="button"
-            className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--card)] px-2.5 py-1 text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+            className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--card)] px-2.5 py-1 text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
             onClick={() => onSelectMonth(null)}
           >
             <X className="size-3" aria-hidden />
@@ -176,7 +176,7 @@ export function DreOverview({
                 onSelectMonth(active ? null : month.month)
               }
               className={cn(
-                "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wide transition-colors",
+                "shrink-0 cursor-pointer rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wide transition-colors",
                 month.isFutureMonth && "cursor-not-allowed opacity-35",
                 active
                   ? "bg-[var(--primary)] text-white"

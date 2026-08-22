@@ -584,9 +584,9 @@ export function DreClient() {
             }))}
         />
       ) : null}
-      <div className="space-y-5">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-wrap items-center gap-2">
+      <div className="space-y-5 [&_button]:cursor-pointer [&_a]:cursor-pointer [&_[role=button]]:cursor-pointer [&_label]:cursor-pointer">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex flex-wrap items-end gap-2">
             <FormSelect
               id="dre-year"
               label="Ano"
@@ -599,14 +599,14 @@ export function DreClient() {
               type="button"
               variant="ghost"
               size="sm"
-              className="h-10 gap-1.5 text-xs"
+              className="h-10 gap-1.5 rounded-xl text-xs"
               onClick={() => setHelpOpen((open) => !open)}
             >
               <HelpCircle className="size-3.5" aria-hidden />
               Como usar
             </Button>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-end gap-2">
             <Popover open={cadastroOpen} onOpenChange={setCadastroOpen}>
               <PopoverTrigger asChild>
                 <Button
@@ -624,7 +624,7 @@ export function DreClient() {
                 <div className="flex flex-col">
                   <button
                     type="button"
-                    className="rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--muted)]"
+                    className="cursor-pointer rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--muted)]"
                     onClick={() => {
                       setCadastroOpen(false);
                       setOperationalCostsModalOpen(true);
@@ -634,7 +634,7 @@ export function DreClient() {
                   </button>
                   <button
                     type="button"
-                    className="rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--muted)]"
+                    className="cursor-pointer rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--muted)]"
                     onClick={() => {
                       setCadastroOpen(false);
                       setFixedCostsModalOpen(true);
@@ -644,7 +644,7 @@ export function DreClient() {
                   </button>
                   <button
                     type="button"
-                    className="rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--muted)]"
+                    className="cursor-pointer rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--muted)]"
                     onClick={() => {
                       setCadastroOpen(false);
                       setInvestmentCostsModalOpen(true);

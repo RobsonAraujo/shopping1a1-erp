@@ -15,6 +15,8 @@ import {
   AlertCircle,
   ChevronLeft,
   ChevronRight,
+  Columns3,
+  List,
   RefreshCw,
   Undo2,
 } from "lucide-react";
@@ -749,7 +751,7 @@ function DreInlineMoneyCell({
           muted && "text-[var(--muted-foreground)]",
           adjusted && "text-amber-900 dark:text-amber-200",
           (!disabled || onAudit) &&
-            "cursor-pointer rounded-sm hover:bg-black/[0.04]",
+            "cursor-pointer rounded-sm hover:bg-[var(--muted)]",
           onAudit &&
             !isMobile &&
             "underline decoration-dotted decoration-1 underline-offset-2",
@@ -1099,8 +1101,8 @@ function renderValueCell(
   const colored = isColoredRow(row);
   const moneyLabel = formatFinancialMoney(amount);
   const valueClassName = cn(
-    "whitespace-nowrap text-center text-[12.5px] font-bold tabular-nums leading-tight",
-    colored ? "text-white" : "",
+    "whitespace-nowrap text-center text-[13px] tabular-nums leading-tight",
+    colored ? "font-semibold text-[var(--foreground)]" : "font-medium",
   );
 
   const editableKey = getEditableLineKey(row);
@@ -1150,7 +1152,7 @@ function renderValueCell(
         tabIndex={auditable ? 0 : undefined}
         className={cn(
           auditable &&
-            "cursor-pointer rounded-sm underline decoration-dotted decoration-1 underline-offset-2 hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]",
+            "cursor-pointer rounded-sm underline decoration-dotted decoration-1 underline-offset-2 hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]",
         )}
         title={
           auditable
@@ -1191,12 +1193,12 @@ function renderValueCell(
   );
 }
 
-function renderPercentCell(percent: number | null, colored: boolean) {
+function renderPercentCell(percent: number | null) {
   return (
     <div
       className={cn(
-        "whitespace-nowrap text-center text-[12.5px] font-bold tabular-nums leading-tight",
-        colored ? "text-white" : valueToneClass(percent),
+        "whitespace-nowrap text-center text-[11px] font-medium tabular-nums leading-tight",
+        valueToneClass(percent),
       )}
     >
       {formatFinancialPercent(percent)}
@@ -1334,7 +1336,7 @@ function DreMobileRow({
     <div
       className={cn(
         "inline-flex w-full items-center justify-center gap-1.5",
-        colored ? "text-white" : "",
+        colored ? "font-semibold text-[var(--foreground)]" : "",
       )}
     >
       <div
@@ -1343,7 +1345,7 @@ function DreMobileRow({
         className={cn(
           "whitespace-nowrap text-center text-[13px] font-bold tabular-nums leading-tight",
           auditKind &&
-            "cursor-pointer rounded-sm underline decoration-dotted decoration-1 underline-offset-2 hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]",
+            "cursor-pointer rounded-sm underline decoration-dotted decoration-1 underline-offset-2 hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]",
         )}
         title={
           auditKind ? `Clique para auditar ${row.label} (ano)` : undefined
@@ -1396,7 +1398,7 @@ function DreMobileRow({
       <div className="shrink-0 text-right">
         {valueNode}
         {showPercentRow ? (
-          <div className="mt-0.5">{renderPercentCell(percent, colored)}</div>
+          <div className="mt-0.5">{renderPercentCell(percent)}</div>
         ) : null}
       </div>
     </div>
@@ -1513,7 +1515,7 @@ function DreYearTableMobile({
             type="button"
             variant={showDetails ? "secondary" : "default"}
             size="sm"
-            className="h-8 text-xs font-semibold shadow-sm"
+            className="h-8 cursor-pointer text-xs font-semibold shadow-sm"
             onClick={onToggleDetails}
           >
             {showDetails ? "Ocultar detalhes" : "Mostrar detalhes"}
@@ -1521,10 +1523,11 @@ function DreYearTableMobile({
         </div>
       ) : null}
       <div className="flex items-center gap-2">
-        <Button
+          <Button
           type="button"
           variant="outline"
           size="icon"
+          className="cursor-pointer"
           aria-label="Período anterior"
           disabled={selection === 0}
           onClick={() => goToOffset(-1)}
@@ -1545,6 +1548,7 @@ function DreYearTableMobile({
           type="button"
           variant="outline"
           size="icon"
+          className="cursor-pointer"
           aria-label="Próximo período"
           disabled={selection === "total"}
           onClick={() => goToOffset(1)}
@@ -1567,7 +1571,7 @@ function DreYearTableMobile({
               type="button"
               variant="outline"
               size="sm"
-              className="ml-auto gap-1.5"
+              className="ml-auto cursor-pointer gap-1.5"
               disabled={syncingMonths.has(selectedMonth.month)}
               title={
                 syncingMonths.has(selectedMonth.month)
@@ -1778,6 +1782,229 @@ function MonthHeaderCell({
   );
 }
 
+function DreLayoutToggle({
+  layout,
+  onChange,
+}: {
+  layout: "statement" | "year";
+  onChange: (layout: "statement" | "year") => void;
+}) {
+  return (
+    <div className="inline-flex rounded-full bg-[var(--muted)] p-1">
+      <button
+        type="button"
+        className={cn(
+          "inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
+          layout === "statement"
+            ? "bg-[var(--card)] text-[var(--foreground)] shadow-sm"
+            : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
+        )}
+        onClick={() => onChange("statement")}
+      >
+        <List className="size-3.5" aria-hidden />
+        Demonstrativo
+      </button>
+      <button
+        type="button"
+        className={cn(
+          "inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
+          layout === "year"
+            ? "bg-[var(--card)] text-[var(--foreground)] shadow-sm"
+            : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
+        )}
+        onClick={() => onChange("year")}
+      >
+        <Columns3 className="size-3.5" aria-hidden />
+        Comparar meses
+      </button>
+    </div>
+  );
+}
+
+function DreStatementPanel({
+  data,
+  showDetails,
+  selectedMonth,
+  syncingMonths,
+  syncingMonthMessages,
+  onSyncMonth,
+  onLineChange,
+  onLineRestore,
+  onFixedCostChange,
+  onOperationalCostChange,
+  onInvestmentCostChange,
+  onAuditClick,
+  onEditingChange,
+}: {
+  data: DreYearView;
+  showDetails: boolean;
+  selectedMonth: number | null;
+  syncingMonths: Set<number>;
+  syncingMonthMessages: Record<number, string>;
+  onSyncMonth: (month: number) => void;
+  onLineChange: DreYearTableProps["onLineChange"];
+  onLineRestore?: DreYearTableProps["onLineRestore"];
+  onFixedCostChange: DreYearTableProps["onFixedCostChange"];
+  onOperationalCostChange: DreYearTableProps["onOperationalCostChange"];
+  onInvestmentCostChange: DreYearTableProps["onInvestmentCostChange"];
+  onAuditClick: (kind: AuditKind, period: number | "year") => void;
+  onEditingChange?: (editing: boolean, month: number, rowId: string) => void;
+}) {
+  const rows = useMemo(
+    () =>
+      buildDreTableRows(
+        data.costItems,
+        data.operationalCostItems,
+        data.investmentCostItems,
+        true,
+      ),
+    [data.costItems, data.operationalCostItems, data.investmentCostItems],
+  );
+  const month =
+    selectedMonth !== null
+      ? (data.months.find((m) => m.month === selectedMonth) ?? null)
+      : null;
+  const isYear = month === null;
+  const alertMessages = month ? getMonthAlertMessages(month) : [];
+
+  return (
+    <div className="px-4 py-5 sm:px-8">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
+            Demonstrativo
+          </p>
+          <h2 className="mt-1 text-xl font-semibold tracking-tight">
+            {month ? month.label : `Ano ${data.year}`}
+          </h2>
+          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+            {isYear
+              ? "Totais do ano. Escolha um mês nas pílulas acima para editar valores."
+              : `Sync: ${formatSyncTime(month.syncedAt)}`}
+          </p>
+        </div>
+        {month?.canSync ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9 cursor-pointer gap-1.5 rounded-full"
+            disabled={syncingMonths.has(month.month)}
+            onClick={() => onSyncMonth(month.month)}
+          >
+            <RefreshCw
+              className={cn(
+                "size-3.5",
+                syncingMonths.has(month.month) && "animate-spin",
+              )}
+              aria-hidden
+            />
+            {syncingMonths.has(month.month)
+              ? (syncingMonthMessages[month.month] ?? "Sincronizando…")
+              : "Sincronizar mês"}
+          </Button>
+        ) : null}
+      </div>
+      {alertMessages.length > 0 ? (
+        <p className="mb-4 flex items-start gap-2 text-xs text-amber-800">
+          <AlertCircle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+          {alertMessages[0]}
+        </p>
+      ) : null}
+
+      <div className="mx-auto max-w-2xl">
+        {rows.map((row) => {
+          if (!showDetails && isDetailRow(row)) return null;
+          const section = isColoredRow(row);
+          const detail = isDetailRow(row);
+          const showPercent = row.type === "static" && row.showPercent;
+          const { amount, percent } = isYear
+            ? getYearTotalForRow(row, data)
+            : getCellValue(row, month);
+          const auditKind = getAuditKindForRow(row);
+
+          return (
+            <div
+              key={row.id}
+              className={cn(
+                "flex items-center justify-between gap-4 rounded-xl px-2 transition-colors",
+                section ? "mt-4 border-t border-[var(--border)] pt-3" : "py-1.5",
+                detail && "pl-5",
+                "hover:bg-[var(--muted)]/40",
+              )}
+            >
+              <div className="min-w-0 flex-1 py-1">{renderLabelCell(row)}</div>
+              <div className="flex shrink-0 flex-col items-end">
+                {isYear ? (
+                  <div
+                    role={auditKind ? "button" : undefined}
+                    tabIndex={auditKind ? 0 : undefined}
+                    className={cn(
+                      "whitespace-nowrap text-right text-[15px] tabular-nums leading-tight",
+                      section ? "font-semibold" : "font-medium",
+                      valueToneClass(amount),
+                      auditKind &&
+                        "cursor-pointer rounded-md px-1 hover:bg-[var(--muted)]",
+                    )}
+                    onClick={
+                      auditKind
+                        ? () => onAuditClick(auditKind, "year")
+                        : undefined
+                    }
+                    onKeyDown={
+                      auditKind
+                        ? (e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              onAuditClick(auditKind, "year");
+                            }
+                          }
+                        : undefined
+                    }
+                  >
+                    {formatFinancialMoney(amount)}
+                  </div>
+                ) : (
+                  <div className="[&_.inline-flex]:justify-end">
+                    {renderValueCell(
+                      row,
+                      month,
+                      onLineChange,
+                      onFixedCostChange,
+                      onOperationalCostChange,
+                      onInvestmentCostChange,
+                      (kind, m) => onAuditClick(kind, m),
+                      onEditingChange,
+                      onLineRestore,
+                    )}
+                  </div>
+                )}
+                {showPercent ? (
+                  <p className="mt-0.5 text-[11px] text-[var(--muted-foreground)]">
+                    {formatFinancialPercent(percent)} da receita
+                  </p>
+                ) : percent != null && !section && Math.abs(percent) > 0 ? (
+                  <div
+                    className="mt-1 h-1 w-16 overflow-hidden rounded-full bg-[var(--muted)]"
+                    aria-hidden
+                  >
+                    <div
+                      className="h-full rounded-full bg-[var(--primary)]/45"
+                      style={{
+                        width: `${Math.min(100, Math.abs(percent))}%`,
+                      }}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function DreYearTable(props: DreYearTableProps) {
   const isMobile = useIsMobile();
   if (isMobile) {
@@ -1820,6 +2047,7 @@ function DreYearTableDesktop({
     month: number;
     rowId: string;
   } | null>(null);
+  const [layout, setLayout] = useState<"statement" | "year">("statement");
   const [auditTarget, setAuditTarget] = useState<AuditTarget>(null);
   const isEditing = editingCell !== null;
   const columnFocusMonth = isEditing ? null : selectedMonth;
@@ -1873,40 +2101,48 @@ function DreYearTableDesktop({
   return (
     <TooltipProvider delayDuration={200}>
       <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]">
-        {onToggleDetails ? (
-          <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-2.5">
-            <p className="relative min-h-[1.1rem] flex-1 text-xs text-[var(--muted-foreground)]">
-              <span className="invisible" aria-hidden>
-                Exibindo linhas detalhadas (custos, tarifas, fretes…).
-              </span>
-              <span
-                className={cn(
-                  "absolute inset-0 transition-opacity duration-300 ease-out motion-reduce:transition-none",
-                  showDetails ? "opacity-100" : "opacity-0",
-                )}
-              >
-                Exibindo linhas detalhadas (custos, tarifas, fretes…).
-              </span>
-              <span
-                className={cn(
-                  "absolute inset-0 transition-opacity duration-300 ease-out motion-reduce:transition-none",
-                  showDetails ? "opacity-0" : "opacity-100",
-                )}
-              >
-                Detalhes ocultos — só totais e resultados.
-              </span>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
+          <DreLayoutToggle layout={layout} onChange={setLayout} />
+          {onToggleDetails ? (
+            <div className="flex items-center gap-3">
+            <p className="hidden text-xs text-[var(--muted-foreground)] sm:block">
+              {showDetails
+                ? "Linhas detalhadas visíveis"
+                : "Só totais e resultados"}
             </p>
             <Button
               type="button"
               variant={showDetails ? "outline" : "default"}
               size="sm"
-              className="h-8 shrink-0 rounded-full text-[11px] font-medium"
+              className="h-8 shrink-0 cursor-pointer rounded-full text-[11px] font-medium"
               onClick={onToggleDetails}
             >
               {showDetails ? "Ocultar detalhes" : "Mostrar detalhes"}
             </Button>
-          </div>
-        ) : null}
+            </div>
+          ) : null}
+        </div>
+        {layout === "statement" ? (
+            <DreStatementPanel
+              data={data}
+              showDetails={showDetails}
+              selectedMonth={selectedMonth}
+              syncingMonths={syncingMonths}
+              syncingMonthMessages={syncingMonthMessages}
+              onSyncMonth={onSyncMonth}
+              onLineChange={onLineChange}
+              onLineRestore={onLineRestore}
+              onFixedCostChange={onFixedCostChange}
+              onOperationalCostChange={onOperationalCostChange}
+              onInvestmentCostChange={onInvestmentCostChange}
+              onAuditClick={(kind, period) =>
+                setAuditTarget({ kind, period })
+              }
+              onEditingChange={(editing, m, rowId) =>
+                setEditingCell(editing ? { month: m, rowId } : null)
+              }
+            />
+        ) : (
         <div className="overflow-x-auto">
         <table className="w-full min-w-[64rem] table-fixed border-collapse text-xs">
           <colgroup>
@@ -2071,7 +2307,9 @@ function DreYearTableDesktop({
                       <div
                         className={cn(
                           "inline-flex w-full items-center justify-center gap-1.5",
-                          isColoredRow(row) ? "text-white" : "",
+                          isColoredRow(row)
+                            ? "font-semibold text-[var(--foreground)]"
+                            : "",
                         )}
                       >
                         <div
@@ -2080,7 +2318,7 @@ function DreYearTableDesktop({
                           className={cn(
                             "whitespace-nowrap text-center text-[12.5px] font-bold tabular-nums leading-tight",
                             yearAuditKind &&
-                              "cursor-pointer rounded-sm underline decoration-dotted decoration-1 underline-offset-2 hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]",
+                              "cursor-pointer rounded-sm underline decoration-dotted decoration-1 underline-offset-2 hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]",
                           )}
                           title={
                             yearAuditKind
@@ -2143,7 +2381,6 @@ function DreYearTableDesktop({
                         >
                           {renderPercentCell(
                             getCellValue(row, month).percent,
-                            isColoredRow(row),
                           )}
                         </td>
                       ))}
@@ -2158,7 +2395,6 @@ function DreYearTableDesktop({
                       >
                         {renderPercentCell(
                           getYearTotalForRow(row, data).percent,
-                          isColoredRow(row),
                         )}
                       </td>
                     </tr>
@@ -2169,6 +2405,7 @@ function DreYearTableDesktop({
           </tbody>
         </table>
         </div>
+        )}
       </div>
       <DreProductCostAuditModal
         open={auditTarget !== null && auditTarget.kind === "productCost"}

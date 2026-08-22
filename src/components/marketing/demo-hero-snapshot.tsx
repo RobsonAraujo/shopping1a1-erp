@@ -214,41 +214,54 @@ export function DemoHeroSnapshot() {
               </div>
             </div>
 
-            <div className="overflow-hidden rounded-xl border border-[var(--border)] text-[11px] font-bold">
-              <p className="bg-[var(--muted)]/40 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                DRE · AGO
-              </p>
-              <div className="marketing-hero-dre-row flex items-center justify-between bg-slate-900 px-3 py-2 text-white">
-                <span>(=) Margem de Contribuição</span>
-                <span className="tabular-nums">R$ 50.100,00</span>
+            <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] text-[11px]">
+              <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-1.5">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
+                  Demonstrativo
+                </p>
+                <p className="text-[10px] font-semibold text-[var(--foreground)]">
+                  AGO
+                </p>
               </div>
-              <div
-                className="marketing-hero-dre-row flex items-center justify-between bg-zinc-800 px-3 py-2 text-zinc-50"
-                style={{ animationDelay: "80ms" }}
-              >
-                <span>(-) Custos Variáveis</span>
-                <span className="tabular-nums">−R$ 164.700,00</span>
-              </div>
-              <div
-                className="marketing-hero-dre-row flex items-center justify-between bg-white px-3 py-1.5 pl-5 text-[var(--foreground)]"
-                style={{ animationDelay: "160ms" }}
-              >
-                <span>Tarifa ML</span>
-                <span className="tabular-nums">−R$ 28.120,00</span>
-              </div>
-              <div
-                className="marketing-hero-dre-row flex items-center justify-between px-3 py-1.5 pl-5 text-[var(--foreground)]"
-                style={{ animationDelay: "240ms", backgroundColor: "#f4f2f7" }}
-              >
-                <span>Custo produto</span>
-                <span className="tabular-nums">−R$ 98.400,00</span>
-              </div>
-              <div
-                className="marketing-hero-dre-row flex items-center justify-between bg-slate-900 px-3 py-2 text-white"
-                style={{ animationDelay: "320ms" }}
-              >
-                <span>(=) Lucro Operacional</span>
-                <span className="tabular-nums">R$ 38.420,00</span>
+              <div className="px-2 py-1.5">
+                <div className="marketing-hero-dre-row flex items-center justify-between rounded-lg px-2 py-1.5">
+                  <span className="font-semibold">Margem de contribuição</span>
+                  <span className="font-semibold tabular-nums text-emerald-800">
+                    R$ 50.100,00
+                  </span>
+                </div>
+                <div
+                  className="marketing-hero-dre-row flex items-center justify-between px-2 py-1 pl-5 text-[var(--muted-foreground)]"
+                  style={{ animationDelay: "80ms" }}
+                >
+                  <span>Tarifa ML</span>
+                  <span className="tabular-nums text-rose-800">
+                    −R$ 28.120,00
+                  </span>
+                </div>
+                <div
+                  className="marketing-hero-dre-row flex items-center justify-between px-2 py-1 pl-5 text-[var(--muted-foreground)]"
+                  style={{ animationDelay: "160ms" }}
+                >
+                  <span>Custo produto</span>
+                  <span className="tabular-nums text-rose-800">
+                    −R$ 98.400,00
+                  </span>
+                </div>
+                <div
+                  className="marketing-hero-dre-row mt-1 flex items-center justify-between rounded-lg border-t border-[var(--border)] px-2 pt-2"
+                  style={{ animationDelay: "240ms" }}
+                >
+                  <span className="font-semibold">Lucro operacional</span>
+                  <div className="text-right">
+                    <p className="font-semibold tabular-nums text-emerald-800">
+                      R$ 38.420,00
+                    </p>
+                    <p className="text-[10px] font-normal text-[var(--muted-foreground)]">
+                      17,89% da receita
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
