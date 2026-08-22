@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { TrendingUp } from "lucide-react";
+import { Layers, Lock, ShieldCheck, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { DemoCatalog } from "@/components/marketing/demo-catalog";
 import { DemoDre } from "@/components/marketing/demo-dre";
@@ -10,6 +10,12 @@ import { MarketingFaq } from "@/components/marketing/faq";
 import { MarketingHowItStarts } from "@/components/marketing/how-it-starts";
 import { MarketingMoreInPanel } from "@/components/marketing/more-in-panel";
 import { OAuthCta } from "@/components/marketing/oauth-cta";
+
+const TRUST_ITEMS = [
+  { icon: ShieldCheck, label: "OAuth oficial Mercado Livre" },
+  { icon: Lock, label: "Tokens criptografados no servidor" },
+  { icon: Layers, label: "Dados isolados por loja" },
+] as const;
 
 export function MarketingLanding({
   isLoggedIn,
@@ -90,9 +96,10 @@ export function MarketingLanding({
                 </span>
               </h1>
               <p className="mt-4 max-w-xl text-base leading-relaxed text-white/80 sm:text-lg">
-                Lucratividade por anúncio (incluindo pós-ADS), apuração de lucro
-                real, competição de catálogo, DRE com sync da fatura, Full e
-                compras. Um login: a conta que você já usa na ML. Sem senha nova.
+                Lucratividade por anúncio depois do ADS, apuração de lucro real
+                por SKU e DRE que fecha sozinho com a fatura do Mercado Livre —
+                Full e compras no mesmo painel. Um login: a conta que você já
+                usa na ML.
               </p>
               {error ? (
                 <div
@@ -118,6 +125,17 @@ export function MarketingLanding({
                     senha nova
                   </p>
                 ) : null}
+              </div>
+              <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2">
+                {TRUST_ITEMS.map(({ icon: Icon, label }) => (
+                  <span
+                    key={label}
+                    className="inline-flex items-center gap-1.5 text-xs text-white/55"
+                  >
+                    <Icon className="size-3.5 text-emerald-300" aria-hidden />
+                    {label}
+                  </span>
+                ))}
               </div>
             </div>
             <DemoHeroSnapshot />
@@ -165,33 +183,44 @@ export function MarketingLanding({
           </div>
         </section>
 
-        <section className="bg-[var(--background)] px-4 py-16 sm:px-6">
-          <div className="mx-auto max-w-6xl">
-            <h2 className="text-center text-2xl font-bold text-[var(--primary)]">
-              E ainda acompanha a operação no ML
-            </h2>
-            <div className="mt-10 space-y-12">
-              <div id="catalogo" className="scroll-mt-20 space-y-4">
-                <h3 className="text-lg font-semibold text-[var(--primary)]">
-                  Relatório de catálogo
-                </h3>
-                <p className="max-w-2xl text-sm text-[var(--muted-foreground)]">
-                  Timeline do dia: quando o anúncio estava ganhando, perdendo ou
-                  compartilhando — e quantas vendas saíram em cada trecho.
-                </p>
-                <DemoCatalog />
-              </div>
-              <div id="dre" className="scroll-mt-20 space-y-4">
-                <h3 className="text-lg font-semibold text-[var(--primary)]">
-                  DRE com sync da fatura
-                </h3>
-                <p className="max-w-2xl text-sm text-[var(--muted-foreground)]">
-                  A mesma grade do DRE: totais em verde e vermelho, algumas
-                  linhas de detalhe (tarifa, CMV, ADS) zebradas, JUL e AGO.
-                </p>
-                <DemoDre />
-              </div>
+        <section
+          id="dre"
+          className="scroll-mt-20 bg-[var(--background)] px-4 py-16 sm:px-6 sm:py-20"
+        >
+          <div className="mx-auto max-w-6xl space-y-8">
+            <div className="max-w-2xl">
+              <h2 className="text-2xl font-bold tracking-tight text-[var(--primary)] sm:text-3xl">
+                DRE que fecha sozinho
+              </h2>
+              <p className="mt-3 text-[15px] leading-relaxed text-[var(--muted-foreground)]">
+                Totais em verde e vermelho, com o detalhe de tarifa, CMV e ADS
+                direto da fatura do Mercado Livre — mês a mês, sem exportar
+                planilha para bater o número que já apareceu na lucratividade
+                e no tributário.
+              </p>
             </div>
+            <DemoDre />
+          </div>
+        </section>
+
+        <section
+          id="catalogo"
+          className="scroll-mt-20 bg-white px-4 py-16 sm:px-6 sm:py-20"
+        >
+          <div className="mx-auto max-w-6xl space-y-8">
+            <div className="max-w-2xl">
+              <p className="text-sm font-semibold uppercase tracking-wide text-amber-700">
+                Concorrência
+              </p>
+              <h2 className="mt-2 text-2xl font-bold tracking-tight text-[var(--primary)] sm:text-3xl">
+                Quem ganhou o anúncio, minuto a minuto
+              </h2>
+              <p className="mt-3 text-[15px] leading-relaxed text-[var(--muted-foreground)]">
+                Timeline do dia: quando o anúncio estava ganhando, perdendo ou
+                compartilhando — e quantas vendas saíram em cada trecho.
+              </p>
+            </div>
+            <DemoCatalog />
           </div>
         </section>
 

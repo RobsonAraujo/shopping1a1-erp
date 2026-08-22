@@ -42,7 +42,7 @@ export function OAuthCta({
       size={size}
       asChild
       className={cn(
-        "bg-amber-400 text-slate-900 shadow-md hover:bg-amber-300 hover:text-slate-900",
+        "border-2 border-amber-400 bg-white text-[#1b2d6f] shadow-md hover:border-amber-300 hover:bg-amber-50",
         className,
       )}
     >
