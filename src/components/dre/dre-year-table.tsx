@@ -1828,27 +1828,55 @@ function DreLayoutToggle({
   );
 }
 
-interface RevenueShareSegment {
-  id: string;
-  label: string;
-  description: string;
-  value: number;
-  percent: number;
-  barClass: string;
-  dotClass: string;
+type DrePieDisplayMode = "both" | "percent" | "value";
+
+const PIE_DISPLAY_OPTIONS: Array<{ value: DrePieDisplayMode; label: string }> = [
+  { value: "both", label: "R$ e %" },
+  { value: "percent", label: "Só %" },
+  { value: "value", label: "Só R$" },
+];
+
+function polarToCartesian(cx: number, cy: number, r: number, angleDeg: number) {
+  const rad = ((angleDeg - 90) * Math.PI) / 180;
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+}
+
+/** Caminho de uma fatia de rosca (donut) entre dois ângulos, em graus. */
+function donutSlicePath(
+  cx: number,
+  cy: number,
+  rOuter: number,
+  rInner: number,
+  startAngle: number,
+  endAngle: number,
+) {
+  const startOuter = polarToCartesian(cx, cy, rOuter, endAngle);
+  const endOuter = polarToCartesian(cx, cy, rOuter, startAngle);
+  const startInner = polarToCartesian(cx, cy, rInner, endAngle);
+  const endInner = polarToCartesian(cx, cy, rInner, startAngle);
+  const largeArc = endAngle - startAngle > 180 ? 1 : 0;
+  return [
+    `M ${startOuter.x} ${startOuter.y}`,
+    `A ${rOuter} ${rOuter} 0 ${largeArc} 0 ${endOuter.x} ${endOuter.y}`,
+    `L ${endInner.x} ${endInner.y}`,
+    `A ${rInner} ${rInner} 0 ${largeArc} 1 ${startInner.x} ${startInner.y}`,
+    "Z",
+  ].join(" ");
 }
 
 /**
- * Barra de proporção: Total de Entrada = 100%, dividida em Custos Variáveis,
- * Custo Fixo, Investimentos e Lucro Operacional. Se o mês/ano fechou no
- * prejuízo, os custos são reescalados para caber nos 100% da barra (senão
- * ela "estouraria") e o resultado negativo vira um selo à parte.
+ * Gráfico de rosca: Custos Variáveis, Custo Fixo, Investimentos e Lucro
+ * Operacional como fatias — cada uma proporcional ao próprio valor absoluto
+ * (não à Entrada), para funcionar mesmo em prejuízo. O centro mostra a
+ * Entrada; a legenda ao lado tem um alternador pra ver só valor, só % (da
+ * receita) ou os dois.
  */
-function DreRevenueShareBar({
+function DreRevenuePie({
   totals,
 }: {
   totals: DreComputedTotals | null | undefined;
 }) {
+  const [mode, setMode] = useState<DrePieDisplayMode>("both");
   const base = totals?.totalEntrada ?? null;
 
   if (!totals || base == null || base <= 0) {
@@ -1859,184 +1887,195 @@ function DreRevenueShareBar({
     );
   }
 
-  const costs = [
-    {
-      id: "totalCustoOperacional",
-      label: "Custos Variáveis",
-      description:
-        "Tarifas do Mercado Livre, custo de produto, impostos, frete, Full e campanhas ADS.",
-      value: Math.abs(totals.totalCustoOperacional),
-      barClass: "bg-rose-400",
-      dotClass: "bg-rose-400",
-    },
-    {
-      id: "totalCustoFixo",
-      label: "Custo Fixo",
-      description:
-        "Custos fixos cadastrados manualmente por você (aluguel, folha, softwares...).",
-      value: Math.abs(totals.totalCustoFixo),
-      barClass: "bg-amber-400",
-      dotClass: "bg-amber-400",
-    },
-    {
-      id: "totalInvestimento",
-      label: "Investimentos",
-      description: "Investimentos cadastrados manualmente por você no período.",
-      value: Math.abs(totals.totalInvestimento),
-      barClass: "bg-violet-400",
-      dotClass: "bg-violet-400",
-    },
-  ].filter((c) => c.value > 0);
-
   const lucro = totals.lucroOperacional;
   const isLoss = lucro < 0;
-  const costSum = costs.reduce((sum, c) => sum + c.value, 0);
 
-  const segments: RevenueShareSegment[] = costs.map((c) => ({
-    ...c,
-    percent: isLoss
-      ? costSum > 0
-        ? (c.value / costSum) * 100
-        : 0
-      : (c.value / base) * 100,
-  }));
-
-  const lucroPercent = isLoss ? 0 : Math.max(0, (lucro / base) * 100);
-  if (!isLoss) {
-    segments.push({
-      id: "lucroOperacional",
-      label: "Lucro Operacional",
-      description:
-        "O que sobra da receita depois de todos os custos e investimentos.",
-      value: lucro,
-      percent: lucroPercent,
-      barClass: "bg-emerald-500",
-      dotClass: "bg-emerald-500",
-    });
-  }
-
-  const statBlocks: Array<{
-    id: string;
-    label: string;
-    value: number;
-    icon: typeof TrendingUp;
-    tone: string;
-    isBase?: boolean;
-  }> = [
-    {
-      id: "totalEntrada",
-      label: "Entrada",
-      value: base,
-      icon: Banknote,
-      tone: "primary",
-      isBase: true,
-    },
+  const rawItems = [
     {
       id: "totalCustoOperacional",
       label: "Custos Variáveis",
       value: totals.totalCustoOperacional,
       icon: Receipt,
-      tone: "rose",
+      fillClass: "fill-rose-500",
+      dotClass: "bg-rose-500",
     },
     {
       id: "totalCustoFixo",
       label: "Custo Fixo",
       value: totals.totalCustoFixo,
       icon: Landmark,
-      tone: "amber",
+      fillClass: "fill-slate-400",
+      dotClass: "bg-slate-400",
     },
     {
       id: "totalInvestimento",
       label: "Investimentos",
       value: totals.totalInvestimento,
       icon: Rocket,
-      tone: "violet",
+      fillClass: "fill-sky-400",
+      dotClass: "bg-sky-400",
     },
     {
       id: "lucroOperacional",
       label: "Lucro Operacional",
       value: lucro,
       icon: TrendingUp,
-      tone: isLoss ? "rose" : "emerald",
+      fillClass: isLoss ? "fill-amber-500" : "fill-emerald-500",
+      dotClass: isLoss ? "bg-amber-500" : "bg-emerald-500",
     },
   ];
 
+  const weights = rawItems.map((item) => Math.abs(item.value));
+  const totalWeight = weights.reduce((sum, w) => sum + w, 0) || 1;
+
+  const slices = rawItems.reduce<
+    Array<
+      (typeof rawItems)[number] & {
+        percent: number;
+        startAngle: number;
+        endAngle: number;
+        fraction: number;
+      }
+    >
+  >((acc, item, index) => {
+    const previousEnd = acc.length > 0 ? acc[acc.length - 1].endAngle : 0;
+    const fraction = weights[index] / totalWeight;
+    const startAngle = previousEnd;
+    const endAngle = Math.min(360, startAngle + fraction * 360);
+    acc.push({
+      ...item,
+      percent: (item.value / base) * 100,
+      startAngle,
+      endAngle: Math.min(endAngle, startAngle + 359.9),
+      fraction,
+    });
+    return acc;
+  }, []);
+
+  const showValue = mode !== "percent";
+  const showPercent = mode !== "value";
+
   return (
     <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-4 sm:px-6">
-      <p className="text-xs font-medium text-[var(--muted-foreground)]">
-        Visão geral do período
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs font-medium text-[var(--muted-foreground)]">
+          Visão geral do período
+        </p>
+        <div className="inline-flex rounded-full bg-[var(--muted)] p-1">
+          {PIE_DISPLAY_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={cn(
+                "cursor-pointer rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
+                mode === option.value
+                  ? "bg-[var(--card)] text-[var(--foreground)] shadow-sm"
+                  : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
+              )}
+              onClick={() => setMode(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-3">
-        {statBlocks.map((block) => {
-          const Icon = block.icon;
-          return (
-            <div key={block.id} className="flex items-center gap-2">
-              <span
-                className={cn(
-                  "flex size-8 shrink-0 items-center justify-center rounded-lg",
-                  GROUP_TONE_CLASS[block.tone],
-                )}
+      <div className="mt-4 flex flex-col items-center gap-6 sm:flex-row">
+        <div className="relative shrink-0">
+          <svg viewBox="0 0 200 200" className="size-44 sm:size-48" aria-hidden>
+            {slices
+              .filter((slice) => slice.fraction > 0)
+              .map((slice) => (
+                <Tooltip key={slice.id}>
+                  <TooltipTrigger asChild>
+                    <path
+                      d={donutSlicePath(
+                        100,
+                        100,
+                        94,
+                        58,
+                        slice.startAngle,
+                        slice.endAngle,
+                      )}
+                      className={cn(
+                        slice.fillClass,
+                        "cursor-default transition-[filter] duration-150 hover:brightness-110",
+                      )}
+                      stroke="var(--card)"
+                      strokeWidth={2}
+                    />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">
+                    <p className="font-semibold">{slice.label}</p>
+                    <p className="mt-0.5 font-semibold tabular-nums">
+                      {formatFinancialMoney(slice.value)} ·{" "}
+                      {formatFinancialPercent(slice.percent)}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              ))}
+          </svg>
+          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+              Entrada
+            </p>
+            <p className="text-sm font-bold tabular-nums text-[var(--foreground)] sm:text-base">
+              {formatFinancialMoney(base)}
+            </p>
+          </div>
+        </div>
+
+        <div className="w-full flex-1 space-y-1">
+          {slices.map((slice) => {
+            const Icon = slice.icon;
+            return (
+              <div
+                key={slice.id}
+                className="flex items-center justify-between gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-[var(--muted)]/40"
               >
-                <Icon className="size-4" aria-hidden />
-              </span>
-              <div className="min-w-0">
-                <p className="text-[10px] leading-tight font-medium whitespace-nowrap text-[var(--muted-foreground)]">
-                  {block.label}
-                </p>
-                <p
-                  className={cn(
-                    "text-sm leading-tight font-semibold tabular-nums",
-                    block.isBase
-                      ? "text-[var(--foreground)]"
-                      : valueToneClass(block.value),
-                  )}
-                >
-                  {formatFinancialMoney(block.value)}
-                </p>
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span
+                    className={cn("size-2.5 shrink-0 rounded-full", slice.dotClass)}
+                    aria-hidden
+                  />
+                  <Icon
+                    className="size-4 shrink-0 text-[var(--muted-foreground)]"
+                    aria-hidden
+                  />
+                  <span className="truncate text-sm text-[var(--foreground)]">
+                    {slice.label}
+                  </span>
+                </div>
+                <div className="flex shrink-0 items-baseline gap-2">
+                  {showValue ? (
+                    <span
+                      className={cn(
+                        "text-sm font-semibold tabular-nums",
+                        valueToneClass(slice.value),
+                      )}
+                    >
+                      {formatFinancialMoney(slice.value)}
+                    </span>
+                  ) : null}
+                  {showPercent ? (
+                    <span className="tabular-nums text-xs text-[var(--muted-foreground)]">
+                      {formatFinancialPercent(slice.percent)}
+                    </span>
+                  ) : null}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
       {isLoss ? (
-        <div className="mt-3 flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700">
+        <div className="mt-3 flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
           <AlertCircle className="size-3.5 shrink-0" aria-hidden />
           Prejuízo operacional: {formatFinancialMoney(lucro)} (
           {formatFinancialPercent((lucro / base) * 100)})
         </div>
       ) : null}
-
-      <div className="mt-4 flex h-7 w-full overflow-hidden rounded-lg bg-[var(--muted)]">
-        {segments.map((segment) => (
-          <Tooltip key={segment.id}>
-            <TooltipTrigger asChild>
-              <div
-                className={cn(
-                  "h-full cursor-default transition-[filter] duration-150 hover:brightness-110",
-                  segment.barClass,
-                )}
-                style={{ width: `${segment.percent}%` }}
-              />
-            </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-56 text-xs">
-              <p className="font-semibold">{segment.label}</p>
-              <p className="mt-0.5 font-semibold tabular-nums">
-                {formatFinancialMoney(segment.value)} ·{" "}
-                {formatFinancialPercent(
-                  segment.id === "lucroOperacional"
-                    ? lucroPercent
-                    : (segment.value / base) * 100,
-                )}
-              </p>
-              <p className="mt-1 leading-snug text-[var(--muted-foreground)]">
-                {segment.description}
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        ))}
-      </div>
     </div>
   );
 }
@@ -2279,7 +2318,7 @@ function DreStatementPanel({
       ) : null}
 
       <div className="space-y-3">
-        <DreRevenueShareBar totals={totals} />
+        <DreRevenuePie totals={totals} />
 
         <div className="mx-auto grid max-w-3xl items-start gap-2.5 sm:grid-cols-2">
           <div className="flex flex-col gap-2.5">
