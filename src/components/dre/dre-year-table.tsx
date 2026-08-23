@@ -3,6 +3,7 @@
 import {
   Fragment,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -13,11 +14,16 @@ import { createPortal } from "react-dom";
 import { NumericFormat } from "react-number-format";
 import {
   AlertCircle,
+  Banknote,
   ChevronLeft,
   ChevronRight,
   Columns3,
+  Landmark,
   List,
+  Receipt,
   RefreshCw,
+  Rocket,
+  TrendingUp,
   Undo2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -51,6 +57,7 @@ import {
   getYearProductCostBreakdown,
   getYearTaxBreakdown,
   isDreEditableLineKey,
+  type DreComputedTotals,
   type DreEditableLineKey,
   type DreLineBreakdownItem,
 } from "@/lib/dre/dre-calculations";
@@ -1821,6 +1828,266 @@ function DreLayoutToggle({
   );
 }
 
+interface RevenueShareSegment {
+  id: string;
+  label: string;
+  description: string;
+  value: number;
+  percent: number;
+  barClass: string;
+  dotClass: string;
+}
+
+/**
+ * Barra de proporção: Total de Entrada = 100%, dividida em Custos Variáveis,
+ * Custo Fixo, Investimentos e Lucro Operacional. Se o mês/ano fechou no
+ * prejuízo, os custos são reescalados para caber nos 100% da barra (senão
+ * ela "estouraria") e o resultado negativo vira um selo à parte.
+ */
+function DreRevenueShareBar({
+  totals,
+}: {
+  totals: DreComputedTotals | null | undefined;
+}) {
+  const base = totals?.totalEntrada ?? null;
+
+  if (!totals || base == null || base <= 0) {
+    return (
+      <div className="flex h-24 items-center justify-center rounded-2xl border border-dashed border-[var(--border)] text-sm text-[var(--muted-foreground)]">
+        Sem dados suficientes para o período.
+      </div>
+    );
+  }
+
+  const costs = [
+    {
+      id: "totalCustoOperacional",
+      label: "Custos Variáveis",
+      description:
+        "Tarifas do Mercado Livre, custo de produto, impostos, frete, Full e campanhas ADS.",
+      value: Math.abs(totals.totalCustoOperacional),
+      barClass: "bg-rose-400",
+      dotClass: "bg-rose-400",
+    },
+    {
+      id: "totalCustoFixo",
+      label: "Custo Fixo",
+      description:
+        "Custos fixos cadastrados manualmente por você (aluguel, folha, softwares...).",
+      value: Math.abs(totals.totalCustoFixo),
+      barClass: "bg-amber-400",
+      dotClass: "bg-amber-400",
+    },
+    {
+      id: "totalInvestimento",
+      label: "Investimentos",
+      description: "Investimentos cadastrados manualmente por você no período.",
+      value: Math.abs(totals.totalInvestimento),
+      barClass: "bg-violet-400",
+      dotClass: "bg-violet-400",
+    },
+  ].filter((c) => c.value > 0);
+
+  const lucro = totals.lucroOperacional;
+  const isLoss = lucro < 0;
+  const costSum = costs.reduce((sum, c) => sum + c.value, 0);
+
+  const segments: RevenueShareSegment[] = costs.map((c) => ({
+    ...c,
+    percent: isLoss
+      ? costSum > 0
+        ? (c.value / costSum) * 100
+        : 0
+      : (c.value / base) * 100,
+  }));
+
+  const lucroPercent = isLoss ? 0 : Math.max(0, (lucro / base) * 100);
+  if (!isLoss) {
+    segments.push({
+      id: "lucroOperacional",
+      label: "Lucro Operacional",
+      description:
+        "O que sobra da receita depois de todos os custos e investimentos.",
+      value: lucro,
+      percent: lucroPercent,
+      barClass: "bg-emerald-500",
+      dotClass: "bg-emerald-500",
+    });
+  }
+
+  const statBlocks: Array<{
+    id: string;
+    label: string;
+    value: number;
+    icon: typeof TrendingUp;
+    tone: string;
+    isBase?: boolean;
+  }> = [
+    {
+      id: "totalEntrada",
+      label: "Entrada",
+      value: base,
+      icon: Banknote,
+      tone: "primary",
+      isBase: true,
+    },
+    {
+      id: "totalCustoOperacional",
+      label: "Custos Variáveis",
+      value: totals.totalCustoOperacional,
+      icon: Receipt,
+      tone: "rose",
+    },
+    {
+      id: "totalCustoFixo",
+      label: "Custo Fixo",
+      value: totals.totalCustoFixo,
+      icon: Landmark,
+      tone: "amber",
+    },
+    {
+      id: "totalInvestimento",
+      label: "Investimentos",
+      value: totals.totalInvestimento,
+      icon: Rocket,
+      tone: "violet",
+    },
+    {
+      id: "lucroOperacional",
+      label: "Lucro Operacional",
+      value: lucro,
+      icon: TrendingUp,
+      tone: isLoss ? "rose" : "emerald",
+    },
+  ];
+
+  return (
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-4 sm:px-6">
+      <p className="text-xs font-medium text-[var(--muted-foreground)]">
+        Visão geral do período
+      </p>
+
+      <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-3">
+        {statBlocks.map((block) => {
+          const Icon = block.icon;
+          return (
+            <div key={block.id} className="flex items-center gap-2">
+              <span
+                className={cn(
+                  "flex size-8 shrink-0 items-center justify-center rounded-lg",
+                  GROUP_TONE_CLASS[block.tone],
+                )}
+              >
+                <Icon className="size-4" aria-hidden />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[10px] leading-tight font-medium whitespace-nowrap text-[var(--muted-foreground)]">
+                  {block.label}
+                </p>
+                <p
+                  className={cn(
+                    "text-sm leading-tight font-semibold tabular-nums",
+                    block.isBase
+                      ? "text-[var(--foreground)]"
+                      : valueToneClass(block.value),
+                  )}
+                >
+                  {formatFinancialMoney(block.value)}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {isLoss ? (
+        <div className="mt-3 flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700">
+          <AlertCircle className="size-3.5 shrink-0" aria-hidden />
+          Prejuízo operacional: {formatFinancialMoney(lucro)} (
+          {formatFinancialPercent((lucro / base) * 100)})
+        </div>
+      ) : null}
+
+      <div className="mt-4 flex h-7 w-full overflow-hidden rounded-lg bg-[var(--muted)]">
+        {segments.map((segment) => (
+          <Tooltip key={segment.id}>
+            <TooltipTrigger asChild>
+              <div
+                className={cn(
+                  "h-full cursor-default transition-[filter] duration-150 hover:brightness-110",
+                  segment.barClass,
+                )}
+                style={{ width: `${segment.percent}%` }}
+              />
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-56 text-xs">
+              <p className="font-semibold">{segment.label}</p>
+              <p className="mt-0.5 font-semibold tabular-nums">
+                {formatFinancialMoney(segment.value)} ·{" "}
+                {formatFinancialPercent(
+                  segment.id === "lucroOperacional"
+                    ? lucroPercent
+                    : (segment.value / base) * 100,
+                )}
+              </p>
+              <p className="mt-1 leading-snug text-[var(--muted-foreground)]">
+                {segment.description}
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+interface StatementGroup {
+  header: DreTableRow;
+  items: DreTableRow[];
+}
+
+/**
+ * Agrupa as linhas planas do DRE em blocos por seção (Entrada, Custos
+ * Variáveis, Custo Fixo, Investimentos). Linhas "resultado" (margem, lucro
+ * antes dos investimentos, lucro operacional) fecham o grupo atual sem virar
+ * um cartão — esses totais já aparecem, com destaque, na ponte visual acima.
+ */
+function buildStatementGroups(rows: DreTableRow[]): StatementGroup[] {
+  const groups: StatementGroup[] = [];
+  let current: StatementGroup | null = null;
+  for (const row of rows) {
+    const kind = row.type === "static" ? row.kind : "custo-detail";
+    if (kind === "entrada-total" || kind === "custo-total") {
+      current = { header: row, items: [] };
+      groups.push(current);
+      continue;
+    }
+    if (kind === "resultado") {
+      current = null;
+      continue;
+    }
+    if (current) current.items.push(row);
+  }
+  return groups;
+}
+
+const GROUP_VISUALS: Partial<
+  Record<DreStaticRowId, { icon: typeof TrendingUp; tone: string }>
+> = {
+  totalEntrada: { icon: Banknote, tone: "primary" },
+  totalCustoOperacional: { icon: Receipt, tone: "rose" },
+  totalCustoFixo: { icon: Landmark, tone: "amber" },
+  totalInvestimento: { icon: Rocket, tone: "violet" },
+};
+
+const GROUP_TONE_CLASS: Record<string, string> = {
+  primary: "bg-[var(--primary)]/10 text-[var(--primary)]",
+  rose: "bg-rose-50 text-rose-600",
+  amber: "bg-amber-50 text-amber-600",
+  violet: "bg-violet-50 text-violet-600",
+  emerald: "bg-emerald-50 text-emerald-600",
+};
+
 function DreStatementPanel({
   data,
   showDetails,
@@ -1860,21 +2127,120 @@ function DreStatementPanel({
       ),
     [data.costItems, data.operationalCostItems, data.investmentCostItems],
   );
+  const groups = useMemo(() => buildStatementGroups(rows), [rows]);
   const month =
     selectedMonth !== null
       ? (data.months.find((m) => m.month === selectedMonth) ?? null)
       : null;
   const isYear = month === null;
   const alertMessages = month ? getMonthAlertMessages(month) : [];
+  const totals = isYear ? data.yearTotals : month.totals;
+
+  function renderDetailRow(row: DreTableRow) {
+    const { amount, percent } = isYear
+      ? getYearTotalForRow(row, data)
+      : getCellValue(row, month as DreMonthView);
+    const auditKind = getAuditKindForRow(row);
+
+    return (
+      <div
+        key={row.id}
+        className="flex items-center justify-between gap-4 px-4 py-2.5 transition-colors hover:bg-[var(--muted)]/40"
+      >
+        <div className="min-w-0 flex-1">{renderLabelCell(row)}</div>
+        <div className="flex shrink-0 flex-col items-end">
+          {isYear ? (
+            <div
+              role={auditKind ? "button" : undefined}
+              tabIndex={auditKind ? 0 : undefined}
+              className={cn(
+                "whitespace-nowrap text-right text-[15px] font-medium tabular-nums leading-tight",
+                valueToneClass(amount),
+                auditKind &&
+                  "cursor-pointer rounded-md px-1 hover:bg-[var(--muted)]",
+              )}
+              onClick={
+                auditKind ? () => onAuditClick(auditKind, "year") : undefined
+              }
+              onKeyDown={
+                auditKind
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onAuditClick(auditKind, "year");
+                      }
+                    }
+                  : undefined
+              }
+            >
+              {formatFinancialMoney(amount)}
+            </div>
+          ) : (
+            <div className="[&_.inline-flex]:justify-end">
+              {renderValueCell(
+                row,
+                month as DreMonthView,
+                onLineChange,
+                onFixedCostChange,
+                onOperationalCostChange,
+                onInvestmentCostChange,
+                (kind, m) => onAuditClick(kind, m),
+                onEditingChange,
+                onLineRestore,
+              )}
+            </div>
+          )}
+          {percent != null && Math.abs(percent) > 0 ? (
+            <div
+              className="mt-1 h-1 w-16 overflow-hidden rounded-full bg-[var(--muted)]"
+              aria-hidden
+            >
+              <div
+                className="h-full rounded-full bg-[var(--primary)]/45"
+                style={{ width: `${Math.min(100, Math.abs(percent))}%` }}
+              />
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  const groupIds = useMemo(() => groups.map((g) => g.header.id), [groups]);
+  const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const [columnOf, setColumnOf] = useState<Record<string, number>>({});
+
+  /**
+   * Masonry real: mede a altura de cada cartão já renderizado e distribui
+   * greedy — sempre para a coluna mais curta no momento. Se um cartão
+   * grande cresce, os seguintes migram de coluna; caso contrário eles se
+   * empilham direto atrás do cartão anterior daquela coluna.
+   */
+  useLayoutEffect(() => {
+    const heights = groupIds.map(
+      (id) => cardRefs.current.get(id)?.offsetHeight ?? 0,
+    );
+    const colHeights = [0, 0];
+    const next: Record<string, number> = {};
+    groupIds.forEach((id, index) => {
+      const col = colHeights[0] <= colHeights[1] ? 0 : 1;
+      next[id] = col;
+      colHeights[col] += heights[index];
+    });
+    setColumnOf((prev) => {
+      const changed = groupIds.some((id) => prev[id] !== next[id]);
+      return changed ? next : prev;
+    });
+  }, [groupIds, showDetails, isYear, month?.month]);
 
   return (
     <div className="px-4 py-5 sm:px-8">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3 border-b border-[var(--border)] pb-5">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
             Demonstrativo
           </p>
-          <h2 className="mt-1 text-xl font-semibold tracking-tight">
+          <h2 className="mt-1 text-2xl font-semibold tracking-tight">
             {month ? month.label : `Ano ${data.year}`}
           </h2>
           <p className="mt-1 text-xs text-[var(--muted-foreground)]">
@@ -1912,97 +2278,79 @@ function DreStatementPanel({
         </p>
       ) : null}
 
-      <div className="mx-auto max-w-2xl">
-        {rows.map((row) => {
-          if (!showDetails && isDetailRow(row)) return null;
-          const section = isColoredRow(row);
-          const detail = isDetailRow(row);
-          const showPercent = row.type === "static" && row.showPercent;
-          const { amount, percent } = isYear
-            ? getYearTotalForRow(row, data)
-            : getCellValue(row, month);
-          const auditKind = getAuditKindForRow(row);
+      <div className="space-y-3">
+        <DreRevenueShareBar totals={totals} />
 
-          return (
-            <div
-              key={row.id}
-              className={cn(
-                "flex items-center justify-between gap-4 rounded-xl px-2 transition-colors",
-                section ? "mt-4 border-t border-[var(--border)] pt-3" : "py-1.5",
-                detail && "pl-5",
-                "hover:bg-[var(--muted)]/40",
-              )}
-            >
-              <div className="min-w-0 flex-1 py-1">{renderLabelCell(row)}</div>
-              <div className="flex shrink-0 flex-col items-end">
-                {isYear ? (
-                  <div
-                    role={auditKind ? "button" : undefined}
-                    tabIndex={auditKind ? 0 : undefined}
-                    className={cn(
-                      "whitespace-nowrap text-right text-[15px] tabular-nums leading-tight",
-                      section ? "font-semibold" : "font-medium",
-                      valueToneClass(amount),
-                      auditKind &&
-                        "cursor-pointer rounded-md px-1 hover:bg-[var(--muted)]",
-                    )}
-                    onClick={
-                      auditKind
-                        ? () => onAuditClick(auditKind, "year")
-                        : undefined
-                    }
-                    onKeyDown={
-                      auditKind
-                        ? (e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              onAuditClick(auditKind, "year");
-                            }
-                          }
-                        : undefined
-                    }
-                  >
-                    {formatFinancialMoney(amount)}
-                  </div>
-                ) : (
-                  <div className="[&_.inline-flex]:justify-end">
-                    {renderValueCell(
-                      row,
-                      month,
-                      onLineChange,
-                      onFixedCostChange,
-                      onOperationalCostChange,
-                      onInvestmentCostChange,
-                      (kind, m) => onAuditClick(kind, m),
-                      onEditingChange,
-                      onLineRestore,
-                    )}
-                  </div>
-                )}
-                {showPercent ? (
-                  <p className="mt-0.5 text-[11px] text-[var(--muted-foreground)]">
-                    {formatFinancialPercent(percent)} da receita
-                  </p>
-                ) : percent != null && !section && Math.abs(percent) > 0 ? (
-                  <div
-                    className="mt-1 h-1 w-16 overflow-hidden rounded-full bg-[var(--muted)]"
-                    aria-hidden
-                  >
-                    <div
-                      className="h-full rounded-full bg-[var(--primary)]/45"
-                      style={{
-                        width: `${Math.min(100, Math.abs(percent))}%`,
-                      }}
-                    />
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          );
-        })}
+        <div className="mx-auto grid max-w-3xl items-start gap-2.5 sm:grid-cols-2">
+          <div className="flex flex-col gap-2.5">
+            {groups
+              .filter(
+                (group, index) => (columnOf[group.header.id] ?? index % 2) === 0,
+              )
+              .map((group) => renderStatementGroup(group))}
+          </div>
+          <div className="flex flex-col gap-2.5">
+            {groups
+              .filter(
+                (group, index) => (columnOf[group.header.id] ?? index % 2) === 1,
+              )
+              .map((group) => renderStatementGroup(group))}
+          </div>
+        </div>
       </div>
     </div>
   );
+
+  function renderStatementGroup(group: StatementGroup) {
+    const visual =
+      group.header.type === "static"
+        ? GROUP_VISUALS[group.header.id]
+        : undefined;
+    const Icon = visual?.icon ?? TrendingUp;
+    const { amount: headerAmount } = isYear
+      ? getYearTotalForRow(group.header, data)
+      : getCellValue(group.header, month as DreMonthView);
+
+    return (
+      <div
+        key={group.header.id}
+        ref={(el) => {
+          if (el) cardRefs.current.set(group.header.id, el);
+          else cardRefs.current.delete(group.header.id);
+        }}
+        className="overflow-hidden rounded-2xl border border-[var(--border)]"
+      >
+        <div className="flex items-center justify-between gap-3 bg-[var(--muted)]/40 px-4 py-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span
+              className={cn(
+                "flex size-8 shrink-0 items-center justify-center rounded-lg",
+                GROUP_TONE_CLASS[visual?.tone ?? "primary"],
+              )}
+            >
+              <Icon className="size-4" aria-hidden />
+            </span>
+            <p className="truncate text-sm font-semibold text-[var(--foreground)]">
+              {group.header.label}
+            </p>
+          </div>
+          <p
+            className={cn(
+              "shrink-0 text-sm font-semibold tabular-nums",
+              valueToneClass(headerAmount),
+            )}
+          >
+            {formatFinancialMoney(headerAmount)}
+          </p>
+        </div>
+        {showDetails && group.items.length > 0 ? (
+          <div className="divide-y divide-[var(--border)]/70">
+            {group.items.map((row) => renderDetailRow(row))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 }
 
 export function DreYearTable(props: DreYearTableProps) {

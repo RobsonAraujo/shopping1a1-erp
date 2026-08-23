@@ -585,7 +585,7 @@ export function DreClient() {
         />
       ) : null}
       <div className="space-y-5 [&_button]:cursor-pointer [&_a]:cursor-pointer [&_[role=button]]:cursor-pointer [&_label]:cursor-pointer">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 lg:flex-row lg:items-end lg:justify-between">
           <div className="flex flex-wrap items-end gap-2">
             <FormSelect
               id="dre-year"
@@ -679,6 +679,10 @@ export function DreClient() {
               <Download className="size-3.5" aria-hidden />
               CSV
             </Button>
+            <div
+              className="mx-1 hidden h-6 w-px bg-[var(--border)] sm:block"
+              aria-hidden
+            />
             <Button
               type="button"
               size="sm"
