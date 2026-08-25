@@ -476,6 +476,12 @@ export type DreComputedTotals = {
   lucroOperacionalAntesInvestimentosPercent: number | null;
   lucroOperacional: number;
   lucroOperacionalPercent: number | null;
+  totalSaidaNaoOperacionalManual: number;
+  totalSaidaNaoOperacional: number;
+  totalEntradaNaoOperacionalManual: number;
+  totalEntradaNaoOperacional: number;
+  resultadoLiquido: number;
+  resultadoLiquidoPercent: number | null;
 };
 
 const OPERATIONAL_LINE_KEYS: (keyof DreLineAmounts)[] = [
@@ -508,6 +514,8 @@ export function computeDreTotals(
   fixedCosts: DreManualCostInput[],
   operationalCosts: DreManualCostInput[] = [],
   investmentCosts: DreManualCostInput[] = [],
+  nonOperationalOutCosts: DreManualCostInput[] = [],
+  nonOperationalInCosts: DreManualCostInput[] = [],
 ): DreComputedTotals {
   const revenueMl = roundMoney(Math.max(0, lines.revenueMl));
   const totalEntrada = revenueMl;
@@ -565,6 +573,32 @@ export function computeDreTotals(
     totalEntrada,
   );
 
+  let totalSaidaNaoOperacionalManual = 0;
+  for (const row of nonOperationalOutCosts) {
+    totalSaidaNaoOperacionalManual += Math.max(0, row.amount);
+  }
+  totalSaidaNaoOperacionalManual = roundMoney(totalSaidaNaoOperacionalManual);
+  const totalSaidaNaoOperacional = roundMoney(-totalSaidaNaoOperacionalManual);
+
+  let totalEntradaNaoOperacionalManual = 0;
+  for (const row of nonOperationalInCosts) {
+    totalEntradaNaoOperacionalManual += Math.max(0, row.amount);
+  }
+  totalEntradaNaoOperacionalManual = roundMoney(
+    totalEntradaNaoOperacionalManual,
+  );
+  // Única categoria manual que soma (não subtrai) — dinheiro recebido fora
+  // da operação (ex.: venda de imobilizado, reembolso).
+  const totalEntradaNaoOperacional = totalEntradaNaoOperacionalManual;
+
+  const resultadoLiquido = roundMoney(
+    lucroOperacional + totalSaidaNaoOperacional + totalEntradaNaoOperacional,
+  );
+  const resultadoLiquidoPercent = percentOfRevenue(
+    resultadoLiquido,
+    totalEntrada,
+  );
+
   return {
     totalEntrada,
     totalCustoOperacional,
@@ -580,6 +614,12 @@ export function computeDreTotals(
     lucroOperacionalAntesInvestimentosPercent,
     lucroOperacional,
     lucroOperacionalPercent,
+    totalSaidaNaoOperacionalManual,
+    totalSaidaNaoOperacional,
+    totalEntradaNaoOperacionalManual,
+    totalEntradaNaoOperacional,
+    resultadoLiquido,
+    resultadoLiquidoPercent,
   };
 }
 

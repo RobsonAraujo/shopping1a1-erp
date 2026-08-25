@@ -102,6 +102,49 @@ describe("computeDreTotals", () => {
     assert.equal(totals.lucroOperacional, 8500);
   });
 
+  it("subtracts non-operational outflows and adds non-operational inflows after lucro operacional", () => {
+    const totals = computeDreTotals(
+      {
+        ...BASE_LINES,
+        revenueMl: 10000,
+      },
+      0,
+      [{ costItemId: "rent", amount: 1000 }],
+      [],
+      [{ costItemId: "marketing-institucional", amount: 500 }],
+      [{ costItemId: "multa", amount: 200 }],
+      [{ costItemId: "venda-imobilizado", amount: 700 }],
+    );
+
+    assert.equal(totals.lucroOperacional, 8500);
+    // Saída não operacional subtrai, como as outras categorias manuais.
+    assert.equal(totals.totalSaidaNaoOperacionalManual, 200);
+    assert.equal(totals.totalSaidaNaoOperacional, -200);
+    // Entrada não operacional SOMA — é a única categoria manual positiva.
+    assert.equal(totals.totalEntradaNaoOperacionalManual, 700);
+    assert.equal(totals.totalEntradaNaoOperacional, 700);
+    assert.equal(totals.resultadoLiquido, 8500 - 200 + 700);
+    assert.equal(
+      totals.resultadoLiquidoPercent,
+      percentOfRevenue(totals.resultadoLiquido, 10000),
+    );
+  });
+
+  it("negative amounts in non-operational cost inputs are ignored (never flip the sign)", () => {
+    const totals = computeDreTotals(
+      { ...BASE_LINES, revenueMl: 10000 },
+      0,
+      [],
+      [],
+      [],
+      [{ costItemId: "multa", amount: -50 }],
+      [{ costItemId: "venda-imobilizado", amount: -50 }],
+    );
+    assert.equal(totals.totalSaidaNaoOperacional, -0);
+    assert.equal(totals.totalEntradaNaoOperacional, 0);
+    assert.equal(totals.resultadoLiquido, totals.lucroOperacional);
+  });
+
   it("returns null percent when revenue is zero", () => {
     assert.equal(percentOfRevenue(100, 0), null);
   });

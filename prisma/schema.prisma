@@ -531,9 +531,24 @@ model DreCostItem {
 }
 
 enum DreCostSection {
-  FIXED       @map("fixed")
-  OPERATIONAL @map("operational")
-  INVESTMENT  @map("investment")
+  FIXED               @map("fixed")
+  OPERATIONAL         @map("operational")
+  INVESTMENT          @map("investment")
+  NON_OPERATIONAL_OUT @map("non_operational_out")
+  NON_OPERATIONAL_IN  @map("non_operational_in")
+}
+
+/// Preferências de exibição do DRE por organização — puramente visual, nunca afeta o cálculo.
+model DreDisplaySettings {
+  id                    String   @id @default(cuid())
+  organizationId        String   @unique @map("organization_id")
+  showInvestments       Boolean  @default(true) @map("show_investments")
+  showNonOperationalOut Boolean  @default(true) @map("show_non_operational_out")
+  showNonOperationalIn  Boolean  @default(true) @map("show_non_operational_in")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  @@map("dre_display_settings")
 }
 
 model DreCostMonthValue {

@@ -9,6 +9,8 @@ function emptyYear(): DreYearView {
     costItems: [],
     operationalCostItems: [],
     investmentCostItems: [],
+    nonOperationalOutItems: [],
+    nonOperationalInItems: [],
     months: Array.from({ length: 12 }, (_, i) => ({
       month: i + 1,
       label: `Mês ${i + 1}`,
@@ -67,6 +69,10 @@ function emptyYear(): DreYearView {
       operationalCostOverrides: {},
       investmentCostValues: {},
       investmentCostOverrides: {},
+      nonOperationalOutValues: {},
+      nonOperationalOutOverrides: {},
+      nonOperationalInValues: {},
+      nonOperationalInOverrides: {},
       totals: null,
     })),
     yearTotals: {
@@ -84,6 +90,12 @@ function emptyYear(): DreYearView {
       lucroOperacionalAntesInvestimentosPercent: 26,
       lucroOperacional: 260,
       lucroOperacionalPercent: 26,
+      totalSaidaNaoOperacionalManual: 0,
+      totalSaidaNaoOperacional: 0,
+      totalEntradaNaoOperacionalManual: 0,
+      totalEntradaNaoOperacional: 0,
+      resultadoLiquido: 260,
+      resultadoLiquidoPercent: 26,
     },
   };
 }

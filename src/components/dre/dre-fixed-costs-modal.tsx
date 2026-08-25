@@ -28,7 +28,12 @@ import {
 import { readApiError } from "@/lib/api-client-error";
 import type { DreCostItemView } from "@/lib/dre/dre-year-data";
 
-export type DreCostSection = "fixed" | "operational" | "investment";
+export type DreCostSection =
+  | "fixed"
+  | "operational"
+  | "investment"
+  | "nonOperationalOut"
+  | "nonOperationalIn";
 
 type DreCostItemsModalProps = {
   open: boolean;
@@ -151,7 +156,11 @@ export function DreCostItemsModal({
       ? "Ex.: Aluguel"
       : section === "operational"
         ? "Ex.: Embalagens"
-        : "Ex.: Marketing institucional";
+        : section === "investment"
+          ? "Ex.: Marketing institucional"
+          : section === "nonOperationalOut"
+            ? "Ex.: Multa, prejuízo com processo"
+            : "Ex.: Venda de imobilizado, reembolso";
 
   return (
     <>

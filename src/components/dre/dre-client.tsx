@@ -1,7 +1,22 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Download, HelpCircle, Info, Plus, RefreshCw, Scale, Upload } from "lucide-react";
+import {
+  CalendarRange,
+  ChevronDown,
+  Download,
+  FileCheck2,
+  FolderPlus,
+  HelpCircle,
+  Info,
+  MousePointerClick,
+  Plus,
+  RefreshCw,
+  Scale,
+  Settings2,
+  SquarePen,
+  Upload,
+} from "lucide-react";
 import { DreCostItemsModal } from "@/components/dre/dre-fixed-costs-modal";
 import { DreOverview } from "@/components/dre/dre-overview";
 import { DreProductCostLevelingModal } from "@/components/dre/dre-product-cost-leveling-modal";
@@ -25,6 +40,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { UserFeedback } from "@/components/ui/user-feedback";
 import { consumeSSEStream } from "@/hooks/use-sse-stream";
@@ -34,7 +50,11 @@ import {
 } from "@/lib/financial-margin";
 import type { DreEditableLineKey } from "@/lib/dre/dre-calculations";
 import { downloadDreYearCsv } from "@/lib/dre/dre-export-csv";
-import { dreEditableLineLabel } from "@/lib/dre/dre-table-rows";
+import {
+  DEFAULT_DRE_VISIBILITY,
+  dreEditableLineLabel,
+  type DreVisibilitySettings,
+} from "@/lib/dre/dre-table-rows";
 import type { DreYearView } from "@/lib/dre/dre-year-data";
 import type { DreSyncProgressPhase } from "@/lib/dre/dre-month-data";
 import {
@@ -44,6 +64,53 @@ import {
 import { cn } from "@/lib/utils";
 
 const SYNC_ALL_CONCURRENCY = 2;
+
+const HELP_TONE_CLASS: Record<string, string> = {
+  primary: "bg-[var(--primary)]/10 text-[var(--primary)]",
+  rose: "bg-rose-50 text-rose-600",
+  amber: "bg-amber-50 text-amber-600",
+  violet: "bg-violet-50 text-violet-600",
+  emerald: "bg-emerald-50 text-emerald-600",
+};
+
+const HELP_TIPS: Array<{
+  icon: typeof MousePointerClick;
+  tone: string;
+  title: string;
+  description: string;
+}> = [
+  {
+    icon: MousePointerClick,
+    tone: "primary",
+    title: "Um clique",
+    description: "no valor abre o detalhamento.",
+  },
+  {
+    icon: SquarePen,
+    tone: "violet",
+    title: "Dois cliques",
+    description: "editam a célula. Enter salva, Esc cancela.",
+  },
+  {
+    icon: CalendarRange,
+    tone: "amber",
+    title: "Cabeçalho do mês",
+    description: "ou as pílulas acima focam aquele período nos cards.",
+  },
+  {
+    icon: FolderPlus,
+    tone: "emerald",
+    title: "Cadastrar",
+    description: "cria o item; o valor entra com dois cliques na tabela.",
+  },
+  {
+    icon: FileCheck2,
+    tone: "rose",
+    title: "Conciliar ML",
+    description:
+      "aplica a planilha oficial Por Vendas. Use depois de sincronizar — a API de faturamento pode oscilar.",
+  },
+];
 
 type DreSyncSseEvent =
   | {
@@ -116,6 +183,10 @@ export function DreClient() {
     useState(false);
   const [investmentCostsModalOpen, setInvestmentCostsModalOpen] =
     useState(false);
+  const [nonOperationalOutModalOpen, setNonOperationalOutModalOpen] =
+    useState(false);
+  const [nonOperationalInModalOpen, setNonOperationalInModalOpen] =
+    useState(false);
   const [levelingModalOpen, setLevelingModalOpen] = useState(false);
   const [syncingMonths, setSyncingMonths] = useState<Set<number>>(new Set());
   const [syncingMonthMessages, setSyncingMonthMessages] = useState<
@@ -132,6 +203,10 @@ export function DreClient() {
   >({});
   const [helpOpen, setHelpOpen] = useState(false);
   const [cadastroOpen, setCadastroOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [displaySettings, setDisplaySettings] = useState<DreVisibilitySettings>(
+    DEFAULT_DRE_VISIBILITY,
+  );
   const [reconcileOpen, setReconcileOpen] = useState(false);
   const [reconciliationBusy, setReconciliationBusy] = useState(false);
   const [reconcileAfterSync, setReconcileAfterSync] = useState(false);
@@ -201,6 +276,41 @@ export function DreClient() {
     setSelectedMonth(null);
     setSessionAdjustedByMonth({});
   }, [year]);
+
+  // Preferência de exibição por organização — independente do ano, busca 1x.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/dre/display-settings");
+        if (!res.ok || cancelled) return;
+        const json = (await res.json()) as DreVisibilitySettings;
+        if (!cancelled) setDisplaySettings(json);
+      } catch {
+        // Preferência puramente visual — se falhar, fica no default (tudo visível).
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const toggleDisplaySetting = useCallback(
+    (key: keyof DreVisibilitySettings) => {
+      setDisplaySettings((prev) => {
+        const next = { ...prev, [key]: !prev[key] };
+        void fetch("/api/dre/display-settings", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ [key]: next[key] }),
+        }).catch(() => {
+          // Puramente visual — falha de rede aqui não precisa de banner de erro.
+        });
+        return next;
+      });
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!error) return;
@@ -767,6 +877,98 @@ export function DreClient() {
                   >
                     Investimentos
                   </button>
+                  <div className="my-1 border-t border-[var(--border)]" />
+                  <p className="px-3 pb-1 pt-0.5 text-[11px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+                    Despesas não operacionais
+                  </p>
+                  <button
+                    type="button"
+                    className="cursor-pointer rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--muted)]"
+                    onClick={() => {
+                      setCadastroOpen(false);
+                      setNonOperationalOutModalOpen(true);
+                    }}
+                  >
+                    Saídas não operacionais
+                  </button>
+                  <button
+                    type="button"
+                    className="cursor-pointer rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--muted)]"
+                    onClick={() => {
+                      setCadastroOpen(false);
+                      setNonOperationalInModalOpen(true);
+                    }}
+                  >
+                    Entradas não operacionais
+                  </button>
+                </div>
+              </PopoverContent>
+            </Popover>
+            <Popover open={settingsOpen} onOpenChange={setSettingsOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-10 gap-1.5 rounded-xl"
+                  aria-label="Configurações de exibição do DRE"
+                >
+                  <Settings2 className="size-3.5" aria-hidden />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-72 p-3" align="end">
+                <p className="text-xs font-medium text-[var(--foreground)]">
+                  Categorias exibidas
+                </p>
+                <p className="mt-0.5 text-[11px] text-[var(--muted-foreground)]">
+                  Some só da tela — os valores continuam calculados por baixo.
+                </p>
+                <div className="mt-3 flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <label
+                      htmlFor="dre-show-investments"
+                      className="text-sm text-[var(--foreground)]"
+                    >
+                      Investimentos
+                    </label>
+                    <Switch
+                      id="dre-show-investments"
+                      checked={displaySettings.showInvestments}
+                      onCheckedChange={() =>
+                        toggleDisplaySetting("showInvestments")
+                      }
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <label
+                      htmlFor="dre-show-non-operational-out"
+                      className="text-sm text-[var(--foreground)]"
+                    >
+                      Saídas não operacionais
+                    </label>
+                    <Switch
+                      id="dre-show-non-operational-out"
+                      checked={displaySettings.showNonOperationalOut}
+                      onCheckedChange={() =>
+                        toggleDisplaySetting("showNonOperationalOut")
+                      }
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <label
+                      htmlFor="dre-show-non-operational-in"
+                      className="text-sm text-[var(--foreground)]"
+                    >
+                      Entradas não operacionais
+                    </label>
+                    <Switch
+                      id="dre-show-non-operational-in"
+                      checked={displaySettings.showNonOperationalIn}
+                      onCheckedChange={() =>
+                        toggleDisplaySetting("showNonOperationalIn")
+                      }
+                    />
+                  </div>
                 </div>
               </PopoverContent>
             </Popover>
@@ -788,7 +990,7 @@ export function DreClient() {
               disabled={!data || loading}
               onClick={() => {
                 if (!data) return;
-                downloadDreYearCsv(data, showDetails);
+                downloadDreYearCsv(data, showDetails, displaySettings);
               }}
             >
               <Download className="size-3.5" aria-hidden />
@@ -837,30 +1039,33 @@ export function DreClient() {
         </div>
 
         {helpOpen ? (
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm leading-relaxed text-[var(--muted-foreground)]">
-            <p className="font-medium text-[var(--foreground)]">Atalhos da grade</p>
-            <ul className="mt-2 grid gap-1.5 sm:grid-cols-2">
-              <li>
-                <span className="font-medium text-[var(--foreground)]">Um clique</span>{" "}
-                no valor abre o detalhamento.
-              </li>
-              <li>
-                <span className="font-medium text-[var(--foreground)]">Dois cliques</span>{" "}
-                editam a célula. Enter salva, Esc cancela.
-              </li>
-              <li>
-                <span className="font-medium text-[var(--foreground)]">Cabeçalho do mês</span>{" "}
-                ou as pílulas acima focam aquele período nos cards.
-              </li>
-              <li>
-                <span className="font-medium text-[var(--foreground)]">Cadastrar</span>{" "}
-                cria o item; o valor entra com dois cliques na tabela.
-              </li>
-              <li>
-                <span className="font-medium text-[var(--foreground)]">Conciliar ML</span>{" "}
-                aplica a planilha oficial Por Vendas. Use depois de sincronizar
-                — a API de faturamento pode oscilar.
-              </li>
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-3">
+            <p className="text-sm font-medium text-[var(--foreground)]">
+              Atalhos da grade
+            </p>
+            <ul className="mt-2.5 grid gap-2.5 sm:grid-cols-2">
+              {HELP_TIPS.map((tip) => {
+                const Icon = tip.icon;
+                return (
+                  <li key={tip.title} className="flex items-start gap-2.5">
+                    <span
+                      className={cn(
+                        "flex size-8 shrink-0 items-center justify-center rounded-lg",
+                        HELP_TONE_CLASS[tip.tone],
+                      )}
+                      aria-hidden
+                    >
+                      <Icon className="size-4" />
+                    </span>
+                    <p className="pt-1 text-sm leading-relaxed text-[var(--muted-foreground)]">
+                      <span className="font-medium text-[var(--foreground)]">
+                        {tip.title}
+                      </span>{" "}
+                      {tip.description}
+                    </p>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         ) : null}
@@ -973,6 +1178,7 @@ export function DreClient() {
         {viewData ? (
           <DreYearTable
             data={viewData}
+            visibility={displaySettings}
             showDetails={showDetails}
             onToggleDetails={() => setShowDetails((v) => !v)}
             selectedMonth={selectedMonth}
@@ -993,6 +1199,12 @@ export function DreClient() {
               void handleManualCostChange(costItemId, month, amount)
             }
             onInvestmentCostChange={(costItemId, month, amount) =>
+              void handleManualCostChange(costItemId, month, amount)
+            }
+            onNonOperationalOutChange={(costItemId, month, amount) =>
+              void handleManualCostChange(costItemId, month, amount)
+            }
+            onNonOperationalInChange={(costItemId, month, amount) =>
               void handleManualCostChange(costItemId, month, amount)
             }
           />
@@ -1025,6 +1237,26 @@ export function DreClient() {
           description="1) Cadastre o nome do item aqui (ex.: marketing institucional, CAPEX). 2) Depois, na tabela do DRE, dê dois cliques na célula do mês para informar o valor. Esses itens entram após o Lucro Operacional Antes dos Investimentos."
           costItems={data?.investmentCostItems ?? []}
           onClose={() => setInvestmentCostsModalOpen(false)}
+          onChanged={() => void loadYear(year)}
+          onError={setError}
+        />
+        <DreCostItemsModal
+          open={nonOperationalOutModalOpen}
+          section="nonOperationalOut"
+          title="Cadastrar saídas não operacionais"
+          description="1) Cadastre o nome do item aqui (ex.: multa, prejuízo com processo). 2) Depois, na tabela do DRE, dê dois cliques na célula do mês para informar o valor. Esses itens entram após o Lucro Operacional."
+          costItems={data?.nonOperationalOutItems ?? []}
+          onClose={() => setNonOperationalOutModalOpen(false)}
+          onChanged={() => void loadYear(year)}
+          onError={setError}
+        />
+        <DreCostItemsModal
+          open={nonOperationalInModalOpen}
+          section="nonOperationalIn"
+          title="Cadastrar entradas não operacionais"
+          description="1) Cadastre o nome do item aqui (ex.: venda de imobilizado, reembolso). 2) Depois, na tabela do DRE, dê dois cliques na célula do mês para informar o valor. Esses itens somam ao Resultado Líquido."
+          costItems={data?.nonOperationalInItems ?? []}
+          onClose={() => setNonOperationalInModalOpen(false)}
           onChanged={() => void loadYear(year)}
           onError={setError}
         />

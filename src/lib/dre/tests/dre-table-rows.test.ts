@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   buildDreTableRows,
+  filterRowsByVisibility,
   rowBackgroundClass,
   rowLabelClass,
   valueToneClass,
@@ -23,6 +24,12 @@ const operationalItems: DreCostItemView[] = [
 const investmentItems: DreCostItemView[] = [
   { id: "i1", name: "Marketing institucional", sortOrder: 1, recurring: true },
 ];
+const nonOperationalOutItems: DreCostItemView[] = [
+  { id: "no1", name: "Multa", sortOrder: 1, recurring: false },
+];
+const nonOperationalInItems: DreCostItemView[] = [
+  { id: "ni1", name: "Venda de imobilizado", sortOrder: 1, recurring: false },
+];
 
 describe("buildDreTableRows", () => {
   it("returns only top-level (non-indented) rows when showDetails is false", () => {
@@ -30,6 +37,8 @@ describe("buildDreTableRows", () => {
       costItems,
       operationalItems,
       investmentItems,
+      [],
+      [],
       false,
     );
     assert.ok(rows.every((r) => !("indent" in r) || !r.indent));
@@ -44,6 +53,8 @@ describe("buildDreTableRows", () => {
       costItems,
       operationalItems,
       investmentItems,
+      [],
+      [],
       true,
     );
     const fixed = rows.find((r) => r.type === "fixed-cost");
@@ -62,6 +73,8 @@ describe("buildDreTableRows", () => {
       costItems,
       operationalItems,
       investmentItems,
+      [],
+      [],
       true,
     );
     const marginIndex = rows.findIndex((r) => r.id === "margemContribuicao");
@@ -74,6 +87,8 @@ describe("buildDreTableRows", () => {
       costItems,
       operationalItems,
       investmentItems,
+      [],
+      [],
       true,
     );
     const totalIndex = rows.findIndex((r) => r.id === "totalCustoFixo");
@@ -86,6 +101,8 @@ describe("buildDreTableRows", () => {
       costItems,
       operationalItems,
       investmentItems,
+      [],
+      [],
       true,
     );
     const totalIndex = rows.findIndex((r) => r.id === "totalInvestimento");
@@ -94,7 +111,7 @@ describe("buildDreTableRows", () => {
   });
 
   it("includes visible partial returns row after cancelled sales", () => {
-    const rows = buildDreTableRows([], [], [], true);
+    const rows = buildDreTableRows([], [], [], [], [], true);
     const cancelledIndex = rows.findIndex((r) => r.id === "cancelledSalesMl");
     const partialIndex = rows.findIndex((r) => r.id === "partialReturnsMl");
     assert.ok(partialIndex >= 0);
@@ -107,8 +124,85 @@ describe("buildDreTableRows", () => {
   });
 
   it("produces the same number of static rows as DRE_STATIC_ROWS when there are no custom cost items", () => {
-    const rows = buildDreTableRows([], [], [], true);
+    const rows = buildDreTableRows([], [], [], [], [], true);
     assert.equal(rows.length, DRE_STATIC_ROWS.length);
+  });
+
+  it("places non-operational-out/in-cost rows right after their totals", () => {
+    const rows = buildDreTableRows(
+      costItems,
+      operationalItems,
+      investmentItems,
+      nonOperationalOutItems,
+      nonOperationalInItems,
+      true,
+    );
+    const outTotalIndex = rows.findIndex(
+      (r) => r.id === "totalSaidaNaoOperacional",
+    );
+    const outRowIndex = rows.findIndex(
+      (r) => r.type === "non-operational-out-cost",
+    );
+    assert.equal(outRowIndex, outTotalIndex + 1);
+
+    const inTotalIndex = rows.findIndex(
+      (r) => r.id === "totalEntradaNaoOperacional",
+    );
+    const inRowIndex = rows.findIndex(
+      (r) => r.type === "non-operational-in-cost",
+    );
+    assert.equal(inRowIndex, inTotalIndex + 1);
+  });
+});
+
+describe("filterRowsByVisibility", () => {
+  const rows = buildDreTableRows(
+    [],
+    [],
+    investmentItems,
+    nonOperationalOutItems,
+    nonOperationalInItems,
+    true,
+  );
+
+  it("keeps everything visible by default", () => {
+    const filtered = filterRowsByVisibility(rows, {
+      showInvestments: true,
+      showNonOperationalOut: true,
+      showNonOperationalIn: true,
+    });
+    assert.equal(filtered.length, rows.length);
+  });
+
+  it("hides Investimentos and the redundant 'antes dos investimentos' row", () => {
+    const filtered = filterRowsByVisibility(rows, {
+      showInvestments: false,
+      showNonOperationalOut: true,
+      showNonOperationalIn: true,
+    });
+    assert.ok(!filtered.some((r) => r.type === "investment-cost"));
+    assert.ok(!filtered.some((r) => r.id === "totalInvestimento"));
+    assert.ok(
+      !filtered.some((r) => r.id === "lucroOperacionalAntesInvestimentos"),
+    );
+    assert.ok(filtered.some((r) => r.id === "lucroOperacional"));
+  });
+
+  it("hides Resultado Líquido only when BOTH non-operational categories are hidden", () => {
+    const onlyOutHidden = filterRowsByVisibility(rows, {
+      showInvestments: true,
+      showNonOperationalOut: false,
+      showNonOperationalIn: true,
+    });
+    assert.ok(onlyOutHidden.some((r) => r.id === "resultadoLiquido"));
+    assert.ok(!onlyOutHidden.some((r) => r.type === "non-operational-out-cost"));
+
+    const bothHidden = filterRowsByVisibility(rows, {
+      showInvestments: true,
+      showNonOperationalOut: false,
+      showNonOperationalIn: false,
+    });
+    assert.ok(!bothHidden.some((r) => r.id === "resultadoLiquido"));
   });
 });
 

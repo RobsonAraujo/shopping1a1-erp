@@ -32,7 +32,10 @@ export type DreStaticRowId =
   | "totalCustoFixo"
   | "lucroOperacionalAntesInvestimentos"
   | "totalInvestimento"
-  | "lucroOperacional";
+  | "lucroOperacional"
+  | "totalSaidaNaoOperacional"
+  | "totalEntradaNaoOperacional"
+  | "resultadoLiquido";
 
 export type DreTableRow =
   | {
@@ -66,6 +69,24 @@ export type DreTableRow =
     }
   | {
       type: "investment-cost";
+      id: string;
+      costItemId: string;
+      kind: "custo-detail";
+      label: string;
+      source: "manual";
+      indent: true;
+    }
+  | {
+      type: "non-operational-out-cost";
+      id: string;
+      costItemId: string;
+      kind: "custo-detail";
+      label: string;
+      source: "manual";
+      indent: true;
+    }
+  | {
+      type: "non-operational-in-cost";
       id: string;
       costItemId: string;
       kind: "custo-detail";
@@ -294,12 +315,39 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     showPercent: true,
     methodology: "Lucro Operacional Antes dos Investimentos − Investimentos.",
   },
+  {
+    type: "static",
+    id: "totalSaidaNaoOperacional",
+    kind: "custo-total",
+    label: "(-) Saídas não operacionais",
+    methodology:
+      'Soma das saídas não operacionais cadastradas manualmente para o mês (ex.: multa, prejuízo com processo — ver botão "Saídas não operacionais"). Dinheiro que sai fora da operação normal do negócio.',
+  },
+  {
+    type: "static",
+    id: "totalEntradaNaoOperacional",
+    kind: "entrada-total",
+    label: "(+) Entradas não operacionais",
+    methodology:
+      'Soma das entradas não operacionais cadastradas manualmente para o mês (ex.: venda de imobilizado, reembolso — ver botão "Entradas não operacionais"). Dinheiro que entra fora da operação normal do negócio.',
+  },
+  {
+    type: "static",
+    id: "resultadoLiquido",
+    kind: "resultado",
+    label: "(=) Resultado Líquido",
+    showPercent: true,
+    methodology:
+      "Lucro Operacional − Saídas não operacionais + Entradas não operacionais.",
+  },
 ];
 
 export function buildDreTableRows(
   costItems: DreCostItemView[],
   operationalCostItems: DreCostItemView[],
   investmentCostItems: DreCostItemView[],
+  nonOperationalOutItems: DreCostItemView[],
+  nonOperationalInItems: DreCostItemView[],
   showDetails: boolean,
 ): DreTableRow[] {
   const rows: DreTableRow[] = [];
@@ -360,6 +408,42 @@ export function buildDreTableRows(
       continue;
     }
 
+    if (row.id === "totalSaidaNaoOperacional") {
+      rows.push(row);
+      if (showDetails) {
+        for (const item of nonOperationalOutItems) {
+          rows.push({
+            type: "non-operational-out-cost",
+            id: `non-operational-out-${item.id}`,
+            costItemId: item.id,
+            kind: "custo-detail",
+            label: item.name,
+            source: "manual",
+            indent: true,
+          });
+        }
+      }
+      continue;
+    }
+
+    if (row.id === "totalEntradaNaoOperacional") {
+      rows.push(row);
+      if (showDetails) {
+        for (const item of nonOperationalInItems) {
+          rows.push({
+            type: "non-operational-in-cost",
+            id: `non-operational-in-${item.id}`,
+            costItemId: item.id,
+            kind: "custo-detail",
+            label: item.name,
+            source: "manual",
+            indent: true,
+          });
+        }
+      }
+      continue;
+    }
+
     rows.push(row);
   }
   return rows;
@@ -375,6 +459,12 @@ export function getRowMethodology(row: DreTableRow): string | undefined {
   }
   if (row.type === "investment-cost") {
     return `Valor de investimento informado manualmente por você para "${row.label}" neste mês. Itens recorrentes herdam o último valor informado; itens “só no mês” valem apenas onde você digitou.`;
+  }
+  if (row.type === "non-operational-out-cost") {
+    return `Valor de saída não operacional informado manualmente por você para "${row.label}" neste mês. Itens recorrentes herdam o último valor informado; itens “só no mês” valem apenas onde você digitou.`;
+  }
+  if (row.type === "non-operational-in-cost") {
+    return `Valor de entrada não operacional informado manualmente por você para "${row.label}" neste mês. Itens recorrentes herdam o último valor informado; itens “só no mês” valem apenas onde você digitou.`;
   }
   return undefined;
 }
@@ -393,7 +483,9 @@ export function rowBackgroundClass(row: DreTableRow): string {
   if (
     row.type === "fixed-cost" ||
     row.type === "operational-cost" ||
-    row.type === "investment-cost"
+    row.type === "investment-cost" ||
+    row.type === "non-operational-out-cost" ||
+    row.type === "non-operational-in-cost"
   ) {
     return "bg-transparent";
   }
@@ -416,7 +508,9 @@ export function rowLabelClass(row: DreTableRow): string {
   if (
     row.type === "fixed-cost" ||
     row.type === "operational-cost" ||
-    row.type === "investment-cost"
+    row.type === "investment-cost" ||
+    row.type === "non-operational-out-cost" ||
+    row.type === "non-operational-in-cost"
   ) {
     return "text-[13px] font-normal leading-snug text-[var(--foreground)]";
   }
@@ -463,6 +557,22 @@ export function getCellValue(
     };
   }
 
+  if (row.type === "non-operational-out-cost") {
+    const raw = month.nonOperationalOutValues[row.costItemId];
+    return {
+      amount: raw === null || raw === undefined ? null : -raw,
+      percent: null,
+    };
+  }
+
+  if (row.type === "non-operational-in-cost") {
+    const raw = month.nonOperationalInValues[row.costItemId];
+    return {
+      amount: raw === null || raw === undefined ? null : raw,
+      percent: null,
+    };
+  }
+
   const totals = month.totals;
 
   switch (row.id) {
@@ -496,6 +606,21 @@ export function getCellValue(
         amount: totals?.lucroOperacional ?? null,
         percent: totals?.lucroOperacionalPercent ?? null,
       };
+    case "totalSaidaNaoOperacional":
+      return {
+        amount: totals?.totalSaidaNaoOperacional ?? null,
+        percent: null,
+      };
+    case "totalEntradaNaoOperacional":
+      return {
+        amount: totals?.totalEntradaNaoOperacional ?? null,
+        percent: null,
+      };
+    case "resultadoLiquido":
+      return {
+        amount: totals?.resultadoLiquido ?? null,
+        percent: totals?.resultadoLiquidoPercent ?? null,
+      };
     default:
       if (row.type === "static" && row.lineKey && month.lines) {
         return { amount: month.lines[row.lineKey], percent: null };
@@ -508,11 +633,68 @@ export function isDetailRow(row: DreTableRow): boolean {
   if (
     row.type === "fixed-cost" ||
     row.type === "operational-cost" ||
-    row.type === "investment-cost"
+    row.type === "investment-cost" ||
+    row.type === "non-operational-out-cost" ||
+    row.type === "non-operational-in-cost"
   ) {
     return true;
   }
   return Boolean(row.indent);
+}
+
+/** Preferência de exibição de categoria — puramente visual, não afeta o cálculo por baixo. */
+export type DreVisibilitySettings = {
+  showInvestments: boolean;
+  showNonOperationalOut: boolean;
+  showNonOperationalIn: boolean;
+};
+
+export const DEFAULT_DRE_VISIBILITY: DreVisibilitySettings = {
+  showInvestments: true,
+  showNonOperationalOut: true,
+  showNonOperationalIn: true,
+};
+
+/** Remove da lista as linhas escondidas pelas preferências de exibição (tabela, Demonstrativo e CSV usam a mesma regra). */
+export function filterRowsByVisibility(
+  rows: DreTableRow[],
+  visibility: DreVisibilitySettings,
+): DreTableRow[] {
+  const hideResultadoLiquido =
+    !visibility.showNonOperationalOut && !visibility.showNonOperationalIn;
+
+  return rows.filter((row) => {
+    if (!visibility.showInvestments) {
+      if (row.type === "investment-cost") return false;
+      if (
+        row.type === "static" &&
+        (row.id === "totalInvestimento" ||
+          row.id === "lucroOperacionalAntesInvestimentos")
+      ) {
+        return false;
+      }
+    }
+    if (!visibility.showNonOperationalOut) {
+      if (row.type === "non-operational-out-cost") return false;
+      if (row.type === "static" && row.id === "totalSaidaNaoOperacional") {
+        return false;
+      }
+    }
+    if (!visibility.showNonOperationalIn) {
+      if (row.type === "non-operational-in-cost") return false;
+      if (row.type === "static" && row.id === "totalEntradaNaoOperacional") {
+        return false;
+      }
+    }
+    if (
+      hideResultadoLiquido &&
+      row.type === "static" &&
+      row.id === "resultadoLiquido"
+    ) {
+      return false;
+    }
+    return true;
+  });
 }
 
 export const DRE_MONTH_HEADER_COLORS = [

@@ -20,9 +20,11 @@ import {
   Columns3,
   Landmark,
   List,
+  PiggyBank,
   Receipt,
   RefreshCw,
   Rocket,
+  TrendingDown,
   TrendingUp,
   Undo2,
 } from "lucide-react";
@@ -57,13 +59,16 @@ import {
   getYearProductCostBreakdown,
   getYearTaxBreakdown,
   isDreEditableLineKey,
+  percentOfRevenue,
   type DreComputedTotals,
   type DreEditableLineKey,
   type DreLineBreakdownItem,
 } from "@/lib/dre/dre-calculations";
 import {
   buildDreTableRows,
+  DEFAULT_DRE_VISIBILITY,
   dreMonthShortLabel,
+  filterRowsByVisibility,
   getCellValue,
   isColoredRow,
   isDetailRow,
@@ -72,6 +77,7 @@ import {
   valueToneClass,
   type DreStaticRowId,
   type DreTableRow,
+  type DreVisibilitySettings,
 } from "@/lib/dre/dre-table-rows";
 import { reportsConfig } from "@/config/reports";
 import {
@@ -219,6 +225,7 @@ function DetailAnimatedCell({
 
 type DreYearTableProps = {
   data: DreYearView;
+  visibility?: DreVisibilitySettings;
   showDetails: boolean;
   onToggleDetails?: () => void;
   selectedMonth?: number | null;
@@ -244,6 +251,16 @@ type DreYearTableProps = {
     amount: number | null,
   ) => void;
   onInvestmentCostChange: (
+    costItemId: string,
+    month: number,
+    amount: number | null,
+  ) => void;
+  onNonOperationalOutChange: (
+    costItemId: string,
+    month: number,
+    amount: number | null,
+  ) => void;
+  onNonOperationalInChange: (
     costItemId: string,
     month: number,
     amount: number | null,
@@ -1103,6 +1120,8 @@ function renderValueCell(
   onFixedCostChange: DreYearTableProps["onFixedCostChange"],
   onOperationalCostChange: DreYearTableProps["onOperationalCostChange"],
   onInvestmentCostChange: DreYearTableProps["onInvestmentCostChange"],
+  onNonOperationalOutChange: DreYearTableProps["onNonOperationalOutChange"],
+  onNonOperationalInChange: DreYearTableProps["onNonOperationalInChange"],
   onAuditClick?: (kind: AuditKind, month: number) => void,
   onEditingChange?: (editing: boolean, month: number, rowId: string) => void,
   onLineRestore?: DreYearTableProps["onLineRestore"],
@@ -1189,6 +1208,64 @@ function renderValueCell(
         onEditingChange={notifyEditing}
         onCommit={(amount) =>
           onInvestmentCostChange(
+            row.costItemId,
+            month.month,
+            amount === null ? null : Math.abs(amount),
+          )
+        }
+      />
+    );
+  }
+
+  if (row.type === "non-operational-out-cost") {
+    const stored = month.nonOperationalOutValues[row.costItemId];
+    const override = month.nonOperationalOutOverrides[row.costItemId];
+    const displayAmount = stored === null || stored === undefined ? null : -stored;
+    const inherited = override === null && stored !== null;
+    return (
+      <DreInlineMoneyCell
+        displayAmount={displayAmount}
+        label={`${row.label} (${month.label})`}
+        allowNegative
+        disabled={!canEditMonth}
+        muted={inherited}
+        title={
+          inherited
+            ? "Valor herdado do mês anterior — duplo-clique para editar"
+            : undefined
+        }
+        onEditingChange={notifyEditing}
+        onCommit={(amount) =>
+          onNonOperationalOutChange(
+            row.costItemId,
+            month.month,
+            amount === null ? null : Math.abs(amount),
+          )
+        }
+      />
+    );
+  }
+
+  if (row.type === "non-operational-in-cost") {
+    const stored = month.nonOperationalInValues[row.costItemId];
+    const override = month.nonOperationalInOverrides[row.costItemId];
+    const displayAmount = stored === null || stored === undefined ? null : stored;
+    const inherited = override === null && stored !== null;
+    return (
+      <DreInlineMoneyCell
+        displayAmount={displayAmount}
+        label={`${row.label} (${month.label})`}
+        allowNegative
+        disabled={!canEditMonth}
+        muted={inherited}
+        title={
+          inherited
+            ? "Valor herdado do mês anterior — duplo-clique para editar"
+            : undefined
+        }
+        onEditingChange={notifyEditing}
+        onCommit={(amount) =>
+          onNonOperationalInChange(
             row.costItemId,
             month.month,
             amount === null ? null : Math.abs(amount),
@@ -1294,6 +1371,32 @@ function renderValueCell(
   );
 }
 
+/** Envolve `node` com um tooltip "X% do faturamento" no hover — usado em toda célula de valor, não só nas 3 linhas de resultado que já mostram % fixo. */
+function withRevenuePercentTooltip(
+  node: ReactNode,
+  amount: number | null | undefined,
+  revenue: number | null | undefined,
+): ReactNode {
+  if (amount == null || revenue == null || revenue <= 0) return node;
+  const percent = percentOfRevenue(amount, revenue);
+  if (percent === null) return node;
+  return (
+    <Tooltip>
+      {/* "asChild" clona esse span e o Radix mede sua posição via
+          getBoundingClientRect para ancorar o tooltip — display:contents
+          faz o elemento não gerar caixa própria, e o Radix não acha onde
+          ancorar (tooltip cai no canto superior esquerdo da página).
+          inline-block preserva a geometria sem afetar o fluxo ao redor. */}
+      <TooltipTrigger asChild>
+        <span className="inline-block max-w-full">{node}</span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="text-xs">
+        {formatFinancialPercent(percent)} do faturamento
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function renderPercentCell(percent: number | null) {
   return (
     <div
@@ -1350,6 +1453,32 @@ function getYearTotalForRow(
     return { amount: hasAny ? -sum : null, percent: null };
   }
 
+  if (row.type === "non-operational-out-cost") {
+    let sum = 0;
+    let hasAny = false;
+    for (const month of data.months) {
+      const v = month.nonOperationalOutValues[row.costItemId];
+      if (v !== null && v !== undefined) {
+        sum += v;
+        hasAny = true;
+      }
+    }
+    return { amount: hasAny ? -sum : null, percent: null };
+  }
+
+  if (row.type === "non-operational-in-cost") {
+    let sum = 0;
+    let hasAny = false;
+    for (const month of data.months) {
+      const v = month.nonOperationalInValues[row.costItemId];
+      if (v !== null && v !== undefined) {
+        sum += v;
+        hasAny = true;
+      }
+    }
+    return { amount: hasAny ? sum : null, percent: null };
+  }
+
   const totals = data.yearTotals;
   if (!totals) return { amount: null, percent: null };
 
@@ -1387,6 +1516,15 @@ function getYearTotalForRow(
         amount: totals.lucroOperacional,
         percent: totals.lucroOperacionalPercent,
       };
+    case "totalSaidaNaoOperacional":
+      return { amount: totals.totalSaidaNaoOperacional, percent: null };
+    case "totalEntradaNaoOperacional":
+      return { amount: totals.totalEntradaNaoOperacional, percent: null };
+    case "resultadoLiquido":
+      return {
+        amount: totals.resultadoLiquido,
+        percent: totals.resultadoLiquidoPercent,
+      };
     default:
       if (row.type === "static" && row.lineKey) {
         const sum = data.months.reduce(
@@ -1413,6 +1551,8 @@ function DreMobileRow({
   onFixedCostChange,
   onOperationalCostChange,
   onInvestmentCostChange,
+  onNonOperationalOutChange,
+  onNonOperationalInChange,
   onAuditClick,
 }: {
   row: DreTableRow;
@@ -1424,6 +1564,8 @@ function DreMobileRow({
   onFixedCostChange: DreYearTableProps["onFixedCostChange"];
   onOperationalCostChange: DreYearTableProps["onOperationalCostChange"];
   onInvestmentCostChange: DreYearTableProps["onInvestmentCostChange"];
+  onNonOperationalOutChange: DreYearTableProps["onNonOperationalOutChange"];
+  onNonOperationalInChange: DreYearTableProps["onNonOperationalInChange"];
   onAuditClick: (kind: AuditKind, period: number | "year") => void;
 }) {
   const colored = isColoredRow(row);
@@ -1478,6 +1620,8 @@ function DreMobileRow({
       onFixedCostChange,
       onOperationalCostChange,
       onInvestmentCostChange,
+      onNonOperationalOutChange,
+      onNonOperationalInChange,
       (kind, m) => onAuditClick(kind, m),
       undefined,
       onLineRestore,
@@ -1487,6 +1631,12 @@ function DreMobileRow({
   const percent = isTotal
     ? getYearTotalForRow(row, data).percent
     : getCellValue(row, month!).percent;
+  const revenueAmount = isTotal
+    ? getYearTotalForRow(row, data).amount
+    : getCellValue(row, month!).amount;
+  const revenueBase = isTotal
+    ? data.yearTotals?.totalEntrada
+    : month?.totals?.totalEntrada;
 
   return (
     <div
@@ -1497,7 +1647,7 @@ function DreMobileRow({
     >
       <div className="min-w-0 flex-1">{renderLabelCell(row)}</div>
       <div className="shrink-0 text-right">
-        {valueNode}
+        {withRevenuePercentTooltip(valueNode, revenueAmount, revenueBase)}
         {showPercentRow ? (
           <div className="mt-0.5">{renderPercentCell(percent)}</div>
         ) : null}
@@ -1508,6 +1658,7 @@ function DreMobileRow({
 
 function DreYearTableMobile({
   data,
+  visibility = DEFAULT_DRE_VISIBILITY,
   showDetails,
   onToggleDetails,
   onSelectedMonthChange,
@@ -1519,16 +1670,30 @@ function DreYearTableMobile({
   onFixedCostChange,
   onOperationalCostChange,
   onInvestmentCostChange,
+  onNonOperationalOutChange,
+  onNonOperationalInChange,
 }: DreYearTableProps) {
   const rows = useMemo(
     () =>
-      buildDreTableRows(
-        data.costItems,
-        data.operationalCostItems,
-        data.investmentCostItems,
-        true,
+      filterRowsByVisibility(
+        buildDreTableRows(
+          data.costItems,
+          data.operationalCostItems,
+          data.investmentCostItems,
+          data.nonOperationalOutItems,
+          data.nonOperationalInItems,
+          true,
+        ),
+        visibility,
       ),
-    [data.costItems, data.operationalCostItems, data.investmentCostItems],
+    [
+      data.costItems,
+      data.operationalCostItems,
+      data.investmentCostItems,
+      data.nonOperationalOutItems,
+      data.nonOperationalInItems,
+      visibility,
+    ],
   );
 
   const detailIndexById = useMemo(() => buildDetailIndexMap(rows), [rows]);
@@ -1728,6 +1893,8 @@ function DreYearTableMobile({
               onFixedCostChange={onFixedCostChange}
               onOperationalCostChange={onOperationalCostChange}
               onInvestmentCostChange={onInvestmentCostChange}
+              onNonOperationalOutChange={onNonOperationalOutChange}
+              onNonOperationalInChange={onNonOperationalInChange}
               onAuditClick={(kind, period) => setAuditTarget({ kind, period })}
             />
           );
@@ -1963,6 +2130,13 @@ function donutSlicePath(
   ].join(" ");
 }
 
+/** Reduz a fonte do valor central do donut conforme o texto formatado cresce, pra nunca estourar o buraco. */
+function pieCenterValueSizeClass(formatted: string): string {
+  if (formatted.length > 14) return "text-[10px] sm:text-xs";
+  if (formatted.length > 10) return "text-xs sm:text-sm";
+  return "text-sm sm:text-base";
+}
+
 /**
  * Gráfico de rosca: Custos Variáveis, Custo Fixo, Investimentos e Lucro
  * Operacional como fatias — cada uma proporcional ao próprio valor absoluto
@@ -1972,8 +2146,10 @@ function donutSlicePath(
  */
 function DreRevenuePie({
   totals,
+  visibility = DEFAULT_DRE_VISIBILITY,
 }: {
   totals: DreComputedTotals | null | undefined;
+  visibility?: DreVisibilitySettings;
 }) {
   const [mode, setMode] = useState<DrePieDisplayMode>("both");
   const base = totals?.totalEntrada ?? null;
@@ -2006,14 +2182,18 @@ function DreRevenuePie({
       fillClass: "fill-slate-400",
       dotClass: "bg-slate-400",
     },
-    {
-      id: "totalInvestimento",
-      label: "Investimentos",
-      value: totals.totalInvestimento,
-      icon: Rocket,
-      fillClass: "fill-sky-400",
-      dotClass: "bg-sky-400",
-    },
+    ...(visibility.showInvestments
+      ? [
+          {
+            id: "totalInvestimento",
+            label: "Investimentos",
+            value: totals.totalInvestimento,
+            icon: Rocket,
+            fillClass: "fill-sky-400",
+            dotClass: "bg-sky-400",
+          },
+        ]
+      : []),
     {
       id: "lucroOperacional",
       label: "Lucro Operacional",
@@ -2092,7 +2272,7 @@ function DreRevenuePie({
                         100,
                         100,
                         94,
-                        58,
+                        66,
                         slice.startAngle,
                         slice.endAngle,
                       )}
@@ -2114,11 +2294,20 @@ function DreRevenuePie({
                 </Tooltip>
               ))}
           </svg>
-          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+          <div
+            className={cn(
+              "pointer-events-none absolute left-1/2 top-1/2 flex w-[62%] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center overflow-hidden px-1",
+            )}
+          >
             <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
               Entrada
             </p>
-            <p className="text-sm font-bold tabular-nums text-[var(--foreground)] sm:text-base">
+            <p
+              className={cn(
+                "w-full truncate text-center font-bold tabular-nums text-[var(--foreground)]",
+                pieCenterValueSizeClass(formatFinancialMoney(base)),
+              )}
+            >
               {formatFinancialMoney(base)}
             </p>
           </div>
@@ -2216,6 +2405,8 @@ const GROUP_VISUALS: Partial<
   totalCustoOperacional: { icon: Receipt, tone: "rose" },
   totalCustoFixo: { icon: Landmark, tone: "amber" },
   totalInvestimento: { icon: Rocket, tone: "violet" },
+  totalSaidaNaoOperacional: { icon: TrendingDown, tone: "rose" },
+  totalEntradaNaoOperacional: { icon: PiggyBank, tone: "emerald" },
 };
 
 const GROUP_TONE_CLASS: Record<string, string> = {
@@ -2228,6 +2419,7 @@ const GROUP_TONE_CLASS: Record<string, string> = {
 
 function DreStatementPanel({
   data,
+  visibility = DEFAULT_DRE_VISIBILITY,
   showDetails,
   selectedMonth,
   syncingMonths,
@@ -2238,10 +2430,13 @@ function DreStatementPanel({
   onFixedCostChange,
   onOperationalCostChange,
   onInvestmentCostChange,
+  onNonOperationalOutChange,
+  onNonOperationalInChange,
   onAuditClick,
   onEditingChange,
 }: {
   data: DreYearView;
+  visibility?: DreVisibilitySettings;
   showDetails: boolean;
   selectedMonth: number | null;
   syncingMonths: Set<number>;
@@ -2252,18 +2447,32 @@ function DreStatementPanel({
   onFixedCostChange: DreYearTableProps["onFixedCostChange"];
   onOperationalCostChange: DreYearTableProps["onOperationalCostChange"];
   onInvestmentCostChange: DreYearTableProps["onInvestmentCostChange"];
+  onNonOperationalOutChange: DreYearTableProps["onNonOperationalOutChange"];
+  onNonOperationalInChange: DreYearTableProps["onNonOperationalInChange"];
   onAuditClick: (kind: AuditKind, period: number | "year") => void;
   onEditingChange?: (editing: boolean, month: number, rowId: string) => void;
 }) {
   const rows = useMemo(
     () =>
-      buildDreTableRows(
-        data.costItems,
-        data.operationalCostItems,
-        data.investmentCostItems,
-        true,
+      filterRowsByVisibility(
+        buildDreTableRows(
+          data.costItems,
+          data.operationalCostItems,
+          data.investmentCostItems,
+          data.nonOperationalOutItems,
+          data.nonOperationalInItems,
+          true,
+        ),
+        visibility,
       ),
-    [data.costItems, data.operationalCostItems, data.investmentCostItems],
+    [
+      data.costItems,
+      data.operationalCostItems,
+      data.investmentCostItems,
+      data.nonOperationalOutItems,
+      data.nonOperationalInItems,
+      visibility,
+    ],
   );
   const groups = useMemo(() => buildStatementGroups(rows), [rows]);
   const month =
@@ -2287,46 +2496,52 @@ function DreStatementPanel({
       >
         <div className="min-w-0 flex-1">{renderLabelCell(row)}</div>
         <div className="flex shrink-0 flex-col items-end">
-          {isYear ? (
-            <div
-              role={auditKind ? "button" : undefined}
-              tabIndex={auditKind ? 0 : undefined}
-              className={cn(
-                "whitespace-nowrap text-right text-[15px] font-medium tabular-nums leading-tight",
-                valueToneClass(amount),
-                auditKind &&
-                  "cursor-pointer rounded-md px-1 hover:bg-[var(--muted)]",
-              )}
-              onClick={
-                auditKind ? () => onAuditClick(auditKind, "year") : undefined
-              }
-              onKeyDown={
-                auditKind
-                  ? (e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        onAuditClick(auditKind, "year");
+          {withRevenuePercentTooltip(
+            isYear ? (
+              <div
+                role={auditKind ? "button" : undefined}
+                tabIndex={auditKind ? 0 : undefined}
+                className={cn(
+                  "whitespace-nowrap text-right text-[15px] font-medium tabular-nums leading-tight",
+                  valueToneClass(amount),
+                  auditKind &&
+                    "cursor-pointer rounded-md px-1 hover:bg-[var(--muted)]",
+                )}
+                onClick={
+                  auditKind ? () => onAuditClick(auditKind, "year") : undefined
+                }
+                onKeyDown={
+                  auditKind
+                    ? (e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onAuditClick(auditKind, "year");
+                        }
                       }
-                    }
-                  : undefined
-              }
-            >
-              {formatFinancialMoney(amount)}
-            </div>
-          ) : (
-            <div className="[&_.inline-flex]:justify-end">
-              {renderValueCell(
-                row,
-                month as DreMonthView,
-                onLineChange,
-                onFixedCostChange,
-                onOperationalCostChange,
-                onInvestmentCostChange,
-                (kind, m) => onAuditClick(kind, m),
-                onEditingChange,
-                onLineRestore,
-              )}
-            </div>
+                    : undefined
+                }
+              >
+                {formatFinancialMoney(amount)}
+              </div>
+            ) : (
+              <div className="[&_.inline-flex]:justify-end">
+                {renderValueCell(
+                  row,
+                  month as DreMonthView,
+                  onLineChange,
+                  onFixedCostChange,
+                  onOperationalCostChange,
+                  onInvestmentCostChange,
+                  onNonOperationalOutChange,
+                  onNonOperationalInChange,
+                  (kind, m) => onAuditClick(kind, m),
+                  onEditingChange,
+                  onLineRestore,
+                )}
+              </div>
+            ),
+            amount,
+            totals?.totalEntrada,
           )}
           {percent != null && Math.abs(percent) > 0 ? (
             <div
@@ -2417,7 +2632,7 @@ function DreStatementPanel({
       ) : null}
 
       <div className="space-y-3">
-        <DreRevenuePie totals={totals} />
+        <DreRevenuePie totals={totals} visibility={visibility} />
 
         <div className="mx-auto grid max-w-3xl items-start gap-2.5 sm:grid-cols-2">
           <div className="flex flex-col gap-2.5">
@@ -2501,6 +2716,7 @@ export function DreYearTable(props: DreYearTableProps) {
 
 function DreYearTableDesktop({
   data,
+  visibility = DEFAULT_DRE_VISIBILITY,
   showDetails,
   onToggleDetails,
   selectedMonth: selectedMonthProp = null,
@@ -2513,6 +2729,8 @@ function DreYearTableDesktop({
   onFixedCostChange,
   onOperationalCostChange,
   onInvestmentCostChange,
+  onNonOperationalOutChange,
+  onNonOperationalInChange,
 }: DreYearTableProps) {
   const [selectedMonthLocal, setSelectedMonthLocal] = useState<number | null>(
     null,
@@ -2575,11 +2793,16 @@ function DreYearTableDesktop({
     auditTarget,
   );
 
-  const rows = buildDreTableRows(
-    data.costItems,
-    data.operationalCostItems,
-    data.investmentCostItems,
-    true,
+  const rows = filterRowsByVisibility(
+    buildDreTableRows(
+      data.costItems,
+      data.operationalCostItems,
+      data.investmentCostItems,
+      data.nonOperationalOutItems,
+      data.nonOperationalInItems,
+      true,
+    ),
+    visibility,
   );
   const detailIndexById = buildDetailIndexMap(rows);
   const detailCount = detailIndexById.size;
@@ -2615,6 +2838,7 @@ function DreYearTableDesktop({
         {layout === "statement" ? (
             <DreStatementPanel
               data={data}
+              visibility={visibility}
               showDetails={showDetails}
               selectedMonth={selectedMonth}
               syncingMonths={syncingMonths}
@@ -2625,6 +2849,8 @@ function DreYearTableDesktop({
               onFixedCostChange={onFixedCostChange}
               onOperationalCostChange={onOperationalCostChange}
               onInvestmentCostChange={onInvestmentCostChange}
+              onNonOperationalOutChange={onNonOperationalOutChange}
+              onNonOperationalInChange={onNonOperationalInChange}
               onAuditClick={(kind, period) =>
                 setAuditTarget({ kind, period })
               }
@@ -2762,20 +2988,26 @@ function DreYearTableDesktop({
                           contentClassName="px-1.5 py-2 text-center align-middle"
                           style={cellStyle}
                         >
-                          {renderValueCell(
-                            row,
-                            month,
-                            onLineChange,
-                            onFixedCostChange,
-                            onOperationalCostChange,
-                            onInvestmentCostChange,
-                            (kind, m) =>
-                              setAuditTarget({ kind, period: m }),
-                            (editing, m, rowId) =>
-                              setEditingCell(
-                                editing ? { month: m, rowId } : null,
-                              ),
-                            onLineRestore,
+                          {withRevenuePercentTooltip(
+                            renderValueCell(
+                              row,
+                              month,
+                              onLineChange,
+                              onFixedCostChange,
+                              onOperationalCostChange,
+                              onInvestmentCostChange,
+                              onNonOperationalOutChange,
+                              onNonOperationalInChange,
+                              (kind, m) =>
+                                setAuditTarget({ kind, period: m }),
+                              (editing, m, rowId) =>
+                                setEditingCell(
+                                  editing ? { month: m, rowId } : null,
+                                ),
+                              onLineRestore,
+                            ),
+                            getCellValue(row, month).amount,
+                            month.totals?.totalEntrada,
                           )}
                         </DetailAnimatedCell>
                       );
@@ -2794,55 +3026,59 @@ function DreYearTableDesktop({
                       contentClassName="px-2 py-2 text-center align-middle"
                       style={cellStyle}
                     >
-                      <div
-                        className={cn(
-                          "inline-flex w-full items-center justify-center gap-1.5",
-                          isColoredRow(row)
-                            ? "font-semibold text-[var(--foreground)]"
-                            : "",
-                        )}
-                      >
+                      {withRevenuePercentTooltip(
                         <div
-                          role={yearAuditKind ? "button" : undefined}
-                          tabIndex={yearAuditKind ? 0 : undefined}
                           className={cn(
-                            "whitespace-nowrap text-center text-[12.5px] font-bold tabular-nums leading-tight",
-                            yearAuditKind &&
-                              "cursor-pointer rounded-sm underline decoration-dotted decoration-1 underline-offset-2 hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]",
+                            "inline-flex w-full items-center justify-center gap-1.5",
+                            isColoredRow(row)
+                              ? "font-semibold text-[var(--foreground)]"
+                              : "",
                           )}
-                          title={
-                            yearAuditKind
-                              ? `Clique para auditar ${row.label} (ano)`
-                              : undefined
-                          }
-                          onClick={
-                            yearAuditKind
-                              ? () =>
-                                  setAuditTarget({
-                                    kind: yearAuditKind,
-                                    period: "year",
-                                  })
-                              : undefined
-                          }
-                          onKeyDown={
-                            yearAuditKind
-                              ? (e) => {
-                                  if (e.key === "Enter" || e.key === " ") {
-                                    e.preventDefault();
+                        >
+                          <div
+                            role={yearAuditKind ? "button" : undefined}
+                            tabIndex={yearAuditKind ? 0 : undefined}
+                            className={cn(
+                              "whitespace-nowrap text-center text-[12.5px] font-bold tabular-nums leading-tight",
+                              yearAuditKind &&
+                                "cursor-pointer rounded-sm underline decoration-dotted decoration-1 underline-offset-2 hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]",
+                            )}
+                            title={
+                              yearAuditKind
+                                ? `Clique para auditar ${row.label} (ano)`
+                                : undefined
+                            }
+                            onClick={
+                              yearAuditKind
+                                ? () =>
                                     setAuditTarget({
                                       kind: yearAuditKind,
                                       period: "year",
-                                    });
+                                    })
+                                : undefined
+                            }
+                            onKeyDown={
+                              yearAuditKind
+                                ? (e) => {
+                                    if (e.key === "Enter" || e.key === " ") {
+                                      e.preventDefault();
+                                      setAuditTarget({
+                                        kind: yearAuditKind,
+                                        period: "year",
+                                      });
+                                    }
                                   }
-                                }
-                              : undefined
-                          }
-                        >
-                          {formatFinancialMoney(
-                            getYearTotalForRow(row, data).amount,
-                          )}
-                        </div>
-                      </div>
+                                : undefined
+                            }
+                          >
+                            {formatFinancialMoney(
+                              getYearTotalForRow(row, data).amount,
+                            )}
+                          </div>
+                        </div>,
+                        getYearTotalForRow(row, data).amount,
+                        data.yearTotals?.totalEntrada,
+                      )}
                     </DetailAnimatedCell>
                   </tr>
                   {showPercentRow ? (

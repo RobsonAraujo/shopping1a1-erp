@@ -42,6 +42,9 @@ const AMOUNTS: Record<DreStaticRowId, [number, number]> = {
   lucroOperacionalAntesInvestimentos: [36400, 40300],
   totalInvestimento: [-4200, -1880],
   lucroOperacional: [32200, 38420],
+  totalSaidaNaoOperacional: [0, 0],
+  totalEntradaNaoOperacional: [0, 0],
+  resultadoLiquido: [32200, 38420],
 };
 
 const PERCENTS: Partial<Record<DreStaticRowId, [number, number]>> = {

@@ -7,7 +7,15 @@ import { parseJsonBody } from "@/lib/api-validation";
 
 const costItemBodySchema = z.object({
   name: z.string().trim().min(1, "Name is required"),
-  section: z.enum(["fixed", "operational", "investment"]).optional(),
+  section: z
+    .enum([
+      "fixed",
+      "operational",
+      "investment",
+      "nonOperationalOut",
+      "nonOperationalIn",
+    ])
+    .optional(),
   recurring: z.boolean().optional().default(true),
 });
 
@@ -15,6 +23,8 @@ const SECTION_MAP = {
   fixed: "FIXED",
   operational: "OPERATIONAL",
   investment: "INVESTMENT",
+  nonOperationalOut: "NON_OPERATIONAL_OUT",
+  nonOperationalIn: "NON_OPERATIONAL_IN",
 } as const;
 
 export async function GET() {

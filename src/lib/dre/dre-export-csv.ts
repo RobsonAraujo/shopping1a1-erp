@@ -1,8 +1,10 @@
 import {
   buildDreTableRows,
   dreMonthShortLabel,
+  filterRowsByVisibility,
   getCellValue,
   type DreTableRow,
+  type DreVisibilitySettings,
 } from "@/lib/dre/dre-table-rows";
 import type { DreYearView } from "@/lib/dre/dre-year-data";
 
@@ -58,6 +60,30 @@ function getYearTotalAmount(
     }
     return hasAny ? -sum : null;
   }
+  if (row.type === "non-operational-out-cost") {
+    let sum = 0;
+    let hasAny = false;
+    for (const month of data.months) {
+      const v = month.nonOperationalOutValues[row.costItemId];
+      if (v !== null && v !== undefined) {
+        sum += v;
+        hasAny = true;
+      }
+    }
+    return hasAny ? -sum : null;
+  }
+  if (row.type === "non-operational-in-cost") {
+    let sum = 0;
+    let hasAny = false;
+    for (const month of data.months) {
+      const v = month.nonOperationalInValues[row.costItemId];
+      if (v !== null && v !== undefined) {
+        sum += v;
+        hasAny = true;
+      }
+    }
+    return hasAny ? sum : null;
+  }
 
   const totals = data.yearTotals;
   if (!totals) return null;
@@ -81,6 +107,12 @@ function getYearTotalAmount(
       return totals.totalInvestimento;
     case "lucroOperacional":
       return totals.lucroOperacional;
+    case "totalSaidaNaoOperacional":
+      return totals.totalSaidaNaoOperacional;
+    case "totalEntradaNaoOperacional":
+      return totals.totalEntradaNaoOperacional;
+    case "resultadoLiquido":
+      return totals.resultadoLiquido;
     default:
       if (row.lineKey) {
         const hasData = data.months.some((m) => m.lines !== null);
@@ -98,13 +130,19 @@ function getYearTotalAmount(
 export function buildDreYearCsv(
   data: DreYearView,
   showDetails = true,
+  visibility?: DreVisibilitySettings,
 ): string {
-  const rows = buildDreTableRows(
+  let rows = buildDreTableRows(
     data.costItems,
     data.operationalCostItems,
     data.investmentCostItems,
+    data.nonOperationalOutItems,
+    data.nonOperationalInItems,
     showDetails,
   );
+  if (visibility) {
+    rows = filterRowsByVisibility(rows, visibility);
+  }
 
   const header = [
     "Linha",
@@ -131,8 +169,9 @@ export function buildDreYearCsv(
 export function downloadDreYearCsv(
   data: DreYearView,
   showDetails = true,
+  visibility?: DreVisibilitySettings,
 ): void {
-  const csv = buildDreYearCsv(data, showDetails);
+  const csv = buildDreYearCsv(data, showDetails, visibility);
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
