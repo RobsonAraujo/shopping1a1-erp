@@ -10,6 +10,8 @@ import { isFutureCalendarMonth } from "@/lib/mercadolibre/revenue-periods";
 
 const MAX_BYTES = 15 * 1024 * 1024;
 
+export const maxDuration = 300;
+
 const yearMonthFormSchema = z.object({
   year: z.coerce.number().int().min(2000).max(2100),
   month: z.coerce.number().int().min(1).max(12),

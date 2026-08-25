@@ -142,7 +142,7 @@ export async function createPendingReconciliationImport(input: {
       });
     }
     return created.id;
-  });
+  }, { timeout: 120_000 });
 
   return {
     importId,
