@@ -1392,6 +1392,16 @@ export function parseSnapshotPayload(raw: unknown): DreMonthSnapshotPayload | nu
   const saleFeeBreakdown = parseLineBreakdown(p.saleFeeBreakdown);
   const sellerShippingBreakdown = parseLineBreakdown(p.sellerShippingBreakdown);
   const adsCostBreakdown = parseLineBreakdown(p.adsCostBreakdown);
+  const partialReturnsBreakdown = parseLineBreakdown(p.partialReturnsBreakdown);
+  const returnFeeBreakdown = parseLineBreakdown(p.returnFeeBreakdown);
+  const specialFeesBreakdown = parseLineBreakdown(p.specialFeesBreakdown);
+  const fullShippingBreakdown = parseLineBreakdown(p.fullShippingBreakdown);
+  const fullStorageBreakdown = parseLineBreakdown(p.fullStorageBreakdown);
+  const fullNonComplianceBreakdown = parseLineBreakdown(
+    p.fullNonComplianceBreakdown,
+  );
+  const minhaPaginaBreakdown = parseLineBreakdown(p.minhaPaginaBreakdown);
+  const affiliateFeeBreakdown = parseLineBreakdown(p.affiliateFeeBreakdown);
 
   const syncedLineBaselineRaw = p.syncedLineBaseline;
   let syncedLineBaseline:
@@ -1451,6 +1461,14 @@ export function parseSnapshotPayload(raw: unknown): DreMonthSnapshotPayload | nu
     saleFeeBreakdown,
     sellerShippingBreakdown,
     adsCostBreakdown,
+    partialReturnsBreakdown,
+    returnFeeBreakdown,
+    specialFeesBreakdown,
+    fullShippingBreakdown,
+    fullStorageBreakdown,
+    fullNonComplianceBreakdown,
+    minhaPaginaBreakdown,
+    affiliateFeeBreakdown,
     fullReportSourced: Boolean(p.fullReportSourced),
     syncedLineBaseline,
     manuallyEditedLineKeys,

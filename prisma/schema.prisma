@@ -641,3 +641,62 @@ model DreProductCostLeveling {
   @@index([organizationId])
   @@map("dre_product_cost_levelings")
 }
+
+enum DreReconciliationImportStatus {
+  pending
+  confirmed
+  superseded
+}
+
+/// Upload da planilha de conciliação ML (Por Vendas) para um mês do DRE.
+model DreReconciliationImport {
+  id                   String                         @id @default(cuid())
+  organizationId       String                         @map("organization_id")
+  year                 Int
+  month                Int
+  fileName             String                         @map("file_name")
+  sheetName            String                         @map("sheet_name")
+  rowCount             Int                            @map("row_count")
+  status               DreReconciliationImportStatus  @default(pending)
+  aggregationJson      Json                           @map("aggregation_json")
+  parseWarningsJson    Json?                          @map("parse_warnings_json")
+  previousPayloadJson  Json?                          @map("previous_payload_json")
+  acceptedLineKeysJson Json?                          @map("accepted_line_keys_json")
+  appliedAt            DateTime?                      @map("applied_at")
+  uploadedAt           DateTime                       @default(now()) @map("uploaded_at")
+  confirmedAt          DateTime?                      @map("confirmed_at")
+  createdAt            DateTime                       @default(now()) @map("created_at")
+  updatedAt            DateTime                       @updatedAt @map("updated_at")
+
+  entries DreReconciliationEntry[]
+
+  @@index([organizationId, year, month, status])
+  @@map("dre_reconciliation_imports")
+}
+
+model DreReconciliationEntry {
+  id                 String   @id @default(cuid())
+  importId           String   @map("import_id")
+  organizationId     String   @map("organization_id")
+  rowIndex           Int      @map("row_index")
+  operationDate      DateTime? @map("operation_date") @db.Date
+  operationId        String   @map("operation_id")
+  operationType      String   @map("operation_type")
+  operationStatus    String?  @map("operation_status")
+  sku                String?
+  itemTitle          String?  @map("item_title")
+  quantity           Int?
+  grossValue         Decimal? @map("gross_value") @db.Decimal(18, 2)
+  totalFees          Decimal? @map("total_fees") @db.Decimal(18, 2)
+  totalPostpaidFees  Decimal? @map("total_postpaid_fees") @db.Decimal(18, 2)
+  sellerPaidShipping Decimal? @map("seller_paid_shipping") @db.Decimal(18, 2)
+  mappedLineKey      String?  @map("mapped_line_key")
+  mappedAmount       Decimal? @map("mapped_amount") @db.Decimal(18, 2)
+  rawJson            Json     @map("raw_json")
+
+  import DreReconciliationImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, importId])
+  @@index([importId, mappedLineKey])
+  @@map("dre_reconciliation_entries")
+}

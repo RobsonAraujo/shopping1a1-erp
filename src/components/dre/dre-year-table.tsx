@@ -842,7 +842,15 @@ type AuditKind =
   | "cancelledSales"
   | "saleFee"
   | "sellerShipping"
-  | "adsCost";
+  | "adsCost"
+  | "partialReturns"
+  | "returnFee"
+  | "specialFees"
+  | "fullShipping"
+  | "fullStorage"
+  | "fullNonCompliance"
+  | "minhaPagina"
+  | "affiliateFee";
 type AuditTarget = { kind: AuditKind; period: number | "year" } | null;
 
 /** Linhas estáticas do DRE que abrem auditoria ao clicar no valor. */
@@ -854,6 +862,14 @@ const ROW_ID_TO_AUDIT_KIND: Partial<Record<DreStaticRowId, AuditKind>> = {
   saleFeeMl: "saleFee",
   sellerShippingMl: "sellerShipping",
   adsCost: "adsCost",
+  partialReturnsMl: "partialReturns",
+  returnFeeMl: "returnFee",
+  specialFeesMl: "specialFees",
+  fullShippingMl: "fullShipping",
+  fullStorageMl: "fullStorage",
+  fullNonComplianceMl: "fullNonCompliance",
+  minhaPaginaMl: "minhaPagina",
+  affiliateFeeMl: "affiliateFee",
 };
 
 function getAuditKindForRow(row: DreTableRow): AuditKind | null {
@@ -871,10 +887,10 @@ const LINE_AUDIT_TEXT: Partial<
       "Soma do valor de venda de cada pedido pago no mês, por anúncio/SKU (inclui as vendas canceladas somadas de volta ao faturamento).",
   },
   cancelledSales: {
-    rowLabel: "Canceladas ML",
-    amountLabel: "Valor cancelado",
+    rowLabel: "Canceladas / devolvidas",
+    amountLabel: "Valor cancelado/devolvido",
     description:
-      "Soma do valor bruto de cada pedido cancelado no mês, por anúncio/SKU.",
+      "Soma do valor bruto de cada pedido cancelado ou devolvido no mês, por anúncio/SKU.",
   },
   saleFee: {
     rowLabel: "Tarifa ML",
@@ -894,6 +910,47 @@ const LINE_AUDIT_TEXT: Partial<
     description:
       "Gasto com campanhas de Product Ads no mês, por anúncio.",
   },
+  partialReturns: {
+    rowLabel: "Devoluções parciais",
+    amountLabel: "Valor",
+    description: "Reembolsos parciais da conciliação ML, por operação.",
+  },
+  returnFee: {
+    rowLabel: "Tarifa de devolução",
+    amountLabel: "Tarifa",
+    description: "Estornos de tarifa de venda em cancelamentos/devoluções.",
+  },
+  specialFees: {
+    rowLabel: "Tarifas especiais",
+    amountLabel: "Tarifa",
+    description:
+      "Cobranças especiais da conciliação ML e tarifas ainda não classificadas.",
+  },
+  fullShipping: {
+    rowLabel: "Full envios",
+    amountLabel: "Custo",
+    description: "Tarifas de envio Full da conciliação ML.",
+  },
+  fullStorage: {
+    rowLabel: "Full armazém",
+    amountLabel: "Custo",
+    description: "Cobrança de armazenamento Full no mês.",
+  },
+  fullNonCompliance: {
+    rowLabel: "Full inconform.",
+    amountLabel: "Custo",
+    description: "Multas por inconformidade no envio ao Full.",
+  },
+  minhaPagina: {
+    rowLabel: "Minha Página",
+    amountLabel: "Tarifa",
+    description: "Tarifa de manutenção da Minha Página / E-Shop.",
+  },
+  affiliateFee: {
+    rowLabel: "Comissão Afiliados",
+    amountLabel: "Comissão",
+    description: "Comissão paga a afiliados.",
+  },
 };
 
 const LINE_BREAKDOWN_FIELD: Partial<
@@ -904,6 +961,14 @@ const LINE_BREAKDOWN_FIELD: Partial<
   saleFee: "saleFeeBreakdown",
   sellerShipping: "sellerShippingBreakdown",
   adsCost: "adsCostBreakdown",
+  partialReturns: "partialReturnsBreakdown",
+  returnFee: "returnFeeBreakdown",
+  specialFees: "specialFeesBreakdown",
+  fullShipping: "fullShippingBreakdown",
+  fullStorage: "fullStorageBreakdown",
+  fullNonCompliance: "fullNonComplianceBreakdown",
+  minhaPagina: "minhaPaginaBreakdown",
+  affiliateFee: "affiliateFeeBreakdown",
 };
 
 type LineAuditState = {
@@ -977,6 +1042,10 @@ function renderLabelCell(row: DreTableRow) {
     row.type === "investment-cost" ||
     (row.type === "static" && row.indent);
 
+  const cancelledHint =
+    row.type === "static" && row.id === "cancelledSalesMl"
+      ? row.methodology
+      : undefined;
   const labelSpan = <span className={rowLabelClass(row)}>{row.label}</span>;
 
   return (
@@ -991,8 +1060,11 @@ function renderLabelCell(row: DreTableRow) {
               {labelSpan}
             </span>
           </TooltipTrigger>
-          <TooltipContent side="right" align="start">
-            Fonte: {sourceOriginLabel(source)}
+          <TooltipContent side="right" align="start" className="max-w-xs">
+            <p>Fonte: {sourceOriginLabel(source)}</p>
+            {cancelledHint ? (
+              <p className="mt-1.5">{cancelledHint}</p>
+            ) : null}
           </TooltipContent>
         </Tooltip>
       ) : (

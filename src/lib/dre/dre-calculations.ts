@@ -115,6 +115,14 @@ export type DreMonthSnapshotPayload = DreLineAmounts & {
   saleFeeBreakdown?: DreLineBreakdownItem[];
   sellerShippingBreakdown?: DreLineBreakdownItem[];
   adsCostBreakdown?: DreLineBreakdownItem[];
+  partialReturnsBreakdown?: DreLineBreakdownItem[];
+  returnFeeBreakdown?: DreLineBreakdownItem[];
+  specialFeesBreakdown?: DreLineBreakdownItem[];
+  fullShippingBreakdown?: DreLineBreakdownItem[];
+  fullStorageBreakdown?: DreLineBreakdownItem[];
+  fullNonComplianceBreakdown?: DreLineBreakdownItem[];
+  minhaPaginaBreakdown?: DreLineBreakdownItem[];
+  affiliateFeeBreakdown?: DreLineBreakdownItem[];
   /** true quando Full envios/inconformidade vieram dos envios já importados no Relatório Full deste mês (mais confiável que o total consolidado da fatura). */
   fullReportSourced?: boolean;
   /**
@@ -297,6 +305,29 @@ export function applyRestoreLineFromSync(
   }
 
   return next;
+}
+
+/**
+ * Após conciliação aceita: os valores atuais das chaves viram a nova verdade
+ * (baseline) e deixam de aparecer como “ajustado”.
+ */
+export function commitReconciledLinesAsTruth(
+  payload: DreMonthSnapshotPayload,
+  lineKeys: readonly DreEditableLineKey[],
+): DreMonthSnapshotPayload {
+  const baseline: Partial<Record<DreEditableLineKey, number>> = {
+    ...(payload.syncedLineBaseline ?? {}),
+  };
+  const edited = new Set(payload.manuallyEditedLineKeys ?? []);
+  for (const key of lineKeys) {
+    baseline[key] = getEditableLineAmount(payload, key);
+    edited.delete(key);
+  }
+  return {
+    ...payload,
+    syncedLineBaseline: baseline,
+    manuallyEditedLineKeys: [...edited],
+  };
 }
 
 export type DreManualCostInput = {

@@ -190,6 +190,28 @@ Plano de execução detalhado (arquivos e código concretos): ver plano de imple
 
 Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templates/feature-saas-impact.md).
 
+### DRE: Devoluções parciais fora da conciliação Por Vendas — 2026-08-24
+
+- **Tabelas novas/alteradas:** nenhuma
+- **Precisa `organizationId`?** sim — preview/apply já escopados; só muda a agregação da planilha
+- **APIs afetadas:** mesmas rotas de conciliação; `partialReturnsMl` deixa de ser proposto pelo XLSX (fica no snapshot da API/fatura)
+- **Assume singleton?** não
+- **Cron/background:** nenhum
+- **Dados globais vs por org:** por org
+- **Código já tenant-ready?** sim
+- **Ação futura na migração:** nenhuma
+
+### Conciliação do DRE via planilha ML — 2026-08-23
+
+- **Tabelas novas/alteradas:** novas `dre_reconciliation_imports`, `dre_reconciliation_entries` (`organization_id` NOT NULL desde a criação); `dre_month_snapshots.payload` ganha 8 campos de breakdown opcionais
+- **Precisa `organizationId`?** sim — presente em ambas as tabelas desde a criação
+- **APIs afetadas:** novas `POST /api/dre/reconciliation/preview`, `POST /api/dre/reconciliation/[importId]/apply`, `POST /api/dre/reconciliation/[importId]/commit`, `DELETE /api/dre/reconciliation/[importId]`
+- **Assume singleton?** não
+- **Cron/background:** nenhum (imports `pending` órfãos são limpos no próximo upload do mesmo mês)
+- **Dados globais vs por org:** tudo por org
+- **Código já tenant-ready?** sim
+- **Ação futura na migração:** nenhuma
+
 ### PIS/COFINS só na Config. tributária — 2026-08-22
 
 - **Tabelas novas/alteradas:** nenhuma (`company_tax_settings.pis_rate_percent` + `cofins_rate_percent` continuam a fonte; `pis_cofins_percent` passa a ser espelho da soma)

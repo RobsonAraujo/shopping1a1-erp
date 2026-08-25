@@ -60,3 +60,57 @@ export function parseQuery<T>(
   }
   return { ok: true, data: result.data };
 }
+
+export async function readSingleFileField(
+  request: Request,
+  fieldName: string,
+  options: { maxBytes: number; allowedExtensions: string[] },
+): Promise<
+  | { ok: true; file: File; buffer: Buffer; form: FormData }
+  | { ok: false; response: NextResponse }
+> {
+  let form: FormData;
+  try {
+    form = await request.formData();
+  } catch {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "Formulário inválido." },
+        { status: 400 },
+      ),
+    };
+  }
+  const value = form.get(fieldName);
+  if (!(value instanceof File) || value.size === 0) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "Arquivo obrigatório." },
+        { status: 400 },
+      ),
+    };
+  }
+  if (value.size > options.maxBytes) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "Arquivo maior do que o limite permitido." },
+        { status: 400 },
+      ),
+    };
+  }
+  const name = value.name.toLowerCase();
+  const allowed = options.allowedExtensions.some((ext) => name.endsWith(ext));
+  if (!allowed) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "Envie um arquivo .xlsx." },
+        { status: 400 },
+      ),
+    };
+  }
+  const buffer = Buffer.from(await value.arrayBuffer());
+  return { ok: true, file: value, buffer, form };
+}

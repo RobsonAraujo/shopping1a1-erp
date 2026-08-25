@@ -59,6 +59,16 @@ export type DreMonthView = {
   saleFeeBreakdown: DreLineBreakdownItem[] | null;
   sellerShippingBreakdown: DreLineBreakdownItem[] | null;
   adsCostBreakdown: DreLineBreakdownItem[] | null;
+  partialReturnsBreakdown: DreLineBreakdownItem[] | null;
+  returnFeeBreakdown: DreLineBreakdownItem[] | null;
+  specialFeesBreakdown: DreLineBreakdownItem[] | null;
+  fullShippingBreakdown: DreLineBreakdownItem[] | null;
+  fullStorageBreakdown: DreLineBreakdownItem[] | null;
+  fullNonComplianceBreakdown: DreLineBreakdownItem[] | null;
+  minhaPaginaBreakdown: DreLineBreakdownItem[] | null;
+  affiliateFeeBreakdown: DreLineBreakdownItem[] | null;
+  pendingReconciliationImportId: string | null;
+  pendingReconciliationApplied: boolean;
   /**
    * true quando o Relatório Full já tem envios para o mês (import ML ou
    * manual) — usado só para o alerta de UI; o valor na célula ainda vem do
@@ -200,6 +210,7 @@ export async function loadDreYearView(
     monthValues,
     fullShipmentMonths,
     importedBillingPeriods,
+    pendingReconciliationImports,
   ] = await Promise.all([
     prisma.dreCostItem.findMany({
       where: { organizationId, active: true },
@@ -221,7 +232,15 @@ export async function loadDreYearView(
     }),
     listFullShipmentActivityMonthsForYear(organizationId, year),
     listImportedBillingPeriods(organizationId),
+    prisma.dreReconciliationImport.findMany({
+      where: { organizationId, year, status: "pending" },
+      select: { id: true, month: true, appliedAt: true },
+    }),
   ]);
+
+  const pendingReconciliationByMonth = new Map(
+    pendingReconciliationImports.map((row) => [row.month, row]),
+  );
 
   const importedBillingMonths = new Set(
     importedBillingPeriods
@@ -326,6 +345,19 @@ export async function loadDreYearView(
       saleFeeBreakdown: payload?.saleFeeBreakdown ?? null,
       sellerShippingBreakdown: payload?.sellerShippingBreakdown ?? null,
       adsCostBreakdown: payload?.adsCostBreakdown ?? null,
+      partialReturnsBreakdown: payload?.partialReturnsBreakdown ?? null,
+      returnFeeBreakdown: payload?.returnFeeBreakdown ?? null,
+      specialFeesBreakdown: payload?.specialFeesBreakdown ?? null,
+      fullShippingBreakdown: payload?.fullShippingBreakdown ?? null,
+      fullStorageBreakdown: payload?.fullStorageBreakdown ?? null,
+      fullNonComplianceBreakdown: payload?.fullNonComplianceBreakdown ?? null,
+      minhaPaginaBreakdown: payload?.minhaPaginaBreakdown ?? null,
+      affiliateFeeBreakdown: payload?.affiliateFeeBreakdown ?? null,
+      pendingReconciliationImportId:
+        pendingReconciliationByMonth.get(month)?.id ?? null,
+      pendingReconciliationApplied: Boolean(
+        pendingReconciliationByMonth.get(month)?.appliedAt,
+      ),
       // Checagem ao vivo (não só o flag do snapshot): snapshots antigos não
       // tinham `fullReportSourced`, e importar depois da sync também conta.
       fullReportSourced:

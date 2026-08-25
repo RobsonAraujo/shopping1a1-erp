@@ -27,6 +27,8 @@ const TENANT_SCOPED_MODELS = new Set([
   "CatalogCompetitionPollRun",
   "DreMonthSnapshot",
   "DreCostMonthValue",
+  "DreReconciliationImport",
+  "DreReconciliationEntry",
 ]);
 
 /**

@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, Download, HelpCircle, Plus, RefreshCw, Scale } from "lucide-react";
+import { ChevronDown, Download, HelpCircle, Info, Plus, RefreshCw, Scale, Upload } from "lucide-react";
 import { DreCostItemsModal } from "@/components/dre/dre-fixed-costs-modal";
 import { DreOverview } from "@/components/dre/dre-overview";
 import { DreProductCostLevelingModal } from "@/components/dre/dre-product-cost-leveling-modal";
 import { DreSyncOverlay } from "@/components/dre/dre-sync-overlay";
 import { DreYearTable } from "@/components/dre/dre-year-table";
+import { DreReconciliationModal } from "@/components/dre/dre-reconciliation-modal";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,7 +25,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { UserFeedback } from "@/components/ui/user-feedback";
 import { consumeSSEStream } from "@/hooks/use-sse-stream";
 import { formatApiErrorMessage, readApiError } from "@/lib/api-client-error";
@@ -131,6 +132,9 @@ export function DreClient() {
   >({});
   const [helpOpen, setHelpOpen] = useState(false);
   const [cadastroOpen, setCadastroOpen] = useState(false);
+  const [reconcileOpen, setReconcileOpen] = useState(false);
+  const [reconciliationBusy, setReconciliationBusy] = useState(false);
+  const [reconcileAfterSync, setReconcileAfterSync] = useState(false);
 
   const yearOptions = useMemo(
     () =>
@@ -284,6 +288,7 @@ export function DreClient() {
               }
               return { ...prev, [month]: [...preserveLineKeys] };
             });
+            setReconcileAfterSync(true);
           }
         });
 
@@ -564,6 +569,82 @@ export function DreClient() {
     [year],
   );
 
+  const handleReconciliationApplied = useCallback(
+    (
+      yearView: DreYearView,
+      acceptedLineKeys: DreEditableLineKey[],
+      appliedMonth: number,
+    ) => {
+      setData(yearView);
+      setSessionAdjustedByMonth((prev) => ({
+        ...prev,
+        [appliedMonth]: acceptedLineKeys,
+      }));
+    },
+    [],
+  );
+
+  const handleCommitReconciliation = useCallback(
+    async (importId: string) => {
+      setReconciliationBusy(true);
+      setError(null);
+      try {
+        const res = await fetch(
+          `/api/dre/reconciliation/${importId}/commit`,
+          { method: "POST" },
+        );
+        if (!res.ok) {
+          setError(await readApiError(res, "dre_reconciliation_commit_failed"));
+          return;
+        }
+        const json = (await res.json()) as { year?: DreYearView };
+        if (json.year) {
+          setData(json.year);
+          if (selectedMonth !== null) {
+            setSessionAdjustedByMonth((prev) => ({
+              ...prev,
+              [selectedMonth]: [],
+            }));
+          }
+        }
+      } finally {
+        setReconciliationBusy(false);
+      }
+    },
+    [selectedMonth],
+  );
+
+  const handleDiscardReconciliation = useCallback(
+    async (importId: string) => {
+      setReconciliationBusy(true);
+      setError(null);
+      try {
+        const res = await fetch(`/api/dre/reconciliation/${importId}`, {
+          method: "DELETE",
+        });
+        if (!res.ok) {
+          setError(
+            await readApiError(res, "dre_reconciliation_discard_failed"),
+          );
+          return;
+        }
+        const json = (await res.json()) as { year?: DreYearView };
+        if (json.year) {
+          setData(json.year);
+          if (selectedMonth !== null) {
+            setSessionAdjustedByMonth((prev) => ({
+              ...prev,
+              [selectedMonth]: [],
+            }));
+          }
+        }
+      } finally {
+        setReconciliationBusy(false);
+      }
+    },
+    [selectedMonth],
+  );
+
   const syncConfirmMonthLabel =
     syncConfirm?.mode === "month"
       ? (data?.months.find((m) => m.month === syncConfirm.month)?.label ??
@@ -685,6 +766,7 @@ export function DreClient() {
             />
             <Button
               type="button"
+              variant="outline"
               size="sm"
               className="h-10 rounded-xl"
               disabled={syncingAll || loading}
@@ -696,6 +778,27 @@ export function DreClient() {
               />
               Sincronizar
             </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-10 gap-1.5 rounded-xl"
+                  disabled={!data || loading}
+                  onClick={() => {
+                    setReconcileAfterSync(false);
+                    setReconcileOpen(true);
+                  }}
+                >
+                  <Upload className="size-3.5" aria-hidden />
+                  Conciliar ML
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                A API de faturamento do Mercado Livre pode oscilar. A planilha
+                oficial Por Vendas é a fonte da verdade do mês.
+              </TooltipContent>
+            </Tooltip>
           </div>
         </div>
 
@@ -719,7 +822,57 @@ export function DreClient() {
                 <span className="font-medium text-[var(--foreground)]">Cadastrar</span>{" "}
                 cria o item; o valor entra com dois cliques na tabela.
               </li>
+              <li>
+                <span className="font-medium text-[var(--foreground)]">Conciliar ML</span>{" "}
+                aplica a planilha oficial Por Vendas. Use depois de sincronizar
+                — a API de faturamento pode oscilar.
+              </li>
             </ul>
+          </div>
+        ) : null}
+
+        {viewData ? (
+          <div
+            className={
+              reconcileAfterSync
+                ? "flex flex-wrap items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+                : "flex flex-wrap items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 text-sm text-[var(--foreground)]"
+            }
+          >
+            <Info
+              className={
+                reconcileAfterSync
+                  ? "size-4 shrink-0 text-amber-700"
+                  : "size-4 shrink-0 text-[var(--muted-foreground)]"
+              }
+              aria-hidden
+            />
+            <span className="min-w-0 flex-1">
+              {reconcileAfterSync
+                ? "Dados atualizados. Concilie com a planilha oficial Por Vendas — a API de faturamento do Mercado Livre não é a fonte da verdade."
+                : "A API de faturamento do Mercado Livre pode oscilar. Depois de sincronizar, concilie o mês com a planilha Por Vendas."}
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant={reconcileAfterSync ? "default" : "outline"}
+              onClick={() => {
+                setReconcileAfterSync(false);
+                setReconcileOpen(true);
+              }}
+            >
+              Conciliar agora
+            </Button>
+            {reconcileAfterSync ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setReconcileAfterSync(false)}
+              >
+                Depois
+              </Button>
+            ) : null}
           </div>
         ) : null}
 
@@ -734,6 +887,50 @@ export function DreClient() {
         {error ? (
           <UserFeedback>{error}</UserFeedback>
         ) : null}
+
+        {viewData && selectedMonth
+          ? (() => {
+              const month = viewData.months.find(
+                (item) => item.month === selectedMonth,
+              );
+              if (!month?.pendingReconciliationApplied) return null;
+              if (!(month.month in sessionAdjustedByMonth)) return null;
+              return (
+                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                  <span className="flex-1">
+                    Conciliação aplicada em {month.label} — números em âmbar.
+                    Salvar tudo grava como verdade do mês (preto). Descartar
+                    volta ao valor anterior.
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={reconciliationBusy}
+                    onClick={() =>
+                      void handleDiscardReconciliation(
+                        month.pendingReconciliationImportId!,
+                      )
+                    }
+                  >
+                    Descartar
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={reconciliationBusy}
+                    onClick={() =>
+                      void handleCommitReconciliation(
+                        month.pendingReconciliationImportId!,
+                      )
+                    }
+                  >
+                    Salvar tudo
+                  </Button>
+                </div>
+              );
+            })()
+          : null}
 
         {loading && !data ? (
           <p className="text-sm text-[var(--muted-foreground)]">Carregando…</p>
@@ -935,6 +1132,22 @@ export function DreClient() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        {reconcileOpen && data ? (
+          <DreReconciliationModal
+            open
+            year={year}
+            months={data.months}
+            defaultMonth={
+              selectedMonth ??
+              data.months.find((item) => item.isCurrentMonth)?.month ??
+              data.months.find((item) => !item.isFutureMonth)?.month ??
+              1
+            }
+            onClose={() => setReconcileOpen(false)}
+            onApplied={handleReconciliationApplied}
+            onError={setError}
+          />
+        ) : null}
       </div>
     </TooltipProvider>
   );
