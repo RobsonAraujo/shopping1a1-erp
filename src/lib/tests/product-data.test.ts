@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  diffLevelableProductFields,
   productWriteToPrismaData,
   validateProductInput,
   type ProductWriteInput,
 } from "@/lib/product-data";
+import type { Product } from "@/generated/prisma/client";
 
 function baseInput(overrides: Partial<ProductWriteInput> = {}): ProductWriteInput {
   return {
@@ -45,5 +47,76 @@ describe("productWriteToPrismaData — pmaPrice", () => {
   it("defaults pmaPrice to null when absent", () => {
     const data = productWriteToPrismaData("org-1", baseInput());
     assert.equal(data.pmaPrice, null);
+  });
+});
+
+function baseProduct(overrides: Partial<Record<string, unknown>> = {}): Product {
+  return {
+    id: "prod-1",
+    organizationId: "org-1",
+    sku: "SKU-A",
+    ncm: null,
+    unitCostNf: 50,
+    purchaseIcmsPercent: 18,
+    hasIcmsSt: false,
+    purchaseCostWithSt: null,
+    ipiPercent: 0,
+    extraCosts: 0,
+    isMonophasic: false,
+    saleIcmsPercent: 18,
+    isImported: false,
+    pmaPrice: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    ...overrides,
+  } as unknown as Product;
+}
+
+describe("diffLevelableProductFields", () => {
+  it("reports no changed fields when nothing changed", () => {
+    const before = baseProduct();
+    const { changedFields } = diffLevelableProductFields(before, baseInput());
+    assert.deepEqual(changedFields, []);
+  });
+
+  it("detects a single changed field (unitCostNf)", () => {
+    const before = baseProduct({ unitCostNf: 50 });
+    const { changedFields, previousValues } = diffLevelableProductFields(
+      before,
+      baseInput({ unitCostNf: 65 }),
+    );
+    assert.deepEqual(changedFields, ["unitCostNf"]);
+    // previousValues traz o snapshot completo de antes, não só o campo mudado.
+    assert.equal(previousValues.unitCostNf, 50);
+    assert.equal(previousValues.purchaseIcmsPercent, 18);
+  });
+
+  it("marks both hasIcmsSt and purchaseCostWithSt when toggled true→false", () => {
+    const before = baseProduct({ hasIcmsSt: true, purchaseCostWithSt: 70 });
+    const { changedFields, previousValues } = diffLevelableProductFields(
+      before,
+      baseInput({ hasIcmsSt: false, purchaseCostWithSt: null }),
+    );
+    assert.ok(changedFields.includes("hasIcmsSt"));
+    assert.ok(changedFields.includes("purchaseCostWithSt"));
+    assert.equal(previousValues.hasIcmsSt, true);
+    assert.equal(previousValues.purchaseCostWithSt, 70);
+  });
+
+  it("ignores fields omitted from the payload (Simples Nacional hides Lucro Real fields)", () => {
+    const before = baseProduct({
+      purchaseIcmsPercent: 18,
+      saleIcmsPercent: 18,
+      isMonophasic: true,
+      isImported: true,
+    });
+    const simplesInput: ProductWriteInput = {
+      sku: "SKU-A",
+      unitCostNf: 50,
+      extraCosts: 0,
+      // Campos fiscais de Lucro Real omitidos (regime Simples Nacional).
+    };
+    const { changedFields } = diffLevelableProductFields(before, simplesInput);
+    assert.deepEqual(changedFields, []);
   });
 });

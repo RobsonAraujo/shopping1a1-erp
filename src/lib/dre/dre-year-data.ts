@@ -428,9 +428,14 @@ export async function loadDreYearView(
         fullShipmentMonths.has(month) || importedBillingMonths.has(month),
       adsCost: payload?.adsCost ?? null,
       manuallyEditedLineKeys: payload?.manuallyEditedLineKeys ?? [],
-      syncedLineBaselineKeys: payload?.syncedLineBaseline
-        ? (Object.keys(payload.syncedLineBaseline) as DreEditableLineKey[])
-        : [],
+      // Só considera o baseline se ele veio de um sync real — senão o
+      // baseline "fantasma" semeado por `applyManualLineEdit` num snapshot
+      // vazio faria o botão "Restaurar" reverter pro valor pré-edição (ex. 0)
+      // em vez de um valor de sync de verdade.
+      syncedLineBaselineKeys:
+        payload?.hasRealSyncBaseline && payload.syncedLineBaseline
+          ? (Object.keys(payload.syncedLineBaseline) as DreEditableLineKey[])
+          : [],
       fixedCostValues,
       fixedCostOverrides,
       operationalCostValues,

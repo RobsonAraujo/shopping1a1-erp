@@ -1126,7 +1126,9 @@ function renderValueCell(
   onEditingChange?: (editing: boolean, month: number, rowId: string) => void,
   onLineRestore?: DreYearTableProps["onLineRestore"],
 ) {
-  const canEditMonth = !month.isFutureMonth;
+  // Meses futuros são editáveis manualmente (orçamento/planejamento antecipado);
+  // só o sync automático via ML continua bloqueado pra mês futuro.
+  const canEditMonth = true;
   const notifyEditing = (editing: boolean) =>
     onEditingChange?.(editing, month.month, row.id);
 

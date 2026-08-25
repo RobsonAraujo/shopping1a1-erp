@@ -363,11 +363,10 @@ export function DreOverview({
             <button
               key={month.month}
               type="button"
-              disabled={month.isFutureMonth}
               onClick={() => onSelectMonth(active ? null : month.month)}
               className={cn(
                 "shrink-0 cursor-pointer rounded-lg px-3 py-1.5 text-[11px] font-semibold tracking-wide transition-colors",
-                month.isFutureMonth && "cursor-not-allowed opacity-35",
+                month.isFutureMonth && "opacity-60",
                 active
                   ? "bg-[var(--primary)] text-white shadow-sm"
                   : month.syncedAt

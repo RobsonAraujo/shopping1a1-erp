@@ -21,6 +21,12 @@ const levelingBodySchema = z.object({
   unitCostNf: z.number().finite().nonnegative(),
   purchaseCostWithSt: z.number().finite().nonnegative().nullable(),
   ipiPercent: z.number().finite().min(0).max(100),
+  purchaseIcmsPercent: z.number().finite().min(0).max(100).nullable().default(null),
+  extraCosts: z.number().finite().nonnegative().nullable().default(null),
+  isMonophasic: z.boolean().nullable().default(null),
+  saleIcmsPercent: z.number().finite().min(0).max(100).nullable().default(null),
+  isImported: z.boolean().nullable().default(null),
+  pmaPrice: z.number().finite().positive().nullable().default(null),
 });
 
 function levelingErrorResponse(e: DreProductCostLevelingError) {

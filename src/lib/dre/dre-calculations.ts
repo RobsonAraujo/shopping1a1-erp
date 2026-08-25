@@ -154,6 +154,14 @@ export type DreMonthSnapshotPayload = DreLineAmounts & {
   syncedBreakdownBaseline?: DreSyncedBreakdownBaseline;
   /** Chaves com valor diferente do baseline (editadas após o último sync). */
   manuallyEditedLineKeys?: DreEditableLineKey[];
+  /**
+   * true só quando `syncedLineBaseline` veio de um sync real (ML). Distingue
+   * isso do baseline "fantasma" que `applyManualLineEdit` semeia ao editar
+   * uma linha num snapshot vazio (mês sem sync ainda) — sem essa distinção,
+   * o botão "Restaurar" aparece e reverte pro valor pré-edição (ex.: 0) em
+   * vez de para um valor de sync de verdade.
+   */
+  hasRealSyncBaseline?: boolean;
 };
 
 export const DRE_LINE_KEY_TO_BREAKDOWN_FIELD: Partial<
@@ -278,6 +286,7 @@ export function withSyncLineBaseline(
     syncedLineBaseline: buildSyncedLineBaseline(payload),
     syncedBreakdownBaseline: captureSyncedBreakdowns(payload),
     manuallyEditedLineKeys: [],
+    hasRealSyncBaseline: true,
   };
 }
 
@@ -298,6 +307,7 @@ export function mergePreservedManualLines(
       syncedLineBaseline: baseline,
       syncedBreakdownBaseline: freshBreakdowns,
       manuallyEditedLineKeys: [],
+      hasRealSyncBaseline: true,
     };
   }
 
@@ -306,6 +316,7 @@ export function mergePreservedManualLines(
     ...fresh,
     syncedLineBaseline: baseline,
     syncedBreakdownBaseline: freshBreakdowns,
+    hasRealSyncBaseline: true,
   };
   const edited: DreEditableLineKey[] = [];
 

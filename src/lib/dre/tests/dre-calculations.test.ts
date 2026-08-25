@@ -342,6 +342,17 @@ describe("manual line edit / restore from sync", () => {
     const payload = emptyPayload({ revenueMl: 500 });
     assert.equal(applyRestoreLineFromSync(payload, "revenueMl"), null);
   });
+
+  it("does not mark hasRealSyncBaseline when editing a never-synced snapshot", () => {
+    // Simula `emptyDreMonthSnapshotPayload()` (mês futuro/sem sync ainda):
+    // não tem `syncedLineBaseline`/`hasRealSyncBaseline`.
+    const neverSynced = emptyPayload({ revenueMl: 0 });
+    const edited = applyManualLineEdit(neverSynced, "revenueMl", 500);
+    // `applyManualLineEdit` semeia um baseline "fantasma" (valor pré-edição)
+    // pra saber se a linha difere dele, mas isso não é um sync real.
+    assert.equal(edited.syncedLineBaseline?.revenueMl, 0);
+    assert.notEqual(edited.hasRealSyncBaseline, true);
+  });
 });
 
 describe("mergePreservedManualLines", () => {

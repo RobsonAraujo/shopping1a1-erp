@@ -77,6 +77,12 @@ function toView(row: {
   unitCostNf: unknown;
   purchaseCostWithSt: unknown;
   ipiPercent: unknown;
+  purchaseIcmsPercent: unknown;
+  extraCosts: unknown;
+  isMonophasic: boolean | null;
+  saleIcmsPercent: unknown;
+  isImported: boolean | null;
+  pmaPrice: unknown;
   createdAt: Date;
   updatedAt: Date;
 }): DreProductCostLevelingView {
@@ -100,6 +106,12 @@ function toView(row: {
     unitCostNf,
     purchaseCostWithSt,
     ipiPercent,
+    purchaseIcmsPercent: decimalToNumber(row.purchaseIcmsPercent),
+    extraCosts: decimalToNumber(row.extraCosts),
+    isMonophasic: row.isMonophasic,
+    saleIcmsPercent: decimalToNumber(row.saleIcmsPercent),
+    isImported: row.isImported,
+    pmaPrice: decimalToNumber(row.pmaPrice),
     pricingCost,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -141,9 +153,13 @@ async function assertNoOverlap(
 
 export async function listDreProductCostLevelings(
   organizationId: string,
+  sku?: string,
 ): Promise<DreProductCostLevelingView[]> {
   const rows = await prisma.dreProductCostLeveling.findMany({
-    where: { organizationId },
+    where: {
+      organizationId,
+      ...(sku ? { sku: normalizeProductSku(sku) } : {}),
+    },
     orderBy: [{ sku: "asc" }, { startDate: "asc" }],
   });
   return rows.map(toView);
@@ -180,6 +196,12 @@ export async function createDreProductCostLeveling(
       unitCostNf: input.unitCostNf,
       purchaseCostWithSt: input.hasIcmsSt ? input.purchaseCostWithSt : null,
       ipiPercent: input.ipiPercent,
+      purchaseIcmsPercent: input.purchaseIcmsPercent,
+      extraCosts: input.extraCosts,
+      isMonophasic: input.isMonophasic,
+      saleIcmsPercent: input.saleIcmsPercent,
+      isImported: input.isImported,
+      pmaPrice: input.pmaPrice,
     },
   });
   return toView(row);
@@ -228,6 +250,12 @@ export async function updateDreProductCostLeveling(
       unitCostNf: input.unitCostNf,
       purchaseCostWithSt: input.hasIcmsSt ? input.purchaseCostWithSt : null,
       ipiPercent: input.ipiPercent,
+      purchaseIcmsPercent: input.purchaseIcmsPercent,
+      extraCosts: input.extraCosts,
+      isMonophasic: input.isMonophasic,
+      saleIcmsPercent: input.saleIcmsPercent,
+      isImported: input.isImported,
+      pmaPrice: input.pmaPrice,
     },
   });
   return toView(row);

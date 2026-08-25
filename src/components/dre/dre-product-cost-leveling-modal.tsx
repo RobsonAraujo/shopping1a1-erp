@@ -1,11 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
-import type { DateRange } from "react-day-picker";
 import {
-  CalendarIcon,
   Check,
   ChevronsUpDown,
   Pencil,
@@ -25,12 +21,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
 import { FormInput } from "@/components/ui/form-input";
-import {
-  localDateToYmd,
-  ymdToLocalDate,
-} from "@/components/ui/date-range-picker";
 import {
   Sheet,
   SheetBody,
@@ -40,15 +31,14 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Switch } from "@/components/ui/switch";
 import {
-  MaskedMoneyField,
-  MaskedPercentField,
-} from "@/components/financial-cost-input-fields";
+  DreProductCostLevelingFields,
+  type DreProductCostLevelingFormValues,
+} from "@/components/dre/dre-product-cost-leveling-fields";
+import { periodLabel, PeriodDateRangeField } from "@/components/dre/date-range-field";
 import { useApiResource } from "@/hooks/use-api-resource";
 import { readApiError } from "@/lib/api-client-error";
 import {
-  computeLevelingPricingCost,
   enumerateMonthsOverlappingDateRange,
   type DreProductCostLevelingView,
 } from "@/lib/dre/dre-product-cost-leveling-shared";
@@ -65,14 +55,10 @@ type DreProductCostLevelingModalProps = {
   onSyncAffectedMonths: (months: number[]) => void;
 };
 
-type FormState = {
+type FormState = DreProductCostLevelingFormValues & {
   sku: string;
   startDate: string;
   endDate: string;
-  hasIcmsSt: boolean;
-  unitCostNf: number | null;
-  purchaseCostWithSt: number | null;
-  ipiPercent: number | null;
 };
 
 function emptyForm(year: number): FormState {
@@ -84,6 +70,12 @@ function emptyForm(year: number): FormState {
     unitCostNf: null,
     purchaseCostWithSt: null,
     ipiPercent: 0,
+    purchaseIcmsPercent: null,
+    extraCosts: null,
+    isMonophasic: null,
+    saleIcmsPercent: null,
+    isImported: null,
+    pmaPrice: null,
   };
 }
 
@@ -96,136 +88,13 @@ function formFromItem(item: DreProductCostLevelingView): FormState {
     unitCostNf: item.unitCostNf,
     purchaseCostWithSt: item.purchaseCostWithSt,
     ipiPercent: item.ipiPercent,
+    purchaseIcmsPercent: item.purchaseIcmsPercent,
+    extraCosts: item.extraCosts,
+    isMonophasic: item.isMonophasic,
+    saleIcmsPercent: item.saleIcmsPercent,
+    isImported: item.isImported,
+    pmaPrice: item.pmaPrice,
   };
-}
-
-function periodLabel(startDate: string, endDate: string): string {
-  const from = ymdToLocalDate(startDate);
-  const to = ymdToLocalDate(endDate);
-  if (!from || !to) return `${startDate} – ${endDate}`;
-  if (startDate === endDate) {
-    return format(from, "dd MMM yyyy", { locale: ptBR });
-  }
-  return `${format(from, "dd MMM yyyy", { locale: ptBR })} – ${format(to, "dd MMM yyyy", { locale: ptBR })}`;
-}
-
-function PeriodDateRangeField({
-  startDate,
-  endDate,
-  onChange,
-  disabled,
-}: {
-  startDate: string;
-  endDate: string;
-  onChange: (startDate: string, endDate: string) => void;
-  disabled?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState<DateRange | undefined>();
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  function openPicker() {
-    setDraft({
-      from: ymdToLocalDate(startDate),
-      to: ymdToLocalDate(endDate),
-    });
-    setOpen(true);
-  }
-
-  function cancelPicker() {
-    setDraft(undefined);
-    setOpen(false);
-  }
-
-  function applyPicker() {
-    if (!draft?.from) return;
-    const from = localDateToYmd(draft.from);
-    const to = localDateToYmd(draft.to ?? draft.from);
-    onChange(from, to);
-    setDraft(undefined);
-    setOpen(false);
-  }
-
-  useEffect(() => {
-    if (!open) return;
-
-    function onPointerDown(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        cancelPicker();
-      }
-    }
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") cancelPicker();
-    }
-
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
-
-  const canApply = Boolean(draft?.from);
-
-  return (
-    <div ref={rootRef} className="space-y-1.5">
-      <label className="block text-xs font-medium text-[var(--muted-foreground)]">
-        Período
-      </label>
-      <Button
-        type="button"
-        variant="outline"
-        disabled={disabled}
-        className="h-10 w-full justify-start gap-2 font-normal"
-        onClick={() => {
-          if (open) cancelPicker();
-          else openPicker();
-        }}
-      >
-        <CalendarIcon className="size-4 shrink-0 opacity-70" aria-hidden />
-        <span className="truncate">{periodLabel(startDate, endDate)}</span>
-      </Button>
-      {open ? (
-        <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--popover)] shadow-sm">
-          <div className="p-2">
-            <Calendar
-              mode="range"
-              locale={ptBR}
-              defaultMonth={draft?.from ?? draft?.to ?? new Date()}
-              selected={draft}
-              onSelect={(range) => {
-                setDraft(range);
-              }}
-              numberOfMonths={1}
-              className="mx-auto"
-            />
-          </div>
-          <div className="flex justify-end gap-2 border-t border-[var(--border)] px-3 py-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 text-xs"
-              onClick={cancelPicker}
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              className="h-8 text-xs"
-              disabled={!canApply}
-              onClick={applyPicker}
-            >
-              Aplicar
-            </Button>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
 }
 
 function SkuComboboxField({
@@ -389,14 +258,22 @@ export function DreProductCostLevelingModal({
     endDate: string;
   } | null>(null);
 
+  type ProductSummary = {
+    sku: string;
+    unitCostNf: number;
+    hasIcmsSt: boolean;
+    purchaseCostWithSt: number | null;
+    ipiPercent: number;
+    purchaseIcmsPercent: number;
+    extraCosts: number;
+    isMonophasic: boolean;
+    saleIcmsPercent: number;
+    isImported: boolean;
+    pmaPrice: number | null;
+  };
+
   const productsResource = useApiResource<{
-    products: Array<{
-      sku: string;
-      unitCostNf: number;
-      hasIcmsSt: boolean;
-      purchaseCostWithSt: number | null;
-      ipiPercent: number;
-    }>;
+    products: ProductSummary[];
   }>("/api/products", { enabled: open, fallbackError: "products_load_failed" });
   const productSkus = useMemo(
     () =>
@@ -406,22 +283,9 @@ export function DreProductCostLevelingModal({
     [productsResource.data],
   );
   const productBySku = useMemo(() => {
-    const map = new Map<
-      string,
-      {
-        unitCostNf: number;
-        hasIcmsSt: boolean;
-        purchaseCostWithSt: number | null;
-        ipiPercent: number;
-      }
-    >();
+    const map = new Map<string, ProductSummary>();
     for (const product of productsResource.data?.products ?? []) {
-      map.set(product.sku, {
-        unitCostNf: product.unitCostNf,
-        hasIcmsSt: product.hasIcmsSt,
-        purchaseCostWithSt: product.purchaseCostWithSt,
-        ipiPercent: product.ipiPercent,
-      });
+      map.set(product.sku, product);
     }
     return map;
   }, [productsResource.data]);
@@ -437,51 +301,65 @@ export function DreProductCostLevelingModal({
             unitCostNf: product.unitCostNf,
             purchaseCostWithSt: product.purchaseCostWithSt,
             ipiPercent: product.ipiPercent,
+            purchaseIcmsPercent: product.purchaseIcmsPercent,
+            extraCosts: product.extraCosts,
+            isMonophasic: product.isMonophasic,
+            saleIcmsPercent: product.saleIcmsPercent,
+            isImported: product.isImported,
+            pmaPrice: product.pmaPrice,
           }
         : {}),
     }));
   }
 
-  const previewCost = useMemo(
-    () =>
-      computeLevelingPricingCost({
-        hasIcmsSt: form.hasIcmsSt,
-        unitCostNf: form.unitCostNf ?? 0,
-        purchaseCostWithSt: form.purchaseCostWithSt,
-        ipiPercent: form.ipiPercent ?? 0,
-      }),
-    [form],
-  );
-
-  const loadItems = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/dre/product-cost-leveling");
-      if (!res.ok) {
-        onError(await readApiError(res, "dre_product_cost_leveling_failed"));
+  const loadItems = useCallback(
+    async (sku: string) => {
+      if (!sku) {
+        setItems([]);
         return;
       }
-      const json = (await res.json()) as { items?: DreProductCostLevelingView[] };
-      setItems(json.items ?? []);
-      onError(null);
-    } catch {
-      onError("Falha de rede ao carregar nivelamentos.");
-    } finally {
-      setLoading(false);
-    }
-  }, [onError]);
+      setLoading(true);
+      try {
+        const res = await fetch(
+          `/api/dre/product-cost-leveling?sku=${encodeURIComponent(sku)}`,
+        );
+        if (!res.ok) {
+          onError(await readApiError(res, "dre_product_cost_leveling_failed"));
+          return;
+        }
+        const json = (await res.json()) as {
+          items?: DreProductCostLevelingView[];
+        };
+        setItems(json.items ?? []);
+        onError(null);
+      } catch {
+        onError("Falha de rede ao carregar nivelamentos.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [onError],
+  );
 
   useEffect(() => {
     if (!open) return;
     setEditingId(null);
     setForm(emptyForm(year));
     setPendingResync(null);
-    void loadItems();
-  }, [open, year, loadItems]);
+    setItems([]);
+  }, [open, year]);
 
+  useEffect(() => {
+    if (!open) return;
+    void loadItems(form.sku);
+  }, [open, form.sku, loadItems]);
+
+  // Mantém o SKU selecionado (só reseta os outros campos) — é o mesmo
+  // seletor que também filtra "Nivelamentos cadastrados" abaixo, então
+  // depois de salvar dá pra continuar cadastrando outro período do mesmo SKU.
   function resetForm() {
     setEditingId(null);
-    setForm(emptyForm(year));
+    setForm((f) => ({ ...emptyForm(year), sku: f.sku }));
   }
 
   async function save() {
@@ -508,6 +386,12 @@ export function DreProductCostLevelingModal({
       unitCostNf: form.unitCostNf ?? 0,
       purchaseCostWithSt: form.hasIcmsSt ? form.purchaseCostWithSt : null,
       ipiPercent: form.ipiPercent ?? 0,
+      purchaseIcmsPercent: form.purchaseIcmsPercent,
+      extraCosts: form.extraCosts,
+      isMonophasic: form.isMonophasic,
+      saleIcmsPercent: form.saleIcmsPercent,
+      isImported: form.isImported,
+      pmaPrice: form.pmaPrice,
     };
 
     setBusy(true);
@@ -532,7 +416,7 @@ export function DreProductCostLevelingModal({
         endDate: body.endDate,
       });
       resetForm();
-      await loadItems();
+      await loadItems(sku);
     } catch {
       onError("Falha de rede ao salvar nivelamento.");
     } finally {
@@ -559,7 +443,7 @@ export function DreProductCostLevelingModal({
       });
       if (editingId === pendingDelete.id) resetForm();
       setPendingDelete(null);
-      await loadItems();
+      await loadItems(form.sku);
     } catch {
       onError("Falha de rede ao excluir nivelamento.");
     } finally {
@@ -657,63 +541,11 @@ export function DreProductCostLevelingModal({
                 }
               />
 
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="dre-leveling-st"
-                  checked={form.hasIcmsSt}
-                  onCheckedChange={(checked) =>
-                    setForm((f) => ({ ...f, hasIcmsSt: checked }))
-                  }
-                  disabled={busy}
-                />
-                <label
-                  htmlFor="dre-leveling-st"
-                  className="text-sm text-[var(--foreground)]"
-                >
-                  ICMS-ST
-                </label>
-              </div>
-
-              {form.hasIcmsSt ? (
-                <MaskedMoneyField
-                  id="dre-leveling-st-cost"
-                  label="Custo de compra somado ICMS-ST"
-                  value={form.purchaseCostWithSt}
-                  onValueChange={(v) =>
-                    setForm((f) => ({ ...f, purchaseCostWithSt: v }))
-                  }
-                  readOnly={busy}
-                />
-              ) : (
-                <MaskedMoneyField
-                  id="dre-leveling-nf"
-                  label="Custo unitário NF"
-                  value={form.unitCostNf}
-                  onValueChange={(v) =>
-                    setForm((f) => ({ ...f, unitCostNf: v }))
-                  }
-                  readOnly={busy}
-                />
-              )}
-
-              <MaskedPercentField
-                id="dre-leveling-ipi"
-                label="IPI"
-                value={form.ipiPercent}
-                onValueChange={(v) =>
-                  setForm((f) => ({ ...f, ipiPercent: v }))
-                }
-                readOnly={busy}
+              <DreProductCostLevelingFields
+                form={form}
+                onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
+                busy={busy}
               />
-
-              <p className="text-xs text-[var(--muted-foreground)]">
-                Custo efetivo:{" "}
-                <span className="font-semibold text-[var(--foreground)]">
-                  {previewCost === null
-                    ? "—"
-                    : formatFinancialMoney(previewCost)}
-                </span>
-              </p>
 
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -745,13 +577,17 @@ export function DreProductCostLevelingModal({
               <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                 Nivelamentos cadastrados
               </p>
-              {loading ? (
+              {!form.sku ? (
+                <p className="text-sm text-[var(--muted-foreground)]">
+                  Selecione um SKU acima para ver os nivelamentos cadastrados.
+                </p>
+              ) : loading ? (
                 <p className="text-sm text-[var(--muted-foreground)]">
                   Carregando…
                 </p>
               ) : items.length === 0 ? (
                 <p className="text-sm text-[var(--muted-foreground)]">
-                  Nenhum nivelamento ainda.
+                  Nenhum nivelamento para este SKU ainda.
                 </p>
               ) : (
                 <ul className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)]">

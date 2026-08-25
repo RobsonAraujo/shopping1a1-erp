@@ -8,6 +8,7 @@ import {
   enumerateMonthsOverlappingDateRange,
   isValidDatePeriod,
   resolveLevelingCostForOrderDate,
+  type DreProductCostLevelingInput,
 } from "../dre-product-cost-leveling-shared";
 import type { ResolvedProductPricing } from "@/lib/product-pricing";
 
@@ -122,5 +123,26 @@ describe("dre-product-cost-leveling helpers", () => {
     ]);
     applyLevelingPricingToMap(pricingBySku, new Map([["SKU-A", 41]]));
     assert.equal(pricingBySku.get("SKU-A")?.pricingCost, 41);
+  });
+
+  it("ignores the expanded product-history fields when computing pricing cost", () => {
+    // Os campos extras (item 3) são só histórico — não devem mudar o custo
+    // efetivo do nivelamento, que continua vindo só de custo/ICMS-ST/IPI.
+    const withExtras: DreProductCostLevelingInput = {
+      sku: "SKU-A",
+      startDate: "2026-01-01",
+      endDate: "2026-01-31",
+      hasIcmsSt: false,
+      unitCostNf: 41,
+      purchaseCostWithSt: null,
+      ipiPercent: 0,
+      purchaseIcmsPercent: 18,
+      extraCosts: 999,
+      isMonophasic: true,
+      saleIcmsPercent: 12,
+      isImported: true,
+      pmaPrice: 500,
+    };
+    assert.equal(computeLevelingPricingCost(withExtras), 41);
   });
 });

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import {
   buildProductView,
+  diffLevelableProductFields,
   ensureCompanySettings,
   productPatchToPrismaData,
   validateProductInput,
@@ -86,17 +87,38 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 
   try {
+    const before = await prisma.product.findUnique({
+      where: { organizationId_sku: { organizationId, sku } },
+    });
+    if (!before) {
+      return NextResponse.json({ error: "Product not found" }, { status: 404 });
+    }
+
     const settings = await ensureCompanySettings(organizationId);
     const data = productPatchToPrismaData(parsed);
     const product = await prisma.product.update({
       where: { organizationId_sku: { organizationId, sku } },
       data,
     });
+
+    const { changedFields, previousValues } = diffLevelableProductFields(
+      before,
+      parsed,
+    );
+
     return NextResponse.json({
       product: buildProductView(product, settings.pisCofinsPercent, undefined, {
         taxRegime: settings.taxRegime,
         simplesAliquotaEfetivaPercent: settings.simplesAliquotaEfetivaPercent,
       }),
+      levelingSuggestion:
+        changedFields.length > 0
+          ? {
+              changedFields,
+              previousValues,
+              productCreatedAt: product.createdAt.toISOString(),
+            }
+          : null,
     });
   } catch (e) {
     logServerError("api/products/[sku] PATCH", e);

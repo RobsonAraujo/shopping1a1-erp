@@ -393,3 +393,123 @@ export function productPatchToPrismaData(
   if (input.pmaPrice !== undefined) data.pmaPrice = input.pmaPrice ?? null;
   return data;
 }
+
+/**
+ * Campos do produto cobertos pelo nivelamento de custo do DRE (todos exceto
+ * NCM, que é classificação fiscal fixa e não varia no tempo).
+ */
+export type LevelableProductValues = {
+  hasIcmsSt: boolean;
+  unitCostNf: number;
+  purchaseCostWithSt: number | null;
+  ipiPercent: number;
+  purchaseIcmsPercent: number;
+  extraCosts: number;
+  isMonophasic: boolean;
+  saleIcmsPercent: number;
+  isImported: boolean;
+  pmaPrice: number | null;
+};
+
+export type LevelableProductFieldKey = keyof LevelableProductValues;
+
+function amountsMatch(a: number, b: number): boolean {
+  return Math.abs(a - b) < 0.000_001;
+}
+
+function toLevelableValues(product: Product): LevelableProductValues {
+  return {
+    hasIcmsSt: product.hasIcmsSt,
+    unitCostNf: decimalToNumber(product.unitCostNf) ?? 0,
+    purchaseCostWithSt: decimalToNumber(product.purchaseCostWithSt),
+    ipiPercent: decimalToNumber(product.ipiPercent) ?? 0,
+    purchaseIcmsPercent: decimalToNumber(product.purchaseIcmsPercent) ?? 0,
+    extraCosts: decimalToNumber(product.extraCosts) ?? 0,
+    isMonophasic: product.isMonophasic,
+    saleIcmsPercent: decimalToNumber(product.saleIcmsPercent) ?? 0,
+    isImported: product.isImported,
+    pmaPrice: decimalToNumber(product.pmaPrice),
+  };
+}
+
+/**
+ * Compara o estado anterior do produto (antes do PATCH) com a edição
+ * validada e retorna quais campos niveláveis mudaram de fato — só os que
+ * vieram no payload (regime Simples Nacional omite os fiscais de Lucro
+ * Real; omitido = preservado no banco, não é "mudança"). `previousValues`
+ * traz o snapshot completo de antes (não só os campos que mudaram), pra
+ * pré-preencher um nivelamento cobrindo o período anterior à edição.
+ */
+export function diffLevelableProductFields(
+  before: Product,
+  input: ProductWriteInput,
+): {
+  changedFields: LevelableProductFieldKey[];
+  previousValues: LevelableProductValues;
+} {
+  const previousValues = toLevelableValues(before);
+  const changedFields: LevelableProductFieldKey[] = [];
+
+  if (!amountsMatch(input.unitCostNf, previousValues.unitCostNf)) {
+    changedFields.push("unitCostNf");
+  }
+  if (!amountsMatch(input.extraCosts, previousValues.extraCosts)) {
+    changedFields.push("extraCosts");
+  }
+  if (
+    input.purchaseIcmsPercent !== undefined &&
+    !amountsMatch(input.purchaseIcmsPercent, previousValues.purchaseIcmsPercent)
+  ) {
+    changedFields.push("purchaseIcmsPercent");
+  }
+  // hasIcmsSt/purchaseCostWithSt sempre andam juntos — mesma convenção de
+  // `productPatchToPrismaData` (purchaseCostWithSt só é gravado quando
+  // hasIcmsSt vem no payload).
+  if (input.hasIcmsSt !== undefined) {
+    const nextPurchaseCostWithSt = input.hasIcmsSt
+      ? (input.purchaseCostWithSt ?? null)
+      : null;
+    if (input.hasIcmsSt !== previousValues.hasIcmsSt) {
+      changedFields.push("hasIcmsSt");
+    }
+    const costChanged =
+      nextPurchaseCostWithSt === null || previousValues.purchaseCostWithSt === null
+        ? nextPurchaseCostWithSt !== previousValues.purchaseCostWithSt
+        : !amountsMatch(nextPurchaseCostWithSt, previousValues.purchaseCostWithSt);
+    if (costChanged) changedFields.push("purchaseCostWithSt");
+  }
+  if (
+    input.ipiPercent !== undefined &&
+    !amountsMatch(input.ipiPercent, previousValues.ipiPercent)
+  ) {
+    changedFields.push("ipiPercent");
+  }
+  if (
+    input.isMonophasic !== undefined &&
+    input.isMonophasic !== previousValues.isMonophasic
+  ) {
+    changedFields.push("isMonophasic");
+  }
+  if (
+    input.isImported !== undefined &&
+    input.isImported !== previousValues.isImported
+  ) {
+    changedFields.push("isImported");
+  }
+  if (
+    input.saleIcmsPercent !== undefined &&
+    !amountsMatch(input.saleIcmsPercent, previousValues.saleIcmsPercent)
+  ) {
+    changedFields.push("saleIcmsPercent");
+  }
+  if (input.pmaPrice !== undefined) {
+    const nextPma = input.pmaPrice ?? null;
+    const pmaChanged =
+      nextPma === null || previousValues.pmaPrice === null
+        ? nextPma !== previousValues.pmaPrice
+        : !amountsMatch(nextPma, previousValues.pmaPrice);
+    if (pmaChanged) changedFields.push("pmaPrice");
+  }
+
+  return { changedFields, previousValues };
+}

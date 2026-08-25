@@ -19,6 +19,12 @@ const levelingBodySchema = z.object({
   unitCostNf: z.number().finite().nonnegative(),
   purchaseCostWithSt: z.number().finite().nonnegative().nullable(),
   ipiPercent: z.number().finite().min(0).max(100),
+  purchaseIcmsPercent: z.number().finite().min(0).max(100).nullable().default(null),
+  extraCosts: z.number().finite().nonnegative().nullable().default(null),
+  isMonophasic: z.boolean().nullable().default(null),
+  saleIcmsPercent: z.number().finite().min(0).max(100).nullable().default(null),
+  isImported: z.boolean().nullable().default(null),
+  pmaPrice: z.number().finite().positive().nullable().default(null),
 });
 
 function levelingErrorResponse(e: DreProductCostLevelingError) {
@@ -33,14 +39,19 @@ function levelingErrorResponse(e: DreProductCostLevelingError) {
   return NextResponse.json({ error: e.code, message: e.message }, { status });
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const auth = await requireOrganization();
   if (!auth.ok) {
     return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
 
+  const sku = request.nextUrl.searchParams.get("sku")?.trim() || undefined;
+
   try {
-    const items = await listDreProductCostLevelings(auth.ctx.organizationId);
+    const items = await listDreProductCostLevelings(
+      auth.ctx.organizationId,
+      sku,
+    );
     return NextResponse.json({ items });
   } catch (e) {
     logServerError("api/dre/product-cost-leveling GET", e);

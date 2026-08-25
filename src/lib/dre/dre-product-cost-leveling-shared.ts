@@ -14,6 +14,16 @@ export type DreProductCostLevelingInput = {
   unitCostNf: number;
   purchaseCostWithSt: number | null;
   ipiPercent: number;
+  /**
+   * Histórico completo do cadastro do produto (exceto NCM, fixo no tempo).
+   * Não entram no cálculo do DRE hoje — só persistidos/exibidos.
+   */
+  purchaseIcmsPercent: number | null;
+  extraCosts: number | null;
+  isMonophasic: boolean | null;
+  saleIcmsPercent: number | null;
+  isImported: boolean | null;
+  pmaPrice: number | null;
 };
 
 export type DreProductCostLevelingView = DreProductCostLevelingInput & {

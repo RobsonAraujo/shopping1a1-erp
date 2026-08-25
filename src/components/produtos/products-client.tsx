@@ -17,6 +17,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { ProductsTable } from "@/components/produtos/products-table";
+import { ProductLevelingSuggestionSheet } from "@/components/produtos/product-leveling-suggestion-sheet";
+import type { DreProductCostLevelingFormValues } from "@/components/dre/dre-product-cost-leveling-fields";
 import { UserFeedback } from "@/components/ui/user-feedback";
 import type { ProductSortKey } from "@/components/produtos/products-table/types";
 import { useTableSort } from "@/hooks/use-table-sort";
@@ -323,12 +325,18 @@ function ProductFormModal({
   taxRegime,
   onClose,
   onSaved,
+  onLevelingSuggested,
 }: {
   initial: ProductFormState;
   title: string;
   taxRegime: TaxRegime;
   onClose: () => void;
   onSaved: () => void;
+  onLevelingSuggested?: (suggestion: {
+    sku: string;
+    previousValues: DreProductCostLevelingFormValues;
+    productCreatedAt: string;
+  }) => void;
 }) {
   const [form, setForm] = useState(initial);
   const [saving, setSaving] = useState(false);
@@ -369,6 +377,21 @@ function ProductFormModal({
           await readApiError(res, isEdit ? "product_update_failed" : "product_create_failed"),
         );
         return;
+      }
+      if (isEdit) {
+        const json = (await res.json()) as {
+          levelingSuggestion?: {
+            previousValues: DreProductCostLevelingFormValues;
+            productCreatedAt: string;
+          } | null;
+        };
+        if (json.levelingSuggestion) {
+          onLevelingSuggested?.({
+            sku: form.sku,
+            previousValues: json.levelingSuggestion.previousValues,
+            productCreatedAt: json.levelingSuggestion.productCreatedAt,
+          });
+        }
       }
       onSaved();
       onClose();
@@ -541,6 +564,11 @@ export function ProductsClient() {
   const [importing, setImporting] = useState(false);
   const [kitsModalOpen, setKitsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [levelingSuggestion, setLevelingSuggestion] = useState<{
+    sku: string;
+    previousValues: DreProductCostLevelingFormValues;
+    productCreatedAt: string;
+  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -814,6 +842,16 @@ export function ProductsClient() {
           taxRegime={data?.taxRegime ?? "LUCRO_REAL"}
           onClose={() => setModal(null)}
           onSaved={() => void load()}
+          onLevelingSuggested={setLevelingSuggestion}
+        />
+      ) : null}
+
+      {levelingSuggestion ? (
+        <ProductLevelingSuggestionSheet
+          sku={levelingSuggestion.sku}
+          previousValues={levelingSuggestion.previousValues}
+          productCreatedAt={levelingSuggestion.productCreatedAt}
+          onClose={() => setLevelingSuggestion(null)}
         />
       ) : null}
     </div>

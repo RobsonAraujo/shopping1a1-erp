@@ -12,7 +12,6 @@ import { loadDreYearView } from "@/lib/dre/dre-year-data";
 import { requireOrganization } from "@/lib/api-auth";
 import { parseJsonBody } from "@/lib/api-validation";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { isFutureCalendarMonth } from "@/lib/mercadolibre/revenue-periods";
 
 const linePatchSchema = z
   .object({
@@ -46,13 +45,6 @@ export async function PATCH(request: NextRequest) {
   const parsedBody = await parseJsonBody(request, linePatchSchema);
   if (!parsedBody.ok) return parsedBody.response;
   const { year, month, lineKey, action, amount } = parsedBody.data;
-
-  if (isFutureCalendarMonth(year, month)) {
-    return NextResponse.json(
-      { error: "Não é possível editar meses futuros." },
-      { status: 400 },
-    );
-  }
 
   try {
     if (action === "restore") {

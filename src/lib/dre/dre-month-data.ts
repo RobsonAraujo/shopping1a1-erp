@@ -1665,5 +1665,6 @@ export function parseSnapshotPayload(raw: unknown): DreMonthSnapshotPayload | nu
     syncedLineBaseline,
     syncedBreakdownBaseline,
     manuallyEditedLineKeys,
+    hasRealSyncBaseline: Boolean(p.hasRealSyncBaseline),
   };
 }

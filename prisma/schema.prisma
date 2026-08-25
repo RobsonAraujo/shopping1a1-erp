@@ -646,6 +646,16 @@ model DreProductCostLeveling {
   unitCostNf         Decimal  @map("unit_cost_nf") @db.Decimal(18, 2)
   purchaseCostWithSt Decimal? @map("purchase_cost_with_st") @db.Decimal(18, 2)
   ipiPercent         Decimal  @default(0) @map("ipi_percent") @db.Decimal(8, 4)
+  /// Campos abaixo: histórico completo do cadastro do produto (exceto NCM,
+  /// que não varia no tempo). Nullable = "não informado" em registros
+  /// antigos. Não usados no cálculo do DRE hoje (só custo/ICMS-ST/IPI acima
+  /// são usados) — persistidos para uso futuro de Margem/Relatório Tributário.
+  purchaseIcmsPercent Decimal? @map("purchase_icms_percent") @db.Decimal(8, 4)
+  extraCosts          Decimal? @map("extra_costs") @db.Decimal(18, 2)
+  isMonophasic        Boolean? @map("is_monophasic")
+  saleIcmsPercent     Decimal? @map("sale_icms_percent") @db.Decimal(8, 4)
+  isImported          Boolean? @map("is_imported")
+  pmaPrice            Decimal? @map("pma_price") @db.Decimal(18, 2)
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
