@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PlanningInfoTrigger } from "@/components/planning-info-trigger";
+import { ProductThumbnail } from "@/components/produtos/product-thumbnail";
 import { itemListSearchEmptyMessage } from "@/components/item-list-search";
 import { formatFinancialMoney, formatFinancialPercent } from "@/lib/financial-margin";
 import type { ProductsTableProps } from "@/components/produtos/products-table/types";
@@ -53,13 +54,16 @@ export function ProductsTableMobile({
         <li key={product.sku}>
           <Card className="p-4 shadow-sm">
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-[var(--foreground)]">
-                  {product.sku}
-                </p>
-                <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-                  NCM {product.ncm ?? "—"}
-                </p>
+              <div className="flex min-w-0 items-start gap-2.5">
+                <ProductThumbnail src={product.imageUrl} alt={product.sku} size={44} />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-[var(--foreground)]">
+                    {product.sku}
+                  </p>
+                  <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                    NCM {product.ncm ?? "—"}
+                  </p>
+                </div>
               </div>
               <div className="flex shrink-0 gap-1">
                 <Button

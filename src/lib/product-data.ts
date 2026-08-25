@@ -24,6 +24,7 @@ import {
 } from "@/lib/inventory/inventory-stock-report";
 import type { CompanyTaxSettings, Product } from "@/generated/prisma/client";
 import { Prisma } from "@/generated/prisma/client";
+import { toMlListingThumbnailUrl } from "@/lib/mercadolibre/item-image";
 
 function decimalToNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null;
@@ -59,6 +60,8 @@ export type ProductView = ProductRecordForPricing & {
   pmaPrice: number | null;
   createdAt: string;
   updatedAt: string;
+  /** Thumbnail do anúncio ML (snapshot em `Listing.imageUrlSnapshot`) — null se nenhum anúncio com esse SKU foi sincronizado ainda. */
+  imageUrl: string | null;
 };
 
 export function buildProductView(
@@ -69,6 +72,7 @@ export function buildProductView(
     taxRegime: CompanySettings["taxRegime"];
     simplesAliquotaEfetivaPercent: number | null;
   },
+  imageUrl: string | null = null,
 ): ProductView {
   const record = productToPricingRecord(product);
   const resolved = resolveProductPricing(record, pisCofinsPercent);
@@ -89,7 +93,49 @@ export function buildProductView(
     pmaPrice: decimalToNumber(product.pmaPrice),
     createdAt: product.createdAt.toISOString(),
     updatedAt: product.updatedAt.toISOString(),
+    imageUrl,
   };
+}
+
+/**
+ * Uma imagem por SKU — a do anúncio sincronizado mais recentemente entre os
+ * que compartilham esse `skuSnapshot`. Sem resolução de alias por ora (mesma
+ * regra simples já usada no relatório de concorrência de catálogo).
+ */
+export async function loadListingImageUrlsBySku(
+  organizationId: string,
+  skus?: string[],
+): Promise<Map<string, string>> {
+  const normalized = skus
+    ? [...new Set(skus.map((s) => s.trim()).filter(Boolean))]
+    : undefined;
+  if (normalized && normalized.length === 0) return new Map();
+
+  const listings = await prisma.listing.findMany({
+    where: {
+      organizationId,
+      ...(normalized ? { skuSnapshot: { in: normalized } } : {}),
+      imageUrlSnapshot: { not: null },
+    },
+    select: { skuSnapshot: true, imageUrlSnapshot: true },
+    orderBy: { lastSyncedAt: { sort: "desc", nulls: "last" } },
+  });
+
+  const bySku = new Map<string, string>();
+  for (const listing of listings) {
+    if (!listing.skuSnapshot || !listing.imageUrlSnapshot) continue;
+    if (bySku.has(listing.skuSnapshot)) continue;
+    bySku.set(listing.skuSnapshot, toMlListingThumbnailUrl(listing.imageUrlSnapshot));
+  }
+  return bySku;
+}
+
+export async function listingImageUrlForSku(
+  organizationId: string,
+  sku: string,
+): Promise<string | null> {
+  const bySku = await loadListingImageUrlsBySku(organizationId, [sku]);
+  return bySku.get(sku) ?? null;
 }
 
 export type CompanySettings = {

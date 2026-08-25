@@ -4,6 +4,8 @@ import { prisma } from "@/lib/db";
 import {
   buildProductView,
   ensureCompanySettings,
+  listingImageUrlForSku,
+  loadListingImageUrlsBySku,
   productWriteToPrismaData,
   validateProductInput,
 } from "@/lib/product-data";
@@ -40,6 +42,10 @@ export async function GET() {
       prisma.product.findMany({ where: { organizationId }, orderBy: { sku: "asc" } }),
       loadProductTaxFromLatestReport(userId),
     ]);
+    const imageUrlsBySku = await loadListingImageUrlsBySku(
+      organizationId,
+      products.map((p) => p.sku),
+    );
     const companyTaxContext = {
       taxRegime: settings.taxRegime,
       simplesAliquotaEfetivaPercent: settings.simplesAliquotaEfetivaPercent,
@@ -50,7 +56,13 @@ export async function GET() {
       simplesAliquotaEfetivaPercent: settings.simplesAliquotaEfetivaPercent,
       taxReportGeneratedAt: taxFromReport.generatedAt,
       products: products.map((p) =>
-        buildProductView(p, settings.pisCofinsPercent, taxFromReport, companyTaxContext),
+        buildProductView(
+          p,
+          settings.pisCofinsPercent,
+          taxFromReport,
+          companyTaxContext,
+          imageUrlsBySku.get(p.sku) ?? null,
+        ),
       ),
     });
   } catch (e) {
@@ -81,11 +93,18 @@ export async function POST(request: NextRequest) {
     const settings = await ensureCompanySettings(organizationId);
     const data = productWriteToPrismaData(organizationId, parsed);
     const product = await prisma.product.create({ data });
+    const imageUrl = await listingImageUrlForSku(organizationId, product.sku);
     return NextResponse.json({
-      product: buildProductView(product, settings.pisCofinsPercent, undefined, {
-        taxRegime: settings.taxRegime,
-        simplesAliquotaEfetivaPercent: settings.simplesAliquotaEfetivaPercent,
-      }),
+      product: buildProductView(
+        product,
+        settings.pisCofinsPercent,
+        undefined,
+        {
+          taxRegime: settings.taxRegime,
+          simplesAliquotaEfetivaPercent: settings.simplesAliquotaEfetivaPercent,
+        },
+        imageUrl,
+      ),
     });
   } catch (e) {
     logServerError("api/products POST", e);

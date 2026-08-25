@@ -190,6 +190,17 @@ Plano de execução detalhado (arquivos e código concretos): ver plano de imple
 
 Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templates/feature-saas-impact.md).
 
+### Thumbnail de produto na lista Meus Produtos — 2026-08-25
+
+- **Tabelas novas/alteradas:** nenhuma (lê `Listing.imageUrlSnapshot` já existente)
+- **Precisa `organizationId`?** sim — `loadListingImageUrlsBySku` filtra listings da org
+- **APIs afetadas:** `GET/POST /api/products`, `GET/PATCH /api/products/[sku]` (campo `imageUrl` no `ProductView`)
+- **Assume singleton?** não
+- **Cron/background:** nenhum (imagem vem do snapshot já sincronizado dos anúncios)
+- **Dados globais vs por org:** por org
+- **Código já tenant-ready?** sim
+- **Ação futura na migração:** nenhuma
+
 ### DRE: sync paralelo, timeout por chamada e cancelamento pelo usuário — 2026-08-24
 
 - **Tabelas novas/alteradas:** nenhuma

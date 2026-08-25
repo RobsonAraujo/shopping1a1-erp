@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PlanningInfoTrigger } from "@/components/planning-info-trigger";
+import { ProductThumbnail } from "@/components/produtos/product-thumbnail";
 import { itemListSearchEmptyMessage } from "@/components/item-list-search";
 import { SortableTh } from "@/components/ui/sortable-th";
 import { formatFinancialMoney, formatFinancialPercent } from "@/lib/financial-margin";
@@ -95,7 +96,12 @@ export function ProductsTableDesktop({
                   key={product.sku}
                   className="border-t border-[var(--border)] transition-colors hover:bg-[var(--muted)]/25"
                 >
-                  <td className="px-4 py-3 font-medium">{product.sku}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2.5">
+                      <ProductThumbnail src={product.imageUrl} alt={product.sku} size={40} />
+                      <span className="font-medium">{product.sku}</span>
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-[var(--muted-foreground)]">
                     {product.ncm ?? "—"}
                   </td>

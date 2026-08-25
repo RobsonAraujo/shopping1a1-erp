@@ -5,6 +5,7 @@ import {
   buildProductView,
   diffLevelableProductFields,
   ensureCompanySettings,
+  listingImageUrlForSku,
   productPatchToPrismaData,
   validateProductInput,
 } from "@/lib/product-data";
@@ -53,8 +54,15 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       taxRegime: settings.taxRegime,
       simplesAliquotaEfetivaPercent: settings.simplesAliquotaEfetivaPercent,
     };
+    const imageUrl = await listingImageUrlForSku(organizationId, sku);
     return NextResponse.json({
-      product: buildProductView(product, settings.pisCofinsPercent, undefined, companyTaxContext),
+      product: buildProductView(
+        product,
+        settings.pisCofinsPercent,
+        undefined,
+        companyTaxContext,
+        imageUrl,
+      ),
       pisCofinsPercent: settings.pisCofinsPercent,
       taxRegime: settings.taxRegime,
       aliases,
@@ -106,11 +114,18 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       parsed,
     );
 
+    const imageUrl = await listingImageUrlForSku(organizationId, sku);
     return NextResponse.json({
-      product: buildProductView(product, settings.pisCofinsPercent, undefined, {
-        taxRegime: settings.taxRegime,
-        simplesAliquotaEfetivaPercent: settings.simplesAliquotaEfetivaPercent,
-      }),
+      product: buildProductView(
+        product,
+        settings.pisCofinsPercent,
+        undefined,
+        {
+          taxRegime: settings.taxRegime,
+          simplesAliquotaEfetivaPercent: settings.simplesAliquotaEfetivaPercent,
+        },
+        imageUrl,
+      ),
       levelingSuggestion:
         changedFields.length > 0
           ? {

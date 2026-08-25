@@ -12,3 +12,18 @@ export function bestItemImageUrl(item: ItemBody): string | undefined {
   if (item.secure_thumbnail) return item.secure_thumbnail;
   return item.thumbnail;
 }
+
+/**
+ * Troca o sufixo de tamanho da ML (-O/-F/-G/-D/-2X) por -I (~500px).
+ * Thumbs de tabela não precisam da original; o optimizer do next/image ainda
+ * reduz para o `sizes` da coluna.
+ */
+export function toMlListingThumbnailUrl(url: string): string {
+  try {
+    const hostname = new URL(url).hostname;
+    if (!hostname.endsWith("mlstatic.com")) return url;
+  } catch {
+    return url;
+  }
+  return url.replace(/-(O|F|G|D|2X)(\.(?:jpe?g|webp|png))(?=$|\?)/i, "-I$2");
+}
