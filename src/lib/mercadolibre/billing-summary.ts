@@ -15,6 +15,7 @@ import {
   listBillingMergeDivergences,
   mergeBillingLines,
   preferCompleteBillingAmount,
+  type MlBillingDetailEntry,
   type MlDetailsAggregation,
 } from "./billing-details";
 import { getMercadoLibreConfig } from "./config";
@@ -52,6 +53,8 @@ export type MlBillingMonthResult = MlBillingDreLines & {
   source: "billing";
   detailsUsed: boolean;
   detailsAggregation: MlDetailsAggregation | null;
+  /** Lançamentos brutos do /details desta key — reuso no corte civil sem re-paginar. */
+  detailEntries: MlBillingDetailEntry[];
   /** Diferenças summary vs details (já resolvidas pelo merge mais completo). */
   mergeWarnings: string[];
 };
@@ -330,6 +333,7 @@ export async function fetchMlBillingSummaryForMonth(
     source: "billing",
     detailsUsed,
     detailsAggregation,
+    detailEntries,
     mergeWarnings,
   };
 }

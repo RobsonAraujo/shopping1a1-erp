@@ -91,6 +91,7 @@ describe("aggregateMlBillingDetails", () => {
     assert.equal(agg.adsCost, 3143.3);
     assert.equal(agg.affiliateFeeMl, -93.73);
     assert.equal(agg.minhaPaginaMl, -99);
+    assert.deepEqual(agg.cancelledOrderIds, []);
     const saleFeeRows = agg.lineBreakdowns.saleFeeMl ?? [];
     assert.equal(saleFeeRows.length, 2);
     assert.equal(
@@ -101,6 +102,72 @@ describe("aggregateMlBillingDetails", () => {
       saleFeeRows.find((row) => row.title === "Bonificação tarifa")?.amount,
       609.52,
     );
+  });
+
+  it("collects order ids from CXC / cancelled billing lines", () => {
+    const agg = aggregateMlBillingDetails([
+      {
+        charge_info: {
+          detail_amount: 100,
+          detail_type: "CHARGE",
+          detail_sub_type: "CXC",
+          transaction_detail: "Venda cancelada",
+        },
+        order_id: 111,
+        sales_info: [{ order_id: 222, transaction_amount: 100 }],
+      },
+      {
+        charge_info: {
+          detail_amount: 50,
+          detail_type: "CHARGE",
+          detail_sub_type: "CXC",
+          transaction_detail: "Venda cancelada",
+        },
+        sales_info: [{ order_id: 111, transaction_amount: 50 }],
+      },
+      {
+        charge_info: {
+          detail_amount: 30,
+          detail_type: "CHARGE",
+          detail_sub_type: "CVVML",
+          transaction_detail: "Tarifa ML",
+        },
+        order_id: 999,
+      },
+    ]);
+
+    assert.equal(agg.cancelledSalesMl, -150);
+    assert.deepEqual([...agg.cancelledOrderIds].sort(), ["111", "222"]);
+  });
+
+  it("collects return-fee order ids (devolvidas still paid) and items_info ids", () => {
+    const agg = aggregateMlBillingDetails([
+      {
+        charge_info: {
+          detail_amount: 11.36,
+          detail_type: "CHARGE",
+          detail_sub_type: "CDSDB",
+          transaction_detail: "Tarifa pela devolução",
+        },
+        sales_info: [{ order_id: "200001111", transaction_amount: 80 }],
+        items_info: [{ item_id: "MLB1", item_amount: 1, order_id: 200001222 }],
+        shipping_info: { pack_id: "2000013274412025" },
+      },
+      {
+        charge_info: {
+          detail_amount: 4.12,
+          detail_type: "BONUS",
+          detail_sub_type: "BVVML",
+          transaction_detail: "Cancelamento do Custo por vender no Mercado Livre",
+        },
+        sales_info: [{ order_id: 999999, transaction_amount: 47.6 }],
+      },
+    ]);
+
+    assert.ok(agg.cancelledOrderIds.includes("200001111"));
+    assert.ok(agg.cancelledOrderIds.includes("200001222"));
+    assert.ok(agg.cancelledOrderIds.includes("2000013274412025"));
+    assert.equal(agg.cancelledOrderIds.includes("999999"), false);
   });
 });
 
@@ -152,6 +219,7 @@ describe("mergeBillingLines", () => {
         chargeCount: 10,
         bySubType: {},
         byLabel: {},
+        cancelledOrderIds: [],
         lineBreakdowns: {},
       },
       {
@@ -199,6 +267,7 @@ describe("mergeBillingLines", () => {
         chargeCount: 1950,
         bySubType: {},
         byLabel: {},
+        cancelledOrderIds: [],
         lineBreakdowns: {},
       },
       {

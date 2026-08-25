@@ -134,6 +134,11 @@ export type OrderSearchOrder = {
   status?: string;
   date_closed?: string;
   date_created?: string;
+  pack_id?: number | string | null;
+  /** Ex.: `delivered`, `not_delivered`, `paid`. Devolução pós-entrega costuma ficar `paid` + `delivered`. */
+  tags?: string[];
+  payments?: Array<{ status?: string; status_detail?: string }>;
+  order_request?: { return?: unknown; change?: unknown };
   order_items?: OrderSearchOrderItem[];
   shipping?: { id?: number };
 };

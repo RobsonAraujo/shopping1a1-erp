@@ -234,6 +234,17 @@ Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templ
 - **Código já tenant-ready?** sim
 - **Ação futura na migração:** nenhuma
 
+### DRE: Custo produto/Imposto ML excluem devolvidas da fatura CXC — 2026-08-25
+
+- **Tabelas novas/alteradas:** nenhuma
+- **Precisa `organizationId`?** sim — mesmo sync/snapshot por org
+- **APIs afetadas:** `POST /api/dre/sync` (mesma rota); usa `order_id` já presente em `/group/ML/details`
+- **Assume singleton?** não
+- **Cron/background:** nenhum
+- **Dados globais vs por org:** por org
+- **Código já tenant-ready?** sim
+- **Ação futura na migração:** nenhuma
+
 ### DRE: auditoria da fatura no sync e reset do breakdown — 2026-08-24
 
 - **Tabelas novas/alteradas:** nenhuma (JSON do `dre_month_snapshots.payload`: `syncedBreakdownBaseline` + breakdowns preenchidos no sync da API)

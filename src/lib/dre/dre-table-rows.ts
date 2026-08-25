@@ -187,7 +187,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     indent: true,
     lineKey: "productCostErp",
     methodology:
-      "Para cada pedido pago no mês: quantidade vendida × custo unitário do produto (custo de compra, já com ST quando aplicável, + IPI), conforme cadastro de produtos do ERP — ou o custo nivelado no DRE quando houver nivelamento para o SKU na data do pedido — sem incluir custos extras. Somado para todos os pedidos do mês (inclui o custo dos itens de kits, quando aplicável).",
+      "Para cada pedido pago no mês que não está na linha Canceladas / devolvidas da fatura: quantidade vendida × custo unitário do produto (custo de compra, já com ST quando aplicável, + IPI), conforme cadastro de produtos do ERP — ou o custo nivelado no DRE quando houver nivelamento para o SKU na data do pedido — sem incluir custos extras. Pedidos só cancelados (status cancelled) e pedidos pagos cujo order_id aparece como CXC na fatura (devolvidas) ficam de fora da soma.",
   },
   {
     type: "static",
@@ -198,7 +198,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     indent: true,
     lineKey: "taxErp",
     methodology:
-      "Para cada pedido pago no mês: valor de venda × % de imposto (ICMS/ST) apurado no relatório tributário do produto naquele mês. Somado para todos os pedidos do mês.",
+      "Para cada pedido pago no mês que não está na linha Canceladas / devolvidas da fatura: valor de venda × % de imposto (ICMS/ST) apurado no relatório tributário do produto naquele mês. Pedidos cancelados e devolvidas ligadas à fatura (mesmo critério do Custo produto) ficam de fora da soma.",
   },
   {
     type: "static",

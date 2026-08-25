@@ -639,8 +639,8 @@ export function computeDreTotals(
  * a linha de canceladas nos custos variáveis para abater o resultado.
  *
  * Custo produto e Imposto ML NÃO são ajustados aqui: o cálculo base já exclui
- * pedidos cancelados corretamente (nenhum produto foi de fato enviado), então
- * não há custo/imposto a neutralizar — diferente da receita, que precisa da
+ * pedidos cancelados e devolvidas ligadas à fatura CXC, então não há
+ * custo/imposto a neutralizar — diferente da receita, que precisa da
  * linha `cancelledSalesMl` para abater o valor bruto incluído acima.
  */
 export function applyDreIncludeCancelledView(

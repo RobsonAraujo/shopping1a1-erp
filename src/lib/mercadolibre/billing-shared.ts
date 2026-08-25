@@ -222,7 +222,7 @@ export function classifyMlBillingEntry(
   // cair como "unmapped".
   if (isFullChargeLabel(label)) return "fullShipping";
 
-  if (type === "CXC" || /cancel|cancelad|anulad/.test(label)) {
+  if (type === "CXC" || /venda(s)? cancelad/.test(label)) {
     return "cancelled";
   }
 

@@ -211,7 +211,73 @@ export type PaidOrderLine = {
   revenue: number;
   /** Data do pedido em YYYY-MM-DD (date_closed/date_created conforme janela). */
   orderDateYmd?: string | null;
+  orderId?: string | null;
+  packId?: string | null;
 };
+
+function identityKey(value: unknown): string | null {
+  if (value == null) return null;
+  const s = String(value).trim();
+  if (!s || s === "undefined" || s === "null" || s === "NaN") return null;
+  return s;
+}
+
+export function orderIdentityKeys(order: OrderSearchOrder): string[] {
+  const keys: string[] = [];
+  const add = (value: unknown) => {
+    const key = identityKey(value);
+    if (key) keys.push(key);
+  };
+  add(order.id);
+  add(order.pack_id);
+  return keys;
+}
+
+export function splitOrderLinesByCancelledOrderIds(
+  lines: PaidOrderLine[],
+  cancelledOrderIds: ReadonlySet<string>,
+): {
+  activeLines: PaidOrderLine[];
+  returnedOnInvoiceLines: PaidOrderLine[];
+} {
+  const activeLines: PaidOrderLine[] = [];
+  const returnedOnInvoiceLines: PaidOrderLine[] = [];
+  for (const line of lines) {
+    const hit =
+      (line.orderId != null && cancelledOrderIds.has(line.orderId)) ||
+      (line.packId != null && cancelledOrderIds.has(line.packId));
+    if (hit) {
+      returnedOnInvoiceLines.push(line);
+    } else {
+      activeLines.push(line);
+    }
+  }
+  return { activeLines, returnedOnInvoiceLines };
+}
+
+const PAID_RETURN_TAGS = new Set(["not_delivered", "returned"]);
+
+function orderLooksReturnedWhilePaid(order: OrderSearchOrder): boolean {
+  if (order.order_request?.return) return true;
+  const tags = order.tags ?? [];
+  if (tags.some((tag) => PAID_RETURN_TAGS.has(String(tag)))) return true;
+  return (order.payments ?? []).some(
+    (payment) =>
+      payment.status === "refunded" || payment.status === "charged_back",
+  );
+}
+
+export function returnedPaidOrderIdsFromOrders(
+  orders: OrderSearchOrder[],
+): Set<string> {
+  const ids = new Set<string>();
+  for (const order of orders) {
+    if (order.status === "cancelled") continue;
+    if (!orderLooksReturnedWhilePaid(order)) continue;
+    for (const key of orderIdentityKeys(order)) ids.add(key);
+  }
+  return ids;
+}
 
 export async function fetchOrdersInDateRange(
   accessToken: string,
@@ -287,13 +353,15 @@ export function paidOrderLinesFromOrders(orders: OrderSearchOrder[]): PaidOrderL
   for (const order of orders) {
     if (order.status === "cancelled") continue;
     const orderDateYmd = orderDateYmdFromOrder(order);
+    const orderId = identityKey(order.id);
+    const packId = identityKey(order.pack_id);
     for (const line of order.order_items ?? []) {
       const itemId = listingIdFromOrderLine(line);
       if (!itemId) continue;
       const quantity = quantityFromOrderLine(line);
       const revenue = revenueFromOrderLine(line);
       if (quantity <= 0 && revenue <= 0) continue;
-      lines.push({ itemId, quantity, revenue, orderDateYmd });
+      lines.push({ itemId, quantity, revenue, orderDateYmd, orderId, packId });
     }
   }
   return lines;
@@ -362,6 +430,8 @@ export async function fetchCancelledOrderLinesInDateRange(
   const lines: PaidOrderLine[] = [];
   for (const order of orders) {
     const orderDateYmd = orderDateYmdFromOrder(order);
+    const orderId = identityKey(order.id);
+    const packId = identityKey(order.pack_id);
     for (const line of order.order_items ?? []) {
       const itemId = listingIdFromOrderLine(line);
       if (!itemId) continue;
@@ -370,6 +440,8 @@ export async function fetchCancelledOrderLinesInDateRange(
         quantity: quantityFromOrderLine(line),
         revenue: revenueFromOrderLine(line),
         orderDateYmd,
+        orderId,
+        packId,
       });
     }
   }

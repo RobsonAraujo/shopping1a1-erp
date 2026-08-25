@@ -115,9 +115,15 @@ export function DreProductCostAuditModal({
             <div className="mb-3 flex shrink-0 items-start gap-2 rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 text-xs leading-relaxed text-[var(--muted-foreground)]">
               <Ban className="mt-0.5 size-3.5 shrink-0" aria-hidden />
               <span>
-                {cancelledItems.length} produto(s) tiveram pedidos cancelados
-                neste período (custo de {formatFinancialMoney(cancelledCost)}
-                ) — marcados com{" "}
+                {cancelledItems.length} produto(s) /{" "}
+                {cancelledItems.reduce(
+                  (sum, item) => sum + (item.cancelledQuantity ?? 0),
+                  0,
+                )}{" "}
+                un. canceladas/devolvidas neste período. A row Canceladas /
+                devolvidas mostra o valor de venda; o custo de compra excluído
+                da soma abaixo é {formatFinancialMoney(cancelledCost)}. Marcados
+                com{" "}
                 <Ban
                   className="inline size-3 -translate-y-px"
                   aria-hidden

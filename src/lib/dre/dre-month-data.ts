@@ -34,11 +34,15 @@ import {
   fetchPaidOrdersByPeriod,
   fetchItemsByIdsBatched,
   paidOrderLinesFromOrders,
+  splitOrderLinesByCancelledOrderIds,
+  returnedPaidOrderIdsFromOrders,
+  orderIdentityKeys,
 } from "@/lib/mercadolibre/api";
 import {
   fetchMlBillingSummaryForMonth,
   isBillingSummaryEmpty,
 } from "@/lib/mercadolibre/billing-summary";
+import { billingPeriodKey } from "@/lib/mercadolibre/billing-shared";
 import { aggregateBillingDetailsForCivilMonthOrders, type MlDetailsAggregation } from "@/lib/mercadolibre/billing-details";
 import {
   createFullBillingDetailsCache,
@@ -605,17 +609,17 @@ async function fetchOrderDataForRange(
     dateField,
   );
   const orderLines = paidOrderLinesFromOrders(orders);
-  const orderIds = new Set<number>();
+  const orderIds = new Set<string>();
   for (const order of orders) {
-    const id = Number(order.id);
-    if (Number.isFinite(id) && id > 0) orderIds.add(id);
+    for (const key of orderIdentityKeys(order)) orderIds.add(key);
   }
+  const returnedByTagIds = returnedPaidOrderIdsFromOrders(orders);
 
   const revenueMl = roundMoney(
     orderLines.reduce((sum, line) => sum + line.revenue, 0),
   );
 
-  return { orderLines, revenueMl, orderIds };
+  return { orderLines, revenueMl, orderIds, returnedByTagIds };
 }
 
 export async function buildDreMonthSnapshot(
@@ -657,7 +661,8 @@ export async function buildDreMonthSnapshot(
   ]);
 
   const billing = billingResult;
-  const { orderLines, revenueMl: ordersRevenueMl, orderIds } = orderResult;
+  const { orderLines, revenueMl: ordersRevenueMl, orderIds, returnedByTagIds } =
+    orderResult;
   const revenueMl = ordersRevenueMl;
 
   const billingAlignsWithCivil =
@@ -679,8 +684,7 @@ export async function buildDreMonthSnapshot(
 
   report({ phase: "ads", message: "Carregando ADS e custos ERP…" });
 
-  const [adsResult, erpCosts] = await Promise.all([
-    (async () => {
+  const adsPromise = (async () => {
       let adsCost = 0;
       let adsCostBreakdown: DreLineBreakdownItem[] | undefined;
       try {
@@ -752,19 +756,7 @@ export async function buildDreMonthSnapshot(
         }
       }
       return { adsCost, adsCostBreakdown };
-    })(),
-    computeErpCostsFromOrderLines(
-      accessToken,
-      sellerId,
-      organizationId,
-      orderLines,
-      year,
-      month,
-    ),
-  ]);
-
-  const { adsCost } = adsResult;
-  let adsCostBreakdown = adsResult.adsCostBreakdown;
+    })();
 
   report({ phase: "ml_costs", message: "Mapeando custos ML…" });
 
@@ -834,6 +826,12 @@ export async function buildDreMonthSnapshot(
         year,
         month,
         orderIds,
+          billing?.detailEntries?.length
+            ? {
+                key: billingPeriodKey(year, month),
+                entries: billing.detailEntries,
+              }
+            : undefined,
       );
       if (
         civil &&
@@ -919,6 +917,12 @@ export async function buildDreMonthSnapshot(
           year,
           month,
           orderIds,
+          billing?.detailEntries?.length
+            ? {
+                key: billingPeriodKey(year, month),
+                entries: billing.detailEntries,
+              }
+            : undefined,
         );
         if (
           civil &&
@@ -1001,6 +1005,27 @@ export async function buildDreMonthSnapshot(
   let cancelledSalesBreakdownFromBilling:
     | DreLineBreakdownItem[]
     | undefined;
+
+  const cancelledBillingOrderIds = new Set([
+    ...(billingAuditAgg?.cancelledOrderIds ?? []),
+    ...returnedByTagIds,
+  ]);
+  const { activeLines, returnedOnInvoiceLines } =
+    splitOrderLinesByCancelledOrderIds(orderLines, cancelledBillingOrderIds);
+
+  const [adsResult, erpCosts] = await Promise.all([
+    adsPromise,
+    computeErpCostsFromOrderLines(
+      accessToken,
+      sellerId,
+      organizationId,
+      activeLines,
+      year,
+      month,
+    ),
+  ]);
+  const { adsCost } = adsResult;
+  let adsCostBreakdown = adsResult.adsCostBreakdown;
 
   const billingLineLists = billingAuditAgg?.lineBreakdowns;
   if (billingLineLists) {
@@ -1141,26 +1166,29 @@ export async function buildDreMonthSnapshot(
           calendarRange.to,
           stockPlanningConfig.salesWindowDateField,
         );
-        if (cancelledLines.length > 0) {
-          const revenueGross = roundMoney(
-            cancelledLines.reduce((sum, line) => sum + line.revenue, 0),
-          );
-          const cancelledErpCosts = await computeErpCostsFromOrderLines(
+        const overlayLines = [...cancelledLines, ...returnedOnInvoiceLines];
+        if (overlayLines.length > 0) {
+          const overlayErpCosts = await computeErpCostsFromOrderLines(
             accessToken,
             sellerId,
             organizationId,
-            cancelledLines,
+            overlayLines,
             year,
             month,
           );
-          cancelledIncludeOverlay = {
-            revenueGross,
-            productCostErp: cancelledErpCosts.productCostErp,
-            taxErp: cancelledErpCosts.taxErp,
-          };
+          if (cancelledLines.length > 0) {
+            const revenueGross = roundMoney(
+              cancelledLines.reduce((sum, line) => sum + line.revenue, 0),
+            );
+            cancelledIncludeOverlay = {
+              revenueGross,
+              productCostErp: overlayErpCosts.productCostErp,
+              taxErp: overlayErpCosts.taxErp,
+            };
+          }
           // Anotados na mesma linha do produto (cancelledQuantity/cancelledCost),
           // sem entrar em quantity/totalCost — ver applyDreIncludeCancelledView.
-          cancelledBreakdown = cancelledErpCosts.breakdown.map((item) => ({
+          cancelledBreakdown = overlayErpCosts.breakdown.map((item) => ({
             ...item,
             quantity: 0,
             totalCost: 0,
@@ -1168,19 +1196,17 @@ export async function buildDreMonthSnapshot(
             cancelledQuantity: item.quantity,
             cancelledCost: item.totalCost,
           }));
-          cancelledTaxBreakdown = cancelledErpCosts.taxBreakdown.map(
-            (item) => ({
-              ...item,
-              quantity: 0,
-              revenue: 0,
-              totalTax: 0,
-              taxPercent: null,
-              cancelledQuantity: item.quantity,
-              cancelledRevenue: item.revenue,
-              cancelledTax: item.totalTax,
-            }),
-          );
-          cancelledOrderRevenueBreakdown = cancelledErpCosts.revenueBreakdown;
+          cancelledTaxBreakdown = overlayErpCosts.taxBreakdown.map((item) => ({
+            ...item,
+            quantity: 0,
+            revenue: 0,
+            totalTax: 0,
+            taxPercent: null,
+            cancelledQuantity: item.quantity,
+            cancelledRevenue: item.revenue,
+            cancelledTax: item.totalTax,
+          }));
+          cancelledOrderRevenueBreakdown = overlayErpCosts.revenueBreakdown;
         }
       } catch (error) {
         logServerError("dre-month-data cancelled overlay", error);

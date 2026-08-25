@@ -20,19 +20,29 @@ type ChargeInfo = {
 };
 
 type SalesInfo = {
-  order_id?: number;
+  order_id?: number | string;
   transaction_amount?: number;
+  sale_date_time?: string;
   sale_fee?: {
     net?: number;
     gross?: number;
   };
 };
 
+type BillingItemInfo = {
+  item_id?: string;
+  item_amount?: number;
+  item_price?: number;
+  order_id?: number | string;
+};
+
 type MlDetailEntry = {
   charge_info?: ChargeInfo;
   sales_info?: SalesInfo[];
+  items_info?: BillingItemInfo[];
+  shipping_info?: { pack_id?: number | string; shipping_id?: number | string };
   details?: MlDetailEntry[];
-  order_id?: number;
+  order_id?: number | string;
   sale_fee?: SalesInfo["sale_fee"];
   payment_info?: Array<{ transaction_amount?: number }>;
   charge_date?: string;
@@ -91,6 +101,8 @@ export type MlDetailsAggregation = {
   chargeCount: number;
   bySubType: Record<string, number>;
   byLabel: Record<string, number>;
+  /** Pedidos em Canceladas/devolvidas ou tarifa de devolução — id/pack_id como string (a API mistura number/string). */
+  cancelledOrderIds: string[];
   lineBreakdowns: Partial<
     Record<BillingDreBreakdownKey, BillingLineBreakdownItem[]>
   >;
@@ -120,6 +132,9 @@ function flattenDetailEntries(data: MlDetailsResponse): MlDetailEntry[] {
         flat.push({
           ...nested,
           sales_info: nested.sales_info ?? result.sales_info,
+          items_info: nested.items_info ?? result.items_info,
+          shipping_info: nested.shipping_info ?? result.shipping_info,
+          order_id: nested.order_id ?? result.order_id,
         });
       }
     }
@@ -129,26 +144,22 @@ function flattenDetailEntries(data: MlDetailsResponse): MlDetailEntry[] {
 }
 
 function collectOrderRevenue(entries: MlDetailEntry[]): number {
-  const byOrder = new Map<number, number>();
+  const byOrder = new Map<string, number>();
 
   for (const entry of entries) {
     for (const sale of entry.sales_info ?? []) {
-      const orderId = sale.order_id;
+      const orderId = billingIdentityKey(sale.order_id);
       const amount = Number(sale.transaction_amount ?? 0);
-      if (
-        typeof orderId === "number" &&
-        Number.isFinite(orderId) &&
-        Number.isFinite(amount) &&
-        amount > 0
-      ) {
+      if (orderId && Number.isFinite(amount) && amount > 0) {
         byOrder.set(orderId, amount);
       }
     }
 
     for (const payment of entry.payment_info ?? []) {
       const amount = Number(payment.transaction_amount ?? 0);
-      if (Number.isFinite(amount) && amount > 0 && entry.order_id) {
-        byOrder.set(entry.order_id, amount);
+      const orderId = billingIdentityKey(entry.order_id);
+      if (Number.isFinite(amount) && amount > 0 && orderId) {
+        byOrder.set(orderId, amount);
       }
     }
   }
@@ -180,6 +191,7 @@ function emptyAggregation(): MlDetailsAggregation {
     chargeCount: 0,
     bySubType: {},
     byLabel: {},
+    cancelledOrderIds: [],
     lineBreakdowns: {},
   };
 }
@@ -362,6 +374,7 @@ export function aggregateMlBillingDetails(
   entries: MlDetailEntry[],
 ): MlDetailsAggregation {
   const agg = emptyAggregation();
+  const cancelledOrderIdSet = new Set<string>();
 
   for (const entry of entries) {
     const info = entry.charge_info;
@@ -384,6 +397,11 @@ export function aggregateMlBillingDetails(
     );
 
     const category = classifyMlBillingEntry(subType, label, detailType);
+    if (category === "cancelled" || category === "returnFee") {
+      for (const id of entryOrderIds(entry)) {
+        cancelledOrderIdSet.add(id);
+      }
+    }
     const breakdownKey = billingCategoryToBreakdownKey(category);
     const before = breakdownKey
       ? amountForBreakdownKey(agg, breakdownKey)
@@ -407,6 +425,7 @@ export function aggregateMlBillingDetails(
   const revenueFromOrders = collectOrderRevenue(entries);
   agg.revenueFromOrders = revenueFromOrders;
   agg.revenueMl = revenueFromOrders > 0 ? revenueFromOrders : null;
+  agg.cancelledOrderIds = [...cancelledOrderIdSet];
 
   for (const key of Object.keys(agg.lineBreakdowns) as BillingDreBreakdownKey[]) {
     const list = agg.lineBreakdowns[key];
@@ -542,23 +561,30 @@ export async function fetchMlBillingDetailsAggregation(
   return aggregateMlBillingDetails(entries);
 }
 
-function entryOrderIds(entry: MlDetailEntry): number[] {
-  const ids: number[] = [];
-  if (typeof entry.order_id === "number" && Number.isFinite(entry.order_id)) {
-    ids.push(entry.order_id);
-  }
-  for (const sale of entry.sales_info ?? []) {
-    if (typeof sale.order_id === "number" && Number.isFinite(sale.order_id)) {
-      ids.push(sale.order_id);
-    }
-  }
-  return ids;
+function billingIdentityKey(value: unknown): string | null {
+  if (value == null) return null;
+  const s = String(value).trim();
+  if (!s || s === "undefined" || s === "null" || s === "NaN") return null;
+  return s;
+}
+
+function entryOrderIds(entry: MlDetailEntry): string[] {
+  const ids = new Set<string>();
+  const add = (value: unknown) => {
+    const id = billingIdentityKey(value);
+    if (id) ids.add(id);
+  };
+  add(entry.order_id);
+  for (const sale of entry.sales_info ?? []) add(sale.order_id);
+  for (const item of entry.items_info ?? []) add(item.order_id);
+  add(entry.shipping_info?.pack_id);
+  return [...ids];
 }
 
 /** Mantém lançamentos ligados a pedidos do mês civil (details não trazem data). */
 export function filterBillingDetailsByOrderIds(
   entries: MlBillingDetailEntry[],
-  orderIds: ReadonlySet<number>,
+  orderIds: ReadonlySet<string>,
 ): MlBillingDetailEntry[] {
   if (orderIds.size === 0) return [];
   return entries.filter((entry) =>
@@ -568,14 +594,15 @@ export function filterBillingDetailsByOrderIds(
 
 /**
  * Agrega tarifas/frete/devolução/especiais dos /details dos períodos que
- * cobrem o mês civil, filtrando pelos order_ids dos pedidos pagos do mês.
- * Usado quando a fatura (key YYYY-MM-01) não alinha ao calendário civil.
+ * cobrem o mês civil, filtrando pelos order_ids / pack_ids dos pedidos pagos.
+ * `alreadyFetched` evita re-paginar a fatura do mês (já baixada no sync).
  */
 export async function aggregateBillingDetailsForCivilMonthOrders(
   accessToken: string,
   year: number,
   month: number,
-  orderIds: ReadonlySet<number>,
+  orderIds: ReadonlySet<string>,
+  alreadyFetched?: { key: string; entries: MlBillingDetailEntry[] },
 ): Promise<MlDetailsAggregation | null> {
   if (orderIds.size === 0) return null;
 
@@ -593,7 +620,10 @@ export async function aggregateBillingDetailsForCivilMonthOrders(
   const perKeyMatches = await Promise.all(
     keys.map(async (key) => {
       try {
-        const entries = await fetchAllMlBillingDetails(accessToken, key);
+        const entries =
+          alreadyFetched && alreadyFetched.key === key
+            ? alreadyFetched.entries
+            : await fetchAllMlBillingDetails(accessToken, key);
         return filterBillingDetailsByOrderIds(entries, orderIds);
       } catch {
         // Período ausente / rate-limit: segue com o que já tiver.

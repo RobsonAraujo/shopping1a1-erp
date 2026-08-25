@@ -2,21 +2,16 @@
 
 Demonstrativo de resultado mensal do vendedor Mercado Livre, calculado via API do ML (billing + orders) e opcionalmente ajustado por upload da planilha de conciliação "Por Vendas" (`src/lib/dre/reconciliation/`).
 
-## Pedidos cancelados
+## Pedidos cancelados e devolvidos
 
-`productCostErp` e `taxErp` (Custo produto, Imposto ML) são calculados só a partir de pedidos com `status: "paid"` (`paidOrderLinesFromOrders`, `src/lib/mercadolibre/api.ts`) — pedidos cancelados nunca entram nessa soma, pois o produto não foi de fato enviado.
+`productCostErp` e `taxErp` (Custo produto, Imposto ML) saem só de pedidos pagos do mês cujo `order_id` **não** aparece nas linhas CXC da fatura (Canceladas / devolvidas). Pedidos com `status: "cancelled"` (`paidOrderLinesFromOrders`) já ficam de fora; devoluções pós-entrega continuam `paid` na API de pedidos, mas são cortadas quando o mesmo `order_id` vem na fatura.
 
-A view "como o painel ML" (`applyDreIncludeCancelledView`, `dre-calculations.ts`) soma a receita bruta de pedidos cancelados de volta ao faturamento (neutralizada pela linha `cancelledSalesMl`, negativa), só para bater com o total que o próprio Mercado Livre mostra — **não** ajusta Custo produto/Imposto ML, já que esse custo nunca foi contado. Os itens cancelados aparecem nos modais de auditoria de Custo produto/Imposto ML com a marca "Cancelado" só para conferência (não somam no total exibido).
+A view "como o painel ML" (`applyDreIncludeCancelledView`, `dre-calculations.ts`) soma a receita bruta de pedidos cancelados de volta ao faturamento (neutralizada pela linha `cancelledSalesMl`, negativa), só para bater com o total que o próprio Mercado Livre mostra — **não** ajusta Custo produto/Imposto ML. Itens cancelados/devolvidos da fatura aparecem nos modais de auditoria com a marca "Cancelado" só para conferência (não somam no total exibido).
+
+Devolução faturada neste mês de uma venda de **outro** mês não entra neste corte (o pedido não está no scrape pago do mês). Linhas CXC sem `order_id` também não casam. Pedidos pagos com tag `not_delivered`/`returned` e pedidos com tarifa de devolução (CXDED/CDSDB) na fatura são tratados como devolvidas e saem do Custo produto/Imposto ML.
 
 ## Limitações conhecidas
 
-### Devolução pós-entrega não é rastreada (2026-08-24)
+### Devolução pós-entrega sem vínculo na fatura
 
-Quando um produto é devolvido **depois** de entregue, a API do Mercado Livre não muda `order.status` (permanece `paid`) — o pedido continua contando normalmente em faturamento, Custo produto e Imposto ML. O sinal de devolução fica em outro recurso, que o projeto não consulta hoje.
-
-Investigação (via documentação pública do ML, ago/2026 — conferir a doc oficial antes de implementar, pode ter mudado):
-
-- **Shipments**: o status vai para `not_delivered` com substatus `returning_to_sender` enquanto o produto está em trânsito de volta; `GET /shipments/{shipment_id}/history` traz o histórico de status/substatus. O projeto já guarda `order.shipping.id` (`src/lib/mercadolibre/types.ts`), então dá pra consultar por pedido.
-- **Claims** (endpoint atual — o antigo `/v1/claims/` foi descontinuado em 06/05/2024): `GET /post-purchase/v1/claims/search?order_id={id}` (ou `resource_id` + `resource=order`), com filtros adicionais (`players.role`, `stage`, `status`, `reason_id`, `date_created`). Permite achar claims de devolução direto por `order_id`, sem precisar do `shipping.id`.
-
-Nenhum dos dois é chamado hoje em lugar nenhum do código (zero ocorrências de `claims`, `mediations`, `post-purchase`, `returning_to_sender`). Implementar isso é uma integração nova — fetch + tipos + decisão de produto sobre como expor no DRE (nova linha? ajuste em Custo produto/Imposto ML, como já existe para cancelados?) — e custa uma chamada extra por pedido no sync, que já tem gargalos de performance conhecidos. Tratar como iniciativa separada.
+Quando a fatura CXC não traz `order_id`, o pedido pago continua no Custo produto/Imposto ML. Claims (`/post-purchase/v1/claims`) e shipment `returning_to_sender` ainda não são consultados (custo extra no sync).

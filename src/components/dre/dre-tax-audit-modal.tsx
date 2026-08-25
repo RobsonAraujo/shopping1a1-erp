@@ -93,6 +93,14 @@ export function DreTaxAuditModal({
   );
   const totalTax = filteredItems.reduce((sum, item) => sum + item.totalTax, 0);
   const cancelledItems = items.filter((item) => (item.cancelledQuantity ?? 0) > 0);
+  const cancelledQuantityTotal = items.reduce(
+    (sum, item) => sum + (item.cancelledQuantity ?? 0),
+    0,
+  );
+  const cancelledRevenueTotal = items.reduce(
+    (sum, item) => sum + (item.cancelledRevenue ?? 0),
+    0,
+  );
   const cancelledTax = items.reduce(
     (sum, item) => sum + (item.cancelledTax ?? 0),
     0,
@@ -121,9 +129,12 @@ export function DreTaxAuditModal({
             <div className="mb-3 flex shrink-0 items-start gap-2 rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 text-xs leading-relaxed text-[var(--muted-foreground)]">
               <Ban className="mt-0.5 size-3.5 shrink-0" aria-hidden />
               <span>
-                {cancelledItems.length} produto(s) tiveram pedidos cancelados
-                neste período (imposto de {formatFinancialMoney(cancelledTax)}
-                ) — marcados com{" "}
+                {cancelledItems.length} produto(s) / {cancelledQuantityTotal}{" "}
+                un. canceladas/devolvidas neste período. A row Canceladas /
+                devolvidas mostra o valor de venda (
+                {formatFinancialMoney(cancelledRevenueTotal)}); o imposto
+                excluído da soma abaixo é {formatFinancialMoney(cancelledTax)}.
+                Marcados com{" "}
                 <Ban
                   className="inline size-3 -translate-y-px"
                   aria-hidden
@@ -277,7 +288,8 @@ export function DreTaxAuditModal({
                                   ) : null}
                                   {fullyCancelled ? (
                                     <p className="text-[11px] font-medium text-[var(--muted-foreground)]">
-                                      Cancelado · não entra no total
+                                      Cancelado · não entra no total ·{" "}
+                                      {cancelledQuantity} un.
                                     </p>
                                   ) : item.missingTax ? (
                                     <p className="text-[11px] text-amber-700">

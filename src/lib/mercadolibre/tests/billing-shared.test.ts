@@ -126,6 +126,29 @@ describe("classifyMlBillingEntry", () => {
   it("classifies cancelled sales by subType or label", () => {
     assert.equal(classifyMlBillingEntry("CXC", "", ""), "cancelled");
     assert.equal(classifyMlBillingEntry("XYZ", "venda cancelada", ""), "cancelled");
+    assert.equal(
+      classifyMlBillingEntry("XYZ", "vendas canceladas", ""),
+      "cancelled",
+    );
+  });
+
+  it("does not treat fee reversal bonuses as cancelled sales", () => {
+    assert.equal(
+      classifyMlBillingEntry(
+        "BVVML",
+        "cancelamento do custo por vender no mercado livre",
+        "BONUS",
+      ),
+      "saleFee",
+    );
+    assert.equal(
+      classifyMlBillingEntry(
+        "BFFE",
+        "cancelamento da tarifa de envio extra ou intermunicipal",
+        "BONUS",
+      ),
+      "sellerShipping",
+    );
   });
 
   it("classifies sale fee by subType prefix", () => {
