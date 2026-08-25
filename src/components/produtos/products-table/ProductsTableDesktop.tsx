@@ -118,17 +118,29 @@ export function ProductsTableDesktop({
                   {showFiscalFlags ? (
                     <>
                       <td className="px-4 py-3 text-center">
-                        <Badge variant={product.hasIcmsSt ? "secondary" : "muted"} className="min-w-[2.5rem]">
+                        <Badge
+                          variant={product.hasIcmsSt ? "success" : "muted"}
+                          dot={product.hasIcmsSt}
+                          className="min-w-[2.5rem]"
+                        >
                           {product.hasIcmsSt ? "Sim" : "Não"}
                         </Badge>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <Badge variant={product.isMonophasic ? "secondary" : "muted"} className="min-w-[2.5rem]">
+                        <Badge
+                          variant={product.isMonophasic ? "success" : "muted"}
+                          dot={product.isMonophasic}
+                          className="min-w-[2.5rem]"
+                        >
                           {product.isMonophasic ? "Sim" : "Não"}
                         </Badge>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <Badge variant={product.isImported ? "secondary" : "muted"} className="min-w-[2.5rem]">
+                        <Badge
+                          variant={product.isImported ? "success" : "muted"}
+                          dot={product.isImported}
+                          className="min-w-[2.5rem]"
+                        >
                           {product.isImported ? "Sim" : "Não"}
                         </Badge>
                       </td>

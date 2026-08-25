@@ -30,13 +30,34 @@ const badgeVariants = cva(
   },
 );
 
+const BADGE_DOT_CLASS: Partial<Record<NonNullable<BadgeProps["variant"]>, string>> = {
+  destructive: "bg-rose-600 dark:bg-rose-400",
+  warning: "bg-amber-600 dark:bg-amber-400",
+  success: "bg-emerald-600 dark:bg-emerald-400",
+  muted: "bg-[var(--muted-foreground)]",
+};
+
 export interface BadgeProps
   extends React.HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof badgeVariants> {}
+    VariantProps<typeof badgeVariants> {
+  /** Bolinha de estado antes do texto — pra status (atrasado/atenção/ok), não pra categoria. */
+  dot?: boolean;
+}
 
-function Badge({ className, variant, ...props }: BadgeProps) {
+function Badge({ className, variant, dot, children, ...props }: BadgeProps) {
   return (
-    <div className={cn(badgeVariants({ variant }), className)} {...props} />
+    <div className={cn(badgeVariants({ variant }), dot && "gap-1.5", className)} {...props}>
+      {dot ? (
+        <span
+          className={cn(
+            "size-1.5 shrink-0 rounded-full",
+            BADGE_DOT_CLASS[variant ?? "default"] ?? "bg-current",
+          )}
+          aria-hidden
+        />
+      ) : null}
+      {children}
+    </div>
   );
 }
 

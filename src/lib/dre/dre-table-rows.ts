@@ -1,5 +1,6 @@
 import type { DreLineAmounts } from "@/lib/dre/dre-calculations";
 import type { DreCostItemView, DreMonthView } from "@/lib/dre/dre-year-data";
+export { valueToneClass } from "@/lib/ui/tone";
 
 export type DreRowKind =
   | "entrada-total"
@@ -518,15 +519,6 @@ export function rowLabelClass(row: DreTableRow): string {
     return "text-[13px] font-normal leading-snug text-[var(--muted-foreground)]";
   }
   return "text-[13px] font-normal leading-snug";
-}
-
-export function valueToneClass(value: number | null | undefined): string {
-  if (value === null || value === undefined) {
-    return "text-[var(--muted-foreground)]";
-  }
-  if (value > 0) return "text-emerald-800 dark:text-emerald-300";
-  if (value < 0) return "text-rose-800 dark:text-rose-300";
-  return "text-[var(--muted-foreground)]";
 }
 
 export function getCellValue(

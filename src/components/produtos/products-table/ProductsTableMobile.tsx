@@ -12,7 +12,7 @@ import type { ProductsTableProps } from "@/components/produtos/products-table/ty
 function FlagBadge({ label, active }: { label: string; active: boolean }) {
   if (!active) return null;
   return (
-    <Badge variant="secondary" className="text-[10px]">
+    <Badge variant="success" dot className="text-[10px]">
       {label}
     </Badge>
   );

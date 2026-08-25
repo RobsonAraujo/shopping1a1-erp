@@ -81,6 +81,12 @@ import {
   type DreTableRow,
   type DreVisibilitySettings,
 } from "@/lib/dre/dre-table-rows";
+import {
+  CATEGORY_BADGE_CLASS as GROUP_TONE_CLASS,
+  CATEGORY_BORDER_COLOR as GROUP_BORDER_COLOR,
+  CATEGORY_ROW_TINT_CLASS as GROUP_ROW_TINT_CLASS,
+  type CategoryTone,
+} from "@/lib/ui/tone";
 import { reportsConfig } from "@/config/reports";
 import {
   formatCalendarRangeYmd,
@@ -2463,7 +2469,7 @@ function buildStatementGroups(rows: DreTableRow[]): StatementGroup[] {
 }
 
 const GROUP_VISUALS: Partial<
-  Record<DreStaticRowId, { icon: typeof TrendingUp; tone: string }>
+  Record<DreStaticRowId, { icon: typeof TrendingUp; tone: CategoryTone }>
 > = {
   totalEntrada: { icon: Banknote, tone: "primary" },
   totalCustoOperacional: { icon: Receipt, tone: "rose" },
@@ -2473,34 +2479,6 @@ const GROUP_VISUALS: Partial<
   totalEntradaNaoOperacional: { icon: PiggyBank, tone: "emerald" },
 };
 
-const GROUP_TONE_CLASS: Record<string, string> = {
-  primary: "bg-[var(--primary)]/10 text-[var(--primary)]",
-  rose: "bg-rose-50 text-rose-600",
-  amber: "bg-amber-50 text-amber-600",
-  violet: "bg-violet-50 text-violet-600",
-  emerald: "bg-emerald-50 text-emerald-600",
-};
-
-/** Igual a GROUP_TONE_CLASS, mas mais sutil — usado como fundo de linha
- * inteira na tabela de comparação de meses (não só o badge do ícone). */
-const GROUP_ROW_TINT_CLASS: Record<string, string> = {
-  primary: "bg-[var(--primary)]/[0.06]",
-  rose: "bg-rose-50/60",
-  amber: "bg-amber-50/60",
-  violet: "bg-violet-50/60",
-  emerald: "bg-emerald-50/60",
-};
-
-/** Cor da "borda" de cada seção na tabela de comparação de meses — desenhada
- * via box-shadow (não border), pra não brigar com border-collapse nem com
- * os divisores de linha existentes (que também são box-shadow). */
-const GROUP_BORDER_COLOR: Record<string, string> = {
-  primary: "color-mix(in srgb, var(--primary) 45%, transparent)",
-  rose: "#fda4af",
-  amber: "#fcd34d",
-  violet: "#c4b5fd",
-  emerald: "#6ee7b7",
-};
 
 type SectionBoxPosition = "first" | "middle" | "last" | "only";
 
@@ -3023,7 +3001,7 @@ function DreYearTableDesktop({
   // das "caixas" de cada categoria.
   const rowSection = new Map<
     string,
-    { position: SectionBoxPosition; tone: string }
+    { position: SectionBoxPosition; tone: CategoryTone }
   >();
   for (const group of buildStatementGroups(rows)) {
     if (group.header.type !== "static") continue;
