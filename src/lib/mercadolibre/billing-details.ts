@@ -468,10 +468,18 @@ async function fetchMlDetailsPage(
   u.searchParams.set("sort_by", "ID");
   u.searchParams.set("order_by", "ASC");
 
-  const res = await fetch(u.toString(), {
-    headers: { Authorization: `Bearer ${accessToken}` },
-    cache: "no-store",
-  });
+  let res: Response;
+  try {
+    res = await fetch(u.toString(), {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+      // Sem timeout aqui, uma chamada travada prende o loop de paginação
+      // abaixo (e o sync inteiro) por tempo indeterminado.
+      signal: AbortSignal.timeout(20_000),
+    });
+  } catch {
+    return null;
+  }
 
   if (!res.ok) {
     return null;
@@ -479,6 +487,9 @@ async function fetchMlDetailsPage(
 
   return (await res.json()) as MlDetailsResponse;
 }
+
+/** Trava de segurança: nenhum mês legítimo deveria ter mais que isso em páginas de 1000 lançamentos por tipo de documento. Evita loop sem fim se a API devolver um cursor que nunca avança para o fim. */
+const MAX_BILLING_DETAILS_PAGES = 50;
 
 export async function fetchAllMlBillingDetails(
   accessToken: string,
@@ -489,7 +500,7 @@ export async function fetchAllMlBillingDetails(
 
   for (const documentType of ["BILL", "CREDIT_NOTE"] as const) {
     let fromId = 0;
-    for (;;) {
+    for (let pageCount = 0; pageCount < MAX_BILLING_DETAILS_PAGES; pageCount++) {
       const page = await fetchMlDetailsPage(
         accessToken,
         key,
@@ -579,15 +590,18 @@ export async function aggregateBillingDetailsForCivilMonthOrders(
     `${nextYear}-${String(nextMonth).padStart(2, "0")}-01`,
   ];
 
-  const matched: MlBillingDetailEntry[] = [];
-  for (const key of keys) {
-    try {
-      const entries = await fetchAllMlBillingDetails(accessToken, key);
-      matched.push(...filterBillingDetailsByOrderIds(entries, orderIds));
-    } catch {
-      // Período ausente / rate-limit: segue com o que já tiver.
-    }
-  }
+  const perKeyMatches = await Promise.all(
+    keys.map(async (key) => {
+      try {
+        const entries = await fetchAllMlBillingDetails(accessToken, key);
+        return filterBillingDetailsByOrderIds(entries, orderIds);
+      } catch {
+        // Período ausente / rate-limit: segue com o que já tiver.
+        return [];
+      }
+    }),
+  );
+  const matched = perKeyMatches.flat();
 
   if (matched.length === 0) return null;
   return aggregateMlBillingDetails(matched);

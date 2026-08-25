@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { dreMonthShortLabel } from "@/lib/dre/dre-table-rows";
 
@@ -25,10 +26,12 @@ export function DreSyncOverlay({
   year,
   items,
   syncingAll = false,
+  onCancel,
 }: {
   year: number;
   items: DreSyncOverlayItem[];
   syncingAll?: boolean;
+  onCancel?: () => void;
 }) {
   const mounted = useIsClient();
 
@@ -77,9 +80,20 @@ export function DreSyncOverlay({
               ))}
             </div>
             <p className="mt-3 text-xs leading-relaxed text-[var(--muted-foreground)]">
-              Consultando Mercado Livre e recalculando o mês. A tela fica
-              bloqueada até concluir — pode levar alguns segundos.
+              Consultando Mercado Livre e recalculando o(s) mês(es). Meses
+              com muitos pedidos podem levar alguns minutos.
             </p>
+            {onCancel ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={onCancel}
+              >
+                Cancelar
+              </Button>
+            ) : null}
           </div>
         </div>
       </Card>

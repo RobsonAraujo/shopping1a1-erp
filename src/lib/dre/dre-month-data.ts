@@ -7,6 +7,7 @@ import {
   applyRestoreLineFromSync,
   computeDreTotals,
   isDreEditableLineKey,
+  mergeLineBreakdowns,
   mergePreservedManualLines,
   mergeProductCostBreakdowns,
   mergeTaxBreakdowns,
@@ -63,32 +64,9 @@ import {
   type CalendarDateRange,
 } from "@/lib/mercadolibre/revenue-periods";
 import { fetchSellerShippingCost } from "@/lib/mercadolibre/seller-shipping-cost";
+import { mapWithConcurrency } from "@/lib/mercadolibre/concurrency";
 
 const FALLBACK_ML_COST_CONCURRENCY = 8;
-
-async function mapWithConcurrency<T, R>(
-  items: T[],
-  concurrency: number,
-  mapper: (item: T, index: number) => Promise<R>,
-): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let nextIndex = 0;
-
-  async function worker() {
-    while (nextIndex < items.length) {
-      const current = nextIndex;
-      nextIndex += 1;
-      results[current] = await mapper(items[current], current);
-    }
-  }
-
-  const workers = Array.from(
-    { length: Math.min(concurrency, Math.max(items.length, 1)) },
-    () => worker(),
-  );
-  await Promise.all(workers);
-  return results;
-}
 
 export type DreSyncProgressPhase =
   | "billing"
@@ -923,38 +901,92 @@ export async function buildDreMonthSnapshot(
       "Custos Full (envios, armazenamento, inconformidades), Minha Página e afiliados da fatura ML do ciclo próximo a este mês.",
     );
   } else {
-    if (billing !== null && revenueMl > 0) {
-      syncWarnings.push(
-        "Resumo de faturamento ML retornou sem cobranças mapeadas; tarifas estimadas pelos pedidos.",
-      );
-    } else if (billing === null) {
-      syncWarnings.push(
-        "Resumo de faturamento ML não disponível; valores estimados pelos pedidos.",
-      );
+    // Resumo de fatura vazio (chamada funcionou, só não veio com cobranças
+    // mapeadas): antes de estimar (preço de tabela via
+    // listing_prices/shipping_options, que não é o valor realmente
+    // cobrado), tentar os dados reais do /group/ML/details do ciclo
+    // próximo ao mês civil — mesma função já usada quando o resumo existe
+    // mas não alinha ao mês civil.
+    //
+    // Só tenta quando `billing !== null` (resumo respondeu, só veio vazio).
+    // Quando o resumo falhou de vez (`billing === null`), pular direto
+    // pro fallback rápido: insistir em outro endpoint pesado e paginado
+    // nesse cenário já causou sync travado (ver histórico do DRE).
+    if (billing !== null) {
+      try {
+        const civil = await aggregateBillingDetailsForCivilMonthOrders(
+          accessToken,
+          year,
+          month,
+          orderIds,
+        );
+        if (
+          civil &&
+          (civil.saleFeeMl !== 0 ||
+            civil.sellerShippingMl !== 0 ||
+            civil.returnFeeMl !== 0 ||
+            civil.specialFeesMl !== 0)
+        ) {
+          saleFeeMl = civil.saleFeeMl;
+          sellerShippingMl = civil.sellerShippingMl;
+          returnFeeMl = civil.returnFeeMl;
+          specialFeesMl = civil.specialFeesMl;
+          cancelledSalesMl = civil.cancelledSalesMl;
+          partialReturnsMl = civil.partialReturnsMl;
+          fullShippingMl = civil.fullShippingMl;
+          fullStorageMl = civil.fullStorageMl;
+          fullNonComplianceMl = civil.fullNonComplianceMl;
+          minhaPaginaMl = civil.minhaPaginaMl;
+          affiliateFeeMl = civil.affiliateFeeMl;
+          usedCivilDetails = true;
+          billingAuditAgg = civil;
+          billingSource = "billing";
+          syncWarnings.push(
+            "Resumo de faturamento ML sem cobranças mapeadas; tarifas/frete/devolução/especiais agregados dos detalhes reais da fatura pelos pedidos do mês.",
+          );
+        }
+      } catch (error) {
+        logServerError(
+          "dre-month-data civil-billing-details-no-summary",
+          error,
+        );
+      }
     }
 
-    try {
-      const fallback = await estimateMlCostsFallback(
-        accessToken,
-        sellerId,
-        calendarRange.from,
-        calendarRange.to,
-        orderLines,
-      );
-      saleFeeMl = fallback.saleFeeMl;
-      sellerShippingMl = fallback.sellerShippingMl;
-      cancelledSalesMl = fallback.cancelledSalesMl;
-      partialReturnsMl = fallback.partialReturnsMl;
-      fullShippingMl = fallback.fullShippingMl;
-      fullStorageMl = fallback.fullStorageMl;
-      fullNonComplianceMl = fallback.fullNonComplianceMl;
-      saleFeeBreakdown = fallback.saleFeeBreakdown;
-      sellerShippingBreakdown = fallback.sellerShippingBreakdown;
-    } catch (error) {
-      logServerError("dre-month-data ml-fallback", error);
-      syncWarnings.push(
-        "Não foi possível estimar tarifas e frete do Mercado Livre.",
-      );
+    if (!usedCivilDetails) {
+      if (billing !== null && revenueMl > 0) {
+        syncWarnings.push(
+          "Resumo de faturamento ML retornou sem cobranças mapeadas; tarifas estimadas pelos pedidos.",
+        );
+      } else if (billing === null) {
+        syncWarnings.push(
+          "Resumo de faturamento ML não disponível; valores estimados pelos pedidos.",
+        );
+      }
+
+      try {
+        const fallback = await estimateMlCostsFallback(
+          accessToken,
+          sellerId,
+          calendarRange.from,
+          calendarRange.to,
+          orderLines,
+        );
+        saleFeeMl = fallback.saleFeeMl;
+        sellerShippingMl = fallback.sellerShippingMl;
+        cancelledSalesMl = fallback.cancelledSalesMl;
+        partialReturnsMl = fallback.partialReturnsMl;
+        fullShippingMl = fallback.fullShippingMl;
+        fullStorageMl = fallback.fullStorageMl;
+        fullNonComplianceMl = fallback.fullNonComplianceMl;
+        saleFeeBreakdown = fallback.saleFeeBreakdown;
+        sellerShippingBreakdown = fallback.sellerShippingBreakdown;
+      } catch (error) {
+        logServerError("dre-month-data ml-fallback", error);
+        syncWarnings.push(
+          "Não foi possível estimar tarifas e frete do Mercado Livre.",
+        );
+      }
     }
   }
 
@@ -998,78 +1030,9 @@ export async function buildDreMonthSnapshot(
 
   report({
     phase: "full",
-    message: "Conferindo Relatório Full (envios/inconformidade)…",
+    message:
+      "Conferindo Relatório Full (envios/inconformidade) e pedidos cancelados…",
   });
-
-  let fullReportSourced = false;
-  try {
-    let fullShipmentRecords = await listFullShipmentsForPeriod(
-      organizationId,
-      year,
-      month,
-    );
-    let autoImported = false;
-
-    if (fullShipmentRecords.length === 0) {
-      try {
-        report({
-          phase: "full",
-          message: "Importando Relatório Full automaticamente…",
-        });
-        const imported = await importFullCollectChargesFromBilling(
-          accessToken,
-          sellerId,
-          organizationId,
-          year,
-          month,
-          { fullDetailsCache },
-        );
-        fullShipmentRecords = imported.shipments;
-        autoImported = imported.imported > 0;
-        if (autoImported) {
-          syncWarnings.push(
-            `Full envios/inconformidade: importamos automaticamente ${imported.imported} envio(s) pelo mesmo fluxo do Relatório Full.`,
-          );
-        }
-      } catch (importError) {
-        logServerError("dre-month-data full-report-auto-import", importError);
-        syncWarnings.push(
-          "Falha ao importar envios Full automaticamente; usando total consolidado da fatura ML.",
-        );
-      }
-    }
-
-    if (fullShipmentRecords.length > 0) {
-      const totalFullCost = fullShipmentRecords.reduce(
-        (sum, s) => sum + s.totalCost,
-        0,
-      );
-      const totalNonCompliance = fullShipmentRecords.reduce(
-        (sum, s) => sum + s.nonComplianceCost,
-        0,
-      );
-      const totalCollect = roundMoney(totalFullCost - totalNonCompliance);
-      fullShippingMl = roundMoney(-Math.max(0, totalCollect));
-      fullNonComplianceMl = roundMoney(-Math.max(0, totalNonCompliance));
-      fullReportSourced = true;
-      fullShippingBreakdown = undefined;
-      fullNonComplianceBreakdown = undefined;
-      if (!autoImported) {
-        syncWarnings.push(
-          "Full envios/inconformidade vêm dos envios já importados no Relatório Full deste mês.",
-        );
-      }
-    } else {
-      syncWarnings.push(
-        "Nenhum envio Full encontrado para este mês (Relatório Full / Fulfillment); Full envios/inconformidade usam o total consolidado da fatura ML.",
-      );
-    }
-  } catch (error) {
-    logServerError("dre-month-data full-report", error);
-    syncWarnings.push(
-      "Não foi possível ler os envios Full importados; usando total consolidado da fatura ML.",
-    );
-  }
 
   if (erpCosts.incompleteProductCostCount > 0) {
     syncWarnings.push(
@@ -1087,47 +1050,143 @@ export async function buildDreMonthSnapshot(
     );
   }
 
-  report({
-    phase: "cancelled",
-    message: "Calculando overlay de pedidos cancelados…",
-  });
-
+  let fullReportSourced = false;
   let cancelledIncludeOverlay: DreCancelledIncludeOverlay | undefined;
   let cancelledBreakdown: DreProductCostBreakdownItem[] = [];
   let cancelledTaxBreakdown: DreTaxBreakdownItem[] = [];
   let cancelledOrderRevenueBreakdown: DreLineBreakdownItem[] = [];
-  try {
-    const cancelledLines = await fetchCancelledOrderLinesInDateRange(
-      accessToken,
-      sellerId,
-      calendarRange.from,
-      calendarRange.to,
-      stockPlanningConfig.salesWindowDateField,
-    );
-    if (cancelledLines.length > 0) {
-      const revenueGross = roundMoney(
-        cancelledLines.reduce((sum, line) => sum + line.revenue, 0),
-      );
-      const cancelledErpCosts = await computeErpCostsFromOrderLines(
-        accessToken,
-        sellerId,
-        organizationId,
-        cancelledLines,
-        year,
-        month,
-      );
-      cancelledIncludeOverlay = {
-        revenueGross,
-        productCostErp: cancelledErpCosts.productCostErp,
-        taxErp: cancelledErpCosts.taxErp,
-      };
-      cancelledBreakdown = cancelledErpCosts.breakdown;
-      cancelledTaxBreakdown = cancelledErpCosts.taxBreakdown;
-      cancelledOrderRevenueBreakdown = cancelledErpCosts.revenueBreakdown;
-    }
-  } catch (error) {
-    logServerError("dre-month-data cancelled overlay", error);
-  }
+
+  // "Full" e "cancelados" são independentes entre si (nenhum lê o resultado
+  // do outro) — rodam em paralelo pra reduzir o tempo total do sync.
+  await Promise.all([
+    (async () => {
+      try {
+        let fullShipmentRecords = await listFullShipmentsForPeriod(
+          organizationId,
+          year,
+          month,
+        );
+        let autoImported = false;
+
+        if (fullShipmentRecords.length === 0) {
+          try {
+            report({
+              phase: "full",
+              message: "Importando Relatório Full automaticamente…",
+            });
+            const imported = await importFullCollectChargesFromBilling(
+              accessToken,
+              sellerId,
+              organizationId,
+              year,
+              month,
+              { fullDetailsCache },
+            );
+            fullShipmentRecords = imported.shipments;
+            autoImported = imported.imported > 0;
+            if (autoImported) {
+              syncWarnings.push(
+                `Full envios/inconformidade: importamos automaticamente ${imported.imported} envio(s) pelo mesmo fluxo do Relatório Full.`,
+              );
+            }
+          } catch (importError) {
+            logServerError(
+              "dre-month-data full-report-auto-import",
+              importError,
+            );
+            syncWarnings.push(
+              "Falha ao importar envios Full automaticamente; usando total consolidado da fatura ML.",
+            );
+          }
+        }
+
+        if (fullShipmentRecords.length > 0) {
+          const totalFullCost = fullShipmentRecords.reduce(
+            (sum, s) => sum + s.totalCost,
+            0,
+          );
+          const totalNonCompliance = fullShipmentRecords.reduce(
+            (sum, s) => sum + s.nonComplianceCost,
+            0,
+          );
+          const totalCollect = roundMoney(totalFullCost - totalNonCompliance);
+          fullShippingMl = roundMoney(-Math.max(0, totalCollect));
+          fullNonComplianceMl = roundMoney(-Math.max(0, totalNonCompliance));
+          fullReportSourced = true;
+          fullShippingBreakdown = undefined;
+          fullNonComplianceBreakdown = undefined;
+          if (!autoImported) {
+            syncWarnings.push(
+              "Full envios/inconformidade vêm dos envios já importados no Relatório Full deste mês.",
+            );
+          }
+        } else {
+          syncWarnings.push(
+            "Nenhum envio Full encontrado para este mês (Relatório Full / Fulfillment); Full envios/inconformidade usam o total consolidado da fatura ML.",
+          );
+        }
+      } catch (error) {
+        logServerError("dre-month-data full-report", error);
+        syncWarnings.push(
+          "Não foi possível ler os envios Full importados; usando total consolidado da fatura ML.",
+        );
+      }
+    })(),
+    (async () => {
+      try {
+        const cancelledLines = await fetchCancelledOrderLinesInDateRange(
+          accessToken,
+          sellerId,
+          calendarRange.from,
+          calendarRange.to,
+          stockPlanningConfig.salesWindowDateField,
+        );
+        if (cancelledLines.length > 0) {
+          const revenueGross = roundMoney(
+            cancelledLines.reduce((sum, line) => sum + line.revenue, 0),
+          );
+          const cancelledErpCosts = await computeErpCostsFromOrderLines(
+            accessToken,
+            sellerId,
+            organizationId,
+            cancelledLines,
+            year,
+            month,
+          );
+          cancelledIncludeOverlay = {
+            revenueGross,
+            productCostErp: cancelledErpCosts.productCostErp,
+            taxErp: cancelledErpCosts.taxErp,
+          };
+          // Anotados na mesma linha do produto (cancelledQuantity/cancelledCost),
+          // sem entrar em quantity/totalCost — ver applyDreIncludeCancelledView.
+          cancelledBreakdown = cancelledErpCosts.breakdown.map((item) => ({
+            ...item,
+            quantity: 0,
+            totalCost: 0,
+            unitCost: 0,
+            cancelledQuantity: item.quantity,
+            cancelledCost: item.totalCost,
+          }));
+          cancelledTaxBreakdown = cancelledErpCosts.taxBreakdown.map(
+            (item) => ({
+              ...item,
+              quantity: 0,
+              revenue: 0,
+              totalTax: 0,
+              taxPercent: null,
+              cancelledQuantity: item.quantity,
+              cancelledRevenue: item.revenue,
+              cancelledTax: item.totalTax,
+            }),
+          );
+          cancelledOrderRevenueBreakdown = cancelledErpCosts.revenueBreakdown;
+        }
+      } catch (error) {
+        logServerError("dre-month-data cancelled overlay", error);
+      }
+    })(),
+  ]);
 
   return {
     revenueMl,
@@ -1158,7 +1217,19 @@ export async function buildDreMonthSnapshot(
       erpCosts.taxBreakdown,
       cancelledTaxBreakdown,
     ]),
-    revenueBreakdown: erpCosts.revenueBreakdown,
+    // A receita de pedidos cancelados conta normalmente em `amount` (o
+    // painel ML inclui canceladas no faturamento bruto — ver
+    // applyDreIncludeCancelledView) e fica também anotada em
+    // `cancelledAmount`, na mesma linha do produto, só para transparência.
+    // Sem isso a lista não bateria com o total de Faturamento ML exibido.
+    revenueBreakdown: mergeLineBreakdowns([
+      erpCosts.revenueBreakdown,
+      cancelledOrderRevenueBreakdown.map((item) => ({
+        ...item,
+        cancelledQuantity: item.quantity,
+        cancelledAmount: item.amount,
+      })),
+    ]),
     cancelledSalesBreakdown: cancelledOrderRevenueBreakdown.length
       ? cancelledOrderRevenueBreakdown
           .map((item) => ({
@@ -1396,6 +1467,14 @@ export function parseSnapshotPayload(raw: unknown): DreMonthSnapshotPayload | nu
             totalCost: numFrom(item.totalCost),
             missingCost: Boolean(item.missingCost),
             leveled: item.leveled ? true : undefined,
+            cancelledQuantity:
+              item.cancelledQuantity !== undefined
+                ? numFrom(item.cancelledQuantity)
+                : undefined,
+            cancelledCost:
+              item.cancelledCost !== undefined
+                ? numFrom(item.cancelledCost)
+                : undefined,
           }))
       : undefined;
 
@@ -1420,6 +1499,18 @@ export function parseSnapshotPayload(raw: unknown): DreMonthSnapshotPayload | nu
                 : numFrom(item.taxPercent),
             totalTax: numFrom(item.totalTax),
             missingTax: Boolean(item.missingTax),
+            cancelledQuantity:
+              item.cancelledQuantity !== undefined
+                ? numFrom(item.cancelledQuantity)
+                : undefined,
+            cancelledRevenue:
+              item.cancelledRevenue !== undefined
+                ? numFrom(item.cancelledRevenue)
+                : undefined,
+            cancelledTax:
+              item.cancelledTax !== undefined
+                ? numFrom(item.cancelledTax)
+                : undefined,
           }))
       : undefined;
 
@@ -1445,6 +1536,15 @@ export function parseSnapshotPayload(raw: unknown): DreMonthSnapshotPayload | nu
                 ? null
                 : numFrom(item.quantity),
             amount: numFrom(item.amount),
+            cancelledQuantity:
+              item.cancelledQuantity === null ||
+              item.cancelledQuantity === undefined
+                ? undefined
+                : numFrom(item.cancelledQuantity),
+            cancelledAmount:
+              item.cancelledAmount !== undefined
+                ? numFrom(item.cancelledAmount)
+                : undefined,
           }))
       : undefined;
 

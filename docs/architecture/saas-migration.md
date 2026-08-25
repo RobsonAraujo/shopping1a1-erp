@@ -190,6 +190,39 @@ Plano de execução detalhado (arquivos e código concretos): ver plano de imple
 
 Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templates/feature-saas-impact.md).
 
+### DRE: sync paralelo, timeout por chamada e cancelamento pelo usuário — 2026-08-24
+
+- **Tabelas novas/alteradas:** nenhuma
+- **Precisa `organizationId`?** não diretamente — mudança de transporte/concorrência (paralelismo interno do sync, `AbortSignal.timeout` por chamada ML, `AbortController` no client para cancelar), não de dados
+- **APIs afetadas:** `POST /api/dre/sync` (mesma rota; agora respeita abort do fetch do client)
+- **Assume singleton?** não
+- **Cron/background:** nenhum
+- **Dados globais vs por org:** n/a
+- **Código já tenant-ready?** sim
+- **Ação futura na migração:** nenhuma
+
+### DRE: fallback de detalhes reais da fatura antes de estimar tarifas — 2026-08-24
+
+- **Tabelas novas/alteradas:** nenhuma
+- **Precisa `organizationId`?** sim — mesmo fluxo de sync já escopado por org (accessToken/sellerId vêm da integração ML da org)
+- **APIs afetadas:** `POST /api/dre/sync` (mesma rota); quando o resumo de fatura ML falha/vem vazio, tenta `/billing/integration/periods/key/{key}/group/ML/details` (mesma função já usada quando a fatura não alinha ao mês civil) antes de cair na estimativa por `listing_prices`/`shipping_options`
+- **Assume singleton?** não
+- **Cron/background:** nenhum
+- **Dados globais vs por org:** por org
+- **Código já tenant-ready?** sim
+- **Ação futura na migração:** nenhuma
+
+### DRE: Custo produto/Imposto ML não somam mais custo de pedidos cancelados — 2026-08-24
+
+- **Tabelas novas/alteradas:** nenhuma (`productCostBreakdown`/`taxBreakdown` no payload do snapshot ganham campo opcional `cancelled`)
+- **Precisa `organizationId`?** sim — mesmo snapshot já escopado por org
+- **APIs afetadas:** `POST /api/dre/sync` (mesma rota); nenhuma rota nova
+- **Assume singleton?** não
+- **Cron/background:** nenhum
+- **Dados globais vs por org:** por org
+- **Código já tenant-ready?** sim
+- **Ação futura na migração:** nenhuma
+
 ### DRE: auditoria da fatura no sync e reset do breakdown — 2026-08-24
 
 - **Tabelas novas/alteradas:** nenhuma (JSON do `dre_month_snapshots.payload`: `syncedBreakdownBaseline` + breakdowns preenchidos no sync da API)

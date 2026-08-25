@@ -131,7 +131,7 @@ describe("sumYearLineAmounts", () => {
 });
 
 describe("applyDreIncludeCancelledView", () => {
-  it("moves cancelled revenue into entrada and keeps cancelled line as custo variável", () => {
+  it("moves cancelled revenue into entrada and keeps cancelled line as custo variável, without touching product cost or tax", () => {
     const lines = {
       ...BASE_LINES,
       revenueMl: 1000,
@@ -146,8 +146,10 @@ describe("applyDreIncludeCancelledView", () => {
     });
     assert.equal(adjusted.revenueMl, 1150);
     assert.equal(adjusted.cancelledSalesMl, -150);
-    assert.equal(adjusted.productCostErp, -450);
-    assert.equal(adjusted.taxErp, -115);
+    // Custo produto e Imposto ML de pedidos cancelados já foram excluídos do
+    // cálculo base — não há custo/imposto a somar de volta aqui.
+    assert.equal(adjusted.productCostErp, -400);
+    assert.equal(adjusted.taxErp, -100);
   });
 
   it("falls back to cancelled line when overlay is missing", () => {

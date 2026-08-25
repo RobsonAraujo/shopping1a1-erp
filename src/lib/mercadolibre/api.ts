@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { roundMoney } from "@/lib/financial-margin";
 import { getMercadoLibreConfig } from "./config";
 import { fetchWithRetry } from "./fetch-with-retry";
+import { mapWithConcurrency } from "./concurrency";
 import {
   aggregateFulfillmentSnapshots,
   collectInventoryIdsFromItem,
@@ -881,15 +882,17 @@ export async function fetchItemsByIdsBatched(
   accessToken: string,
   ids: string[],
   batchSize = 20,
+  concurrency = 8,
 ): Promise<ItemBody[]> {
   const unique = [...new Set(ids.filter(Boolean))];
-  const out: ItemBody[] = [];
+  const batches: string[][] = [];
   for (let i = 0; i < unique.length; i += batchSize) {
-    const batch = unique.slice(i, i + batchSize);
-    const items = await fetchItemsByIds(accessToken, batch);
-    out.push(...items);
+    batches.push(unique.slice(i, i + batchSize));
   }
-  return out;
+  const results = await mapWithConcurrency(batches, concurrency, (batch) =>
+    fetchItemsByIds(accessToken, batch),
+  );
+  return results.flat();
 }
 
 /** Mesmo que `fetchUnitsSoldForItemsInWindow`, mas em lotes para limitar paralelismo. */
@@ -960,31 +963,6 @@ export async function fetchUnitsSoldForItemsInDateRangeBatched(
   }
 
   return out;
-}
-
-async function mapWithConcurrency<T, R>(
-  items: T[],
-  concurrency: number,
-  fn: (item: T, index: number) => Promise<R>,
-): Promise<R[]> {
-  if (items.length === 0) return [];
-  const results = new Array<R>(items.length);
-  let nextIndex = 0;
-
-  async function worker() {
-    while (nextIndex < items.length) {
-      const index = nextIndex;
-      nextIndex += 1;
-      results[index] = await fn(items[index], index);
-    }
-  }
-
-  const workers = Array.from(
-    { length: Math.min(concurrency, items.length) },
-    () => worker(),
-  );
-  await Promise.all(workers);
-  return results;
 }
 
 export async function fetchFulfillmentStock(

@@ -78,6 +78,7 @@ import {
   formatCalendarRangeYmd,
   getCalendarMonthRange,
 } from "@/lib/mercadolibre/revenue-periods";
+import { buildMercadoLivreCostsMetricsUrl } from "@/lib/mercadolibre/costs-metrics-url";
 import { cn } from "@/lib/utils";
 
 const PERCENT_ROW_DIVIDER_STYLE = {
@@ -955,6 +956,25 @@ const LINE_AUDIT_TEXT: Partial<
   },
 };
 
+/** Link para o painel "Tarifas e investimentos" do ML, só para "Tarifas especiais" de um mês específico (não para o total do ano). */
+function buildSpecialFeesExternalLink(
+  year: number,
+  auditTarget: AuditTarget,
+): { href: string; label: string; hint: string } | null {
+  if (
+    auditTarget === null ||
+    auditTarget.kind !== "specialFees" ||
+    auditTarget.period === "year"
+  ) {
+    return null;
+  }
+  return {
+    href: buildMercadoLivreCostsMetricsUrl(year, auditTarget.period),
+    label: "Abrir métricas de custos no Mercado Livre",
+    hint: "Para conferir o valor exato de \"Outras Tarifas\": no painel do Mercado Livre, vá em Tarifas e investimentos e passe o mouse sobre a linha \"Outras Tarifas\".",
+  };
+}
+
 const LINE_BREAKDOWN_FIELD: Partial<
   Record<AuditKind, keyof DreMonthView>
 > = {
@@ -1562,6 +1582,10 @@ function DreYearTableMobile({
   const lineAuditState = resolveLineAuditState(data, auditTarget);
   const lineAuditText =
     auditTarget !== null ? LINE_AUDIT_TEXT[auditTarget.kind] : undefined;
+  const specialFeesExternalLink = buildSpecialFeesExternalLink(
+    data.year,
+    auditTarget,
+  );
 
   const selectedMonth = selection === "total" ? null : data.months[selection];
   const alertMessages = selectedMonth ? getMonthAlertMessages(selectedMonth) : [];
@@ -1764,6 +1788,7 @@ function DreYearTableMobile({
         items={lineAuditState.items}
         unavailable={lineAuditState.unavailable}
         needsResync={lineAuditState.needsResync}
+        externalLink={specialFeesExternalLink}
         onClose={() => setAuditTarget(null)}
       />
     </div>
@@ -2545,6 +2570,10 @@ function DreYearTableDesktop({
   const lineAuditState = resolveLineAuditState(data, auditTarget);
   const lineAuditText =
     auditTarget !== null ? LINE_AUDIT_TEXT[auditTarget.kind] : undefined;
+  const specialFeesExternalLink = buildSpecialFeesExternalLink(
+    data.year,
+    auditTarget,
+  );
 
   const rows = buildDreTableRows(
     data.costItems,
@@ -2895,6 +2924,7 @@ function DreYearTableDesktop({
         items={lineAuditState.items}
         unavailable={lineAuditState.unavailable}
         needsResync={lineAuditState.needsResync}
+        externalLink={specialFeesExternalLink}
         onClose={() => setAuditTarget(null)}
       />
     </TooltipProvider>

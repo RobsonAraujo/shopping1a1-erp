@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertTriangle, Search } from "lucide-react";
+import { AlertTriangle, Ban, ExternalLink, Search } from "lucide-react";
 import {
   Sheet,
   SheetBody,
@@ -31,6 +31,8 @@ type DreLineAuditModalProps = {
   unavailable?: boolean;
   /** true quando algum mês do período não tem o detalhamento salvo (sincronizado antes desta funcionalidade). */
   needsResync?: boolean;
+  /** Link externo opcional para o painel do ML (hoje só usado por "Tarifas especiais"). */
+  externalLink?: { href: string; label: string; hint: string } | null;
   onClose: () => void;
 };
 
@@ -52,6 +54,7 @@ export function DreLineAuditModal({
   items,
   unavailable,
   needsResync,
+  externalLink,
   onClose,
 }: DreLineAuditModalProps) {
   const [query, setQuery] = useState("");
@@ -80,6 +83,11 @@ export function DreLineAuditModal({
   );
   const totalAmount = filteredItems.reduce((sum, item) => sum + item.amount, 0);
   const hasQuantity = items.some((item) => item.quantity !== null);
+  const cancelledItems = items.filter((item) => (item.cancelledQuantity ?? 0) > 0);
+  const cancelledTotal = items.reduce(
+    (sum, item) => sum + (item.cancelledAmount ?? 0),
+    0,
+  );
 
   return (
     <Sheet
@@ -99,6 +107,17 @@ export function DreLineAuditModal({
           </SheetDescription>
         </SheetHeader>
         <SheetBody className="flex flex-1 flex-col overflow-hidden">
+          {externalLink ? (
+            <div className="mb-3 flex shrink-0 flex-col gap-2 rounded-xl border border-[var(--border)] p-3 text-xs leading-relaxed text-[var(--muted-foreground)]">
+              <p>{externalLink.hint}</p>
+              <Button asChild variant="outline" size="sm" className="w-full">
+                <a href={externalLink.href} target="_blank" rel="noreferrer">
+                  <ExternalLink className="size-3.5" aria-hidden />
+                  {externalLink.label}
+                </a>
+              </Button>
+            </div>
+          ) : null}
           {unavailable ? (
             <div className="flex flex-1 items-center justify-center">
               <div className="max-w-md rounded-lg border border-[var(--border)] bg-[var(--muted)]/30 px-4 py-6 text-center text-sm text-[var(--muted-foreground)]">
@@ -113,6 +132,20 @@ export function DreLineAuditModal({
             </div>
           ) : (
             <>
+              {cancelledItems.length > 0 ? (
+                <div className="mb-3 flex shrink-0 items-start gap-2 rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 text-xs leading-relaxed text-[var(--muted-foreground)]">
+                  <Ban className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                  <span>
+                    {cancelledItems.length} produto(s) tiveram pedidos
+                    cancelados neste período ({formatFinancialMoney(cancelledTotal)}
+                    ) — anotados abaixo, na linha do próprio produto. Esse
+                    valor conta normalmente aqui (o painel ML inclui
+                    canceladas no faturamento bruto), mas é abatido pela
+                    linha &quot;Canceladas / devolvidas&quot; no resultado
+                    final.
+                  </span>
+                </div>
+              ) : null}
               {needsResync ? (
                 <div className="mb-3 flex shrink-0 items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs text-amber-900">
                   <AlertTriangle
@@ -192,33 +225,53 @@ export function DreLineAuditModal({
                             </td>
                           </tr>
                         ) : (
-                          sortedRows.map((item) => (
-                            <tr
-                              key={item.key}
-                              className="border-b border-[var(--border)] last:border-b-0"
-                            >
-                              <td className="px-3 py-2">
-                                <div className="min-w-0">
-                                  <p className="truncate font-medium leading-tight">
-                                    {item.title || item.sku || "—"}
-                                  </p>
-                                  {item.sku ? (
-                                    <p className="truncate text-[11px] text-[var(--muted-foreground)]">
-                                      SKU: {item.sku}
+                          sortedRows.map((item) => {
+                            const cancelledQuantity =
+                              item.cancelledQuantity ?? 0;
+                            const cancelledAmountForItem =
+                              item.cancelledAmount ?? 0;
+                            return (
+                              <tr
+                                key={item.key}
+                                className="border-b border-[var(--border)] last:border-b-0"
+                              >
+                                <td className="px-3 py-2">
+                                  <div className="min-w-0">
+                                    <p className="truncate font-medium leading-tight">
+                                      {item.title || item.sku || "—"}
                                     </p>
-                                  ) : null}
-                                </div>
-                              </td>
-                              {hasQuantity ? (
-                                <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
-                                  {item.quantity ?? "—"}
+                                    {item.sku ? (
+                                      <p className="truncate text-[11px] text-[var(--muted-foreground)]">
+                                        SKU: {item.sku}
+                                      </p>
+                                    ) : null}
+                                    {cancelledQuantity > 0 ? (
+                                      <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-[var(--muted-foreground)]">
+                                        <Ban
+                                          className="size-3 shrink-0"
+                                          aria-hidden
+                                        />
+                                        inclui {cancelledQuantity} un.
+                                        cancelados (
+                                        {formatFinancialMoney(
+                                          cancelledAmountForItem,
+                                        )}
+                                        )
+                                      </p>
+                                    ) : null}
+                                  </div>
                                 </td>
-                              ) : null}
-                              <td className="whitespace-nowrap px-3 py-2 text-right font-semibold tabular-nums">
-                                {formatFinancialMoney(item.amount)}
-                              </td>
-                            </tr>
-                          ))
+                                {hasQuantity ? (
+                                  <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
+                                    {item.quantity ?? "—"}
+                                  </td>
+                                ) : null}
+                                <td className="whitespace-nowrap px-3 py-2 text-right font-semibold tabular-nums">
+                                  {formatFinancialMoney(item.amount)}
+                                </td>
+                              </tr>
+                            );
+                          })
                         )}
                       </tbody>
                       <tfoot>

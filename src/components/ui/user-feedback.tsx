@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { AlertTriangle, CheckCircle2, Info, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Info, X, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatApiErrorMessage } from "@/lib/api-client-error";
 
@@ -56,11 +56,14 @@ export function UserFeedback({
   title,
   children,
   className,
+  onDismiss,
 }: {
   tone?: UserFeedbackTone;
   title?: string;
   children: ReactNode;
   className?: string;
+  /** Quando informado, mostra um botão de fechar no canto superior direito. */
+  onDismiss?: () => void;
 }) {
   const styles = TONE_STYLES[tone];
   const Icon = ICONS[tone];
@@ -87,7 +90,7 @@ export function UserFeedback({
       >
         <Icon className="size-4" />
       </span>
-      <div className="min-w-0 pt-0.5">
+      <div className="min-w-0 flex-1 pt-0.5">
         <p className={cn("text-sm font-semibold leading-5", styles.title)}>
           {title ?? DEFAULT_TITLE[tone]}
         </p>
@@ -95,6 +98,19 @@ export function UserFeedback({
           {message}
         </div>
       </div>
+      {onDismiss ? (
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="Fechar"
+          className={cn(
+            "-mr-1 -mt-1 flex size-6 shrink-0 items-center justify-center rounded-md opacity-70 transition-opacity hover:opacity-100",
+            styles.title,
+          )}
+        >
+          <X className="size-4" />
+        </button>
+      ) : null}
     </div>
   );
 }

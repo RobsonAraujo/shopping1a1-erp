@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertTriangle, Search } from "lucide-react";
+import { AlertTriangle, Ban, Search } from "lucide-react";
 import {
   Sheet,
   SheetBody,
@@ -19,6 +19,7 @@ import {
   formatFinancialMoney,
   formatFinancialPercent,
 } from "@/lib/financial-margin";
+import { cn } from "@/lib/utils";
 import type { DreTaxBreakdownItem } from "@/lib/dre/dre-calculations";
 
 type DreTaxAuditSortKey =
@@ -82,9 +83,20 @@ export function DreTaxAuditModal({
     { key: "totalTax", direction: "desc" },
   );
 
-  const totalQuantity = filteredItems.reduce((sum, item) => sum + item.quantity, 0);
-  const totalRevenue = filteredItems.reduce((sum, item) => sum + item.revenue, 0);
+  const totalQuantity = filteredItems.reduce(
+    (sum, item) => sum + item.quantity,
+    0,
+  );
+  const totalRevenue = filteredItems.reduce(
+    (sum, item) => sum + item.revenue,
+    0,
+  );
   const totalTax = filteredItems.reduce((sum, item) => sum + item.totalTax, 0);
+  const cancelledItems = items.filter((item) => (item.cancelledQuantity ?? 0) > 0);
+  const cancelledTax = items.reduce(
+    (sum, item) => sum + (item.cancelledTax ?? 0),
+    0,
+  );
 
   return (
     <Sheet
@@ -105,6 +117,23 @@ export function DreTaxAuditModal({
           </SheetDescription>
         </SheetHeader>
         <SheetBody className="flex flex-1 flex-col overflow-hidden">
+          {cancelledItems.length > 0 ? (
+            <div className="mb-3 flex shrink-0 items-start gap-2 rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 text-xs leading-relaxed text-[var(--muted-foreground)]">
+              <Ban className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              <span>
+                {cancelledItems.length} produto(s) tiveram pedidos cancelados
+                neste período (imposto de {formatFinancialMoney(cancelledTax)}
+                ) — marcados com{" "}
+                <Ban
+                  className="inline size-3 -translate-y-px"
+                  aria-hidden
+                />{" "}
+                abaixo, na linha do próprio produto. A receita desses
+                pedidos entra em Faturamento ML, mas esse imposto não é
+                somado no total abaixo pois o produto não foi enviado.
+              </span>
+            </div>
+          ) : null}
           {needsResync ? (
             <div className="mb-3 flex shrink-0 items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs text-amber-900">
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
@@ -194,50 +223,93 @@ export function DreTaxAuditModal({
                         </td>
                       </tr>
                     ) : (
-                      sortedRows.map((item) => (
-                        <tr
-                          key={item.key}
-                          className="border-b border-[var(--border)] last:border-b-0"
-                        >
-                          <td className="px-3 py-2">
-                            <div className="flex items-start gap-1.5">
-                              {item.missingTax ? (
-                                <AlertTriangle
-                                  className="mt-0.5 size-3.5 shrink-0 text-amber-600"
-                                  aria-hidden
-                                />
-                              ) : null}
-                              <div className="min-w-0">
-                                <p className="truncate font-medium leading-tight">
-                                  {item.title || item.sku || "—"}
-                                </p>
-                                {item.sku ? (
-                                  <p className="truncate text-[11px] text-[var(--muted-foreground)]">
-                                    SKU: {item.sku}
-                                  </p>
+                      sortedRows.map((item) => {
+                        const cancelledQuantity = item.cancelledQuantity ?? 0;
+                        const cancelledRevenueForItem =
+                          item.cancelledRevenue ?? 0;
+                        const cancelledTaxForItem = item.cancelledTax ?? 0;
+                        const fullyCancelled =
+                          item.quantity === 0 && cancelledQuantity > 0;
+                        const displayQuantity = fullyCancelled
+                          ? cancelledQuantity
+                          : item.quantity;
+                        const displayRevenue = fullyCancelled
+                          ? cancelledRevenueForItem
+                          : item.revenue;
+                        const displayTaxPercent = fullyCancelled
+                          ? cancelledRevenueForItem > 0
+                            ? (cancelledTaxForItem / cancelledRevenueForItem) *
+                              100
+                            : null
+                          : item.taxPercent;
+                        const displayTotalTax = fullyCancelled
+                          ? cancelledTaxForItem
+                          : item.totalTax;
+                        return (
+                          <tr
+                            key={item.key}
+                            className={cn(
+                              "border-b border-[var(--border)] last:border-b-0",
+                              fullyCancelled && "opacity-60",
+                            )}
+                          >
+                            <td className="px-3 py-2">
+                              <div className="flex items-start gap-1.5">
+                                {fullyCancelled ? (
+                                  <Ban
+                                    className="mt-0.5 size-3.5 shrink-0 text-[var(--muted-foreground)]"
+                                    aria-hidden
+                                  />
+                                ) : item.missingTax ? (
+                                  <AlertTriangle
+                                    className="mt-0.5 size-3.5 shrink-0 text-amber-600"
+                                    aria-hidden
+                                  />
                                 ) : null}
-                                {item.missingTax ? (
-                                  <p className="text-[11px] text-amber-700">
-                                    Sem % de imposto apurado no mês
+                                <div className="min-w-0">
+                                  <p className="truncate font-medium leading-tight">
+                                    {item.title || item.sku || "—"}
                                   </p>
-                                ) : null}
+                                  {item.sku ? (
+                                    <p className="truncate text-[11px] text-[var(--muted-foreground)]">
+                                      SKU: {item.sku}
+                                    </p>
+                                  ) : null}
+                                  {fullyCancelled ? (
+                                    <p className="text-[11px] font-medium text-[var(--muted-foreground)]">
+                                      Cancelado · não entra no total
+                                    </p>
+                                  ) : item.missingTax ? (
+                                    <p className="text-[11px] text-amber-700">
+                                      Sem % de imposto apurado no mês
+                                    </p>
+                                  ) : null}
+                                  {!fullyCancelled && cancelledQuantity > 0 ? (
+                                    <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-[var(--muted-foreground)]">
+                                      <Ban className="size-3 shrink-0" aria-hidden />+
+                                      {cancelledQuantity} un. cancelados (
+                                      {formatFinancialMoney(cancelledTaxForItem)}
+                                      ) · não contam no total
+                                    </p>
+                                  ) : null}
+                                </div>
                               </div>
-                            </div>
-                          </td>
-                          <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
-                            {item.quantity}
-                          </td>
-                          <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
-                            {formatFinancialMoney(item.revenue)}
-                          </td>
-                          <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
-                            {formatFinancialPercent(item.taxPercent)}
-                          </td>
-                          <td className="whitespace-nowrap px-3 py-2 text-right font-semibold tabular-nums">
-                            {formatFinancialMoney(item.totalTax)}
-                          </td>
-                        </tr>
-                      ))
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
+                              {displayQuantity}
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
+                              {formatFinancialMoney(displayRevenue)}
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
+                              {formatFinancialPercent(displayTaxPercent)}
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2 text-right font-semibold tabular-nums">
+                              {formatFinancialMoney(displayTotalTax)}
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                   <tfoot>

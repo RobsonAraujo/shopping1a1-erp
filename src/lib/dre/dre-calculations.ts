@@ -37,6 +37,10 @@ export type DreProductCostBreakdownItem = {
   missingCost: boolean;
   /** true quando o custo unitário veio de um nivelamento DRE no período. */
   leveled?: boolean;
+  /** Unidades do mesmo SKU/período que vieram de pedidos cancelados — não contam em `quantity`/`totalCost`, só informativas (mesma linha do produto, não uma linha separada). */
+  cancelledQuantity?: number;
+  /** Custo correspondente a `cancelledQuantity` — não conta em `totalCost`. */
+  cancelledCost?: number;
 };
 
 /** Separa na auditoria vendas niveladas vs custo do cadastro (mesmo SKU no mês). */
@@ -65,6 +69,10 @@ export type DreTaxBreakdownItem = {
   taxPercent: number | null;
   totalTax: number;
   missingTax: boolean;
+  /** Unidades do mesmo SKU/período que vieram de pedidos cancelados — não contam em `quantity`/`revenue`/`totalTax`, só informativas (mesma linha do produto). */
+  cancelledQuantity?: number;
+  cancelledRevenue?: number;
+  cancelledTax?: number;
 };
 
 /** Auditoria genérica (quantidade + valor) por SKU/anúncio, usada por linhas mais simples (faturamento, canceladas, tarifas, frete, ADS). */
@@ -74,6 +82,15 @@ export type DreLineBreakdownItem = {
   title: string;
   quantity: number | null;
   amount: number;
+  /**
+   * Parte de `quantity`/`amount` (na mesma linha) que veio de pedidos
+   * cancelados — hoje só usado em Faturamento ML, onde a receita cancelada
+   * já está somada em `amount`/`quantity` (o painel ML inclui canceladas no
+   * faturamento bruto); estes campos são só para anotar quanto disso é
+   * cancelado, sem alterar a soma.
+   */
+  cancelledQuantity?: number | null;
+  cancelledAmount?: number;
 };
 
 /** Linhas do snapshot que podem ser editadas manualmente na grade do DRE. */
@@ -569,6 +586,11 @@ export function computeDreTotals(
 /**
  * Inclui vendas canceladas no faturamento bruto (como o painel ML), mantendo
  * a linha de canceladas nos custos variáveis para abater o resultado.
+ *
+ * Custo produto e Imposto ML NÃO são ajustados aqui: o cálculo base já exclui
+ * pedidos cancelados corretamente (nenhum produto foi de fato enviado), então
+ * não há custo/imposto a neutralizar — diferente da receita, que precisa da
+ * linha `cancelledSalesMl` para abater o valor bruto incluído acima.
  */
 export function applyDreIncludeCancelledView(
   lines: DreLineAmounts,
@@ -589,10 +611,6 @@ export function applyDreIncludeCancelledView(
   return {
     ...lines,
     revenueMl: roundMoney(lines.revenueMl + revenueAdd),
-    productCostErp: roundMoney(
-      lines.productCostErp + (overlay?.productCostErp ?? 0),
-    ),
-    taxErp: roundMoney(lines.taxErp + (overlay?.taxErp ?? 0)),
   };
 }
 
@@ -633,13 +651,15 @@ export function mergeProductCostBreakdowns(
     for (const item of list) {
       const mergeKey = normalizeProductCostAuditMergeKey(item);
       const leveled =
-        item.leveled === true || mergeKey.endsWith("::leveled");
+        item.leveled === true || mergeKey.includes("::leveled");
       const existing = byKey.get(mergeKey);
       if (!existing) {
         byKey.set(mergeKey, {
           ...item,
           key: mergeKey,
           leveled: leveled || undefined,
+          cancelledQuantity: item.cancelledQuantity || undefined,
+          cancelledCost: item.cancelledCost || undefined,
         });
         continue;
       }
@@ -651,6 +671,13 @@ export function mergeProductCostBreakdowns(
           : 0;
       existing.missingCost = existing.missingCost || item.missingCost;
       existing.leveled = leveled || undefined;
+      if (item.cancelledQuantity || item.cancelledCost) {
+        existing.cancelledQuantity =
+          (existing.cancelledQuantity ?? 0) + (item.cancelledQuantity ?? 0);
+        existing.cancelledCost = roundMoney(
+          (existing.cancelledCost ?? 0) + (item.cancelledCost ?? 0),
+        );
+      }
     }
   }
   return [...byKey.values()].sort((a, b) => {
@@ -693,6 +720,16 @@ export function mergeTaxBreakdowns(
           ? roundMoney((existing.totalTax / existing.revenue) * 100)
           : null;
       existing.missingTax = existing.missingTax || item.missingTax;
+      if (item.cancelledQuantity || item.cancelledRevenue || item.cancelledTax) {
+        existing.cancelledQuantity =
+          (existing.cancelledQuantity ?? 0) + (item.cancelledQuantity ?? 0);
+        existing.cancelledRevenue = roundMoney(
+          (existing.cancelledRevenue ?? 0) + (item.cancelledRevenue ?? 0),
+        );
+        existing.cancelledTax = roundMoney(
+          (existing.cancelledTax ?? 0) + (item.cancelledTax ?? 0),
+        );
+      }
     }
   }
   return [...byKey.values()].sort((a, b) => b.totalTax - a.totalTax);
@@ -725,6 +762,13 @@ export function mergeLineBreakdowns(
           ? null
           : (existing.quantity ?? 0) + (item.quantity ?? 0);
       existing.amount = roundMoney(existing.amount + item.amount);
+      if (item.cancelledQuantity || item.cancelledAmount) {
+        existing.cancelledQuantity =
+          (existing.cancelledQuantity ?? 0) + (item.cancelledQuantity ?? 0);
+        existing.cancelledAmount = roundMoney(
+          (existing.cancelledAmount ?? 0) + (item.cancelledAmount ?? 0),
+        );
+      }
     }
   }
   return [...byKey.values()].sort((a, b) => b.amount - a.amount);

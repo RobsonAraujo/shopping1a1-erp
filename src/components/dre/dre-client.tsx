@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Download, HelpCircle, Info, Plus, RefreshCw, Scale, Upload } from "lucide-react";
 import { DreCostItemsModal } from "@/components/dre/dre-fixed-costs-modal";
 import { DreOverview } from "@/components/dre/dre-overview";
@@ -135,6 +135,10 @@ export function DreClient() {
   const [reconcileOpen, setReconcileOpen] = useState(false);
   const [reconciliationBusy, setReconciliationBusy] = useState(false);
   const [reconcileAfterSync, setReconcileAfterSync] = useState(false);
+  /** Um AbortController por mês em sincronização (sync-all roda concorrência 2). */
+  const syncControllersRef = useRef<Map<number, AbortController>>(new Map());
+  /** true enquanto um "Sincronizar tudo" cancelado não deve puxar o próximo mês da fila. */
+  const syncAllCancelledRef = useRef(false);
 
   const yearOptions = useMemo(
     () =>
@@ -198,6 +202,12 @@ export function DreClient() {
     setSessionAdjustedByMonth({});
   }, [year]);
 
+  useEffect(() => {
+    if (!error) return;
+    const timeout = setTimeout(() => setError(null), 8000);
+    return () => clearTimeout(timeout);
+  }, [error]);
+
   const updateSessionAdjustedAfterEdit = useCallback(
     (
       month: number,
@@ -231,11 +241,14 @@ export function DreClient() {
         ...prev,
         [month]: "Iniciando sincronização…",
       }));
+      const controller = new AbortController();
+      syncControllersRef.current.set(month, controller);
       try {
         const res = await fetch("/api/dre/sync?stream=1", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ year, month, preserveLineKeys }),
+          signal: controller.signal,
         });
         if (!res.ok) {
           setError(await readApiError(res, "dre_sync_failed"));
@@ -260,8 +273,13 @@ export function DreClient() {
           if (event.type === "complete") {
             completed = true;
             setData((prev) => {
-              if (!prev || prev.year !== event.yearView.year) {
+              if (!prev) {
                 return event.yearView;
+              }
+              if (prev.year !== event.yearView.year) {
+                // Usuário trocou de ano enquanto esta sync estava em voo —
+                // os dados já carregados são de outro ano, não sobrescrever.
+                return prev;
               }
               // Sync-all (concorrência 2): um yearView antigo não pode
               // sobrescrever mês já atualizado por outra sync em paralelo.
@@ -297,10 +315,15 @@ export function DreClient() {
           return false;
         }
         return true;
-      } catch {
-        setError("Falha de rede ao sincronizar. Verifique sua conexão.");
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          setError("Sincronização cancelada.");
+        } else {
+          setError("Falha de rede ao sincronizar. Verifique sua conexão.");
+        }
         return false;
       } finally {
+        syncControllersRef.current.delete(month);
         setSyncingMonths((prev) => {
           const next = new Set(prev);
           next.delete(month);
@@ -316,6 +339,13 @@ export function DreClient() {
     },
     [year],
   );
+
+  const cancelSyncingMonths = useCallback(() => {
+    syncAllCancelledRef.current = true;
+    for (const controller of syncControllersRef.current.values()) {
+      controller.abort();
+    }
+  }, []);
 
   const monthHasSnapshot = useCallback(
     (month: number) => {
@@ -343,6 +373,7 @@ export function DreClient() {
     ) => {
       setSyncingAll(true);
       setError(null);
+      syncAllCancelledRef.current = false;
       const failures: number[] = [];
       const months: number[] = [];
       for (let month = 1; month <= 12; month += 1) {
@@ -353,7 +384,7 @@ export function DreClient() {
       try {
         let cursor = 0;
         async function worker() {
-          while (cursor < months.length) {
+          while (cursor < months.length && !syncAllCancelledRef.current) {
             const month = months[cursor];
             cursor += 1;
             const ok = await syncMonth(
@@ -372,7 +403,9 @@ export function DreClient() {
         );
         await Promise.all(workers);
 
-        if (failures.length > 0) {
+        if (syncAllCancelledRef.current) {
+          setError("Sincronização cancelada.");
+        } else if (failures.length > 0) {
           setError(
             `Falha ao sincronizar ${failures.length} mês(es), começando por ${failures[0]}. Corrija o erro e tente novamente.`,
           );
@@ -663,6 +696,7 @@ export function DreClient() {
               month,
               message: syncingMonthMessages[month] ?? "Sincronizando…",
             }))}
+          onCancel={cancelSyncingMonths}
         />
       ) : null}
       <div className="space-y-5 [&_button]:cursor-pointer [&_a]:cursor-pointer [&_[role=button]]:cursor-pointer [&_label]:cursor-pointer">
@@ -885,7 +919,7 @@ export function DreClient() {
         ) : null}
 
         {error ? (
-          <UserFeedback>{error}</UserFeedback>
+          <UserFeedback onDismiss={() => setError(null)}>{error}</UserFeedback>
         ) : null}
 
         {viewData && selectedMonth
