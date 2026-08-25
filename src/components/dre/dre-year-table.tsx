@@ -14,11 +14,13 @@ import { NumericFormat } from "react-number-format";
 import {
   AlertCircle,
   Banknote,
+  Check,
   ChevronLeft,
   ChevronRight,
   Columns3,
   Landmark,
   List,
+  Pencil,
   PiggyBank,
   Receipt,
   RefreshCw,
@@ -26,6 +28,7 @@ import {
   TrendingDown,
   TrendingUp,
   Undo2,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FormSelect } from "@/components/ui/form-select";
@@ -457,12 +460,13 @@ function DreInlineMoneyCell({
   const [panelEntered, setPanelEntered] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const focusedOnceRef = useRef(false);
 
   const EDITOR_MIN_WIDTH_PX = 320;
   const VIEWPORT_PAD_PX = 16;
-  const EDITOR_PANEL_HEIGHT_PX = 148;
+  const EDITOR_PANEL_HEIGHT_PX = 220;
 
   function placeEditorPanel() {
     const anchor = anchorRef.current;
@@ -550,6 +554,20 @@ function DreInlineMoneyCell({
     inputRef.current?.select();
   }, [editing, isMobile, panelStyle]);
 
+  // Clique fora do painel cancela a edição — mesmo padrão já usado nos
+  // outros popovers do app (combobox de SKU, seletor de período etc.).
+  useEffect(() => {
+    if (!editing || isMobile) return;
+    function onPointerDown(event: MouseEvent) {
+      if (!panelRef.current?.contains(event.target as Node)) {
+        cancelEditing();
+      }
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing, isMobile]);
+
   useEffect(() => {
     return () => {
       if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
@@ -624,7 +642,7 @@ function DreInlineMoneyCell({
       className={
         isMobile
           ? "h-16 w-full rounded-2xl border-0 bg-[var(--muted)]/50 px-4 text-center text-3xl font-bold tabular-nums outline-none ring-1 ring-[var(--border)] transition-[box-shadow,ring-color] duration-150 focus:bg-[var(--background)] focus:ring-2 focus:ring-[var(--primary)]/50"
-          : "h-12 w-full rounded-lg border-0 bg-[var(--muted)]/40 px-3 text-right text-xl font-bold tabular-nums outline-none ring-1 ring-[var(--border)] transition-[box-shadow,ring-color] duration-150 focus:bg-white focus:ring-2 focus:ring-[var(--primary)]/40"
+          : "h-14 w-full rounded-xl border-0 bg-[var(--muted)]/50 px-3.5 text-right text-2xl font-bold tabular-nums text-[var(--foreground)] shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] outline-none ring-1 ring-[var(--border)] transition-[box-shadow,ring-color,background-color] duration-150 focus:bg-[var(--background)] focus:shadow-none focus:ring-2 focus:ring-[var(--primary)]/50"
       }
     />
   );
@@ -704,35 +722,66 @@ function DreInlineMoneyCell({
               onDoubleClick={(e) => e.stopPropagation()}
             >
               <div
+                ref={panelRef}
                 className={cn(
-                  "rounded-xl border border-[var(--border)] bg-[var(--background)] p-3 shadow-xl ring-1 ring-black/5 transition-[opacity,transform] duration-200 ease-out",
+                  "overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--background)] shadow-2xl ring-1 ring-black/5 transition-[opacity,transform] duration-200 ease-out",
                   panelEntered
-                    ? "scale-100 opacity-100"
-                    : "scale-95 opacity-0",
+                    ? "translate-y-0 scale-100 opacity-100"
+                    : "-translate-y-1 scale-95 opacity-0",
                 )}
               >
-                <p className="mb-2 truncate text-xs font-medium text-[var(--muted-foreground)]">
-                  {label}
-                </p>
-                {moneyInput}
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  <Button
+                <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--muted)]/30 px-3.5 py-2.5">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-[var(--primary)]/10 text-[var(--primary)]">
+                      <Pencil className="size-3.5" aria-hidden />
+                    </span>
+                    <p className="truncate text-xs font-semibold text-[var(--foreground)]">
+                      {label}
+                    </p>
+                  </div>
+                  <button
                     type="button"
-                    variant="outline"
-                    className="h-10 text-sm font-semibold"
+                    aria-label="Cancelar edição"
+                    className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => cancelEditing()}
                   >
-                    Cancelar
-                  </Button>
-                  <Button
-                    type="button"
-                    className="h-10 text-sm font-semibold"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => commit(draft)}
-                  >
-                    Aplicar
-                  </Button>
+                    <X className="size-3.5" aria-hidden />
+                  </button>
+                </div>
+                <div className="p-3.5">
+                  {moneyInput}
+                  <p className="mt-2 text-center text-[11px] text-[var(--muted-foreground)]">
+                    <kbd className="rounded border border-[var(--border)] bg-[var(--muted)] px-1 py-0.5 font-sans text-[10px] font-medium">
+                      Enter
+                    </kbd>{" "}
+                    aplica ·{" "}
+                    <kbd className="rounded border border-[var(--border)] bg-[var(--muted)] px-1 py-0.5 font-sans text-[10px] font-medium">
+                      Esc
+                    </kbd>{" "}
+                    cancela
+                  </p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-10 gap-1.5 text-sm font-semibold"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => cancelEditing()}
+                    >
+                      <X className="size-3.5" aria-hidden />
+                      Cancelar
+                    </Button>
+                    <Button
+                      type="button"
+                      className="h-10 gap-1.5 text-sm font-semibold"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => commit(draft)}
+                    >
+                      <Check className="size-3.5" aria-hidden />
+                      Aplicar
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>,
