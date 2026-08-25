@@ -3,7 +3,6 @@
 import {
   Fragment,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -104,9 +103,6 @@ const PERCENT_ROW_DIVIDER_STYLE = {
 const MAIN_ROW_DIVIDER_STYLE = {
   boxShadow: "inset 0 -1px 0 0 rgba(148, 163, 184, 0.35)",
 } as const;
-
-/** Zebra striping das linhas de detalhe. */
-const ALT_ROW_BG = "var(--muted)";
 
 const SELECTED_MONTH_CELL_CLASS = "relative";
 
@@ -775,6 +771,7 @@ function DreInlineMoneyCell({
           "whitespace-nowrap text-[12.5px] font-bold tabular-nums leading-tight",
           muted && "text-[var(--muted-foreground)]",
           adjusted && "text-amber-900 dark:text-amber-200",
+          !muted && !adjusted && valueToneClass(displayAmount),
           (!disabled || onAudit) &&
             "cursor-pointer rounded-sm hover:bg-[var(--muted)]",
           onAudit &&
@@ -1086,12 +1083,28 @@ function renderLabelCell(row: DreTableRow) {
       ? row.methodology
       : undefined;
   const labelSpan = <span className={rowLabelClass(row)}>{row.label}</span>;
+  const groupVisual = row.type === "static" ? GROUP_VISUALS[row.id] : undefined;
+  const GroupIcon = groupVisual?.icon;
 
   return (
     <div
-      className={cn("flex min-w-0 items-start", indent && "pl-2.5")}
+      className={cn(
+        "flex min-w-0",
+        GroupIcon ? "items-center gap-1.5" : "items-start",
+        indent && "pl-2.5",
+      )}
       title={source ? undefined : row.label}
     >
+      {GroupIcon ? (
+        <span
+          className={cn(
+            "flex size-5 shrink-0 items-center justify-center rounded-md",
+            GROUP_TONE_CLASS[groupVisual.tone],
+          )}
+        >
+          <GroupIcon className="size-3" aria-hidden />
+        </span>
+      ) : null}
       {source ? (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -2419,6 +2432,87 @@ const GROUP_TONE_CLASS: Record<string, string> = {
   emerald: "bg-emerald-50 text-emerald-600",
 };
 
+/** Igual a GROUP_TONE_CLASS, mas mais sutil — usado como fundo de linha
+ * inteira na tabela de comparação de meses (não só o badge do ícone). */
+const GROUP_ROW_TINT_CLASS: Record<string, string> = {
+  primary: "bg-[var(--primary)]/[0.06]",
+  rose: "bg-rose-50/60",
+  amber: "bg-amber-50/60",
+  violet: "bg-violet-50/60",
+  emerald: "bg-emerald-50/60",
+};
+
+/** Cor da "borda" de cada seção na tabela de comparação de meses — desenhada
+ * via box-shadow (não border), pra não brigar com border-collapse nem com
+ * os divisores de linha existentes (que também são box-shadow). */
+const GROUP_BORDER_COLOR: Record<string, string> = {
+  primary: "color-mix(in srgb, var(--primary) 45%, transparent)",
+  rose: "#fda4af",
+  amber: "#fcd34d",
+  violet: "#c4b5fd",
+  emerald: "#6ee7b7",
+};
+
+type SectionBoxPosition = "first" | "middle" | "last" | "only";
+
+/** Camadas de box-shadow que desenham os lados da "caixa" da seção que
+ * tocam esta célula. `edge` diz se a célula é a borda esquerda/direita da
+ * tabela (onde entra a borda lateral) ou uma célula de mês no meio (só topo/
+ * base, quando a linha é a primeira/última da seção). */
+function sectionBoxShadowLayers(
+  position: SectionBoxPosition | undefined,
+  edge: "outer-start" | "outer-end" | "inner",
+  color: string | undefined,
+): string[] {
+  if (!position || !color) return [];
+  const layers: string[] = [];
+  if (edge === "outer-start") layers.push(`inset 2px 0 0 0 ${color}`);
+  if (edge === "outer-end") layers.push(`inset -2px 0 0 0 ${color}`);
+  if (position === "first" || position === "only") {
+    layers.push(`inset 0 2px 0 0 ${color}`);
+  }
+  if (position === "last" || position === "only") {
+    layers.push(`inset 0 -2px 0 0 ${color}`);
+  }
+  return layers;
+}
+
+function withSectionBox(
+  baseStyle: CSSProperties | undefined,
+  position: SectionBoxPosition | undefined,
+  edge: "outer-start" | "outer-end" | "inner",
+  color: string | undefined,
+): CSSProperties | undefined {
+  const layers = sectionBoxShadowLayers(position, edge, color);
+  if (layers.length === 0) return baseStyle;
+  const existing = (baseStyle as { boxShadow?: string } | undefined)
+    ?.boxShadow;
+  return {
+    ...baseStyle,
+    boxShadow: existing
+      ? `${layers.join(", ")}, ${existing}`
+      : layers.join(", "),
+  };
+}
+
+const SECTION_CORNER_CLASS: Record<
+  "start" | "end",
+  Record<SectionBoxPosition, string>
+> = {
+  start: {
+    first: "rounded-tl-xl",
+    only: "rounded-tl-xl rounded-bl-xl",
+    last: "rounded-bl-xl",
+    middle: "",
+  },
+  end: {
+    first: "rounded-tr-xl",
+    only: "rounded-tr-xl rounded-br-xl",
+    last: "rounded-br-xl",
+    middle: "",
+  },
+};
+
 function DreStatementPanel({
   data,
   visibility = DEFAULT_DRE_VISIBILITY,
@@ -2561,32 +2655,8 @@ function DreStatementPanel({
     );
   }
 
-  const groupIds = useMemo(() => groups.map((g) => g.header.id), [groups]);
-  const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-  const [columnOf, setColumnOf] = useState<Record<string, number>>({});
-
-  /**
-   * Masonry real: mede a altura de cada cartão já renderizado e distribui
-   * greedy — sempre para a coluna mais curta no momento. Se um cartão
-   * grande cresce, os seguintes migram de coluna; caso contrário eles se
-   * empilham direto atrás do cartão anterior daquela coluna.
-   */
-  useLayoutEffect(() => {
-    const heights = groupIds.map(
-      (id) => cardRefs.current.get(id)?.offsetHeight ?? 0,
-    );
-    const colHeights = [0, 0];
-    const next: Record<string, number> = {};
-    groupIds.forEach((id, index) => {
-      const col = colHeights[0] <= colHeights[1] ? 0 : 1;
-      next[id] = col;
-      colHeights[col] += heights[index];
-    });
-    setColumnOf((prev) => {
-      const changed = groupIds.some((id) => prev[id] !== next[id]);
-      return changed ? next : prev;
-    });
-  }, [groupIds, showDetails, isYear, month?.month]);
+  const resultLiquido = totals?.resultadoLiquido ?? null;
+  const resultLiquidoPercent = totals?.resultadoLiquidoPercent ?? null;
 
   return (
     <div className="px-4 py-5 sm:px-8">
@@ -2636,25 +2706,35 @@ function DreStatementPanel({
       <div className="space-y-3">
         <DreRevenuePie totals={totals} visibility={visibility} />
 
-        <div className="mx-auto grid max-w-3xl items-start gap-2.5 sm:grid-cols-2">
-          <div className="flex flex-col gap-2.5">
-            {groups
-              .filter(
-                (group, index) => (columnOf[group.header.id] ?? index % 2) === 0,
-              )
-              .map((group) => renderStatementGroup(group))}
-          </div>
-          <div className="flex flex-col gap-2.5">
-            {groups
-              .filter(
-                (group, index) => (columnOf[group.header.id] ?? index % 2) === 1,
-              )
-              .map((group) => renderStatementGroup(group))}
-          </div>
+        <div className="mx-auto flex max-w-xl flex-col items-stretch">
+          {groups.map((group, index) => (
+            <div key={group.header.id} className="flex flex-col items-stretch">
+              {index > 0 ? (
+                <WaterfallConnector operator={connectorOperatorForGroup(group)} />
+              ) : null}
+              {renderStatementGroup(group)}
+            </div>
+          ))}
+          {resultLiquido !== null ? (
+            <>
+              <WaterfallConnector operator="=" />
+              {renderResultCard(resultLiquido, resultLiquidoPercent)}
+            </>
+          ) : null}
         </div>
       </div>
     </div>
   );
+
+  function connectorOperatorForGroup(group: StatementGroup): "+" | "-" {
+    // Sinal estrutural da categoria no DRE (fixo), não o sinal do valor do
+    // período — senão um mês com Investimentos = R$ 0 mostraria "+" mesmo
+    // sendo uma linha de custo (o título do card já diz "(-) Investimentos").
+    return group.header.type === "static" &&
+      group.header.id === "totalEntradaNaoOperacional"
+      ? "+"
+      : "-";
+  }
 
   function renderStatementGroup(group: StatementGroup) {
     const visual =
@@ -2669,10 +2749,6 @@ function DreStatementPanel({
     return (
       <div
         key={group.header.id}
-        ref={(el) => {
-          if (el) cardRefs.current.set(group.header.id, el);
-          else cardRefs.current.delete(group.header.id);
-        }}
         className="overflow-hidden rounded-2xl border border-[var(--border)]"
       >
         <div className="flex items-center justify-between gap-3 bg-[var(--muted)]/40 px-4 py-3">
@@ -2706,6 +2782,79 @@ function DreStatementPanel({
       </div>
     );
   }
+
+  function renderResultCard(amount: number, percent: number | null) {
+    const isLoss = amount < 0;
+    return (
+      <div
+        className={cn(
+          "overflow-hidden rounded-2xl border-2",
+          isLoss
+            ? "border-rose-300 dark:border-rose-900"
+            : "border-emerald-300 dark:border-emerald-900",
+        )}
+      >
+        <div
+          className={cn(
+            "flex items-center justify-between gap-3 px-4 py-3.5",
+            isLoss
+              ? "bg-rose-50 dark:bg-rose-950/30"
+              : "bg-emerald-50 dark:bg-emerald-950/30",
+          )}
+        >
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span
+              className={cn(
+                "flex size-8 shrink-0 items-center justify-center rounded-lg",
+                isLoss
+                  ? "bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-200"
+                  : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-200",
+              )}
+            >
+              <TrendingUp className="size-4" aria-hidden />
+            </span>
+            <p className="truncate text-sm font-semibold text-[var(--foreground)]">
+              Resultado líquido
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-col items-end">
+            <p
+              className={cn(
+                "text-base font-bold tabular-nums",
+                valueToneClass(amount),
+              )}
+            >
+              {formatFinancialMoney(amount)}
+            </p>
+            {percent !== null ? (
+              <p className="text-[11px] font-medium text-[var(--muted-foreground)]">
+                {percent.toFixed(2).replace(".", ",")}% da receita
+              </p>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
+}
+
+function WaterfallConnector({ operator }: { operator: "+" | "-" | "=" }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-1" aria-hidden>
+      <div className="h-3 w-px bg-[var(--border)]" />
+      <span
+        className={cn(
+          "-my-px flex size-5 shrink-0 items-center justify-center rounded-full border text-[11px] font-bold leading-none",
+          operator === "="
+            ? "border-[var(--primary)]/40 bg-[var(--primary)]/10 text-[var(--primary)]"
+            : "border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)]",
+        )}
+      >
+        {operator}
+      </span>
+      <div className="h-3 w-px bg-[var(--border)]" />
+    </div>
+  );
 }
 
 export function DreYearTable(props: DreYearTableProps) {
@@ -2714,6 +2863,16 @@ export function DreYearTable(props: DreYearTableProps) {
     return <DreYearTableMobile key={props.data.year} {...props} />;
   }
   return <DreYearTableDesktop {...props} />;
+}
+
+/** Respiro entre seções — deixa cada categoria "flutuar" como uma caixa
+ * separada, igual ao espaçamento entre cards no Demonstrativo. */
+function SectionSpacerRow({ columnCount }: { columnCount: number }) {
+  return (
+    <tr aria-hidden="true">
+      <td colSpan={columnCount} className="h-5 border-0 bg-[var(--card)] p-0" />
+    </tr>
+  );
 }
 
 function DreYearTableDesktop({
@@ -2809,9 +2968,33 @@ function DreYearTableDesktop({
   const detailIndexById = buildDetailIndexMap(rows);
   const detailCount = detailIndexById.size;
 
-  // Zebra striping só entre as linhas "brancas" visíveis — detalhes colapsados
-  // não entram na contagem.
-  const altRowFlags = altRowFlagsForView(rows, showDetails);
+  // Mesmo agrupamento por categoria do Demonstrativo — usado pra abrir um
+  // respiro visual (spacer row) entre seções e deixar as linhas de
+  // resultado (Margem de Contribuição, Lucro Operacional...) soltas, fora
+  // das "caixas" de cada categoria.
+  const rowSection = new Map<
+    string,
+    { position: SectionBoxPosition; tone: string }
+  >();
+  for (const group of buildStatementGroups(rows)) {
+    if (group.header.type !== "static") continue;
+    const visual = GROUP_VISUALS[group.header.id];
+    if (!visual) continue;
+    const groupRows = [group.header, ...group.items];
+    groupRows.forEach((r, i) => {
+      rowSection.set(r.id, {
+        tone: visual.tone,
+        position:
+          groupRows.length === 1
+            ? "only"
+            : i === 0
+              ? "first"
+              : i === groupRows.length - 1
+                ? "last"
+                : "middle",
+      });
+    });
+  }
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -2916,9 +3099,14 @@ function DreYearTableDesktop({
           </thead>
           <tbody>
             {rows.map((row, index) => {
-              const bg = rowBackgroundClass(row);
+              // Linhas de total de categoria ganham o mesmo tom de cor do
+              // card equivalente no Demonstrativo, em vez do cinza genérico.
+              const groupVisual =
+                row.type === "static" ? GROUP_VISUALS[row.id] : undefined;
+              const bg = groupVisual
+                ? GROUP_ROW_TINT_CLASS[groupVisual.tone]
+                : rowBackgroundClass(row);
               const showPercentRow = row.type === "static" && row.showPercent;
-              const isAlt = altRowFlags[index];
               const detail = isDetailRow(row);
               const detailIndex = detailIndexById.get(row.id) ?? 0;
               // Linhas com percentual logo abaixo não desenham borda inferior —
@@ -2926,14 +3114,32 @@ function DreYearTableDesktop({
               const dividerStyle = showPercentRow
                 ? undefined
                 : MAIN_ROW_DIVIDER_STYLE;
-              const rowClassName = isAlt ? undefined : bg;
-              const cellStyle = isAlt
-                ? { ...dividerStyle, backgroundColor: ALT_ROW_BG }
-                : dividerStyle;
+              const rowClassName = bg;
+              const cellStyle = dividerStyle;
               const yearAuditKind = getAuditKindForRow(row);
+              const section = rowSection.get(row.id);
+              const sectionPosition = section?.position;
+              const sectionColor = section
+                ? GROUP_BORDER_COLOR[section.tone]
+                : undefined;
+              // A linha de percentual (quando existe) vem logo abaixo da
+              // principal — a borda de topo da seção já foi desenhada ali,
+              // então aqui só repete os lados (e a base, se for a última).
+              const percentRowPosition: SectionBoxPosition | undefined =
+                sectionPosition === "first" ? "middle" : sectionPosition;
+              const isResultRow =
+                row.type === "static" && row.kind === "resultado";
+              const needsSpacerBefore =
+                index > 0 &&
+                (sectionPosition === "first" ||
+                  sectionPosition === "only" ||
+                  isResultRow);
 
               return (
                 <Fragment key={row.id}>
+                  {needsSpacerBefore ? (
+                    <SectionSpacerRow columnCount={data.months.length + 2} />
+                  ) : null}
                   <tr
                     className={cn(
                       rowClassName,
@@ -2950,10 +3156,16 @@ function DreYearTableDesktop({
                         "sticky left-0 z-10",
                         !detail && "px-3 py-2",
                         rowClassName,
+                        SECTION_CORNER_CLASS.start[sectionPosition ?? "middle"],
                         (isEditing || columnFocusMonth !== null) && DIM_CLASS,
                       )}
                       contentClassName="px-3 py-2"
-                      style={cellStyle}
+                      style={withSectionBox(
+                        cellStyle,
+                        sectionPosition,
+                        "outer-start",
+                        sectionColor,
+                      )}
                     >
                       {renderLabelCell(row)}
                     </DetailAnimatedCell>
@@ -2988,7 +3200,12 @@ function DreYearTableDesktop({
                                   : columnFocusMonth !== null && DIM_CLASS,
                           )}
                           contentClassName="px-1.5 py-2 text-center align-middle"
-                          style={cellStyle}
+                          style={withSectionBox(
+                            cellStyle,
+                            sectionPosition,
+                            "inner",
+                            sectionColor,
+                          )}
                         >
                           {withRevenuePercentTooltip(
                             renderValueCell(
@@ -3023,10 +3240,16 @@ function DreYearTableDesktop({
                         !detail && "px-2 py-2",
                         "text-center align-middle",
                         rowClassName,
+                        SECTION_CORNER_CLASS.end[sectionPosition ?? "middle"],
                         (isEditing || columnFocusMonth !== null) && DIM_CLASS,
                       )}
                       contentClassName="px-2 py-2 text-center align-middle"
-                      style={cellStyle}
+                      style={withSectionBox(
+                        cellStyle,
+                        sectionPosition,
+                        "outer-end",
+                        sectionColor,
+                      )}
                     >
                       {withRevenuePercentTooltip(
                         <div
@@ -3042,6 +3265,7 @@ function DreYearTableDesktop({
                             tabIndex={yearAuditKind ? 0 : undefined}
                             className={cn(
                               "whitespace-nowrap text-center text-[12.5px] font-bold tabular-nums leading-tight",
+                              valueToneClass(getYearTotalForRow(row, data).amount),
                               yearAuditKind &&
                                 "cursor-pointer rounded-sm underline decoration-dotted decoration-1 underline-offset-2 hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]",
                             )}
@@ -3089,10 +3313,18 @@ function DreYearTableDesktop({
                         className={cn(
                           "sticky left-0 z-10 px-3 py-1.5",
                           bg,
+                          SECTION_CORNER_CLASS.start[
+                            percentRowPosition ?? "middle"
+                          ],
                           (isEditing || columnFocusMonth !== null) &&
                             DIM_CLASS,
                         )}
-                        style={PERCENT_ROW_DIVIDER_STYLE}
+                        style={withSectionBox(
+                          PERCENT_ROW_DIVIDER_STYLE,
+                          percentRowPosition,
+                          "outer-start",
+                          sectionColor,
+                        )}
                       />
                       {data.months.map((month) => (
                         <td
@@ -3105,7 +3337,12 @@ function DreYearTableDesktop({
                                 ? cn(SELECTED_MONTH_CELL_CLASS, bg)
                                 : columnFocusMonth !== null && DIM_CLASS,
                           )}
-                          style={PERCENT_ROW_DIVIDER_STYLE}
+                          style={withSectionBox(
+                            PERCENT_ROW_DIVIDER_STYLE,
+                            percentRowPosition,
+                            "inner",
+                            sectionColor,
+                          )}
                         >
                           {renderPercentCell(
                             getCellValue(row, month).percent,
@@ -3116,10 +3353,18 @@ function DreYearTableDesktop({
                         className={cn(
                           "px-2 py-1.5 text-center align-middle",
                           bg,
+                          SECTION_CORNER_CLASS.end[
+                            percentRowPosition ?? "middle"
+                          ],
                           (isEditing || columnFocusMonth !== null) &&
                             DIM_CLASS,
                         )}
-                        style={PERCENT_ROW_DIVIDER_STYLE}
+                        style={withSectionBox(
+                          PERCENT_ROW_DIVIDER_STYLE,
+                          percentRowPosition,
+                          "outer-end",
+                          sectionColor,
+                        )}
                       >
                         {renderPercentCell(
                           getYearTotalForRow(row, data).percent,
