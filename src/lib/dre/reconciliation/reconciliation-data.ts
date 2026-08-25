@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import {
   applyManualLineEdit,
   commitReconciledLinesAsTruth,
+  DRE_LINE_KEY_TO_BREAKDOWN_FIELD,
   isDreEditableLineKey,
   type DreEditableLineKey,
   type DreLineBreakdownItem,
@@ -22,24 +23,6 @@ import type {
   ReconciliationParseWarning,
   UnrecognizedFeeSummary,
 } from "@/lib/dre/reconciliation/types";
-
-const BREAKDOWN_FIELD: Partial<
-  Record<DreEditableLineKey, keyof DreMonthSnapshotPayload>
-> = {
-  revenueMl: "revenueBreakdown",
-  cancelledSalesMl: "cancelledSalesBreakdown",
-  saleFeeMl: "saleFeeBreakdown",
-  sellerShippingMl: "sellerShippingBreakdown",
-  adsCost: "adsCostBreakdown",
-  partialReturnsMl: "partialReturnsBreakdown",
-  returnFeeMl: "returnFeeBreakdown",
-  specialFeesMl: "specialFeesBreakdown",
-  fullShippingMl: "fullShippingBreakdown",
-  fullStorageMl: "fullStorageBreakdown",
-  fullNonComplianceMl: "fullNonComplianceBreakdown",
-  minhaPaginaMl: "minhaPaginaBreakdown",
-  affiliateFeeMl: "affiliateFeeBreakdown",
-};
 
 function asJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -181,11 +164,11 @@ function applyAggregationToPayload(
     const amount = aggregation.amounts[lineKey];
     if (amount === undefined) continue;
     next = applyManualLineEdit(next, lineKey, amount);
-    const field = BREAKDOWN_FIELD[lineKey];
+    const field = DRE_LINE_KEY_TO_BREAKDOWN_FIELD[lineKey];
     const items = aggregation.breakdowns[lineKey] as
       | DreLineBreakdownItem[]
       | undefined;
-    if (field && items) {
+    if (field && items && field !== "productCostBreakdown" && field !== "taxBreakdown") {
       next = { ...next, [field]: items };
     }
   }

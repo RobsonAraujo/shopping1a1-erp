@@ -38,7 +38,7 @@ import {
   fetchMlBillingSummaryForMonth,
   isBillingSummaryEmpty,
 } from "@/lib/mercadolibre/billing-summary";
-import { aggregateBillingDetailsForCivilMonthOrders } from "@/lib/mercadolibre/billing-details";
+import { aggregateBillingDetailsForCivilMonthOrders, type MlDetailsAggregation } from "@/lib/mercadolibre/billing-details";
 import {
   createFullBillingDetailsCache,
   type FullBillingDetailsCache,
@@ -785,7 +785,8 @@ export async function buildDreMonthSnapshot(
     ),
   ]);
 
-  const { adsCost, adsCostBreakdown } = adsResult;
+  const { adsCost } = adsResult;
+  let adsCostBreakdown = adsResult.adsCostBreakdown;
 
   report({ phase: "ml_costs", message: "Mapeando custos ML…" });
 
@@ -802,7 +803,10 @@ export async function buildDreMonthSnapshot(
   let affiliateFeeMl = 0;
   let saleFeeBreakdown: DreLineBreakdownItem[] | undefined;
   let sellerShippingBreakdown: DreLineBreakdownItem[] | undefined;
+  let billingAuditAgg: MlDetailsAggregation | null =
+    billing?.detailsAggregation ?? null;
   let billingSource: DreMonthSnapshotPayload["billingSource"] = "fallback";
+  let usedCivilDetails = false;
   let isPartial = isCurrentCalendarMonth(year, month);
 
   const billingHasMappedLines =
@@ -846,7 +850,6 @@ export async function buildDreMonthSnapshot(
     }
   } else if (billingHasMappedLines && !billingAlignsWithCivil) {
     billingSource = "fallback";
-    let usedCivilDetails = false;
     try {
       const civil = await aggregateBillingDetailsForCivilMonthOrders(
         accessToken,
@@ -869,6 +872,7 @@ export async function buildDreMonthSnapshot(
           cancelledSalesMl = civil.cancelledSalesMl;
         }
         usedCivilDetails = true;
+        billingAuditAgg = civil;
         billingSource = "billing";
         syncWarnings.push(
           "Tarifa ML / frete / devolução / especiais agregados dos detalhes da fatura pelos pedidos do mês civil (ciclo ML não alinha ao calendário).",
@@ -954,6 +958,44 @@ export async function buildDreMonthSnapshot(
     }
   }
 
+  let partialReturnsBreakdown: DreLineBreakdownItem[] | undefined;
+  let returnFeeBreakdown: DreLineBreakdownItem[] | undefined;
+  let specialFeesBreakdown: DreLineBreakdownItem[] | undefined;
+  let fullShippingBreakdown: DreLineBreakdownItem[] | undefined;
+  let fullStorageBreakdown: DreLineBreakdownItem[] | undefined;
+  let fullNonComplianceBreakdown: DreLineBreakdownItem[] | undefined;
+  let minhaPaginaBreakdown: DreLineBreakdownItem[] | undefined;
+  let affiliateFeeBreakdown: DreLineBreakdownItem[] | undefined;
+  let cancelledSalesBreakdownFromBilling:
+    | DreLineBreakdownItem[]
+    | undefined;
+
+  const billingLineLists = billingAuditAgg?.lineBreakdowns;
+  if (billingLineLists) {
+    const useInvoiceFeeAudit =
+      (billingHasMappedLines && billingAlignsWithCivil) || usedCivilDetails;
+    if (useInvoiceFeeAudit) {
+      if ((billingLineLists.saleFeeMl?.length ?? 0) > 0) {
+        saleFeeBreakdown = billingLineLists.saleFeeMl;
+      }
+      if ((billingLineLists.sellerShippingMl?.length ?? 0) > 0) {
+        sellerShippingBreakdown = billingLineLists.sellerShippingMl;
+      }
+    }
+    cancelledSalesBreakdownFromBilling = billingLineLists.cancelledSalesMl;
+    partialReturnsBreakdown = billingLineLists.partialReturnsMl;
+    returnFeeBreakdown = billingLineLists.returnFeeMl;
+    specialFeesBreakdown = billingLineLists.specialFeesMl;
+    fullShippingBreakdown = billingLineLists.fullShippingMl;
+    fullStorageBreakdown = billingLineLists.fullStorageMl;
+    fullNonComplianceBreakdown = billingLineLists.fullNonComplianceMl;
+    minhaPaginaBreakdown = billingLineLists.minhaPaginaMl;
+    affiliateFeeBreakdown = billingLineLists.affiliateFeeMl;
+    if (!adsCostBreakdown && (billingLineLists.adsCost?.length ?? 0) > 0) {
+      adsCostBreakdown = billingLineLists.adsCost;
+    }
+  }
+
   report({
     phase: "full",
     message: "Conferindo Relatório Full (envios/inconformidade)…",
@@ -1010,6 +1052,8 @@ export async function buildDreMonthSnapshot(
       fullShippingMl = roundMoney(-Math.max(0, totalCollect));
       fullNonComplianceMl = roundMoney(-Math.max(0, totalNonCompliance));
       fullReportSourced = true;
+      fullShippingBreakdown = undefined;
+      fullNonComplianceBreakdown = undefined;
       if (!autoImported) {
         syncWarnings.push(
           "Full envios/inconformidade vêm dos envios já importados no Relatório Full deste mês.",
@@ -1115,15 +1159,25 @@ export async function buildDreMonthSnapshot(
       cancelledTaxBreakdown,
     ]),
     revenueBreakdown: erpCosts.revenueBreakdown,
-    cancelledSalesBreakdown: cancelledOrderRevenueBreakdown
-      .map((item) => ({
-        ...item,
-        amount: roundMoney(-item.amount),
-      }))
-      .sort((a, b) => a.amount - b.amount),
+    cancelledSalesBreakdown: cancelledOrderRevenueBreakdown.length
+      ? cancelledOrderRevenueBreakdown
+          .map((item) => ({
+            ...item,
+            amount: roundMoney(-item.amount),
+          }))
+          .sort((a, b) => a.amount - b.amount)
+      : cancelledSalesBreakdownFromBilling,
     saleFeeBreakdown,
     sellerShippingBreakdown,
     adsCostBreakdown,
+    partialReturnsBreakdown,
+    returnFeeBreakdown,
+    specialFeesBreakdown,
+    fullShippingBreakdown,
+    fullStorageBreakdown,
+    fullNonComplianceBreakdown,
+    minhaPaginaBreakdown,
+    affiliateFeeBreakdown,
     fullReportSourced,
   };
 }
@@ -1324,46 +1378,53 @@ export function parseSnapshotPayload(raw: unknown): DreMonthSnapshotPayload | nu
         }
       : undefined;
 
-  const breakdownRaw = p.productCostBreakdown;
-  const productCostBreakdown = Array.isArray(breakdownRaw)
-    ? breakdownRaw
-        .filter(
-          (item): item is Record<string, unknown> =>
-            Boolean(item) && typeof item === "object",
-        )
-        .map((item) => ({
-          key: typeof item.key === "string" ? item.key : String(item.sku ?? ""),
-          sku: typeof item.sku === "string" ? item.sku : null,
-          title: typeof item.title === "string" ? item.title : "",
-          quantity: numFrom(item.quantity),
-          unitCost: numFrom(item.unitCost),
-          totalCost: numFrom(item.totalCost),
-          missingCost: Boolean(item.missingCost),
-          leveled: item.leveled ? true : undefined,
-        }))
-    : undefined;
+  const parseProductCostBreakdown = (
+    raw: unknown,
+  ): DreProductCostBreakdownItem[] | undefined =>
+    Array.isArray(raw)
+      ? raw
+          .filter(
+            (item): item is Record<string, unknown> =>
+              Boolean(item) && typeof item === "object",
+          )
+          .map((item) => ({
+            key: typeof item.key === "string" ? item.key : String(item.sku ?? ""),
+            sku: typeof item.sku === "string" ? item.sku : null,
+            title: typeof item.title === "string" ? item.title : "",
+            quantity: numFrom(item.quantity),
+            unitCost: numFrom(item.unitCost),
+            totalCost: numFrom(item.totalCost),
+            missingCost: Boolean(item.missingCost),
+            leveled: item.leveled ? true : undefined,
+          }))
+      : undefined;
 
-  const taxBreakdownRaw = p.taxBreakdown;
-  const taxBreakdown = Array.isArray(taxBreakdownRaw)
-    ? taxBreakdownRaw
-        .filter(
-          (item): item is Record<string, unknown> =>
-            Boolean(item) && typeof item === "object",
-        )
-        .map((item) => ({
-          key: typeof item.key === "string" ? item.key : String(item.sku ?? ""),
-          sku: typeof item.sku === "string" ? item.sku : null,
-          title: typeof item.title === "string" ? item.title : "",
-          quantity: numFrom(item.quantity),
-          revenue: numFrom(item.revenue),
-          taxPercent:
-            item.taxPercent === null || item.taxPercent === undefined
-              ? null
-              : numFrom(item.taxPercent),
-          totalTax: numFrom(item.totalTax),
-          missingTax: Boolean(item.missingTax),
-        }))
-    : undefined;
+  const parseTaxBreakdown = (
+    raw: unknown,
+  ): DreTaxBreakdownItem[] | undefined =>
+    Array.isArray(raw)
+      ? raw
+          .filter(
+            (item): item is Record<string, unknown> =>
+              Boolean(item) && typeof item === "object",
+          )
+          .map((item) => ({
+            key: typeof item.key === "string" ? item.key : String(item.sku ?? ""),
+            sku: typeof item.sku === "string" ? item.sku : null,
+            title: typeof item.title === "string" ? item.title : "",
+            quantity: numFrom(item.quantity),
+            revenue: numFrom(item.revenue),
+            taxPercent:
+              item.taxPercent === null || item.taxPercent === undefined
+                ? null
+                : numFrom(item.taxPercent),
+            totalTax: numFrom(item.totalTax),
+            missingTax: Boolean(item.missingTax),
+          }))
+      : undefined;
+
+  const productCostBreakdown = parseProductCostBreakdown(p.productCostBreakdown);
+  const taxBreakdown = parseTaxBreakdown(p.taxBreakdown);
 
   const parseLineBreakdown = (
     raw: unknown,
@@ -1423,6 +1484,37 @@ export function parseSnapshotPayload(raw: unknown): DreMonthSnapshotPayload | nu
     syncedLineBaseline = baseline;
   }
 
+  const syncedBreakdownRaw = p.syncedBreakdownBaseline;
+  let syncedBreakdownBaseline:
+    | DreMonthSnapshotPayload["syncedBreakdownBaseline"]
+    | undefined;
+  if (
+    syncedBreakdownRaw &&
+    typeof syncedBreakdownRaw === "object" &&
+    !Array.isArray(syncedBreakdownRaw)
+  ) {
+    const raw = syncedBreakdownRaw as Record<string, unknown>;
+    syncedBreakdownBaseline = {
+      revenueBreakdown: parseLineBreakdown(raw.revenueBreakdown),
+      cancelledSalesBreakdown: parseLineBreakdown(raw.cancelledSalesBreakdown),
+      saleFeeBreakdown: parseLineBreakdown(raw.saleFeeBreakdown),
+      sellerShippingBreakdown: parseLineBreakdown(raw.sellerShippingBreakdown),
+      adsCostBreakdown: parseLineBreakdown(raw.adsCostBreakdown),
+      partialReturnsBreakdown: parseLineBreakdown(raw.partialReturnsBreakdown),
+      returnFeeBreakdown: parseLineBreakdown(raw.returnFeeBreakdown),
+      specialFeesBreakdown: parseLineBreakdown(raw.specialFeesBreakdown),
+      fullShippingBreakdown: parseLineBreakdown(raw.fullShippingBreakdown),
+      fullStorageBreakdown: parseLineBreakdown(raw.fullStorageBreakdown),
+      fullNonComplianceBreakdown: parseLineBreakdown(
+        raw.fullNonComplianceBreakdown,
+      ),
+      minhaPaginaBreakdown: parseLineBreakdown(raw.minhaPaginaBreakdown),
+      affiliateFeeBreakdown: parseLineBreakdown(raw.affiliateFeeBreakdown),
+      productCostBreakdown: parseProductCostBreakdown(raw.productCostBreakdown),
+      taxBreakdown: parseTaxBreakdown(raw.taxBreakdown),
+    };
+  }
+
   const manuallyEditedLineKeys = Array.isArray(p.manuallyEditedLineKeys)
     ? p.manuallyEditedLineKeys.filter(
         (key): key is DreEditableLineKey =>
@@ -1471,6 +1563,7 @@ export function parseSnapshotPayload(raw: unknown): DreMonthSnapshotPayload | nu
     affiliateFeeBreakdown,
     fullReportSourced: Boolean(p.fullReportSourced),
     syncedLineBaseline,
+    syncedBreakdownBaseline,
     manuallyEditedLineKeys,
   };
 }

@@ -91,6 +91,16 @@ describe("aggregateMlBillingDetails", () => {
     assert.equal(agg.adsCost, 3143.3);
     assert.equal(agg.affiliateFeeMl, -93.73);
     assert.equal(agg.minhaPaginaMl, -99);
+    const saleFeeRows = agg.lineBreakdowns.saleFeeMl ?? [];
+    assert.equal(saleFeeRows.length, 2);
+    assert.equal(
+      saleFeeRows.find((row) => row.title === "Tarifa ML")?.amount,
+      round(-15945.07 - 890.58),
+    );
+    assert.equal(
+      saleFeeRows.find((row) => row.title === "Bonificação tarifa")?.amount,
+      609.52,
+    );
   });
 });
 
@@ -142,6 +152,7 @@ describe("mergeBillingLines", () => {
         chargeCount: 10,
         bySubType: {},
         byLabel: {},
+        lineBreakdowns: {},
       },
       {
         revenueMl: null,
@@ -188,6 +199,7 @@ describe("mergeBillingLines", () => {
         chargeCount: 1950,
         bySubType: {},
         byLabel: {},
+        lineBreakdowns: {},
       },
       {
         revenueMl: null,

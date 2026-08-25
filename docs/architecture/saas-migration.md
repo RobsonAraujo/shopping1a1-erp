@@ -190,6 +190,17 @@ Plano de execução detalhado (arquivos e código concretos): ver plano de imple
 
 Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templates/feature-saas-impact.md).
 
+### DRE: auditoria da fatura no sync e reset do breakdown — 2026-08-24
+
+- **Tabelas novas/alteradas:** nenhuma (JSON do `dre_month_snapshots.payload`: `syncedBreakdownBaseline` + breakdowns preenchidos no sync da API)
+- **Precisa `organizationId`?** sim — snapshot já por org
+- **APIs afetadas:** sync DRE e restore de linha (mesmo payload)
+- **Assume singleton?** não
+- **Cron/background:** nenhum
+- **Dados globais vs por org:** por org
+- **Código já tenant-ready?** sim
+- **Ação futura na migração:** nenhuma
+
 ### DRE: Devoluções parciais fora da conciliação Por Vendas — 2026-08-24
 
 - **Tabelas novas/alteradas:** nenhuma

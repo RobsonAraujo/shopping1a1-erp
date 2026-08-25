@@ -258,12 +258,39 @@ describe("manual line edit / restore from sync", () => {
   });
 
   it("restores from sync baseline", () => {
-    const synced = withSyncLineBaseline(emptyPayload({ saleFeeMl: -80 }));
+    const synced = withSyncLineBaseline(
+      emptyPayload({
+        saleFeeMl: -80,
+        saleFeeBreakdown: [
+          {
+            key: "api",
+            sku: null,
+            title: "Tarifa ML",
+            quantity: null,
+            amount: -80,
+          },
+        ],
+      }),
+    );
     const edited = applyManualLineEdit(synced, "saleFeeMl", -50);
-    const restored = applyRestoreLineFromSync(edited, "saleFeeMl");
+    const withReconAudit = {
+      ...edited,
+      saleFeeBreakdown: [
+        {
+          key: "xlsx",
+          sku: null,
+          title: "Planilha",
+          quantity: 1,
+          amount: -50,
+        },
+      ],
+    };
+    const restored = applyRestoreLineFromSync(withReconAudit, "saleFeeMl");
     assert.ok(restored);
     assert.equal(restored.saleFeeMl, -80);
     assert.deepEqual(restored.manuallyEditedLineKeys, []);
+    assert.equal(restored.saleFeeBreakdown?.[0]?.title, "Tarifa ML");
+    assert.equal(restored.saleFeeBreakdown?.[0]?.amount, -80);
   });
 
   it("returns null when restoring without baseline", () => {

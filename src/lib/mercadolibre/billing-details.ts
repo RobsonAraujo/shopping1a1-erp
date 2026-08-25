@@ -50,6 +50,28 @@ type MlDetailsResponse = {
   sales_info?: SalesInfo[];
 };
 
+export type BillingLineBreakdownItem = {
+  key: string;
+  sku: string | null;
+  title: string;
+  quantity: number | null;
+  amount: number;
+};
+
+export type BillingDreBreakdownKey =
+  | "saleFeeMl"
+  | "sellerShippingMl"
+  | "cancelledSalesMl"
+  | "partialReturnsMl"
+  | "returnFeeMl"
+  | "specialFeesMl"
+  | "adsCost"
+  | "fullShippingMl"
+  | "fullStorageMl"
+  | "fullNonComplianceMl"
+  | "minhaPaginaMl"
+  | "affiliateFeeMl";
+
 export type MlDetailsAggregation = {
   revenueMl: number | null;
   revenueFromOrders: number;
@@ -69,6 +91,9 @@ export type MlDetailsAggregation = {
   chargeCount: number;
   bySubType: Record<string, number>;
   byLabel: Record<string, number>;
+  lineBreakdowns: Partial<
+    Record<BillingDreBreakdownKey, BillingLineBreakdownItem[]>
+  >;
 };
 
 function chargeAmount(info: ChargeInfo | undefined): number {
@@ -155,7 +180,73 @@ function emptyAggregation(): MlDetailsAggregation {
     chargeCount: 0,
     bySubType: {},
     byLabel: {},
+    lineBreakdowns: {},
   };
+}
+
+function billingCategoryToBreakdownKey(
+  category: ReturnType<typeof classifyMlBillingEntry>,
+): BillingDreBreakdownKey | null {
+  switch (category) {
+    case "saleFee":
+      return "saleFeeMl";
+    case "sellerShipping":
+      return "sellerShippingMl";
+    case "cancelled":
+      return "cancelledSalesMl";
+    case "partialReturn":
+      return "partialReturnsMl";
+    case "returnFee":
+      return "returnFeeMl";
+    case "specialFee":
+      return "specialFeesMl";
+    case "ads":
+      return "adsCost";
+    case "fullShipping":
+      return "fullShippingMl";
+    case "fullStorage":
+      return "fullStorageMl";
+    case "fullNonCompliance":
+      return "fullNonComplianceMl";
+    case "minhaPagina":
+      return "minhaPaginaMl";
+    case "affiliateFee":
+      return "affiliateFeeMl";
+    default:
+      return null;
+  }
+}
+
+function amountForBreakdownKey(
+  agg: MlDetailsAggregation,
+  key: BillingDreBreakdownKey,
+): number {
+  return agg[key];
+}
+
+function pushLineBreakdown(
+  agg: MlDetailsAggregation,
+  key: BillingDreBreakdownKey,
+  mergeKey: string,
+  displayTitle: string,
+  delta: number,
+) {
+  if (delta === 0) return;
+  const list = agg.lineBreakdowns[key] ?? [];
+  const itemKey = mergeKey || displayTitle || "(sem label)";
+  const existing = list.find((item) => item.key === itemKey);
+  if (existing) {
+    existing.amount = roundMoney(existing.amount + delta);
+  } else {
+    list.push({
+      key: itemKey,
+      sku: null,
+      title: displayTitle || itemKey,
+      quantity: null,
+      amount: roundMoney(delta),
+    });
+  }
+  agg.lineBreakdowns[key] = list;
 }
 
 function applyCategory(
@@ -293,12 +384,38 @@ export function aggregateMlBillingDetails(
     );
 
     const category = classifyMlBillingEntry(subType, label, detailType);
+    const breakdownKey = billingCategoryToBreakdownKey(category);
+    const before = breakdownKey
+      ? amountForBreakdownKey(agg, breakdownKey)
+      : 0;
     applyCategory(agg, category, amount, isBonus);
+    if (breakdownKey) {
+      const after = amountForBreakdownKey(agg, breakdownKey);
+      pushLineBreakdown(
+        agg,
+        breakdownKey,
+        label || subType || "(sem label)",
+        (info.transaction_detail ?? "").trim() ||
+          label ||
+          subType ||
+          "(sem label)",
+        roundMoney(after - before),
+      );
+    }
   }
 
   const revenueFromOrders = collectOrderRevenue(entries);
   agg.revenueFromOrders = revenueFromOrders;
   agg.revenueMl = revenueFromOrders > 0 ? revenueFromOrders : null;
+
+  for (const key of Object.keys(agg.lineBreakdowns) as BillingDreBreakdownKey[]) {
+    const list = agg.lineBreakdowns[key];
+    if (list) {
+      agg.lineBreakdowns[key] = list.sort(
+        (a, b) => Math.abs(b.amount) - Math.abs(a.amount),
+      );
+    }
+  }
 
   return agg;
 }

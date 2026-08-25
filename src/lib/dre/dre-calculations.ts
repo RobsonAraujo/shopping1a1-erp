@@ -130,9 +130,105 @@ export type DreMonthSnapshotPayload = DreLineAmounts & {
    * Preenchido/atualizado em toda sincronização; preservado em edições manuais.
    */
   syncedLineBaseline?: Partial<Record<DreEditableLineKey, number>>;
+  /**
+   * Listas de auditoria no último sync. Restaurar o valor também restaura
+   * esta lista (senão a conciliação deixava o breakdown antigo).
+   */
+  syncedBreakdownBaseline?: DreSyncedBreakdownBaseline;
   /** Chaves com valor diferente do baseline (editadas após o último sync). */
   manuallyEditedLineKeys?: DreEditableLineKey[];
 };
+
+export const DRE_LINE_KEY_TO_BREAKDOWN_FIELD: Partial<
+  Record<DreEditableLineKey, DreBreakdownField>
+> = {
+  revenueMl: "revenueBreakdown",
+  cancelledSalesMl: "cancelledSalesBreakdown",
+  saleFeeMl: "saleFeeBreakdown",
+  sellerShippingMl: "sellerShippingBreakdown",
+  adsCost: "adsCostBreakdown",
+  partialReturnsMl: "partialReturnsBreakdown",
+  returnFeeMl: "returnFeeBreakdown",
+  specialFeesMl: "specialFeesBreakdown",
+  fullShippingMl: "fullShippingBreakdown",
+  fullStorageMl: "fullStorageBreakdown",
+  fullNonComplianceMl: "fullNonComplianceBreakdown",
+  minhaPaginaMl: "minhaPaginaBreakdown",
+  affiliateFeeMl: "affiliateFeeBreakdown",
+  productCostErp: "productCostBreakdown",
+  taxErp: "taxBreakdown",
+};
+
+export type DreBreakdownField =
+  | "revenueBreakdown"
+  | "cancelledSalesBreakdown"
+  | "saleFeeBreakdown"
+  | "sellerShippingBreakdown"
+  | "adsCostBreakdown"
+  | "partialReturnsBreakdown"
+  | "returnFeeBreakdown"
+  | "specialFeesBreakdown"
+  | "fullShippingBreakdown"
+  | "fullStorageBreakdown"
+  | "fullNonComplianceBreakdown"
+  | "minhaPaginaBreakdown"
+  | "affiliateFeeBreakdown"
+  | "productCostBreakdown"
+  | "taxBreakdown";
+
+export type DreSyncedBreakdownBaseline = Partial<
+  Pick<DreMonthSnapshotPayload, DreBreakdownField>
+>;
+
+const ALL_BREAKDOWN_FIELDS: DreBreakdownField[] = [
+  "revenueBreakdown",
+  "cancelledSalesBreakdown",
+  "saleFeeBreakdown",
+  "sellerShippingBreakdown",
+  "adsCostBreakdown",
+  "partialReturnsBreakdown",
+  "returnFeeBreakdown",
+  "specialFeesBreakdown",
+  "fullShippingBreakdown",
+  "fullStorageBreakdown",
+  "fullNonComplianceBreakdown",
+  "minhaPaginaBreakdown",
+  "affiliateFeeBreakdown",
+  "productCostBreakdown",
+  "taxBreakdown",
+];
+
+export function captureSyncedBreakdowns(
+  payload: DreMonthSnapshotPayload,
+): DreSyncedBreakdownBaseline {
+  const captured: DreSyncedBreakdownBaseline = {};
+  for (const field of ALL_BREAKDOWN_FIELDS) {
+    const value = payload[field];
+    if (value !== undefined) {
+      (captured as Record<string, unknown>)[field] = value;
+    }
+  }
+  return captured;
+}
+
+function restoreBreakdownField(
+  payload: DreMonthSnapshotPayload,
+  lineKey: DreEditableLineKey,
+): Pick<DreMonthSnapshotPayload, DreBreakdownField> {
+  const field = DRE_LINE_KEY_TO_BREAKDOWN_FIELD[lineKey];
+  if (!field) return {};
+  const baseline = payload.syncedBreakdownBaseline;
+  if (!baseline || !Object.prototype.hasOwnProperty.call(baseline, field)) {
+    return { [field]: undefined } as Pick<
+      DreMonthSnapshotPayload,
+      DreBreakdownField
+    >;
+  }
+  return { [field]: baseline[field] } as Pick<
+    DreMonthSnapshotPayload,
+    DreBreakdownField
+  >;
+}
 
 /** Lê o valor armazenado de uma linha editável no payload. */
 export function getEditableLineAmount(
@@ -163,6 +259,7 @@ export function withSyncLineBaseline(
   return {
     ...payload,
     syncedLineBaseline: buildSyncedLineBaseline(payload),
+    syncedBreakdownBaseline: captureSyncedBreakdowns(payload),
     manuallyEditedLineKeys: [],
   };
 }
@@ -177,10 +274,12 @@ export function mergePreservedManualLines(
   preserveKeys: readonly DreEditableLineKey[],
 ): DreMonthSnapshotPayload {
   const baseline = buildSyncedLineBaseline(fresh);
+  const freshBreakdowns = captureSyncedBreakdowns(fresh);
   if (!previous || preserveKeys.length === 0) {
     return {
       ...fresh,
       syncedLineBaseline: baseline,
+      syncedBreakdownBaseline: freshBreakdowns,
       manuallyEditedLineKeys: [],
     };
   }
@@ -189,6 +288,7 @@ export function mergePreservedManualLines(
   const next: DreMonthSnapshotPayload = {
     ...fresh,
     syncedLineBaseline: baseline,
+    syncedBreakdownBaseline: freshBreakdowns,
   };
   const edited: DreEditableLineKey[] = [];
 
@@ -196,6 +296,11 @@ export function mergePreservedManualLines(
     if (!prevEdited.has(key)) continue;
     const amount = getEditableLineAmount(previous, key);
     next[key] = amount;
+    const breakdownField = DRE_LINE_KEY_TO_BREAKDOWN_FIELD[key];
+    if (breakdownField) {
+      (next as Record<string, unknown>)[breakdownField] =
+        previous[breakdownField];
+    }
     if (!amountsMatch(amount, baseline[key])) {
       edited.push(key);
     }
@@ -293,6 +398,7 @@ export function applyRestoreLineFromSync(
   const next: DreMonthSnapshotPayload = {
     ...payload,
     [lineKey]: restoredAmount,
+    ...restoreBreakdownField(payload, lineKey),
     manuallyEditedLineKeys: edited,
   };
 

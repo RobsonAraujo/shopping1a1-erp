@@ -896,13 +896,13 @@ const LINE_AUDIT_TEXT: Partial<
     rowLabel: "Tarifa ML",
     amountLabel: "Tarifa",
     description:
-      "Tarifa de venda cobrada pelo Mercado Livre, por anúncio/SKU — disponível apenas quando estimada pelos pedidos (mês sem fatura consolidada alinhada ao período civil).",
+      "Tarifas de venda da fatura ML (por label da cobrança) ou, se o mês foi estimado pelos pedidos, por anúncio/SKU.",
   },
   sellerShipping: {
     rowLabel: "Frete vendedor",
     amountLabel: "Frete",
     description:
-      "Custo de frete pago pelo vendedor, por anúncio/SKU — disponível apenas quando estimado pelos pedidos (mês sem fatura consolidada alinhada ao período civil).",
+      "Frete da fatura ML (por label) ou, se estimado pelos pedidos, por anúncio/SKU.",
   },
   adsCost: {
     rowLabel: "Campanhas ADS",
@@ -913,18 +913,20 @@ const LINE_AUDIT_TEXT: Partial<
   partialReturns: {
     rowLabel: "Devoluções parciais",
     amountLabel: "Valor",
-    description: "Reembolsos parciais da conciliação ML, por operação.",
+    description:
+      "Reembolsos parciais da fatura ML, agrupados pelo label da cobrança.",
   },
   returnFee: {
     rowLabel: "Tarifa de devolução",
     amountLabel: "Tarifa",
-    description: "Estornos de tarifa de venda em cancelamentos/devoluções.",
+    description:
+      "Tarifas de devolução da fatura ML (e estornos), por label da cobrança.",
   },
   specialFees: {
     rowLabel: "Tarifas especiais",
     amountLabel: "Tarifa",
     description:
-      "Cobranças especiais da conciliação ML e tarifas ainda não classificadas.",
+      "Cobranças especiais da fatura ML (DIFAL, CDLIT e correlatas), por label. A planilha Por Vendas não traz esse agrupamento.",
   },
   fullShipping: {
     rowLabel: "Full envios",
