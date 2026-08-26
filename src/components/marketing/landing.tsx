@@ -220,11 +220,13 @@ export function MarketingLanding({
                 Concorrência
               </p>
               <h2 className="mt-2 text-2xl font-bold tracking-tight text-[var(--primary)] sm:text-3xl">
-                Quem ganhou o anúncio, minuto a minuto
+                Lançou um produto novo? Veja se ele vende de verdade
               </h2>
               <p className="mt-3 text-[15px] leading-relaxed text-[var(--muted-foreground)]">
                 Timeline do dia: quando o anúncio estava ganhando, perdendo ou
-                compartilhando — e quantas vendas saíram em cada trecho.
+                compartilhando o buybox — e quantas vendas saíram em cada
+                trecho. Vender mesmo perdendo ou dividindo a compra é sinal de
+                que o produto tem demanda própria, não só preço vencedor.
               </p>
             </div>
             <DemoCatalog />

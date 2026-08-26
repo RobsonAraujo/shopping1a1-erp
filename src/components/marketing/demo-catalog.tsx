@@ -193,6 +193,11 @@ export function DemoCatalog() {
                   value={entry.priceToWin}
                   valueClass="text-[var(--primary)]"
                 />
+                {entry.status !== "winning" && entry.unitsSold > 0 ? (
+                  <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700">
+                    Vendeu mesmo assim
+                  </span>
+                ) : null}
               </div>
             </div>
           ))}
