@@ -53,23 +53,27 @@ export function MarketingLanding({
       </header>
 
       <main id="topo">
-        <section className="relative overflow-hidden bg-gradient-to-br from-[#0f1a45] via-[#1b2d6f] to-[#243a8a] px-4 py-16 text-white sm:px-6 sm:py-24">
+        <section className="relative overflow-hidden bg-gradient-to-br from-[#0a1130] via-[#141f52] to-[#1b2d6f] px-4 py-16 text-white sm:px-6 sm:py-24">
           <div
             className="marketing-hero-grid pointer-events-none absolute inset-0"
             aria-hidden
           />
           <div
-            className="pointer-events-none absolute -right-24 -top-24 size-80 rounded-full bg-amber-400/20 blur-3xl"
+            className="pointer-events-none absolute -right-24 -top-24 size-80 rounded-full bg-cyan-400/20 blur-3xl"
             aria-hidden
           />
           <div
             className="pointer-events-none absolute bottom-0 left-1/4 size-64 rounded-full bg-sky-400/10 blur-3xl"
             aria-hidden
           />
+          <div
+            className="pointer-events-none absolute -bottom-32 -right-10 size-72 rounded-full bg-indigo-500/10 blur-3xl"
+            aria-hidden
+          />
           <div className="relative mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-2">
             <div>
               <div className="mb-4 flex flex-wrap gap-2">
-                <Badge className="border-amber-300/40 bg-amber-400/20 text-amber-100">
+                <Badge className="border-cyan-300/30 bg-cyan-400/10 text-cyan-100">
                   Mercado Livre
                 </Badge>
                 <Badge className="border-white/20 bg-white/10 text-white">
@@ -84,11 +88,11 @@ export function MarketingLanding({
               </div>
               <h1 className="text-[clamp(2.5rem,6vw,4.75rem)] font-bold leading-[1.06] tracking-tight">
                 <span className="block text-white">O painel do vendedor</span>
-                <span className="mt-1 inline-block bg-gradient-to-r from-amber-200 via-amber-300 to-yellow-200 bg-clip-text text-transparent">
+                <span className="mt-1 inline-block bg-gradient-to-r from-cyan-200 via-sky-300 to-indigo-200 bg-clip-text text-transparent">
                   Mercado Livre
                 </span>
                 <span
-                  className="mt-1 block h-1.5 w-[min(100%,12rem)] rounded-full bg-gradient-to-r from-amber-400 to-yellow-300 sm:h-2 sm:w-[16rem]"
+                  className="mt-1 block h-1.5 w-[min(100%,12rem)] rounded-full bg-gradient-to-r from-cyan-400 to-indigo-400 sm:h-2 sm:w-[16rem]"
                   aria-hidden
                 />
                 <span className="mt-4 block text-[clamp(1.15rem,2.4vw,1.65rem)] font-semibold leading-snug tracking-tight text-white/75">
@@ -238,7 +242,7 @@ export function MarketingLanding({
 
         <section className="bg-gradient-to-br from-[#1b2d6f] to-[#0f1a45] px-4 py-16 text-center text-white sm:px-6">
           <div className="mx-auto max-w-xl">
-            <TrendingUp className="mx-auto size-8 text-amber-400" aria-hidden />
+            <TrendingUp className="mx-auto size-8 text-cyan-300" aria-hidden />
             <h2 className="mt-4 text-2xl font-bold sm:text-3xl">
               Teste com a sua loja de verdade.
             </h2>

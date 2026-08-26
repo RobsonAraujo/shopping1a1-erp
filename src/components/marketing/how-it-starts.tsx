@@ -50,7 +50,7 @@ export function MarketingHowItStarts({
               }
             >
               <p
-                className="font-mono text-3xl font-bold tabular-nums leading-none text-amber-400 sm:text-4xl"
+                className="font-mono text-3xl font-bold tabular-nums leading-none text-[#1b2d6f]/15 sm:text-4xl"
                 aria-hidden
               >
                 {step.n}

@@ -23,11 +23,9 @@ export function OAuthCta({
       ? "h-9 rounded-full px-4 text-sm font-semibold"
       : "h-12 rounded-full px-7 text-[15px] font-semibold";
 
-  const appearance = isLoggedIn
-    ? onDark
-      ? "border-0 bg-white text-[#1b2d6f] shadow-none hover:bg-white/90"
-      : "border-0 bg-[#1b2d6f] text-white shadow-none hover:bg-[#152456]"
-    : "border-0 bg-amber-400 text-[#0f1a45] shadow-none hover:bg-amber-300";
+  const appearance = onDark
+    ? "border-0 bg-white text-[#0f1a45] shadow-[0_10px_30px_-12px_rgba(0,0,0,0.45)] hover:bg-white/90"
+    : "border-0 bg-[#1b2d6f] text-white shadow-none hover:bg-[#152456]";
 
   const label = isLoggedIn ? "Ir para o dashboard" : "Testar grátis";
   const href = isLoggedIn ? dashboardHref : SIGNIN;

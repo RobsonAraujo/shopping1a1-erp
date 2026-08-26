@@ -92,6 +92,67 @@ const DISPLAY: DisplayRow[] = [
   staticRow("lucroOperacional"),
 ];
 
+const CHART_ROWS: {
+  key: DreStaticRowId;
+  label: string;
+  tone: "revenue" | "cost" | "profit";
+}[] = [
+  { key: "totalEntrada", label: "Receita", tone: "revenue" },
+  { key: "saleFeeMl", label: "Tarifa ML", tone: "cost" },
+  { key: "productCostErp", label: "Custo produto", tone: "cost" },
+  { key: "adsCost", label: "ADS", tone: "cost" },
+  { key: "margemContribuicao", label: "Margem de contribuição", tone: "profit" },
+  { key: "lucroOperacional", label: "Lucro operacional", tone: "profit" },
+];
+
+function barToneClass(tone: "revenue" | "cost" | "profit") {
+  if (tone === "revenue") return "bg-[#1b2d6f]";
+  if (tone === "cost") return "bg-rose-400";
+  return "bg-emerald-500";
+}
+
+function DreChart({ monthIndex }: { monthIndex: number }) {
+  const revenue = Math.abs(AMOUNTS.totalEntrada[monthIndex]) || 1;
+
+  return (
+    <div className="border-b border-[var(--border)] px-4 py-4 sm:px-5">
+      <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
+        Receita → lucro operacional
+      </p>
+      <div className="space-y-2.5">
+        {CHART_ROWS.map((row) => {
+          const amount = AMOUNTS[row.key][monthIndex];
+          const width = Math.min(100, (Math.abs(amount) / revenue) * 100);
+          return (
+            <div key={row.key} className="flex items-center gap-3">
+              <p className="w-28 shrink-0 truncate text-[11px] text-[var(--muted-foreground)] sm:w-36">
+                {row.label}
+              </p>
+              <div className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--muted)]">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-[width] duration-500 ease-out",
+                    barToneClass(row.tone),
+                  )}
+                  style={{ width: `${width}%` }}
+                />
+              </div>
+              <p
+                className={cn(
+                  "w-24 shrink-0 text-right text-[11px] font-semibold tabular-nums sm:w-28",
+                  valueToneClass(amount),
+                )}
+              >
+                {formatFinancialMoney(amount)}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function DemoDre() {
   const [monthIndex, setMonthIndex] = useState(1);
   const month = MONTHS[monthIndex];
@@ -125,6 +186,8 @@ export function DemoDre() {
           ))}
         </div>
       </div>
+
+      <DreChart monthIndex={monthIndex} />
 
       <div className="px-4 py-5 sm:px-5">
           {DISPLAY.map((row) => {

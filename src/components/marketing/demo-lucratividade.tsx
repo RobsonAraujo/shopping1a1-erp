@@ -1,9 +1,25 @@
+"use client";
+
 import Image from "next/image";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   formatFinancialMoney,
   formatFinancialPercent,
 } from "@/lib/financial-margin";
+
+function useLiveSeconds(resetAt = 6) {
+  const [seconds, setSeconds] = useState(0);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setSeconds((s) => (s + 1) % resetAt);
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [resetAt]);
+
+  return seconds;
+}
 
 function marginTone(percent: number) {
   if (percent > 0) return "text-emerald-600";
@@ -61,15 +77,23 @@ function Stacked({ pct, value }: { pct: number; value: number }) {
 }
 
 export function DemoLucratividade() {
+  const seconds = useLiveSeconds();
+
   return (
     <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-md">
-      <div className="border-b border-[var(--border)] px-4 py-3">
-        <p className="text-sm font-semibold text-[var(--foreground)]">
-          Lucratividade
-        </p>
-        <p className="text-xs text-[var(--muted-foreground)]">
-          Situação atual · demonstração
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-3">
+        <div>
+          <p className="text-sm font-semibold text-[var(--foreground)]">
+            Lucratividade
+          </p>
+          <p className="text-xs text-[var(--muted-foreground)]">
+            Situação atual · demonstração
+          </p>
+        </div>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+          <span className="marketing-hero-live size-1.5 rounded-full bg-emerald-500" />
+          Ao vivo · atualizado há {seconds}s
+        </span>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[36rem] table-fixed border-collapse text-sm">

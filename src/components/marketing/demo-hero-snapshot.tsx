@@ -86,7 +86,7 @@ export function DemoHeroSnapshot() {
   return (
     <div className="marketing-hero-stage relative mx-auto w-full max-w-lg lg:max-w-none">
       <div className="marketing-hero-float">
-        <div className="marketing-hero-glow pointer-events-none absolute -inset-6 rounded-[1.75rem] bg-amber-400/20 blur-2xl" />
+        <div className="marketing-hero-glow pointer-events-none absolute -inset-6 rounded-[1.75rem] bg-cyan-400/20 blur-2xl" />
         <div className="relative overflow-hidden rounded-2xl border border-white/20 bg-white shadow-2xl shadow-black/40">
           <div className="marketing-hero-shine pointer-events-none absolute inset-0 z-10" />
           <div className="relative flex items-center gap-2 border-b border-[var(--border)] bg-[var(--muted)]/50 px-3 py-2">
