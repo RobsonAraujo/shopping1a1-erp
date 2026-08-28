@@ -10,10 +10,37 @@ import { UserFeedback } from "@/components/ui/user-feedback";
 import { MetricWithHint } from "@/components/metric-with-hint";
 import { readApiError } from "@/lib/api-client-error";
 import { buildPurchaseCoverageBufferTooltip } from "@/lib/purchase-analysis";
+import { cn } from "@/lib/utils";
 import {
   OPERATIONAL_SETTINGS_DEFAULTS,
   type OperationalSettingsValues,
 } from "@/lib/operational-settings-defaults";
+
+type SectionTone = "sky" | "emerald" | "amber";
+
+const SECTION_TONES: Record<
+  SectionTone,
+  { icon: string; border: string; chip: string; chipHover: string }
+> = {
+  sky: {
+    icon: "bg-sky-100 text-sky-900 dark:bg-sky-950/50 dark:text-sky-200",
+    border: "border-l-4 border-l-sky-400 dark:border-l-sky-600",
+    chip: "border-sky-200/80 bg-sky-50 text-sky-900 dark:border-sky-900/60 dark:bg-sky-950/40 dark:text-sky-100",
+    chipHover: "hover:bg-sky-100 dark:hover:bg-sky-950/70",
+  },
+  emerald: {
+    icon: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200",
+    border: "border-l-4 border-l-emerald-400 dark:border-l-emerald-600",
+    chip: "border-emerald-200/80 bg-emerald-50 text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-100",
+    chipHover: "hover:bg-emerald-100 dark:hover:bg-emerald-950/70",
+  },
+  amber: {
+    icon: "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200",
+    border: "border-l-4 border-l-amber-400 dark:border-l-amber-600",
+    chip: "border-amber-200/80 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100",
+    chipHover: "hover:bg-amber-100 dark:hover:bg-amber-950/70",
+  },
+};
 
 type SettingsResponse = { settings: OperationalSettingsValues };
 
@@ -45,14 +72,21 @@ function SectionHeader({
   icon: Icon,
   title,
   description,
+  tone,
 }: {
   icon: typeof Boxes;
   title: string;
   description: string;
+  tone: SectionTone;
 }) {
   return (
     <div className="flex items-start gap-3 border-b border-[var(--border)] px-4 py-4 sm:px-5">
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--muted)]/30 text-[var(--primary)]">
+      <span
+        className={cn(
+          "flex size-10 shrink-0 items-center justify-center rounded-lg shadow-sm",
+          SECTION_TONES[tone].icon,
+        )}
+      >
         <Icon className="size-5" aria-hidden />
       </span>
       <div>
@@ -73,6 +107,7 @@ function SettingField({
   draft,
   onChange,
   suffix = "dias",
+  tone,
 }: {
   fieldKey: FieldKey;
   label: string;
@@ -81,12 +116,14 @@ function SettingField({
   draft: DraftValues;
   onChange: (key: FieldKey, value: string) => void;
   suffix?: string;
+  tone: SectionTone;
 }) {
   const defaultValue = OPERATIONAL_SETTINGS_DEFAULTS[fieldKey];
   const currentValue = draft[fieldKey];
   const isCustomized =
     currentValue.trim() !== "" &&
     Number(currentValue.replace(",", ".")) !== defaultValue;
+  const toneClasses = SECTION_TONES[tone];
 
   return (
     <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3.5 py-3">
@@ -114,14 +151,23 @@ function SettingField({
           <button
             type="button"
             onClick={() => onChange(fieldKey, String(defaultValue))}
-            className="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-[var(--muted-foreground)] hover:bg-[var(--muted)]/50 hover:text-[var(--foreground)]"
+            className={cn(
+              "ml-auto inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+              toneClasses.chip,
+              toneClasses.chipHover,
+            )}
             title={`Restaurar padrão recomendado (${defaultValue})`}
           >
             <RotateCcw className="size-3" aria-hidden />
             padrão: {defaultValue}
           </button>
         ) : (
-          <span className="ml-auto text-[11px] text-[var(--muted-foreground)]">
+          <span
+            className={cn(
+              "ml-auto inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium",
+              toneClasses.chip,
+            )}
+          >
             padrão: {defaultValue}
           </span>
         )}
@@ -256,11 +302,12 @@ export function OperationalSettingsClient() {
         </UserFeedback>
       ) : null}
 
-      <Card className="overflow-hidden p-0">
+      <Card className={cn("overflow-hidden p-0", SECTION_TONES.sky.border)}>
         <SectionHeader
           icon={Boxes}
           title="Reposição de estoque"
           description="Prazos usados para prever quando cada anúncio vai esgotar e quando agir. Aparece em Estoque, Compras e Operações Full."
+          tone="sky"
         />
         <div className="grid gap-3 px-4 py-4 sm:grid-cols-2 sm:px-5 lg:grid-cols-3">
           <SettingField
@@ -274,6 +321,7 @@ export function OperationalSettingsClient() {
             } un./dia. É essa média que o sistema compara pra decidir quando avisar que o estoque vai acabar.`}
             draft={draft}
             onChange={updateField}
+            tone="sky"
           />
           <SettingField
             fieldKey="leadTimeDays"
@@ -282,6 +330,7 @@ export function OperationalSettingsClient() {
             helperText="Ex.: se leva 14 dias entre enviar pro Full e o anúncio voltar a vender, deixe 14 aqui. Esse número soma com o prazo do fornecedor de cada produto pra avisar quando começar a reposição."
             draft={draft}
             onChange={updateField}
+            tone="sky"
           />
           <SettingField
             fieldKey="activeStockBufferDays"
@@ -290,15 +339,17 @@ export function OperationalSettingsClient() {
             helperText="Ex.: com 1 dia, o sistema avisa pra deixar o novo lote ativo pelo menos 1 dia antes do estoque atual zerar."
             draft={draft}
             onChange={updateField}
+            tone="sky"
           />
         </div>
       </Card>
 
-      <Card className="overflow-hidden p-0">
+      <Card className={cn("overflow-hidden p-0", SECTION_TONES.emerald.border)}>
         <SectionHeader
           icon={ShoppingCart}
           title="Sugestão de compra"
           description="Como calculamos quanto comprar e quando um produto é considerado alta, média ou baixa rotação. Aparece na tela de Compras."
+          tone="emerald"
         />
         <div className="grid gap-3 px-4 py-4 sm:grid-cols-2 sm:px-5 lg:grid-cols-3">
           <SettingField
@@ -310,6 +361,7 @@ export function OperationalSettingsClient() {
             helperText="Este é só o valor inicial: cada pessoa pode ajustar temporariamente na própria tela de Compras (fica salvo no navegador dela, sem afetar os outros)."
             draft={draft}
             onChange={updateField}
+            tone="emerald"
           />
           <SettingField
             fieldKey="rotationHighDailyAvg"
@@ -319,6 +371,7 @@ export function OperationalSettingsClient() {
             draft={draft}
             onChange={updateField}
             suffix="vendas/dia"
+            tone="emerald"
           />
           <SettingField
             fieldKey="rotationMediumDailyAvg"
@@ -328,15 +381,17 @@ export function OperationalSettingsClient() {
             draft={draft}
             onChange={updateField}
             suffix="vendas/dia"
+            tone="emerald"
           />
         </div>
       </Card>
 
-      <Card className="overflow-hidden p-0">
+      <Card className={cn("overflow-hidden p-0", SECTION_TONES.amber.border)}>
         <SectionHeader
           icon={Tag}
           title="Promoções"
           description="Quando alertar, no painel Início, que uma promoção do Mercado Livre está perto de terminar."
+          tone="amber"
         />
         <div className="grid gap-3 px-4 py-4 sm:grid-cols-2 sm:px-5 lg:grid-cols-3">
           <SettingField
@@ -346,6 +401,7 @@ export function OperationalSettingsClient() {
             helperText="Ex.: com 3 dias, promoções que faltam 3 dias ou menos para terminar ganham destaque no painel."
             draft={draft}
             onChange={updateField}
+            tone="amber"
           />
         </div>
       </Card>
