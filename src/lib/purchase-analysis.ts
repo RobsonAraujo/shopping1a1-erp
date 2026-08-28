@@ -1,5 +1,11 @@
-import { purchaseAnalysisConfig } from "@/config/purchase-analysis";
-import { stockPlanningConfig } from "@/config/stock-planning";
+import {
+  purchaseAnalysisConfig,
+  type PurchaseAnalysisValues,
+} from "@/config/purchase-analysis";
+import {
+  stockPlanningConfig,
+  type StockPlanningValues,
+} from "@/config/stock-planning";
 import { computeStockPlanningDisplay } from "@/lib/stock-planning";
 
 export type PurchasePerformanceTier = "alta" | "media" | "baixa" | "zero";
@@ -28,18 +34,16 @@ export type PurchaseAnalysisInput = {
   coverageBufferDays?: number;
 };
 
-export const PURCHASE_COVERAGE_BUFFER_STORAGE_KEY =
-  "compras-coverage-buffer-days";
-
-export const DEFAULT_PURCHASE_COVERAGE_BUFFER_DAYS =
-  purchaseAnalysisConfig.targetCoverageBufferDays;
-
-export const PURCHASE_COVERAGE_BUFFER_TOOLTIP = [
-  "Quantos dias o estoque deve durar além dos prazos de reposição (compra até o galpão + envio ao Full).",
-  `A Qtd. sugerida mira cobrir esses prazos + este buffer, com base na média de vendas dos últimos ${stockPlanningConfig.salesAverageWindowDays} dias.`,
-  "Ex.: buffer 30 = planejar cerca de 30 dias extras de venda depois que o novo lote estiver disponível para venda.",
-  "Quanto maior o buffer, maior a Qtd. sugerida; quanto menor, menor a sugestão.",
-].join(" ");
+export function buildPurchaseCoverageBufferTooltip(
+  windowDays: number = stockPlanningConfig.salesAverageWindowDays,
+): string {
+  return [
+    "Quantos dias o estoque deve durar além dos prazos de reposição (compra até o galpão + envio ao Full).",
+    `A Qtd. sugerida mira cobrir esses prazos + este buffer, com base na média de vendas dos últimos ${windowDays} dias.`,
+    "Ex.: buffer 30 = planejar cerca de 30 dias extras de venda depois que o novo lote estiver disponível para venda.",
+    "Quanto maior o buffer, maior a Qtd. sugerida; quanto menor, menor a sugestão.",
+  ].join(" ");
+}
 
 export type PurchaseAnalysisResult = {
   performanceTier: PurchasePerformanceTier;
@@ -65,9 +69,10 @@ function formatNumPt(n: number, maxFractionDigits = 2): string {
 export function computePerformanceTier(
   unitsSoldInWindow: number,
   dailyAvg: number,
+  rotation: PurchaseAnalysisValues["rotationDailyAvg"] = purchaseAnalysisConfig.rotationDailyAvg,
 ): PurchasePerformanceTier {
   if (unitsSoldInWindow <= 0) return "zero";
-  const { altaMin, mediaMin } = purchaseAnalysisConfig.rotationDailyAvg;
+  const { altaMin, mediaMin } = rotation;
   if (dailyAvg >= altaMin) return "alta";
   if (dailyAvg >= mediaMin) return "media";
   return "baixa";
@@ -78,6 +83,7 @@ function buildPerformanceTooltip(
   dailyAvg: number,
   unitsSoldInWindow: number,
   windowDays: number,
+  rotation: PurchaseAnalysisValues["rotationDailyAvg"] = purchaseAnalysisConfig.rotationDailyAvg,
 ): string {
   const avgLabel = formatNumPt(dailyAvg);
   const base = `${unitsSoldInWindow} vendas em ${windowDays} dias (média ${avgLabel}/dia).`;
@@ -85,11 +91,11 @@ function buildPerformanceTooltip(
     case "zero":
       return `Não vendeu no período. Classificação: Zero = sem vendas nos últimos ${windowDays} dias.`;
     case "alta":
-      return `${base} Classificação: Alta = média ≥ 7 vendas/dia.`;
+      return `${base} Classificação: Alta = média ≥ ${rotation.altaMin} vendas/dia.`;
     case "media":
-      return `${base} Classificação: Média = 3 a 6 vendas/dia.`;
+      return `${base} Classificação: Média = ${rotation.mediaMin} a ${rotation.altaMin - 1} vendas/dia.`;
     case "baixa":
-      return `${base} Classificação: Baixa = 1 a 2 vendas/dia (ou menos de 1/dia quando houve alguma venda).`;
+      return `${base} Classificação: Baixa = 1 a ${rotation.mediaMin - 1} vendas/dia (ou menos de 1/dia quando houve alguma venda).`;
   }
 }
 
@@ -104,8 +110,9 @@ function buildStatusTooltip(
     coverageDays: number | null;
     totalStock: number;
   },
+  leadTimeDays: number = stockPlanningConfig.leadTimeDays,
 ): string {
-  const leadFull = stockPlanningConfig.leadTimeDays;
+  const leadFull = leadTimeDays;
   const purchaseLead = input.purchaseLeadTimeDays;
   switch (status) {
     case "urgente":
@@ -144,14 +151,15 @@ export function computeSuggestedPurchaseQty(
   purchaseLeadTimeDays: number,
   targetCoverageDaysOverride?: number | null,
   coverageBufferDays: number = purchaseAnalysisConfig.targetCoverageBufferDays,
+  windowDays: number = stockPlanningConfig.salesAverageWindowDays,
+  fullLeadTimeDays: number = stockPlanningConfig.leadTimeDays,
 ): { suggestedQty: number; dailyAvg: number; targetDays: number } {
-  const windowDays = stockPlanningConfig.salesAverageWindowDays;
   const dailyAvg =
     windowDays > 0 && unitsSoldInWindow > 0 ? unitsSoldInWindow / windowDays : 0;
   const bufferDays = Math.max(0, coverageBufferDays);
   const targetDays =
     targetCoverageDaysOverride ??
-    purchaseLeadTimeDays + stockPlanningConfig.leadTimeDays + bufferDays;
+    purchaseLeadTimeDays + fullLeadTimeDays + bufferDays;
 
   if (dailyAvg <= 0) {
     return { suggestedQty: 0, dailyAvg: 0, targetDays };
@@ -162,19 +170,28 @@ export function computeSuggestedPurchaseQty(
   return { suggestedQty, dailyAvg, targetDays };
 }
 
+export type PurchaseAnalysisSettings = {
+  stockPlanning?: StockPlanningValues;
+  purchaseAnalysis?: PurchaseAnalysisValues;
+};
+
 export function computePurchaseAnalysis(
   input: PurchaseAnalysisInput,
+  settings?: PurchaseAnalysisSettings,
 ): PurchaseAnalysisResult {
-  const windowDays = stockPlanningConfig.salesAverageWindowDays;
+  const stockPlanning = settings?.stockPlanning ?? stockPlanningConfig;
+  const purchaseSettings = settings?.purchaseAnalysis ?? purchaseAnalysisConfig;
+  const windowDays = stockPlanning.salesAverageWindowDays;
   const coverageBufferDays =
-    input.coverageBufferDays ??
-    purchaseAnalysisConfig.targetCoverageBufferDays;
+    input.coverageBufferDays ?? purchaseSettings.targetCoverageBufferDays;
   const { suggestedQty, dailyAvg, targetDays } = computeSuggestedPurchaseQty(
     input.unitsSoldInWindow,
     input.totalStock,
     input.purchaseLeadTimeDays,
     input.costProfile?.targetCoverageDays,
     coverageBufferDays,
+    windowDays,
+    stockPlanning.leadTimeDays,
   );
 
   const coverageDays =
@@ -183,12 +200,14 @@ export function computePurchaseAnalysis(
   const performanceTier = computePerformanceTier(
     input.unitsSoldInWindow,
     dailyAvg,
+    purchaseSettings.rotationDailyAvg,
   );
   const performanceTooltip = buildPerformanceTooltip(
     performanceTier,
     dailyAvg,
     input.unitsSoldInWindow,
     windowDays,
+    purchaseSettings.rotationDailyAvg,
   );
 
   let purchaseStatus: PurchaseStatus = "ok";
@@ -217,15 +236,19 @@ export function computePurchaseAnalysis(
     recommendation = "nao_repor";
   }
 
-  const statusTooltip = buildStatusTooltip(purchaseStatus, {
-    dailyAvg,
-    unitsSoldInWindow: input.unitsSoldInWindow,
-    windowDays,
-    purchaseLeadTimeDays: input.purchaseLeadTimeDays,
-    performanceTier,
-    coverageDays,
-    totalStock: input.totalStock,
-  });
+  const statusTooltip = buildStatusTooltip(
+    purchaseStatus,
+    {
+      dailyAvg,
+      unitsSoldInWindow: input.unitsSoldInWindow,
+      windowDays,
+      purchaseLeadTimeDays: input.purchaseLeadTimeDays,
+      performanceTier,
+      coverageDays,
+      totalStock: input.totalStock,
+    },
+    stockPlanning.leadTimeDays,
+  );
 
   const tooltipParts = [
     `Vendas: ${input.unitsSoldInWindow} un. em ${windowDays} dias (média ${formatNumPt(dailyAvg)}/dia).`,
@@ -233,7 +256,7 @@ export function computePurchaseAnalysis(
     coverageDays !== null
       ? `Cobertura estimada: ${formatNumPt(coverageDays, 1)} dias.`
       : "Sem vendas no período — cobertura indeterminada.",
-    `Meta de cobertura: ${targetDays} dias (prazo compra ${input.purchaseLeadTimeDays} d + Full ${stockPlanningConfig.leadTimeDays} d + buffer ${coverageBufferDays} d).`,
+    `Meta de cobertura: ${targetDays} dias (prazo compra ${input.purchaseLeadTimeDays} d + Full ${stockPlanning.leadTimeDays} d + buffer ${coverageBufferDays} d).`,
     `Quantidade sugerida: max(0, ceil(média × meta) − estoque) = ${suggestedQty} un.`,
   ];
 
@@ -282,12 +305,13 @@ export function buildPurchasePlan(
   totalStock: number,
   unitsSoldInWindow: number,
   purchaseLeadTimeDays: number,
+  config: StockPlanningValues = stockPlanningConfig,
 ) {
   return computeStockPlanningDisplay(
     totalStock,
     unitsSoldInWindow,
-    stockPlanningConfig.salesAverageWindowDays,
-    stockPlanningConfig,
+    config.salesAverageWindowDays,
+    config,
     purchaseLeadTimeDays,
   );
 }

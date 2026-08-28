@@ -1,18 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   mergeSupplierRevenueIntoRows,
   type PurchaseAnalysisItemRow,
 } from "@/lib/purchase-analysis-rows";
-import {
-  buildPurchaseAnalysisInputFromRow,
-  computePurchaseAnalysis,
-} from "@/lib/purchase-analysis";
-import {
-  PurchaseCoverageBufferControl,
-  usePurchaseCoverageBufferDays,
-} from "@/components/compras/purchase-coverage-buffer";
 import {
   ItemListSearch,
   itemListSearchEmptyMessage,
@@ -48,18 +41,6 @@ type RevenueLoadState =
       rowsWithRevenue: PurchaseAnalysisItemRow[];
     };
 
-function recomputeRowsWithBuffer(
-  rows: PurchaseAnalysisItemRow[],
-  coverageBufferDays: number,
-): PurchaseAnalysisItemRow[] {
-  return rows.map((row) => ({
-    ...row,
-    analysis: computePurchaseAnalysis(
-      buildPurchaseAnalysisInputFromRow(row, coverageBufferDays),
-    ),
-  }));
-}
-
 const revenueCardClassName =
   "border-violet-500/40 bg-violet-600 text-white shadow-sm";
 
@@ -86,7 +67,6 @@ export function SupplierPurchaseAnalysisView({
   rows,
   supplierParam,
 }: SupplierPurchaseAnalysisViewProps) {
-  const { bufferDays, setBufferDays } = usePurchaseCoverageBufferDays();
   const [searchQuery, setSearchQuery] = useState("");
   const [showPaused, setShowPaused] = useState(false);
   const [fetchByKey, setFetchByKey] = useState<
@@ -191,13 +171,8 @@ export function SupplierPurchaseAnalysisView({
       ? emptyReadyState
       : (fetchByKey.get(requestKey) ?? { status: "loading" });
 
-  const baseRows =
+  const computedRows =
     revenueState.status === "ready" ? revenueState.rowsWithRevenue : rows;
-
-  const computedRows = useMemo(
-    () => recomputeRowsWithBuffer(baseRows, bufferDays),
-    [baseRows, bufferDays],
-  );
 
   const statusVisibleRows = useMemo(
     () =>
@@ -244,11 +219,17 @@ export function SupplierPurchaseAnalysisView({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <PurchaseCoverageBufferControl
-          bufferDays={bufferDays}
-          onBufferDaysChange={setBufferDays}
-        />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-[var(--muted-foreground)]">
+          A quantidade sugerida usa o buffer de cobertura configurado em{" "}
+          <Link
+            href="/dashboard/configuracoes/planejamento"
+            className="text-[var(--primary)] underline"
+          >
+            Configurações → Planejamento
+          </Link>
+          .
+        </p>
         <ShowPausedListingsSwitch
           checked={showPaused}
           onCheckedChange={setShowPaused}

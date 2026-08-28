@@ -11,6 +11,7 @@ import {
   Scale,
   Settings,
   ShoppingCart,
+  SlidersHorizontal,
   TrendingUp,
   Truck,
   Warehouse,
@@ -142,8 +143,7 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
       {
         href: "/dashboard/dre",
         label: "DRE",
-        description:
-          "Resultado mensal — faturamento, custos, impostos e ADS",
+        description: "Resultado mensal — faturamento, custos, impostos e ADS",
         icon: LineChart,
       },
       {
@@ -151,7 +151,10 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
         label: "Tributário",
         description: "Apuração fiscal mensal — Lucro Real ou Simples Nacional",
         icon: Scale,
-        matchHrefs: ["/dashboard/relatorio-tributario", "/dashboard/simples-nacional"],
+        matchHrefs: [
+          "/dashboard/relatorio-tributario",
+          "/dashboard/simples-nacional",
+        ],
       },
     ],
   },
@@ -165,6 +168,12 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
         label: "Empresa",
         description: "Regime tributário (Lucro Real ou Simples Nacional)",
         icon: Building2,
+      },
+      {
+        href: "/dashboard/configuracoes/planejamento",
+        label: "Planejamento",
+        description: "Prazos de estoque, sugestão de compra e promoções",
+        icon: SlidersHorizontal,
       },
       {
         href: "/dashboard/configuracoes/tributario",

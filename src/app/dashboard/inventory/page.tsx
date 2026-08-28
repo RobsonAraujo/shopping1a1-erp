@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { cookies } from "next/headers";
-import { stockPlanningConfig } from "@/config/stock-planning";
 import { InventoryStockTable, type InventoryRow } from "@/components/inventory/inventory-stock-table";
 import { InventoryStockTableSkeleton } from "@/components/inventory/inventory-stock-table-skeleton";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,6 +16,10 @@ import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { getItemSku, isKitItem } from "@/lib/mercadolibre/item-sku";
 import { countListingsByStatus } from "@/lib/mercadolibre/listing-status";
 import { computeStockPlanningDisplay } from "@/lib/stock-planning";
+import {
+  loadOperationalSettings,
+  toStockPlanningValues,
+} from "@/lib/operational-settings";
 import { loadStockReportProductsBySku } from "@/lib/product-data";
 import type { StockReportProductInfo } from "@/lib/inventory/inventory-stock-report";
 import { prisma } from "@/lib/db";
@@ -45,6 +48,8 @@ async function InventoryDataSection({
   let rows: InventoryRow[] = [];
 
   try {
+    const operationalSettings = await loadOperationalSettings(organizationId);
+    const stockPlanning = toStockPlanningValues(operationalSettings);
     const items = (
       await fetchOperationalListings(token, userId, organizationId)
     ).filter(
@@ -59,8 +64,8 @@ async function InventoryDataSection({
       token,
       userId,
       allIds,
-      stockPlanningConfig.salesAverageWindowDays,
-      stockPlanningConfig.salesWindowDateField,
+      stockPlanning.salesAverageWindowDays,
+      stockPlanning.salesWindowDateField,
     );
     const ids = items.map((i) => i.id);
 
@@ -101,8 +106,8 @@ async function InventoryDataSection({
         const plan = computeStockPlanningDisplay(
           mlStock + warehouseStock + mlStockOnTheWay,
           sold,
-          stockPlanningConfig.salesAverageWindowDays,
-          stockPlanningConfig,
+          stockPlanning.salesAverageWindowDays,
+          stockPlanning,
           purchaseLeadTimeDays,
         );
         return {

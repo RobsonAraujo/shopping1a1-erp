@@ -3,12 +3,12 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { stockPlanningConfig } from "@/config/stock-planning";
 import {
   filterRowsBySupplier,
   loadDashboardPurchaseData,
   type PurchaseAnalysisItemRow,
 } from "@/lib/compras/dashboard-purchase-data";
+import type { PurchaseAnalysisSettings } from "@/lib/purchase-analysis";
 import { decodeSupplierParam, supplierPathSegment } from "@/lib/purchase-analysis";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { SupplierPurchaseAnalysisView } from "@/components/compras/supplier-purchase-analysis-view";
@@ -47,6 +47,7 @@ export default async function SupplierPurchasePage({ params }: PageProps) {
 
   let loadError: string | null = null;
   let supplierRows: PurchaseAnalysisItemRow[] = [];
+  let purchaseAnalysisSettings: PurchaseAnalysisSettings | null = null;
   let supplierMissing = false;
   try {
     const data = await loadDashboardPurchaseData(
@@ -55,6 +56,7 @@ export default async function SupplierPurchasePage({ params }: PageProps) {
       orgContext.organization.id,
     );
     supplierRows = filterRowsBySupplier(data.rows, supplierParam);
+    purchaseAnalysisSettings = data.purchaseAnalysisSettings;
 
     if (supplierRows.length === 0) {
       const hasAnySupplier = data.rows.some((r) => r.supplier === supplier);
@@ -74,10 +76,11 @@ export default async function SupplierPurchasePage({ params }: PageProps) {
     notFound();
   }
 
-  if (loadError) {
+  if (loadError || !purchaseAnalysisSettings) {
     return (
       <UserFeedback title="Não foi possível carregar a análise">
-        {loadError}
+        {loadError ??
+          "Não foi possível carregar a análise deste fornecedor. Tente de novo em instantes."}
       </UserFeedback>
     );
   }
@@ -104,7 +107,9 @@ export default async function SupplierPurchasePage({ params }: PageProps) {
         </h1>
         <p className="mt-2 max-w-3xl text-[15px] leading-relaxed text-[var(--muted-foreground)]">
           Todos os anúncios ativos deste fornecedor. Projeções usam vendas dos
-          últimos {stockPlanningConfig.salesAverageWindowDays} dias.
+          últimos{" "}
+          {purchaseAnalysisSettings.stockPlanning?.salesAverageWindowDays}{" "}
+          dias.
         </p>
       </div>
 

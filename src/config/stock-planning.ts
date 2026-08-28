@@ -34,3 +34,17 @@ export const stockPlanningConfig = {
 } as const;
 
 export type StockPlanningConfig = typeof stockPlanningConfig;
+
+/**
+ * Mesmo formato de `StockPlanningConfig`, mas com tipos "largos" (`number`
+ * em vez de literais). Usar como tipo de parâmetro em funções que recebem
+ * valores carregados em runtime (config da organização em
+ * `src/lib/operational-settings.ts`) — o objeto estático acima continua
+ * sendo aceito normalmente, por ser um subtipo.
+ */
+export type StockPlanningValues = {
+  salesAverageWindowDays: number;
+  leadTimeDays: number;
+  activeStockBufferDays: number;
+  salesWindowDateField: StockPlanningConfig["salesWindowDateField"];
+};

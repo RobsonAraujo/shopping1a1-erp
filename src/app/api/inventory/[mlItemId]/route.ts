@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { stockPlanningConfig } from "@/config/stock-planning";
 import { fetchItemById } from "@/lib/mercadolibre/api";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import { prisma } from "@/lib/db";
 import { syncPurchaseCycleFromWarehouse } from "@/lib/replenishment-cycle-data";
 import { computeStockPlanningDisplay } from "@/lib/stock-planning";
+import {
+  loadOperationalSettings,
+  toStockPlanningValues,
+} from "@/lib/operational-settings";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 import { requireOrganization } from "@/lib/api-auth";
 import { parseJsonBody } from "@/lib/api-validation";
@@ -175,11 +178,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (quantity !== undefined && warehouseStock.quantity > previousQty) {
       const purchaseLead =
         warehouseStock.purchaseLeadTimeDays ?? 0;
+      const stockPlanning = toStockPlanningValues(
+        await loadOperationalSettings(organizationId),
+      );
       const purchasePlan = computeStockPlanningDisplay(
         mlAvailableStockUnits(item) + warehouseStock.quantity,
         0,
-        stockPlanningConfig.salesAverageWindowDays,
-        stockPlanningConfig,
+        stockPlanning.salesAverageWindowDays,
+        stockPlanning,
         purchaseLead,
       );
       await syncPurchaseCycleFromWarehouse(

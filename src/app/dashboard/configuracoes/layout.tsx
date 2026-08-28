@@ -16,8 +16,8 @@ export default function ConfiguracoesLayout({
           Configurações
         </h1>
         <p className="mt-2 max-w-3xl text-[15px] leading-relaxed text-[var(--muted-foreground)]">
-          Regime tributário da empresa e parâmetros fiscais usados nos
-          cálculos e relatórios.
+          Regime tributário, parâmetros fiscais e prazos operacionais
+          (estoque, compra, promoções) usados nos cálculos e relatórios.
         </p>
       </div>
       {children}

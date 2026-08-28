@@ -1,4 +1,3 @@
-import { stockPlanningConfig } from "@/config/stock-planning";
 import { loadLatestCatalogCompetitionSnapshots } from "@/lib/catalog-competition";
 import {
   fetchCategoriesByIds,
@@ -12,7 +11,13 @@ import { getItemSku, getSkuSupplier, isKitItem } from "@/lib/mercadolibre/item-s
 import {
   buildPurchasePlan,
   computePurchaseAnalysis,
+  type PurchaseAnalysisSettings,
 } from "@/lib/purchase-analysis";
+import {
+  loadOperationalSettings,
+  toPurchaseAnalysisValues,
+  toStockPlanningValues,
+} from "@/lib/operational-settings";
 import type {
   PurchaseAnalysisItemRow,
 } from "@/lib/purchase-analysis-rows";
@@ -198,8 +203,14 @@ export async function loadDashboardPurchaseData(
   userId: number,
   organizationId: string,
 ) {
-  const windowDays = stockPlanningConfig.salesAverageWindowDays;
-  const dateField = stockPlanningConfig.salesWindowDateField;
+  const operationalSettings = await loadOperationalSettings(organizationId);
+  const stockPlanning = toStockPlanningValues(operationalSettings);
+  const purchaseAnalysisSettings: PurchaseAnalysisSettings = {
+    stockPlanning,
+    purchaseAnalysis: toPurchaseAnalysisValues(operationalSettings),
+  };
+  const windowDays = stockPlanning.salesAverageWindowDays;
+  const dateField = stockPlanning.salesWindowDateField;
 
   const allIds = await fetchOperationalListingIds(token, userId, organizationId);
   const [rawItems, salesByItem, warehouseStocks, replenishmentCycles, latestSnapshotById] =
@@ -260,19 +271,22 @@ export async function loadDashboardPurchaseData(
     const mlStock = mlAvailableStockUnits(item);
     const totalStock = mlStock + warehouseStock;
     const unitsSold = salesByItem[item.id] ?? 0;
-    const plan = buildPurchasePlan(totalStock, unitsSold, purchaseLead);
-    const analysis = computePurchaseAnalysis({
-      unitsSoldInWindow: unitsSold,
-      totalStock,
-      purchaseLeadTimeDays: purchaseLead,
-      purchaseIsOverdue: plan.purchaseIsOverdue,
-      needsPurchaseAttention: plan.needsPurchaseAttention,
-      costProfile: warehouse
-        ? {
-            targetCoverageDays: warehouse.targetCoverageDays,
-          }
-        : null,
-    });
+    const plan = buildPurchasePlan(totalStock, unitsSold, purchaseLead, stockPlanning);
+    const analysis = computePurchaseAnalysis(
+      {
+        unitsSoldInWindow: unitsSold,
+        totalStock,
+        purchaseLeadTimeDays: purchaseLead,
+        purchaseIsOverdue: plan.purchaseIsOverdue,
+        needsPurchaseAttention: plan.needsPurchaseAttention,
+        costProfile: warehouse
+          ? {
+              targetCoverageDays: warehouse.targetCoverageDays,
+            }
+          : null,
+      },
+      purchaseAnalysisSettings,
+    );
 
     const category = item.category_id
       ? categoriesById[item.category_id]
@@ -325,6 +339,7 @@ export async function loadDashboardPurchaseData(
     warehouseById,
     rows,
     needsPurchase,
+    purchaseAnalysisSettings,
   };
 }
 

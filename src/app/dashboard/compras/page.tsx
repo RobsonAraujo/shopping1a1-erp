@@ -55,9 +55,7 @@ async function ComprasDataSection({
     );
   }
 
-  return (
-    <ComprasPageClient summaries={summaries} rows={rows} boards={boards} />
-  );
+  return <ComprasPageClient summaries={summaries} rows={rows} boards={boards} />;
 }
 
 export const metadata: Metadata = {

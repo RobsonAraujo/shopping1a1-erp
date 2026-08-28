@@ -7,16 +7,8 @@ import type {
   PurchaseAnalysisItemRow,
   SupplierSummary,
 } from "@/lib/purchase-analysis-rows";
-import {
-  buildPurchaseAnalysisInputFromRow,
-  computePurchaseAnalysis,
-  supplierPathSegment,
-} from "@/lib/purchase-analysis";
+import { supplierPathSegment } from "@/lib/purchase-analysis";
 import { buildSupplierSummaries } from "@/lib/purchase-analysis-rows";
-import {
-  PurchaseCoverageBufferControl,
-  usePurchaseCoverageBufferDays,
-} from "@/components/compras/purchase-coverage-buffer";
 import {
   ItemListSearch,
   itemListSearchEmptyMessage,
@@ -35,20 +27,6 @@ type ComprasSupplierGridProps = {
   summaries: SupplierSummary[];
   rows: PurchaseAnalysisItemRow[];
 };
-
-function suggestedUnitsForSupplier(
-  supplierRows: PurchaseAnalysisItemRow[],
-  coverageBufferDays: number,
-): number {
-  return supplierRows
-    .map((row) =>
-      computePurchaseAnalysis(
-        buildPurchaseAnalysisInputFromRow(row, coverageBufferDays),
-      ),
-    )
-    .filter((analysis) => analysis.recommendation === "comprar")
-    .reduce((sum, analysis) => sum + analysis.suggestedQty, 0);
-}
 
 function OverviewStat({
   label,
@@ -80,7 +58,6 @@ function OverviewStat({
 export function ComprasSupplierGrid({
   rows,
 }: ComprasSupplierGridProps) {
-  const { bufferDays, setBufferDays } = usePurchaseCoverageBufferDays();
   const [searchQuery, setSearchQuery] = useState("");
   const [showPaused, setShowPaused] = useState(false);
 
@@ -125,20 +102,6 @@ export function ComprasSupplierGrid({
     );
   }, [summaries, searchQuery]);
 
-  const suggestedBySupplier = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const summary of summaries) {
-      const supplierRows = visibleRows.filter(
-        (r) => r.supplier === summary.supplier,
-      );
-      map.set(
-        summary.supplier,
-        suggestedUnitsForSupplier(supplierRows, bufferDays),
-      );
-    }
-    return map;
-  }, [summaries, visibleRows, bufferDays]);
-
   const overview = useMemo(() => {
     let totalProducts = 0;
     let totalUrgent = 0;
@@ -148,9 +111,7 @@ export function ComprasSupplierGrid({
     for (const summary of summaries) {
       totalProducts += summary.totalProducts;
       totalUrgent += summary.urgentCount;
-      totalSuggested +=
-        suggestedBySupplier.get(summary.supplier) ??
-        summary.suggestedUnitsTotal;
+      totalSuggested += summary.suggestedUnitsTotal;
       if (summary.hasActiveAlert) alertCount += 1;
     }
 
@@ -160,7 +121,7 @@ export function ComprasSupplierGrid({
       totalSuggested,
       alertCount,
     };
-  }, [summaries, suggestedBySupplier]);
+  }, [summaries]);
 
   return (
     <div className="space-y-8">
@@ -178,29 +139,25 @@ export function ComprasSupplierGrid({
           tone="accent"
         />
       </div>
+      <p className="text-xs text-[var(--muted-foreground)]">
+        A quantidade sugerida usa o buffer de cobertura configurado em{" "}
+        <Link
+          href="/dashboard/configuracoes/planejamento"
+          className="text-[var(--primary)] underline"
+        >
+          Configurações → Planejamento
+        </Link>
+        .
+      </p>
 
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-              Parâmetros
-            </h2>
-            <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-              Ajuste o buffer de estoque — vale para todos os fornecedores.
-            </p>
-          </div>
-          <ShowPausedListingsSwitch
-            checked={showPaused}
-            onCheckedChange={setShowPaused}
-            pausedCount={additionalPausedSupplierCount}
-            disabled={rows.length === 0}
-          />
-        </div>
-        <PurchaseCoverageBufferControl
-          bufferDays={bufferDays}
-          onBufferDaysChange={setBufferDays}
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <ShowPausedListingsSwitch
+          checked={showPaused}
+          onCheckedChange={setShowPaused}
+          pausedCount={additionalPausedSupplierCount}
+          disabled={rows.length === 0}
         />
-      </section>
+      </div>
 
       <section className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">

@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { dashboardSummaryConfig } from "@/config/dashboard-summary";
 import { loadPromotionSummary } from "@/lib/home/promotion-summary-data";
+import { loadOperationalSettings } from "@/lib/operational-settings";
 import { requireOrganization } from "@/lib/api-auth";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 
-function parseExpiringSoonDays(value: string | null): number {
-  if (!value) return dashboardSummaryConfig.promotionExpiringSoonDays;
+function parseExpiringSoonDays(
+  value: string | null,
+  defaultDays: number,
+): number {
+  if (!value) return defaultDays;
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed) || parsed < 0 || parsed > 30) {
-    return dashboardSummaryConfig.promotionExpiringSoonDays;
+    return defaultDays;
   }
   return parsed;
 }
@@ -18,10 +21,12 @@ export async function GET(request: NextRequest) {
   if (!auth.ok) {
     return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
-  const { token, userId } = auth.ctx;
+  const { token, userId, organizationId } = auth.ctx;
 
+  const operationalSettings = await loadOperationalSettings(organizationId);
   const expiringSoonDays = parseExpiringSoonDays(
     request.nextUrl.searchParams.get("days"),
+    operationalSettings.promotionExpiringSoonDays,
   );
 
   try {

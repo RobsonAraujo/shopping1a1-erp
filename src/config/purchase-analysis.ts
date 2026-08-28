@@ -15,3 +15,17 @@ export const purchaseAnalysisConfig = {
 } as const;
 
 export type PurchaseAnalysisConfig = typeof purchaseAnalysisConfig;
+
+/**
+ * Mesmo formato de `PurchaseAnalysisConfig`, mas com tipos "largos"
+ * (`number` em vez de literais). Usar em funções que recebem valores
+ * carregados em runtime (config da organização em
+ * `src/lib/operational-settings.ts`).
+ */
+export type PurchaseAnalysisValues = {
+  targetCoverageBufferDays: number;
+  rotationDailyAvg: {
+    altaMin: number;
+    mediaMin: number;
+  };
+};

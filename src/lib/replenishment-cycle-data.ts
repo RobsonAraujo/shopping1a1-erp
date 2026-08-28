@@ -1,14 +1,19 @@
 import { stockPlanningConfig } from "@/config/stock-planning";
+import type { StockPlanningValues } from "@/config/stock-planning";
+import { purchaseAnalysisConfig } from "@/config/purchase-analysis";
+import type { PurchaseAnalysisValues } from "@/config/purchase-analysis";
 import type {
   OperationCycleKind,
   ReplenishmentStatus,
 } from "@/generated/prisma/client";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
+import { buildPurchasePlan, computePurchaseAnalysis } from "@/lib/purchase-analysis";
 import {
-  buildPurchasePlan,
-  computePurchaseAnalysis,
-} from "@/lib/purchase-analysis";
+  loadOperationalSettings,
+  toPurchaseAnalysisValues,
+  toStockPlanningValues,
+} from "@/lib/operational-settings";
 import {
   buildStatusTransition,
   isActiveReplenishmentStatus,
@@ -157,36 +162,42 @@ function buildItemPlanningContext(
   warehouseStock: number,
   purchaseLead: number,
   sold: number,
+  stockPlanning: StockPlanningValues = stockPlanningConfig,
+  purchaseAnalysisValues: PurchaseAnalysisValues = purchaseAnalysisConfig,
 ): ItemPlanningContext {
   const mlQty = mlAvailableStockUnits(item);
-  const w = stockPlanningConfig.salesAverageWindowDays;
+  const w = stockPlanning.salesAverageWindowDays;
   const fullPlan = computeStockPlanningDisplay(
     mlQty,
     sold,
     w,
-    stockPlanningConfig,
+    stockPlanning,
     purchaseLead,
   );
   const purchasePlan = computeStockPlanningDisplay(
     mlQty + warehouseStock,
     sold,
     w,
-    stockPlanningConfig,
+    stockPlanning,
     purchaseLead,
   );
   const plan = buildPurchasePlan(
     mlQty + warehouseStock,
     sold,
     purchaseLead,
+    stockPlanning,
   );
-  const analysis = computePurchaseAnalysis({
-    unitsSoldInWindow: sold,
-    totalStock: mlQty + warehouseStock,
-    purchaseLeadTimeDays: purchaseLead,
-    purchaseIsOverdue: plan.purchaseIsOverdue,
-    needsPurchaseAttention: plan.needsPurchaseAttention,
-    costProfile: null,
-  });
+  const analysis = computePurchaseAnalysis(
+    {
+      unitsSoldInWindow: sold,
+      totalStock: mlQty + warehouseStock,
+      purchaseLeadTimeDays: purchaseLead,
+      purchaseIsOverdue: plan.purchaseIsOverdue,
+      needsPurchaseAttention: plan.needsPurchaseAttention,
+      costProfile: null,
+    },
+    { stockPlanning, purchaseAnalysis: purchaseAnalysisValues },
+  );
 
   return {
     item,
@@ -404,6 +415,11 @@ async function maybeAutoCompleteFullCycle(
   return true;
 }
 
+export type OperationalPlanningSettings = {
+  stockPlanning: StockPlanningValues;
+  purchaseAnalysis: PurchaseAnalysisValues;
+};
+
 export async function syncPurchaseCyclesForItems(
   organizationId: string,
   items: ItemBody[],
@@ -412,6 +428,7 @@ export async function syncPurchaseCyclesForItems(
     string,
     { quantity: number; purchaseLeadTimeDays: number | null }
   >,
+  settings?: OperationalPlanningSettings,
 ): Promise<void> {
   if (items.length === 0) return;
 
@@ -420,7 +437,14 @@ export async function syncPurchaseCyclesForItems(
     const warehouseStock = warehouse?.quantity ?? 0;
     const purchaseLead = warehouse?.purchaseLeadTimeDays ?? 0;
     const sold = salesByItem[item.id] ?? 0;
-    return buildItemPlanningContext(item, warehouseStock, purchaseLead, sold);
+    return buildItemPlanningContext(
+      item,
+      warehouseStock,
+      purchaseLead,
+      sold,
+      settings?.stockPlanning,
+      settings?.purchaseAnalysis,
+    );
   });
 
   const cycleMap = await getLatestCyclesByItemAndKind(
@@ -467,6 +491,7 @@ export async function syncFullCyclesForItems(
     string,
     { quantity: number; purchaseLeadTimeDays: number | null }
   >,
+  settings?: OperationalPlanningSettings,
 ): Promise<void> {
   if (items.length === 0) return;
 
@@ -475,7 +500,14 @@ export async function syncFullCyclesForItems(
     const warehouseStock = warehouse?.quantity ?? 0;
     const purchaseLead = warehouse?.purchaseLeadTimeDays ?? 0;
     const sold = salesByItem[item.id] ?? 0;
-    return buildItemPlanningContext(item, warehouseStock, purchaseLead, sold);
+    return buildItemPlanningContext(
+      item,
+      warehouseStock,
+      purchaseLead,
+      sold,
+      settings?.stockPlanning,
+      settings?.purchaseAnalysis,
+    );
   });
 
   const cycleMap = await getLatestCyclesByItemAndKind(
@@ -520,12 +552,25 @@ export async function syncOperationCyclesForItems(
     string,
     { quantity: number; purchaseLeadTimeDays: number | null }
   >,
+  settings?: OperationalPlanningSettings,
 ): Promise<void> {
   return withReplenishmentSyncLock(async () => {
     if (items.length === 0) return;
     await ensureListingsForItems(organizationId, items);
-    await syncPurchaseCyclesForItems(organizationId, items, salesByItem, warehouseById);
-    await syncFullCyclesForItems(organizationId, items, salesByItem, warehouseById);
+    await syncPurchaseCyclesForItems(
+      organizationId,
+      items,
+      salesByItem,
+      warehouseById,
+      settings,
+    );
+    await syncFullCyclesForItems(
+      organizationId,
+      items,
+      salesByItem,
+      warehouseById,
+      settings,
+    );
   });
 }
 
@@ -656,8 +701,11 @@ export async function loadOperationsBoards(
   userId: number,
   organizationId: string,
 ): Promise<OperationsBoardsData> {
-  const windowDays = stockPlanningConfig.salesAverageWindowDays;
-  const dateField = stockPlanningConfig.salesWindowDateField;
+  const operationalSettings = await loadOperationalSettings(organizationId);
+  const stockPlanning = toStockPlanningValues(operationalSettings);
+  const purchaseAnalysisValues = toPurchaseAnalysisValues(operationalSettings);
+  const windowDays = stockPlanning.salesAverageWindowDays;
+  const dateField = stockPlanning.salesWindowDateField;
   const listingIds = await fetchOperationalListingIds(token, userId, organizationId);
 
   const [rawItems, salesByItem, warehouseStocks] = await Promise.all([
@@ -690,7 +738,10 @@ export async function loadOperationsBoards(
     ]),
   );
 
-  await syncOperationCyclesForItems(organizationId, items, salesByItem, warehouseById);
+  await syncOperationCyclesForItems(organizationId, items, salesByItem, warehouseById, {
+    stockPlanning,
+    purchaseAnalysis: purchaseAnalysisValues,
+  });
 
   const activeCycles = await prisma.replenishmentCycle.findMany({
     where: {
@@ -728,6 +779,8 @@ export async function loadOperationsBoards(
       warehouseStock,
       purchaseLead,
       sold,
+      stockPlanning,
+      purchaseAnalysisValues,
     );
     const card = buildCardFromCycle(cycle, ctx, item);
 

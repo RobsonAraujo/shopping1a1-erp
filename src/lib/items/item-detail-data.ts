@@ -1,4 +1,3 @@
-import { stockPlanningConfig } from "@/config/stock-planning";
 import type {
   OperationCycleKind,
   ReplenishmentStatus,
@@ -16,6 +15,10 @@ import {
   computeStockPlanningDisplay,
   type StockPlanningDisplay,
 } from "@/lib/stock-planning";
+import {
+  loadOperationalSettings,
+  toStockPlanningValues,
+} from "@/lib/operational-settings";
 
 export type ItemCatalogContext = {
   catalogStatus: string | null;
@@ -59,9 +62,12 @@ export async function loadItemDetailContext(input: {
   item: ItemBody;
 }): Promise<ItemDetailContext> {
   const { accessToken, userId, organizationId, itemId, item } = input;
-  const windowDays = stockPlanningConfig.salesAverageWindowDays;
-  const dateField = stockPlanningConfig.salesWindowDateField;
   const mlStock = mlAvailableStockUnits(item);
+  const stockPlanning = toStockPlanningValues(
+    await loadOperationalSettings(organizationId),
+  );
+  const windowDays = stockPlanning.salesAverageWindowDays;
+  const dateField = stockPlanning.salesWindowDateField;
 
   const [
     salesByItem,
@@ -120,7 +126,7 @@ export async function loadItemDetailContext(input: {
     mlStock + warehouseStock,
     unitsSoldInWindow,
     windowDays,
-    stockPlanningConfig,
+    stockPlanning,
     leadTimeDays,
   );
 

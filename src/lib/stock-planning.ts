@@ -1,4 +1,4 @@
-import type { StockPlanningConfig } from "@/config/stock-planning";
+import type { StockPlanningValues } from "@/config/stock-planning";
 
 export type StockPlanningTooltips = {
   stockWillLast: string;
@@ -62,7 +62,7 @@ export function computeStockPlanningDisplay(
   availableQuantity: number,
   unitsSoldInWindow: number,
   windowDays: number,
-  config: StockPlanningConfig,
+  config: StockPlanningValues,
   purchaseLeadTimeDays = 0,
   now: Date = new Date(),
 ): StockPlanningDisplay {

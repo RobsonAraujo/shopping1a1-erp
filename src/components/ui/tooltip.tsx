@@ -19,7 +19,9 @@ const TooltipContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        "z-[100] max-w-sm rounded-lg border border-[var(--border)] bg-[var(--popover)] px-3 py-2.5 text-xs leading-relaxed text-[var(--popover-foreground)] shadow-md",
+        // Acima de Sheet (110) e AlertDialog (120) — tooltip precisa ficar
+        // visível mesmo quando disparado de dentro de um modal.
+        "z-[130] max-w-sm rounded-lg border border-[var(--border)] bg-[var(--popover)] px-3 py-2.5 text-xs leading-relaxed text-[var(--popover-foreground)] shadow-md",
         className,
       )}
       {...props}

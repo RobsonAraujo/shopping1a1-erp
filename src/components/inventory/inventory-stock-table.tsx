@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { HelpCircle } from "lucide-react";
 import {
   ShowPausedListingsSwitch,
@@ -316,6 +316,7 @@ function LeadTimeSettingsModal({
   const [unit, setUnit] = useState<"weeks" | "days">(initial.unit);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const valueInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const i = leadTimeToForm(row.leadTimeDays);
@@ -376,7 +377,16 @@ function LeadTimeSettingsModal({
         if (!next) onClose();
       }}
     >
-      <SheetContent className="sm:max-w-md">
+      <SheetContent
+        className="sm:max-w-md"
+        onOpenAutoFocus={(e) => {
+          // Sem isso, o Radix foca o primeiro elemento focável (o botão "?"
+          // de ajuda), o que abre o tooltip sozinho ao abrir a sheet e faz
+          // ele "piscar" ao clicar. Foca o campo de valor em vez disso.
+          e.preventDefault();
+          valueInputRef.current?.focus();
+        }}
+      >
         <SheetHeader>
           <SheetTitle>Configurações do anúncio</SheetTitle>
           <SheetDescription>
@@ -416,14 +426,15 @@ function LeadTimeSettingsModal({
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="max-w-xs">
-                  Tempo desde que você decide comprar até a mercadoria chegar
-                  no galpão. O valor é salvo em dias (se escolher semanas,
-                  convertemos automaticamente).
+                  O prazo do seu fornecedor: da hora que você decide comprar
+                  até a mercadoria chegar neste galpão. Cada produto pode ter
+                  um prazo diferente, por isso é configurado aqui.
                 </TooltipContent>
               </Tooltip>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <input
+                ref={valueInputRef}
                 id="lead-time-value"
                 type="number"
                 inputMode="numeric"
@@ -449,8 +460,11 @@ function LeadTimeSettingsModal({
               />
             </div>
             <p className="text-xs text-[var(--muted-foreground)]">
-              Informe em semanas ou em dias; o sistema grava em dias para
-              cálculos futuros. Deixe em branco para remover o prazo.
+              Ex.: se o fornecedor demora 15 dias pra entregar, informe 15
+              aqui (ou 2 semanas). Esse prazo vai só até o galpão — o tempo
+              depois disso, do galpão até o Full liberar o anúncio pra venda
+              de novo, é configurado uma vez em Configurações → Planejamento.
+              Deixe em branco para remover o prazo.
             </p>
           </div>
 

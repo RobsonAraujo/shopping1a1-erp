@@ -593,6 +593,37 @@ model DreDisplaySettings {
   @@map("dre_display_settings")
 }
 
+/// Parâmetros operacionais configuráveis pelo usuário em Configurações >
+/// Planejamento (estoque, sugestão de compra, promoções) — uma linha por
+/// organização. Campo `null` = usa o default de `src/config/*.ts`; só grava
+/// valor quando o usuário customiza aquele campo específico.
+model OperationalSettings {
+  id             String @id @default(cuid())
+  organizationId String @unique @map("organization_id")
+
+  /// Janela (dias) usada para calcular a média diária de vendas.
+  salesAverageWindowDays Int? @map("sales_average_window_days")
+  /// Prazo (dias) entre iniciar a reposição e o estoque novo ficar disponível para venda.
+  leadTimeDays Int? @map("lead_time_days")
+  /// Dias de antecedência para o novo estoque já estar ativo no anúncio antes do esgotamento previsto.
+  activeStockBufferDays Int? @map("active_stock_buffer_days")
+
+  /// Dias de cobertura extra (margem de segurança) além dos prazos operacionais na quantidade sugerida de compra.
+  targetCoverageBufferDays Int? @map("target_coverage_buffer_days")
+  /// Média de vendas/dia a partir da qual um produto é classificado como rotação "Alta".
+  rotationHighDailyAvg Int? @map("rotation_high_daily_avg")
+  /// Média de vendas/dia a partir da qual um produto é classificado como rotação "Média".
+  rotationMediumDailyAvg Int? @map("rotation_medium_daily_avg")
+
+  /// Dias de antecedência para alertar no painel que uma promoção do Mercado Livre está terminando.
+  promotionExpiringSoonDays Int? @map("promotion_expiring_soon_days")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("operational_settings")
+}
+
 model DreCostMonthValue {
   id             String      @id @default(cuid())
   organizationId String      @map("organization_id")

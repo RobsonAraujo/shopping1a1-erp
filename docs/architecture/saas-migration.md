@@ -190,6 +190,17 @@ Plano de execução detalhado (arquivos e código concretos): ver plano de imple
 
 Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templates/feature-saas-impact.md).
 
+### Configurações > Planejamento (parâmetros de estoque/compra/promoções editáveis) — 2026-08-28
+
+- **Tabelas novas/alteradas:** nova `operational_settings` (`organizationId` único, todos os campos nullable — `null` = usa o default de `src/config/*.ts`)
+- **Precisa `organizationId`?** sim — já nasce com `organizationId` único, mesmo padrão de `DreDisplaySettings`
+- **APIs afetadas:** novas `GET`/`PATCH /api/operational-settings`
+- **Assume singleton?** não
+- **Cron/background:** nenhum
+- **Dados globais vs por org:** por org
+- **Código já tenant-ready?** sim — `loadOperationalSettings(organizationId)` substitui a leitura direta de `stockPlanningConfig`/`purchaseAnalysisConfig`/`dashboardSummaryConfig` em todos os pontos com `organizationId` já disponível (Estoque, Compras, Operações Full, Item detail, painel de promoções). `salesWindowDateField` e os timezones fixos (`purchaseAnalysisConfig`'s buffer per-browser override em `PURCHASE_COVERAGE_BUFFER_STORAGE_KEY` continua existindo como override local, agora inicializado pelo valor da organização em vez do estático) permanecem hardcoded — não fazem sentido como preferência de usuário
+- **Ação futura na migração:** nenhuma
+
 ### Simples Nacional: cache de receita mensal pro RBT12 — 2026-08-28
 
 - **Tabelas novas/alteradas:** nova `simples_revenue_month_snapshots` (`organizationId`+`sellerId`+`year`+`month`, guarda receita/fonte/data de cálculo de um mês). Resolve a "Ação futura" da entrada anterior ("considerar tabela de cache de RBT12 se o fallback ML ao vivo se mostrar lento") — passou a ser necessário na prática
