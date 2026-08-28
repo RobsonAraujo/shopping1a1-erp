@@ -28,6 +28,13 @@ export type DashboardNavItem = {
   badge?: DashboardNavBadge;
   /** Tooltip no link (ex.: aviso do DRE). */
   title?: string;
+  /**
+   * Rotas reais adicionais que também contam como "ativo" pra este item —
+   * usado quando `href` é um redirecionador server-side (ex.: `/dashboard/tributario`,
+   * que manda pra Lucro Real ou Simples Nacional conforme o regime da
+   * empresa) e a URL final no navegador não é mais `href`.
+   */
+  matchHrefs?: string[];
 };
 
 export type DashboardNavGroup = {
@@ -140,10 +147,11 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
         icon: LineChart,
       },
       {
-        href: "/dashboard/relatorio-tributario",
+        href: "/dashboard/tributario",
         label: "Tributário",
-        description: "Apuração fiscal mensal por venda e SKU",
+        description: "Apuração fiscal mensal — Lucro Real ou Simples Nacional",
         icon: Scale,
+        matchHrefs: ["/dashboard/relatorio-tributario", "/dashboard/simples-nacional"],
       },
     ],
   },
@@ -173,11 +181,21 @@ export function isDashboardNavActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+/** Como `isDashboardNavActive`, mas também considera `item.matchHrefs`. */
+export function isDashboardNavItemActive(
+  pathname: string,
+  item: DashboardNavItem,
+): boolean {
+  return [item.href, ...(item.matchHrefs ?? [])].some((href) =>
+    isDashboardNavActive(pathname, href),
+  );
+}
+
 export function isDashboardNavGroupActive(
   pathname: string,
   group: DashboardNavGroup,
 ): boolean {
-  return group.items.some((item) => isDashboardNavActive(pathname, item.href));
+  return group.items.some((item) => isDashboardNavItemActive(pathname, item));
 }
 
 export const DASHBOARD_TOP_NAV_ITEMS = DASHBOARD_NAV_GROUPS.find(

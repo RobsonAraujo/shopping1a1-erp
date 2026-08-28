@@ -448,6 +448,48 @@ model TaxReportMonthSnapshot {
   @@map("tax_report_month_snapshots")
 }
 
+/// Simulação "e se essa empresa Simples Nacional fosse Lucro Real" — roda o
+/// motor de apuração do Lucro Real (`generateMonthlyTaxReport` com
+/// `forceRegime`) sobre os dados reais do mês, só para comparação. Tabela
+/// fisicamente separada de `TaxReportMonthSnapshot` de propósito: nunca deve
+/// ser lida por Produtos/Lucratividade/DRE, que esperam o regime real da org.
+model TaxReportSimulationSnapshot {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  sellerId       Int      @map("seller_id")
+  year           Int
+  month          Int
+  /// Reservado para cenários futuros além de "LUCRO_REAL" (ex.: outro Anexo).
+  scenario       String   @default("LUCRO_REAL") @map("scenario")
+  generatedAt    DateTime @map("generated_at")
+  payload        Json
+  payloadSummary Json?    @map("payload_summary")
+
+  @@unique([organizationId, sellerId, year, month, scenario])
+  @@index([organizationId])
+  @@map("tax_report_simulation_snapshots")
+}
+
+/// Cache de receita mensal pro cálculo de RBT12 (Simples Nacional) — mês
+/// fechado é imutável na prática, então uma vez calculado não precisa
+/// recomputar em toda visita (evita 12 chamadas ao ML por acesso à tela).
+/// Botão "Atualizar" na UI força recálculo e sobrescreve.
+model SimplesRevenueMonthSnapshot {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  sellerId       Int      @map("seller_id")
+  year           Int
+  month          Int
+  revenue        Decimal  @db.Decimal(18, 2)
+  /// "dre_snapshot" | "ml_live" — de onde veio o valor na última vez que foi calculado.
+  source         String
+  computedAt     DateTime @map("computed_at")
+
+  @@unique([organizationId, sellerId, year, month])
+  @@index([organizationId])
+  @@map("simples_revenue_month_snapshots")
+}
+
 /// Simulação salva de potencial de faturamento / capital de giro (overrides,
 /// exclusões e configurações de capital de giro), por vendedor ML.
 model RevenueSimulation {

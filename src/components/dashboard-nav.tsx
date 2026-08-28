@@ -12,8 +12,8 @@ import {
   DASHBOARD_TOP_NAV_ITEMS,
   type DashboardNavGroup,
   type DashboardNavItem,
-  isDashboardNavActive,
   isDashboardNavGroupActive,
+  isDashboardNavItemActive,
 } from "@/lib/dashboard-nav";
 import { cn } from "@/lib/utils";
 
@@ -101,7 +101,7 @@ function NavDropdownGroup({
             <NavPopoverLink
               key={item.href}
               item={item}
-              active={isDashboardNavActive(pathname, item.href)}
+              active={isDashboardNavItemActive(pathname, item)}
               onNavigate={() => setOpen(false)}
             />
           ))}
@@ -117,7 +117,7 @@ function CategorizedNav({ pathname }: { pathname: string }) {
     <>
       {DASHBOARD_TOP_NAV_ITEMS.map((item) => {
         const Icon = item.icon;
-        const active = isDashboardNavActive(pathname, item.href);
+        const active = isDashboardNavItemActive(pathname, item);
 
         return (
           <Button key={item.href} variant="ghost" size="sm" asChild>

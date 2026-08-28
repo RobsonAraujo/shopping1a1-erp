@@ -190,6 +190,28 @@ Plano de execução detalhado (arquivos e código concretos): ver plano de imple
 
 Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templates/feature-saas-impact.md).
 
+### Simples Nacional: cache de receita mensal pro RBT12 — 2026-08-28
+
+- **Tabelas novas/alteradas:** nova `simples_revenue_month_snapshots` (`organizationId`+`sellerId`+`year`+`month`, guarda receita/fonte/data de cálculo de um mês). Resolve a "Ação futura" da entrada anterior ("considerar tabela de cache de RBT12 se o fallback ML ao vivo se mostrar lento") — passou a ser necessário na prática
+- **Precisa `organizationId`?** sim — já nasce com `organizationId` na unique key; entra em `TENANT_SCOPED_MODELS` (`src/lib/db-tenant-guard.ts`)
+- **APIs afetadas:** `GET /api/reports/simples-nacional/rbt12` ganha `?refresh=1` (botão "Atualizar" na UI, força recálculo dos 12 meses ignorando o cache); resposta ganha `computedAt` por mês e `oldestComputedAt` agregado
+- **Assume singleton?** não
+- **Cron/background:** nenhum — cache é preenchido sob demanda (lazy), no primeiro acesso que precisar de cada mês
+- **Dados globais vs por org:** por org
+- **Código já tenant-ready?** sim
+- **Ação futura na migração:** nenhuma — mês fechado é imutável na prática, cache não precisa de invalidação automática
+
+### Simples Nacional: página própria (RBT12/faixa, composição do DAS, simulador Lucro Real) — 2026-08-28
+
+- **Tabelas novas/alteradas:** nova `tax_report_simulation_snapshots` (`organizationId`+`sellerId`+`year`+`month`+`scenario`, mesmo formato de payload de `tax_report_month_snapshots`, mas fisicamente isolada — nunca lida por Produtos/Lucratividade/DRE). Nenhuma alteração em `company_tax_settings` (Anexo I fica hardcoded em `src/lib/simples-nacional/anexo-i-table.ts` nesta v1)
+- **Precisa `organizationId`?** sim — a tabela nova já nasce com `organizationId` na unique key (diferente do padrão legado "parcial ML" de `TaxReportMonthSnapshot`); entra em `TENANT_SCOPED_MODELS` (`src/lib/db-tenant-guard.ts`)
+- **APIs afetadas:** novas `GET /api/reports/simples-nacional/rbt12` e `GET+POST /api/reports/simples-nacional/simulacao`. `generateMonthlyTaxReport` (`src/lib/tax-report/service/generate-monthly-report.ts`) ganha parâmetro interno opcional `forceRegime` — usado só pelo serviço de simulação (`src/lib/simples-nacional/simulate-lucro-real.ts`), nunca aceito via body de request; contrato de `/api/reports/monthly-tax` inalterado
+- **Assume singleton?** não
+- **Cron/background:** nenhum
+- **Dados globais vs por org:** tabela de faixas do Anexo I (LC 123/2006) é constante estática no código (referência pública nacional, não depende da org); RBT12 é calculado por org, priorizando `DreMonthSnapshot` já sincronizado e caindo para busca ao vivo no ML
+- **Código já tenant-ready?** sim
+- **Ação futura na migração:** considerar `simplesAnexo` em `company_tax_settings` quando Anexo II-V forem suportados (hoje só Anexo I/comércio); cache de RBT12 já implementado — ver entrada seguinte ("cache de receita mensal pro RBT12")
+
 ### Thumbnail de produto na lista Meus Produtos — 2026-08-25
 
 - **Tabelas novas/alteradas:** nenhuma (lê `Listing.imageUrlSnapshot` já existente)

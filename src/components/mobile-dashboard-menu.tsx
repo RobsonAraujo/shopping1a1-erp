@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DASHBOARD_NAV_GROUPS,
-  isDashboardNavActive,
+  isDashboardNavItemActive,
   type DashboardNavItem,
 } from "@/lib/dashboard-nav";
 
@@ -173,7 +173,7 @@ export function MobileDashboardMenu() {
                   <MobileNavLink
                     key={item.href}
                     item={item}
-                    active={isDashboardNavActive(pathname, item.href)}
+                    active={isDashboardNavItemActive(pathname, item)}
                     onNavigate={() => setOpen(false)}
                   />
                 ))}

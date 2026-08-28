@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Download } from "lucide-react";
+import { Download, Scale } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { UserFeedback } from "@/components/ui/user-feedback";
@@ -105,6 +105,22 @@ export function MonthlyTaxReportSkuClient({
   const [notFound, setNotFound] = useState(false);
   const [filterUf, setFilterUf] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [companyTaxRegime, setCompanyTaxRegime] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/tax-config")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json: { company?: { taxRegime?: string } } | null) => {
+        if (!cancelled && json?.company?.taxRegime) {
+          setCompanyTaxRegime(json.company.taxRegime);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const loadReport = useCallback(async () => {
     setLoading(true);
@@ -186,6 +202,25 @@ export function MonthlyTaxReportSkuClient({
   const periodLabel = period
     ? `${formatYmdBr(period.from)} – ${formatYmdBr(period.to)}`
     : `${TAX_REPORT_MONTH_NAMES[month - 1]}/${year}`;
+
+  if (companyTaxRegime && companyTaxRegime !== "LUCRO_REAL") {
+    return (
+      <Card className="p-6 text-center">
+        <Scale className="mx-auto size-8 text-[var(--muted-foreground)]" aria-hidden />
+        <h2 className="mt-3 text-sm font-semibold">
+          Relatório Tributário Mensal não disponível para Simples Nacional
+        </h2>
+        <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
+          Esta apuração por venda e SKU é específica do regime Lucro Real. Um
+          snapshot antigo pode existir pra este período, mas não é mais válido
+          pro regime atual da empresa.
+        </p>
+        <Button variant="outline" size="sm" className="mt-4" asChild>
+          <Link href="/dashboard/tributario">Ir para Tributário</Link>
+        </Button>
+      </Card>
+    );
+  }
 
   if (loading) {
     return (

@@ -41,7 +41,11 @@ import {
   loadIcmsRatesMap,
   loadTaxCompanyConfig,
 } from "@/lib/tax-report/tax-config-data";
-import type { ManualFiscalOverride, TaxReportPayload } from "@/lib/tax-report/types";
+import type {
+  ManualFiscalOverride,
+  TaxCompanyConfig,
+  TaxReportPayload,
+} from "@/lib/tax-report/types";
 
 export type GenerateMonthlyReportProgress = {
   phase: "orders" | "billing" | "compute" | "save" | "done";
@@ -66,6 +70,57 @@ function collectSkusFromOrders(
 
 import { slimTaxReportPayloadForStorage } from "@/lib/tax-report/service/snapshot-storage";
 
+export type GenerationOverrides = {
+  /**
+   * Uso interno exclusivo do simulador Simples x Lucro Real — nunca deve vir
+   * de um body de request. Força o regime usado no cálculo sem alterar
+   * `CompanyTaxSettings` no banco.
+   */
+  forceRegime?: "LUCRO_REAL";
+  /**
+   * Idem — empresa que sempre foi Simples nunca passou pela tela de
+   * Configurações tributárias (só visível/aplicável em Lucro Real), então o
+   * campo no banco é o default de fábrica, nunca calibrado por ela. A
+   * simulação força `false` (sem crédito de ICMS-ST recuperável, Tema
+   * 201/STF) pra não superestimar a vantagem do Lucro Real com uma tese que
+   * a empresa nunca levantou/aplicou.
+   */
+  forceConsiderIcmsStRecuperavel?: boolean;
+  /**
+   * Idem — mesmo motivo do campo acima. Diferente do ICMS-ST recuperável
+   * (tese discutível), a exclusão do ICMS da base do PIS/COFINS é
+   * jurisprudência já pacificada (RE 574.706/STF, "tese do século") — a
+   * simulação força `true` pra não depender do que porventura esteja
+   * configurado no banco de uma empresa que nunca precisou mexer nisso.
+   */
+  forceExcludeIcmsFromPisCofinsBase?: boolean;
+};
+
+/**
+ * Aplica overrides de simulação (quando presentes) sobre o config carregado
+ * do banco, sem persistir nada — usado só pelo serviço de simulação Simples
+ * x Lucro Real (`src/lib/simples-nacional/simulate-lucro-real.ts`). Extraída
+ * como função pura pra ser testável sem mockar Prisma/ML.
+ */
+export function resolveConfigForGeneration(
+  loadedConfig: TaxCompanyConfig,
+  overrides?: GenerationOverrides,
+): TaxCompanyConfig {
+  if (!overrides) return loadedConfig;
+  return {
+    ...loadedConfig,
+    ...(overrides.forceRegime !== undefined
+      ? { taxRegime: overrides.forceRegime }
+      : {}),
+    ...(overrides.forceConsiderIcmsStRecuperavel !== undefined
+      ? { considerIcmsStRecuperavel: overrides.forceConsiderIcmsStRecuperavel }
+      : {}),
+    ...(overrides.forceExcludeIcmsFromPisCofinsBase !== undefined
+      ? { excludeIcmsFromPisCofinsBase: overrides.forceExcludeIcmsFromPisCofinsBase }
+      : {}),
+  };
+}
+
 export async function generateMonthlyTaxReport(input: {
   accessToken: string;
   sellerId: number;
@@ -74,6 +129,15 @@ export async function generateMonthlyTaxReport(input: {
   month: number;
   overrides?: Record<string, ManualFiscalOverride>;
   onProgress?: (progress: GenerateMonthlyReportProgress) => void;
+  /**
+   * Uso interno exclusivo do simulador Simples x Lucro Real — nunca deve vir
+   * de um body de request. Ver `GenerationOverrides`.
+   */
+  forceRegime?: "LUCRO_REAL";
+  /** Idem — ver `GenerationOverrides`. */
+  forceConsiderIcmsStRecuperavel?: boolean;
+  /** Idem — ver `GenerationOverrides`. */
+  forceExcludeIcmsFromPisCofinsBase?: boolean;
 }): Promise<TaxReportPayload> {
   const started = Date.now();
   const { from, to } = getCalendarMonthRange(input.year, input.month);
@@ -172,11 +236,16 @@ export async function generateMonthlyTaxReport(input: {
     message: `Custos de ${custoBySku.size} SKU${custoBySku.size === 1 ? "" : "s"} carregados. Montando vendas…`,
   });
 
-  const [config, icmsRates, cbsIbsVigencia] = await Promise.all([
+  const [loadedConfig, icmsRates, cbsIbsVigencia] = await Promise.all([
     loadTaxCompanyConfig(input.organizationId),
     loadIcmsRatesMap(),
     loadCbsIbsVigencia(input.year),
   ]);
+  const config = resolveConfigForGeneration(loadedConfig, {
+    forceRegime: input.forceRegime,
+    forceConsiderIcmsStRecuperavel: input.forceConsiderIcmsStRecuperavel,
+    forceExcludeIcmsFromPisCofinsBase: input.forceExcludeIcmsFromPisCofinsBase,
+  });
 
   if (config.taxRegime !== "LUCRO_REAL") {
     throw new Error(

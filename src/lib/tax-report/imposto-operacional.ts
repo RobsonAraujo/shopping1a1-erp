@@ -72,3 +72,16 @@ export function margemOperacionalConsolidado(
 ): number {
   return consolidado.margemOperacional ?? consolidado.margemLiquida ?? 0;
 }
+
+/**
+ * PIS/COFINS líquido + ICMS/DIFAL total do consolidado — sem IRPJ/CSLL (não
+ * calculados neste motor). Usado pelo simulador Simples x Lucro Real para
+ * comparar com o DAS pago; ver disclaimer de "comparação parcial" na UI.
+ */
+export function impostoOperacionalConsolidado(
+  consolidado: RelatorioConsolidado,
+): number {
+  return roundMoney(
+    consolidado.pisCofinsLiquido + consolidado.icmsDifalTotal,
+  );
+}

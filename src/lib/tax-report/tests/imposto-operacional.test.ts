@@ -7,6 +7,7 @@ import {
   skuImpostoOperacionalPercentual,
   margemOperacionalEstimadaLinha,
   margemOperacionalConsolidado,
+  impostoOperacionalConsolidado,
 } from "../imposto-operacional";
 import type {
   DetalhamentoTributario,
@@ -164,5 +165,15 @@ describe("margemOperacionalConsolidado", () => {
 
   it("defaults to 0 when neither is set", () => {
     assert.equal(margemOperacionalConsolidado({} as RelatorioConsolidado), 0);
+  });
+});
+
+describe("impostoOperacionalConsolidado", () => {
+  it("sums pisCofinsLiquido and icmsDifalTotal, without IRPJ/CSLL", () => {
+    const consolidado = {
+      pisCofinsLiquido: 100,
+      icmsDifalTotal: 50,
+    } as unknown as RelatorioConsolidado;
+    assert.equal(impostoOperacionalConsolidado(consolidado), 150);
   });
 });
