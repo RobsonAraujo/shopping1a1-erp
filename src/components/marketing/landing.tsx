@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { Layers, Lock, ShieldCheck, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { UserFeedback } from "@/components/ui/user-feedback";
 import { DemoCatalog } from "@/components/marketing/demo-catalog";
 import { DemoDre } from "@/components/marketing/demo-dre";
 import { DemoHeroSnapshot } from "@/components/marketing/demo-hero-snapshot";
@@ -106,15 +107,13 @@ export function MarketingLanding({
                 usa na ML.
               </p>
               {error ? (
-                <div
-                  className="mt-6 rounded-lg border border-red-300/40 bg-red-950/40 px-4 py-3 text-sm text-red-100"
-                  role="alert"
+                <UserFeedback
+                  tone="error"
+                  title="Não foi possível concluir o login"
+                  className="mt-6"
                 >
-                  <p className="font-medium">
-                    Não foi possível concluir o login.
-                  </p>
-                  <p className="mt-1 break-all opacity-90">{error}</p>
-                </div>
+                  {error}
+                </UserFeedback>
               ) : null}
               <div className="mt-8 flex flex-col items-start gap-3">
                 <OAuthCta

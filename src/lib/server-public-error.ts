@@ -1,3 +1,5 @@
+import { captureError } from "@/lib/error-tracking";
+
 /**
  * Evita vazar detalhes de erros internos / respostas de APIs para o cliente em produção.
  * Em desenvolvimento, a mensagem ajuda a depurar no log do servidor — o cliente
@@ -7,6 +9,7 @@ const isDev = process.env.NODE_ENV === "development";
 
 export function logServerError(context: string, error: unknown): void {
   console.error(`[${context}]`, error);
+  captureError(error, { context });
 }
 
 /** Mensagem amigável para páginas server-rendered; o detalhe fica só no log. */

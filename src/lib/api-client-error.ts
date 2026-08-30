@@ -1,5 +1,10 @@
+import { captureError } from "@/lib/error-tracking";
+
 export const GENERIC_USER_ERROR =
   "Não foi possível concluir esta ação. Tente novamente em instantes.";
+
+export const OAUTH_GENERIC_ERROR =
+  "Não foi possível concluir o login com o Mercado Livre. Tente novamente.";
 
 export const RATE_LIMIT_USER_ERROR =
   "O Mercado Livre está ocupado no momento. Aguarde um pouco e tente de novo.";
@@ -106,10 +111,31 @@ const API_ERROR_MESSAGES: Record<string, string> = {
   invalid_json: "Os dados enviados não puderam ser lidos. Tente novamente.",
   invalid_range: INVALID_DATE_RANGE_USER_ERROR,
   invalid_period: INVALID_DATE_RANGE_USER_ERROR,
+  // Login com Mercado Livre (src/app/api/auth/mercadolibre/*)
+  invalid_state: "Sua sessão de login expirou. Tente entrar novamente.",
+  missing_code_or_state: OAUTH_GENERIC_ERROR,
+  oauth_failed: OAUTH_GENERIC_ERROR,
+  oauth_config:
+    "Não foi possível iniciar o login com o Mercado Livre. Tente novamente em instantes ou fale com o suporte.",
+  access_denied:
+    "Login cancelado. Para continuar, autorize o acesso à sua conta do Mercado Livre.",
+  // Strings técnicas em inglês devolvidas por algumas rotas — ver src/app/api/**/route.ts
+  "Cycle not found": "Não encontramos este ciclo de reposição.",
+  "Invalid status": "Status inválido para esta operação.",
+  "Invalid status for cycle kind":
+    "Esse status não é válido para este tipo de ciclo.",
+  "Invalid year": "Informe um ano válido.",
+  "Cost item not found": "Não encontramos este custo fixo.",
+  "Name is required": "Informe um nome.",
+  "No fields to update": "Nenhuma alteração para salvar.",
+  "Failed to load profile":
+    "Não foi possível carregar os dados do seu perfil no Mercado Livre.",
+  "Product not found": "Não encontramos este produto.",
 };
 
 export function logClientError(context: string, error: unknown): void {
   console.error(`[user-feedback:${context}]`, error);
+  captureError(error, { context });
 }
 
 function looksTechnical(message: string): boolean {
