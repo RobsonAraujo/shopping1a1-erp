@@ -74,9 +74,11 @@ export function buildProductView(
   const record = productToPricingRecord(product);
   const resolved = resolveProductPricing(record, pisCofinsPercent);
   const isSimples = companyTaxContext?.taxRegime === "SIMPLES";
-  const reportTax = product.sku
-    ? taxFromReport?.bySku.get(normalizeProductSku(product.sku))
-    : undefined;
+  const reportTax =
+    taxFromReport?.byMlItemId.get(product.mlItemId) ??
+    (product.sku
+      ? taxFromReport?.bySku.get(normalizeProductSku(product.sku))
+      : undefined);
   return {
     mlItemId: product.mlItemId,
     sku: product.sku,
@@ -236,30 +238,62 @@ export async function getCompanyPisCofinsPercent(
   return settings.pisCofinsPercent;
 }
 
-export async function loadProductsMapBySku(
-  organizationId: string,
-  skus: string[],
-): Promise<Map<string, ResolvedProductPricing>> {
-  const normalized = [
-    ...new Set(skus.map((s) => normalizeProductSku(s)).filter(Boolean)),
-  ];
-  if (normalized.length === 0) return new Map();
+export type ProductPricingLookup = {
+  /** Lookup por identidade (mlItemId) — preferir este; sku-texto não é mais único, `bySku` é só fallback pra linha sem itemId resolvido (ex.: componente de kit, que só tem sku). */
+  byMlItemId: Map<string, ResolvedProductPricing>;
+  bySku: Map<string, ResolvedProductPricing>;
+};
 
-  const pisCofins = await getCompanyPisCofinsPercent(organizationId);
-  const products = await prisma.product.findMany({
-    where: { organizationId, sku: { in: normalized } },
-  });
-
+/**
+ * Indexa produtos já buscados por identidade (mlItemId, sempre 1:1) e por
+ * sku-texto (fallback — `Product.sku` não é único, "primeiro que chega"
+ * quando duas linhas colidem, igual a todo fallback por sku deste módulo).
+ */
+export function indexProductPricingLookup(
+  products: Product[],
+  pisCofins: number,
+): ProductPricingLookup {
+  const byMlItemId = new Map<string, ResolvedProductPricing>();
   const bySku = new Map<string, ResolvedProductPricing>();
   for (const product of products) {
-    if (!product.sku || bySku.has(product.sku)) continue;
     const record = productToPricingRecord(product);
     const resolved = resolveProductPricing(record, pisCofins);
-    if (resolved) {
+    if (!resolved) continue;
+    byMlItemId.set(product.mlItemId, resolved);
+    if (product.sku && !bySku.has(product.sku)) {
       bySku.set(product.sku, resolved);
     }
   }
-  return bySku;
+  return { byMlItemId, bySku };
+}
+
+export async function loadProductsMapBySku(
+  organizationId: string,
+  skus: string[],
+  mlItemIds: string[] = [],
+): Promise<ProductPricingLookup> {
+  const normalized = [
+    ...new Set(skus.map((s) => normalizeProductSku(s)).filter(Boolean)),
+  ];
+  const uniqueMlItemIds = [...new Set(mlItemIds.filter(Boolean))];
+  if (normalized.length === 0 && uniqueMlItemIds.length === 0) {
+    return { byMlItemId: new Map(), bySku: new Map() };
+  }
+
+  const pisCofins = await getCompanyPisCofinsPercent(organizationId);
+  const products = await prisma.product.findMany({
+    where: {
+      organizationId,
+      OR: [
+        ...(normalized.length > 0 ? [{ sku: { in: normalized } }] : []),
+        ...(uniqueMlItemIds.length > 0
+          ? [{ mlItemId: { in: uniqueMlItemIds } }]
+          : []),
+      ],
+    },
+  });
+
+  return indexProductPricingLookup(products, pisCofins);
 }
 
 function productToStockReportInfo(product: {
@@ -311,6 +345,35 @@ export async function loadStockReportProductsForListings(
     const resolution = resolveProductForLine({ itemId: line.mlItemId }, maps);
     if (!resolution.product) continue;
     result[normalizedSku] = productToStockReportInfo(resolution.product);
+  }
+  return result;
+}
+
+/**
+ * Mesma resolução de custo que `loadStockReportProductsForListings`, mas
+ * indexada por `mlItemId` (1:1 real) em vez de texto de SKU — pra
+ * consumidores como Insights, onde cada anúncio precisa do seu próprio
+ * custo mesmo que dois anúncios compartilhem o mesmo texto de SKU exibido
+ * (`Product.sku` não é único). Não usar pro relatório de Estoque, que
+ * agrupa fisicamente por SKU de propósito (merge groups) — essa função não
+ * substitui `loadStockReportProductsForListings`, é uma variante paralela.
+ */
+export async function loadStockReportProductsByMlItemId(
+  organizationId: string,
+  mlItemIds: string[],
+): Promise<Map<string, StockReportProductInfo>> {
+  const uniqueIds = [...new Set(mlItemIds)];
+  if (uniqueIds.length === 0) return new Map();
+  const maps = await loadProductResolverMaps(
+    organizationId,
+    uniqueIds.map((itemId) => ({ itemId })),
+  );
+
+  const result = new Map<string, StockReportProductInfo>();
+  for (const itemId of uniqueIds) {
+    const resolution = resolveProductForLine({ itemId }, maps);
+    if (!resolution.product) continue;
+    result.set(itemId, productToStockReportInfo(resolution.product));
   }
   return result;
 }

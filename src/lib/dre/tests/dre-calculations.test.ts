@@ -4,6 +4,7 @@ import {
   applyDreIncludeCancelledView,
   applyManualLineEdit,
   applyRestoreLineFromSync,
+  breakdownIdentityKey,
   computeDreTotals,
   mergePreservedManualLines,
   mergeProductCostBreakdowns,
@@ -422,5 +423,22 @@ describe("mergeProductCostBreakdowns", () => {
     assert.equal(leveled?.unitCost, 41);
     assert.equal(cadastro?.quantity, 5);
     assert.equal(cadastro?.unitCost, 50);
+  });
+});
+
+describe("breakdownIdentityKey", () => {
+  it("keys by itemId, not by sku text", () => {
+    assert.equal(breakdownIdentityKey("MLB1", "SKU-A"), "item:MLB1");
+  });
+
+  it("gives two products different keys even when they share the same sku text (Product.sku is not unique)", () => {
+    const key1 = breakdownIdentityKey("MLB1", "SKU-COLIDIU");
+    const key2 = breakdownIdentityKey("MLB2", "SKU-COLIDIU");
+    assert.notEqual(key1, key2);
+  });
+
+  it("falls back to normalized sku text when itemId is absent (defensive)", () => {
+    assert.equal(breakdownIdentityKey(null, "  sku-a  "), "sku-a");
+    assert.equal(breakdownIdentityKey(undefined, null), "(sem SKU)");
   });
 });

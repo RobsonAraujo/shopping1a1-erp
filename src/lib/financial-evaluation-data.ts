@@ -252,6 +252,7 @@ async function buildRowForItem(
   item: ItemBody,
   pricing: ResolvedProductPricing | null,
   taxBySku: Map<string, number>,
+  taxByMlItemId: Map<string, number>,
   kitContext?: {
     pricingBySku: Map<string, ResolvedProductPricing>;
     kitsByMlItemId: Map<string, KitComponent[]>;
@@ -281,9 +282,9 @@ async function buildRowForItem(
   const sku = effectiveSku ?? getItemSku(item);
   let productCost = pricing?.pricingCost ?? null;
   let extraCosts = pricing?.extraCosts ?? null;
-  let taxRatePercent = sku
-    ? (taxBySku.get(normalizeProductSku(sku)) ?? null)
-    : null;
+  let taxRatePercent =
+    taxByMlItemId.get(item.id) ??
+    (sku ? (taxBySku.get(normalizeProductSku(sku)) ?? null) : null);
   let isKitComposition = false;
   let kitComponents: KitComponent[] | null = null;
 
@@ -590,6 +591,7 @@ async function buildRowForPeriodItem(
   pricing: ResolvedProductPricing | null,
   agg: PeriodSaleAgg,
   taxBySku: Map<string, number>,
+  taxByMlItemId: Map<string, number>,
   kitContext?: {
     pricingBySku: Map<string, ResolvedProductPricing>;
     kitsByMlItemId: Map<string, KitComponent[]>;
@@ -619,9 +621,9 @@ async function buildRowForPeriodItem(
   const sku = effectiveSku ?? getItemSku(item);
   let productCost = pricing?.pricingCost ?? null;
   let extraCosts = pricing?.extraCosts ?? null;
-  let taxRatePercent = sku
-    ? (taxBySku.get(normalizeProductSku(sku)) ?? null)
-    : null;
+  let taxRatePercent =
+    taxByMlItemId.get(item.id) ??
+    (sku ? (taxBySku.get(normalizeProductSku(sku)) ?? null) : null);
   let isKitComposition = false;
   let kitComponents: KitComponent[] | null = null;
 
@@ -912,9 +914,13 @@ export async function loadFinancialEvaluationRows(
   const skus = [...effectiveSkuByItemId.values()]
     .filter((sku): sku is string => Boolean(sku))
     .concat(kitComponentSkus);
-  const [pricingBySku, taxFromReport, productsWithPma, companySettings] =
+  const [pricingLookup, taxFromReport, productsWithPma, companySettings] =
     await Promise.all([
-      loadProductsMapBySku(organizationId, skus),
+      loadProductsMapBySku(
+        organizationId,
+        skus,
+        operationalItems.map((item) => item.id),
+      ),
       loadProductTaxFromLatestReport(userId),
       prisma.product.findMany({
         where: { organizationId, sku: { in: skus }, pmaPrice: { not: null } },
@@ -922,6 +928,7 @@ export async function loadFinancialEvaluationRows(
       }),
       getCompanySettings(organizationId),
     ]);
+  const { byMlItemId: pricingByMlItemId, bySku: pricingBySku } = pricingLookup;
   const taxBySku =
     companySettings.taxRegime === "SIMPLES"
       ? new Map(
@@ -935,6 +942,15 @@ export async function loadFinancialEvaluationRows(
       : new Map(
           [...taxFromReport.bySku].map(([sku, entry]) => [sku, entry.taxPercent]),
         );
+  const taxByMlItemId =
+    companySettings.taxRegime === "SIMPLES"
+      ? new Map<string, number>()
+      : new Map(
+          [...taxFromReport.byMlItemId].map(([mlItemId, entry]) => [
+            mlItemId,
+            entry.taxPercent,
+          ]),
+        );
   const pmaBySku = new Map<string, number>();
   for (const product of productsWithPma) {
     if (product.pmaPrice == null || !product.sku) continue;
@@ -946,15 +962,16 @@ export async function loadFinancialEvaluationRows(
     5,
     async (item) => {
       const sku = effectiveSkuByItemId.get(item.id) ?? null;
-      const pricing = sku
-        ? (pricingBySku.get(normalizeProductSku(sku)) ?? null)
-        : null;
+      const pricing =
+        pricingByMlItemId.get(item.id) ??
+        (sku ? (pricingBySku.get(normalizeProductSku(sku)) ?? null) : null);
       return buildRowForItem(
         accessToken,
         userId,
         item,
         pricing,
         taxBySku,
+        taxByMlItemId,
         {
           pricingBySku,
           kitsByMlItemId,
@@ -1098,9 +1115,13 @@ export async function loadFinancialEvaluationRowsForPeriod(
   const skus = [...effectiveSkuByItemId.values()]
     .filter((sku): sku is string => Boolean(sku))
     .concat(kitComponentSkus);
-  const [pricingBySku, taxFromReport, productsWithPma, companySettings] =
+  const [pricingLookup, taxFromReport, productsWithPma, companySettings] =
     await Promise.all([
-      loadProductsMapBySku(organizationId, skus),
+      loadProductsMapBySku(
+        organizationId,
+        skus,
+        items.map((item) => item.id),
+      ),
       loadProductTaxFromLatestReport(userId),
       prisma.product.findMany({
         where: { organizationId, sku: { in: skus }, pmaPrice: { not: null } },
@@ -1108,6 +1129,7 @@ export async function loadFinancialEvaluationRowsForPeriod(
       }),
       getCompanySettings(organizationId),
     ]);
+  const { byMlItemId: pricingByMlItemId, bySku: pricingBySku } = pricingLookup;
   const taxBySku =
     companySettings.taxRegime === "SIMPLES"
       ? new Map(
@@ -1120,6 +1142,15 @@ export async function loadFinancialEvaluationRowsForPeriod(
         )
       : new Map(
           [...taxFromReport.bySku].map(([sku, entry]) => [sku, entry.taxPercent]),
+        );
+  const taxByMlItemId =
+    companySettings.taxRegime === "SIMPLES"
+      ? new Map<string, number>()
+      : new Map(
+          [...taxFromReport.byMlItemId].map(([mlItemId, entry]) => [
+            mlItemId,
+            entry.taxPercent,
+          ]),
         );
   const pmaBySku = new Map<string, number>();
   for (const product of productsWithPma) {
@@ -1141,9 +1172,9 @@ export async function loadFinancialEvaluationRowsForPeriod(
     5,
     async ({ agg, item }) => {
       const sku = effectiveSkuByItemId.get(item.id) ?? null;
-      const pricing = sku
-        ? (pricingBySku.get(normalizeProductSku(sku)) ?? null)
-        : null;
+      const pricing =
+        pricingByMlItemId.get(item.id) ??
+        (sku ? (pricingBySku.get(normalizeProductSku(sku)) ?? null) : null);
       return buildRowForPeriodItem(
         accessToken,
         userId,
@@ -1151,6 +1182,7 @@ export async function loadFinancialEvaluationRowsForPeriod(
         pricing,
         agg,
         taxBySku,
+        taxByMlItemId,
         {
           pricingBySku,
           kitsByMlItemId,

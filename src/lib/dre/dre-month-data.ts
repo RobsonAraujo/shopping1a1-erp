@@ -5,6 +5,7 @@ import { logServerError } from "@/lib/server-public-error";
 import {
   applyManualLineEdit,
   applyRestoreLineFromSync,
+  breakdownIdentityKey,
   computeDreTotals,
   isDreEditableLineKey,
   mergeLineBreakdowns,
@@ -25,10 +26,14 @@ import { loadProductTaxFromLatestReport } from "@/lib/product-tax-from-report";
 import { roundMoney } from "@/lib/financial-margin";
 import { getItemSku, isKitItem } from "@/lib/mercadolibre/item-sku";
 import { loadKitsByMlItemId, resolveKitPricing } from "@/lib/kit-data";
-import { normalizeProductSku } from "@/lib/product-pricing";
+import {
+  normalizeProductSku,
+  type ResolvedProductPricing,
+} from "@/lib/product-pricing";
 import {
   applyLevelingsForOrderDate,
   loadLevelingsOverlappingMonth,
+  resolveLevelingCostForOrderDate,
 } from "@/lib/dre/dre-product-cost-leveling";
 import {
   fetchCancelledOrderLinesInDateRange,
@@ -137,11 +142,12 @@ async function computeErpCostsFromOrderLines(
     .filter((sku): sku is string => Boolean(sku))
     .map((sku) => normalizeProductSku(sku))
     .concat(kitComponentSkus);
-  const [pricingBySkuBase, taxFromReport, levelings] = await Promise.all([
-    loadProductsMapBySku(organizationId, skus),
+  const [pricingLookup, taxFromReport, levelings] = await Promise.all([
+    loadProductsMapBySku(organizationId, skus, itemIds),
     loadProductTaxFromLatestReport(sellerId, undefined, { year, month }),
     loadLevelingsOverlappingMonth(organizationId, year, month),
   ]);
+  const { byMlItemId: pricingByMlItemIdBase, bySku: pricingBySkuBase } = pricingLookup;
   const taxPercentBySku = new Map(
     [...taxFromReport.bySku].map(([sku, entry]) => [sku, entry.taxPercent]),
   );
@@ -255,16 +261,40 @@ async function computeErpCostsFromOrderLines(
       year,
       month,
     );
-    const pricing = normalizedSku ? pricingBySku.get(normalizedSku) : undefined;
-    const taxEntry = normalizedSku
-      ? (taxFromReport.bySku.get(normalizedSku) ?? null)
+    // Preferir a base resolvida por identidade (mlItemId) — sku-texto não é
+    // mais único, `pricingBySku` (por sku) só serve de fallback pra linha
+    // sem Product resolvido e de base pro componente de kit (que só tem
+    // sku). O nivelamento em si continua sendo por sku (histórico
+    // congelado, ver DreProductCostLeveling.sku), reaplicado aqui pro item.
+    const pricingBaseForItem = pricingByMlItemIdBase.get(line.itemId);
+    const leveledCostForItem = normalizedSku
+      ? resolveLevelingCostForOrderDate(
+          levelings,
+          normalizedSku,
+          line.orderDateYmd ?? null,
+          year,
+          month,
+        )
       : null;
+    const isLeveledForItem = leveledCostForItem !== null;
+    const pricing: ResolvedProductPricing | undefined = isLeveledForItem
+      ? {
+          ...(pricingBaseForItem ?? { taxPercent: 0, extraCosts: 0 }),
+          pricingCost: leveledCostForItem,
+        }
+      : (pricingBaseForItem ??
+        (normalizedSku ? pricingBySkuBase.get(normalizedSku) : undefined));
+    const taxEntry =
+      taxFromReport.byMlItemId.get(line.itemId) ??
+      (normalizedSku ? (taxFromReport.bySku.get(normalizedSku) ?? null) : null);
     const taxPercent = taxEntry?.taxPercent ?? null;
     const item = itemById.get(line.itemId);
     const title = item?.title ?? line.itemId;
 
+    const identityKey = breakdownIdentityKey(line.itemId, sku ?? null);
+
     addToRevenueBreakdown(
-      normalizedSku || `item:${line.itemId}`,
+      identityKey,
       sku ?? null,
       title,
       line.quantity,
@@ -275,19 +305,19 @@ async function computeErpCostsFromOrderLines(
       const cost = line.quantity * pricing.pricingCost;
       productCostErp += cost;
       addToBreakdown(
-        normalizedSku,
+        identityKey,
         sku ?? null,
         title,
         line.quantity,
         cost,
         false,
-        leveledSkus.has(normalizedSku),
+        isLeveledForItem,
       );
       if (taxPercent !== null && taxPercent > 0 && line.revenue > 0) {
         const tax = line.revenue * (taxPercent / 100);
         taxErp += tax;
         addToTaxBreakdown(
-          normalizedSku,
+          identityKey,
           sku ?? null,
           title,
           line.quantity,
@@ -297,7 +327,7 @@ async function computeErpCostsFromOrderLines(
         );
       } else {
         addToTaxBreakdown(
-          normalizedSku,
+          identityKey,
           sku ?? null,
           title,
           line.quantity,
@@ -561,7 +591,7 @@ async function estimateMlCostsFallback(
     if (!item || line.quantity <= 0) continue;
 
     const sku = skuByItemId.get(line.itemId) ?? null;
-    const key = sku ? normalizeProductSku(sku) : `item:${line.itemId}`;
+    const key = breakdownIdentityKey(line.itemId, sku);
     const title = item.title ?? line.itemId;
 
     saleFeeTotal += feeAmount;
@@ -737,7 +767,7 @@ export async function buildDreMonthSnapshot(
               const sku = adsSkuByItemId.get(itemId) ?? null;
               const title = adsItemById.get(itemId)?.title ?? itemId;
               return {
-                key: sku ? normalizeProductSku(sku) : `item:${itemId}`,
+                key: breakdownIdentityKey(itemId, sku),
                 sku,
                 title,
                 quantity: metrics.unitsQuantity,

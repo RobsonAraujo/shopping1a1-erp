@@ -6,14 +6,18 @@ import {
 } from "@/lib/tax-report/aggregation/agregador-por-sku";
 import type { DetalhamentoTributario } from "@/lib/tax-report/types";
 
-function detalhe(sku: string, receita: number): DetalhamentoTributario {
+function detalhe(
+  sku: string,
+  receita: number,
+  itemId: string = sku,
+): DetalhamentoTributario {
   return {
     transacao: {
-      transactionKey: `${sku}-${receita}`,
+      transactionKey: `${sku}-${receita}-${itemId}`,
       orderId: "1",
       orderDate: "2026-05-01",
       sku,
-      itemId: "MLB",
+      itemId,
       quantidade: 1,
       receitaBruta: receita,
       ufDestino: "SP",
@@ -71,7 +75,7 @@ function detalhe(sku: string, receita: number): DetalhamentoTributario {
 }
 
 describe("agregarPorSku", () => {
-  it("groups transactions by exact sku, without merging distinct skus", () => {
+  it("groups transactions by itemId, without merging distinct products", () => {
     const rows = agregarPorSku([detalhe("SKU-A", 100), detalhe("SKU-B", 200)]);
 
     assert.equal(rows.length, 2);
@@ -81,13 +85,31 @@ describe("agregarPorSku", () => {
     assert.equal(byB?.receitaTotal, 200);
   });
 
-  it("sums multiple transactions with the same sku into one row", () => {
+  it("sums multiple transactions from the same itemId into one row", () => {
     const rows = agregarPorSku([detalhe("SKU-A", 100), detalhe("SKU-A", 200)]);
 
     assert.equal(rows.length, 1);
     assert.equal(rows[0]?.sku, "SKU-A");
     assert.equal(rows[0]?.receitaTotal, 300);
     assert.equal(rows[0]?.quantidadeVendas, 2);
+  });
+
+  it("populates mlItemId on the aggregated row", () => {
+    const rows = agregarPorSku([detalhe("SKU-A", 100, "MLB123")]);
+    assert.equal(rows[0]?.mlItemId, "MLB123");
+  });
+
+  it("does not merge two different products that share the same sku text (Product.sku is not unique)", () => {
+    const rows = agregarPorSku([
+      detalhe("SKU-COLIDIU", 100, "MLB1"),
+      detalhe("SKU-COLIDIU", 200, "MLB2"),
+    ]);
+
+    assert.equal(rows.length, 2);
+    const row1 = rows.find((r) => r.mlItemId === "MLB1");
+    const row2 = rows.find((r) => r.mlItemId === "MLB2");
+    assert.equal(row1?.receitaTotal, 100);
+    assert.equal(row2?.receitaTotal, 200);
   });
 });
 

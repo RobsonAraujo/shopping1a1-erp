@@ -53,6 +53,7 @@ export type Rbt12Result = {
  */
 export type SimulacaoSkuComparacao = {
   sku: string;
+  mlItemId?: string;
   receitaTotal: number;
   lucroRealPercent: number;
   /** simplesAliquotaEfetivaPercent − lucroRealPercent. Positivo = Simples pesa mais nesse produto. */

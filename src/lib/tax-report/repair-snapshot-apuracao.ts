@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { normalizeProductSku } from "@/lib/product-pricing";
-import type { CustoProduto } from "@/lib/tax-report/enrichment/custo-produto";
+import type { CustoLookup } from "@/lib/tax-report/enrichment/obter-custo-por-sku";
 import { loadCustoBySkuMap } from "@/lib/tax-report/enrichment/obter-custo-por-sku";
 import { calcularRelatorioFromTransacoes } from "@/lib/tax-report/service/compute-report";
 import {
@@ -23,10 +23,12 @@ export function collectDetalhes(payload: TaxReportPayload): DetalhamentoTributar
 
 export function enrichTransacao(
   transacao: TransacaoVenda,
-  custoBySku: Map<string, CustoProduto>,
+  custoLookup: CustoLookup,
 ): TransacaoVenda {
-  const normalized = normalizeProductSku(transacao.sku);
-  const custo = custoBySku.get(normalized);
+  const custo =
+    (transacao.itemId
+      ? custoLookup.byMlItemId.get(transacao.itemId)
+      : undefined) ?? custoLookup.bySku.get(normalizeProductSku(transacao.sku));
   if (!custo) return transacao;
 
   return {
@@ -47,13 +49,13 @@ export function enrichTransacao(
 
 export function needsCostEnrichmentRepair(
   detalhes: DetalhamentoTributario[],
-  custoBySku: Map<string, CustoProduto>,
+  custoLookup: CustoLookup,
 ): boolean {
   return detalhes.some((d) => {
     if (!d.incluidoNaApuracao) return false;
     const tx = d.transacao;
     if (tx.unitCostNf != null && tx.unitCostNf > 0) return false;
-    const enriched = enrichTransacao(tx, custoBySku);
+    const enriched = enrichTransacao(tx, custoLookup);
     return enriched.unitCostNf != null && enriched.unitCostNf > 0;
   });
 }
@@ -108,10 +110,13 @@ export async function repairTaxReportPayload(
   if (detalhes.length === 0) return synced;
 
   const skus = [...new Set(detalhes.map((d) => d.transacao.sku).filter(Boolean))];
-  const custoBySku = await loadCustoBySkuMap(organizationId, skus);
+  const itemIds = [
+    ...new Set(detalhes.map((d) => d.transacao.itemId).filter(Boolean)),
+  ];
+  const custoLookup = await loadCustoBySkuMap(organizationId, skus, itemIds);
   const needsCostRepair = needsCostEnrichmentRepair(
     detalhes.filter((d) => d.incluidoNaApuracao),
-    custoBySku,
+    custoLookup,
   );
 
   if (!needsApuracaoRepair(synced) && !needsCostRepair) return synced;
@@ -122,7 +127,7 @@ export async function repairTaxReportPayload(
     loadCbsIbsVigencia(synced.year),
   ]);
 
-  const transacoes = detalhes.map((d) => enrichTransacao(d.transacao, custoBySku));
+  const transacoes = detalhes.map((d) => enrichTransacao(d.transacao, custoLookup));
 
   const recomputed = calcularRelatorioFromTransacoes({
     transacoes,

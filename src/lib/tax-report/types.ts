@@ -152,6 +152,8 @@ export type DetalhamentoTributario = {
 
 export type SkuAggregation = {
   sku: string;
+  /** Identidade real da linha (mlItemId do anúncio de origem) — chave de agrupamento/lookup a partir daqui, `sku` é só exibição. Ausente só em snapshots antigos (gerados antes desta identidade existir). */
+  mlItemId?: string;
   quantidadeVendas: number;
   unidadesVendidas: number;
   receitaTotal: number;

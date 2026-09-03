@@ -18,10 +18,7 @@ import {
   loadTaxFixedCostExplicitValues,
   loadTaxFixedCostItems,
 } from "@/lib/tax-report/tax-fixed-cost-data";
-import {
-  loadCustoBySkuMap,
-  type CustoProduto,
-} from "@/lib/tax-report/enrichment/obter-custo-por-sku";
+import { loadCustoBySkuMap } from "@/lib/tax-report/enrichment/obter-custo-por-sku";
 import {
   fetchOrderBillingInfo,
   mapWithConcurrency,
@@ -242,14 +239,15 @@ export async function generateMonthlyTaxReport(input: {
       ),
     ]),
   ];
-  const custoBySku: Map<string, CustoProduto> = await loadCustoBySkuMap(
+  const custoLookup = await loadCustoBySkuMap(
     input.organizationId,
     allSkus,
+    itemIds,
   );
 
   input.onProgress?.({
     phase: "compute",
-    message: `Custos de ${custoBySku.size} SKU${custoBySku.size === 1 ? "" : "s"} carregados. Montando vendas…`,
+    message: `Custos de ${custoLookup.byMlItemId.size} produto${custoLookup.byMlItemId.size === 1 ? "" : "s"} carregados. Montando vendas…`,
   });
 
   const [loadedConfig, icmsRates, cbsIbsVigencia] = await Promise.all([
@@ -291,7 +289,7 @@ export async function generateMonthlyTaxReport(input: {
         order,
         billing,
         itemById,
-        custoBySku,
+        custoLookup,
         contributorByCnpj,
         overrides,
         freightCostByOrderId,

@@ -80,6 +80,7 @@ export async function compararSimplesXLucroReal(
     const lucroRealPercent = skuImpostoOperacionalPercentual(sku);
     return {
       sku: sku.sku,
+      mlItemId: sku.mlItemId,
       receitaTotal: sku.receitaTotal,
       lucroRealPercent,
       diferencaPercent: roundMoney(

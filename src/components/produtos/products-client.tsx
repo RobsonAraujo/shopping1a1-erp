@@ -30,7 +30,10 @@ import {
 import { readApiError } from "@/lib/api-client-error";
 import { filterByItemListSearch } from "@/lib/item-list-search";
 import type { ProductView } from "@/lib/product-data";
-import { formatFinancialMoney, formatFinancialPercent } from "@/lib/financial-margin";
+import {
+  formatFinancialMoney,
+  formatFinancialPercent,
+} from "@/lib/financial-margin";
 import { TAX_REPORT_MONTH_NAMES } from "@/lib/tax-report/routes";
 import { cn } from "@/lib/utils";
 
@@ -52,7 +55,7 @@ const DATE_TIME_FORMATTER = new Intl.DateTimeFormat("pt-BR", {
 
 function formatPricingCostExplainer(product: ProductView): string {
   const base = product.hasIcmsSt
-    ? product.purchaseCostWithSt ?? 0
+    ? (product.purchaseCostWithSt ?? 0)
     : product.unitCostNf;
   const baseLabel = product.hasIcmsSt
     ? "Custo unitário NF + ICMS-ST"
@@ -234,7 +237,10 @@ function ProductFormModal({
       });
       if (!res.ok) {
         setError(
-          await readApiError(res, isEdit ? "product_update_failed" : "product_create_failed"),
+          await readApiError(
+            res,
+            isEdit ? "product_update_failed" : "product_create_failed",
+          ),
         );
         return;
       }
@@ -297,7 +303,9 @@ function ProductFormModal({
                 <label className="block text-sm font-medium">SKU</label>
                 <input
                   value={form.sku}
-                  onChange={(e) => setForm((f) => ({ ...f, sku: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, sku: e.target.value }))
+                  }
                   className="h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-base sm:h-10 sm:text-sm"
                 />
                 <p className="text-xs text-[var(--muted-foreground)]">
@@ -310,7 +318,9 @@ function ProductFormModal({
               <label className="block text-sm font-medium">NCM</label>
               <input
                 value={form.ncm}
-                onChange={(e) => setForm((f) => ({ ...f, ncm: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, ncm: e.target.value }))
+                }
                 className="h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-base sm:h-10 sm:text-sm"
               />
             </div>
@@ -331,8 +341,8 @@ function ProductFormModal({
                 Campos fiscais de Lucro Real (ICMS compra/venda, ICMS-ST, IPI,
                 monofásico, importado) não se aplicam ao Simples Nacional e
                 ficam ocultos. Se este produto já teve esses dados cadastrados
-                antes (ex.: empresa migrou de Lucro Real), eles continuam
-                salvos e voltam a aparecer se o regime mudar de novo.
+                antes (ex.: empresa migrou de Lucro Real), eles continuam salvos
+                e voltam a aparecer se o regime mudar de novo.
               </p>
             ) : (
               <>
@@ -377,7 +387,9 @@ function ProductFormModal({
                   id="ipi"
                   label="IPI"
                   value={form.ipiPercent}
-                  onValueChange={(v) => setForm((f) => ({ ...f, ipiPercent: v }))}
+                  onValueChange={(v) =>
+                    setForm((f) => ({ ...f, ipiPercent: v }))
+                  }
                 />
                 <FormSwitchRow
                   id="is-monophasic"
@@ -416,9 +428,7 @@ function ProductFormModal({
               onValueChange={(v) => setForm((f) => ({ ...f, pmaPrice: v }))}
             />
           </div>
-          {error ? (
-            <UserFeedback className="mt-4">{error}</UserFeedback>
-          ) : null}
+          {error ? <UserFeedback className="mt-4">{error}</UserFeedback> : null}
         </SheetBody>
         <SheetFooter>
           <Button type="button" variant="outline" onClick={onClose}>
@@ -625,9 +635,9 @@ export function ProductsClient() {
       {data?.taxRegime !== "SIMPLES" && data?.taxReportGeneratedAt ? (
         <p className="text-xs text-[var(--muted-foreground)]">
           Coluna Imposto calculada a partir do relatório tributário gerado em{" "}
-          {DATE_TIME_FORMATTER.format(new Date(data.taxReportGeneratedAt))}{" "}
-          ({daysSince(data.taxReportGeneratedAt)} dia(s) atrás). Se houve
-          vendas ou mudanças fiscais recentes,{" "}
+          {DATE_TIME_FORMATTER.format(new Date(data.taxReportGeneratedAt))} (
+          {daysSince(data.taxReportGeneratedAt)} dia(s) atrás). Se houve vendas
+          ou mudanças fiscais recentes,{" "}
           <Link
             href="/dashboard/relatorio-tributario"
             className="font-medium text-[var(--primary)] underline underline-offset-2"
@@ -656,7 +666,7 @@ export function ProductsClient() {
               className={cn("size-4", importing && "animate-spin")}
               aria-hidden
             />
-            Importar SKU dos anúncios
+            Importar anúncio
           </Button>
           <Button
             type="button"
@@ -672,9 +682,7 @@ export function ProductsClient() {
             type="button"
             size="sm"
             className="gap-2"
-            onClick={() =>
-              setModal({ mode: "create", form: emptyForm() })
-            }
+            onClick={() => setModal({ mode: "create", form: emptyForm() })}
           >
             <Plus className="size-4" aria-hidden />
             Novo produto
@@ -694,9 +702,7 @@ export function ProductsClient() {
         entityPlural="produtos"
       />
 
-      {error ? (
-        <UserFeedback>{error}</UserFeedback>
-      ) : null}
+      {error ? <UserFeedback>{error}</UserFeedback> : null}
 
       <ProductsTable
         loading={loading}

@@ -17,7 +17,15 @@ function impostoOperacionalLinhaValor(det: DetalhamentoTributario): number {
   );
 }
 
-function aggregationSkuKey(det: DetalhamentoTributario): string {
+/**
+ * Chave de agrupamento real: `mlItemId` do anúncio de origem — cada anúncio
+ * é seu próprio produto (1 MLB = 1 Product, sem merge automático), então é
+ * a única chave que nunca funde duas linhas por coincidência de texto de
+ * SKU (Product.sku não é mais único). Cai pro texto de sku só quando não há
+ * itemId (defensivo — TransacaoVenda.itemId é obrigatório na prática).
+ */
+function aggregationKey(det: DetalhamentoTributario): string {
+  if (det.transacao.itemId) return `item:${det.transacao.itemId}`;
   const raw = det.transacao.sku || "(sem SKU)";
   if (raw === "(sem SKU)") return raw;
   return normalizeProductSku(raw) || raw;
@@ -30,9 +38,11 @@ export function agregarPorSku(
 
   for (const det of transacoes) {
     if (!det.incluidoNaApuracao) continue;
-    const sku = aggregationSkuKey(det);
-    const existing = map.get(sku) ?? {
+    const key = aggregationKey(det);
+    const sku = det.transacao.sku || "(sem SKU)";
+    const existing = map.get(key) ?? {
       sku,
+      mlItemId: det.transacao.itemId || undefined,
       quantidadeVendas: 0,
       unidadesVendidas: 0,
       receitaTotal: 0,
@@ -65,7 +75,7 @@ export function agregarPorSku(
         (det.creditoOutrasDespesas?.custosFixos?.credito ?? 0),
     );
     existing.transacoes.push(det);
-    map.set(sku, existing);
+    map.set(key, existing);
   }
 
   return [...map.values()]
@@ -191,12 +201,4 @@ export function consolidarRelatorio(
     transacoesExcluidas: excluidas.length,
     transacoesSemBillingInfo: semBilling.length,
   };
-}
-
-export function findSkuAggregation(
-  porSku: SkuAggregation[],
-  sku: string,
-): SkuAggregation | undefined {
-  if (!sku) return undefined;
-  return porSku.find((row) => row.sku === sku);
 }

@@ -81,12 +81,12 @@ export function TaxReportSkuTableDesktop({
           ) : (
             rows.map((row) => (
               <tr
-                key={row.sku}
+                key={row.mlItemId ?? row.sku}
                 className="border-b border-[var(--border)] hover:bg-[var(--muted)]/20"
               >
                 <td className="py-2 pr-3 font-medium">
                   <Link
-                    href={skuPathFor(row.sku)}
+                    href={skuPathFor(row.mlItemId ?? row.sku)}
                     className="inline-flex flex-col gap-0.5 text-[var(--primary)] hover:underline"
                   >
                     <span>{row.sku}</span>
@@ -114,7 +114,7 @@ export function TaxReportSkuTableDesktop({
                 </td>
                 <td className="py-2 text-[var(--muted-foreground)]">
                   <Link
-                    href={skuPathFor(row.sku)}
+                    href={skuPathFor(row.mlItemId ?? row.sku)}
                     aria-label={`Ver vendas de ${row.sku}`}
                   >
                     <ChevronRight className="size-4" />

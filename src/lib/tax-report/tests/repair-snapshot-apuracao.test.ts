@@ -6,6 +6,7 @@ import {
   needsCostEnrichmentRepair,
 } from "@/lib/tax-report/repair-snapshot-apuracao";
 import type { CustoProduto } from "@/lib/tax-report/enrichment/custo-produto";
+import type { CustoLookup } from "@/lib/tax-report/enrichment/obter-custo-por-sku";
 import type { DetalhamentoTributario, TaxReportPayload } from "@/lib/tax-report/types";
 
 const custo: CustoProduto = {
@@ -98,11 +99,14 @@ const meta: TaxReportPayload["meta"] = {
 describe("repairTaxReportPayload cost enrichment", () => {
   it("re-enriches a line without unitCostNf with the registered product cost and recalculates credits", () => {
     const line = lineWithoutCost();
-    const custoBySku = new Map<string, CustoProduto>([["SKU-A", custo]]);
+    const custoLookup: CustoLookup = {
+      byMlItemId: new Map([["MLB1", custo]]),
+      bySku: new Map(),
+    };
 
-    const enriched = enrichTransacao(line.transacao, custoBySku);
+    const enriched = enrichTransacao(line.transacao, custoLookup);
     assert.equal(enriched.unitCostNf, 100);
-    assert.equal(needsCostEnrichmentRepair([line], custoBySku), true);
+    assert.equal(needsCostEnrichmentRepair([line], custoLookup), true);
 
     const recomputed = calcularRelatorioFromTransacoes({
       transacoes: [enriched],
@@ -132,24 +136,50 @@ describe("repairTaxReportPayload cost enrichment", () => {
     assert.equal(repairedLine.icmsCreditoCompra?.creditoTotal, 18);
   });
 
-  it("matches cost by normalized sku (collapses internal double spaces)", () => {
+  it("matches cost by normalized sku when the line's itemId has no registered product (fallback)", () => {
     const line = lineWithoutCost();
     line.transacao.sku = "MXT  - Cabo Guitar 10m (Próprio)";
 
-    const custoBySku = new Map<string, CustoProduto>([
-      ["MXT - Cabo Guitar 10m (Próprio)", { ...custo, sku: "MXT - Cabo Guitar 10m (Próprio)" }],
-    ]);
+    const custoLookup: CustoLookup = {
+      byMlItemId: new Map(),
+      bySku: new Map([
+        ["MXT - Cabo Guitar 10m (Próprio)", { ...custo, sku: "MXT - Cabo Guitar 10m (Próprio)" }],
+      ]),
+    };
 
-    const enriched = enrichTransacao(line.transacao, custoBySku);
+    const enriched = enrichTransacao(line.transacao, custoLookup);
     assert.equal(enriched.unitCostNf, 100);
   });
 
-  it("does not enrich when no product cost is registered for the sku", () => {
+  it("does not enrich when no product cost is registered for the item nor the sku", () => {
     const line = lineWithoutCost();
-    const custoBySku = new Map<string, CustoProduto>();
+    const custoLookup: CustoLookup = { byMlItemId: new Map(), bySku: new Map() };
 
-    const enriched = enrichTransacao(line.transacao, custoBySku);
+    const enriched = enrichTransacao(line.transacao, custoLookup);
     assert.equal(enriched.unitCostNf, null);
-    assert.equal(needsCostEnrichmentRepair([line], custoBySku), false);
+    assert.equal(needsCostEnrichmentRepair([line], custoLookup), false);
+  });
+
+  it("resolves each line's cost by itemId when two lines share the same display sku text (Product.sku is not unique)", () => {
+    const line1 = lineWithoutCost();
+    line1.transacao.sku = "SKU-COLIDIU";
+
+    const line2 = lineWithoutCost();
+    line2.transacao.transactionKey = "line-2";
+    line2.transacao.itemId = "MLB2";
+    line2.transacao.sku = "SKU-COLIDIU";
+
+    const custoLookup: CustoLookup = {
+      byMlItemId: new Map([
+        ["MLB1", { ...custo, unitCostNf: 100 }],
+        ["MLB2", { ...custo, unitCostNf: 55 }],
+      ]),
+      bySku: new Map(),
+    };
+
+    const enriched1 = enrichTransacao(line1.transacao, custoLookup);
+    const enriched2 = enrichTransacao(line2.transacao, custoLookup);
+    assert.equal(enriched1.unitCostNf, 100);
+    assert.equal(enriched2.unitCostNf, 55);
   });
 });

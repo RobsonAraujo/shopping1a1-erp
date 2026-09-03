@@ -13,7 +13,7 @@ import {
 } from "@/lib/tax-report/ml/sku-from-order-line";
 import { normalizeProductSku } from "@/lib/product-pricing";
 import { roundMoney } from "@/lib/financial-margin";
-import type { CustoProduto } from "@/lib/tax-report/enrichment/custo-produto";
+import type { CustoLookup } from "@/lib/tax-report/enrichment/obter-custo-por-sku";
 import type {
   ManualFiscalOverride,
   TransacaoVenda,
@@ -24,7 +24,8 @@ export function buildTransacoesFromOrder(input: {
   order: OrderSearchOrder;
   billing: OrderBillingInfoResponse | null;
   itemById: Map<string, ItemBody>;
-  custoBySku: Map<string, CustoProduto>;
+  /** Preferir `byMlItemId` — `bySku` é só fallback pra linha sem itemId resolvido (`Product.sku` não é mais único). */
+  custoLookup: CustoLookup;
   contributorByCnpj: Map<string, boolean>;
   overrides?: Record<string, ManualFiscalOverride>;
   /** Custo total de frete pago pela empresa por pedido (chave = orderId) — rateado por linha proporcionalmente à receita. */
@@ -73,7 +74,9 @@ export function buildTransacoesFromOrder(input: {
     const transactionKey = `${orderId}-${itemId}-${sku}`;
     const override = input.overrides?.[transactionKey];
 
-    const custo = input.custoBySku.get(normalizeProductSku(sku));
+    const custo =
+      (itemId ? input.custoLookup.byMlItemId.get(itemId) : undefined) ??
+      input.custoLookup.bySku.get(normalizeProductSku(sku));
     const quantidade =
       typeof line.quantity === "number" && line.quantity > 0 ? line.quantity : 1;
 

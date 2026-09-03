@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   diffLevelableProductFields,
+  indexProductPricingLookup,
   productWriteToPrismaData,
   validateProductInput,
   type ProductWriteInput,
@@ -120,5 +121,47 @@ describe("diffLevelableProductFields", () => {
     };
     const { changedFields } = diffLevelableProductFields(before, simplesInput);
     assert.deepEqual(changedFields, []);
+  });
+});
+
+describe("indexProductPricingLookup", () => {
+  it("indexes each product by mlItemId (always 1:1)", () => {
+    const products = [
+      baseProduct({ mlItemId: "MLB1", sku: "SKU-A", unitCostNf: 50 }),
+      baseProduct({ mlItemId: "MLB2", sku: "SKU-B", unitCostNf: 80 }),
+    ];
+    const { byMlItemId } = indexProductPricingLookup(products, 0);
+    assert.equal(byMlItemId.get("MLB1")?.pricingCost, 50);
+    assert.equal(byMlItemId.get("MLB2")?.pricingCost, 80);
+  });
+
+  it("does not merge two products that share the same display sku text (Product.sku is not unique)", () => {
+    const products = [
+      baseProduct({ mlItemId: "MLB1", sku: "SKU-COLIDIU", unitCostNf: 50 }),
+      baseProduct({ mlItemId: "MLB2", sku: "SKU-COLIDIU", unitCostNf: 80 }),
+    ];
+    const { byMlItemId, bySku } = indexProductPricingLookup(products, 0);
+
+    assert.equal(byMlItemId.get("MLB1")?.pricingCost, 50);
+    assert.equal(byMlItemId.get("MLB2")?.pricingCost, 80);
+    // bySku é só fallback — colisão de texto resolve "primeiro que chega
+    // vence" (não-determinístico na prática, ordem do Postgres); o que
+    // importa é que byMlItemId nunca perde/mistura dado dos dois produtos.
+    assert.equal(bySku.size, 1);
+    assert.ok([50, 80].includes(bySku.get("SKU-COLIDIU")?.pricingCost ?? -1));
+  });
+
+  it("skips a product without a registrable pricing (ICMS-ST marked but no purchaseCostWithSt registered)", () => {
+    const products = [
+      baseProduct({
+        mlItemId: "MLB1",
+        sku: "SKU-A",
+        hasIcmsSt: true,
+        purchaseCostWithSt: null,
+      }),
+    ];
+    const { byMlItemId, bySku } = indexProductPricingLookup(products, 0);
+    assert.equal(byMlItemId.size, 0);
+    assert.equal(bySku.size, 0);
   });
 });

@@ -1,4 +1,5 @@
 import { roundMoney } from "@/lib/financial-margin";
+import { normalizeProductSku } from "@/lib/product-pricing";
 
 export type DreLineAmounts = {
   revenueMl: number;
@@ -50,6 +51,22 @@ export function productCostAuditKey(
 ): string {
   const bare = baseKey.replace(/::(leveled|cadastro)$/, "");
   return `${bare}${leveled ? "::leveled" : "::cadastro"}`;
+}
+
+/**
+ * Chave de identidade pra agrupar breakdown por produto (custo/imposto/receita
+ * no drilldown anual do DRE): `mlItemId` do anúncio de origem — cada anúncio
+ * é seu próprio produto (1 MLB = 1 Product, sem merge automático), então é a
+ * única chave que nunca funde duas linhas por coincidência de texto de SKU
+ * (Product.sku não é mais único). Cai pro texto de sku só quando não há
+ * itemId (defensivo — as linhas de pedido sempre têm itemId na prática).
+ */
+export function breakdownIdentityKey(
+  itemId: string | null | undefined,
+  sku: string | null,
+): string {
+  if (itemId) return `item:${itemId}`;
+  return sku ? normalizeProductSku(sku) || sku : "(sem SKU)";
 }
 
 export function normalizeProductCostAuditMergeKey(

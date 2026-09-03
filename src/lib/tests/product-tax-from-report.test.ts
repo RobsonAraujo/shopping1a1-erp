@@ -119,6 +119,29 @@ describe("loadProductTaxFromLatestReport", () => {
     assert.equal(entry!.month, 7);
   });
 
+  it("resolves each product by mlItemId when two rows share the same display sku text", async () => {
+    // Product.sku não é mais único — duas linhas de porSku podem legitimamente
+    // ter o mesmo texto de exibição (edição manual, coincidência). byMlItemId
+    // precisa resolver cada uma pro seu próprio valor, sem que uma "vença" a
+    // outra como bySku faria.
+    const payload = samplePayload([
+      sampleSku({
+        sku: "SKU-COLIDIU",
+        mlItemId: "MLB1",
+        impostoOperacionalMedioPercentual: 20,
+      }),
+      sampleSku({
+        sku: "SKU-COLIDIU",
+        mlItemId: "MLB2",
+        impostoOperacionalMedioPercentual: 12,
+      }),
+    ]);
+    const result = await loadProductTaxFromLatestReport(1, async () => [payload]);
+
+    assert.equal(result.byMlItemId.get("MLB1")?.taxPercent, 20);
+    assert.equal(result.byMlItemId.get("MLB2")?.taxPercent, 12);
+  });
+
   it("ignores the anchor when an explicit loadSnapshots is provided (test/DRE injection contract)", async () => {
     const payload = samplePayload([sampleSku({ sku: "SKU-A" })], undefined, 2026, 9);
     // anchor aponta pra um mês anterior ao snapshot devolvido pelo loader

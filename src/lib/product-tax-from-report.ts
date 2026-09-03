@@ -39,6 +39,8 @@ export type ProductTaxFromReport = {
 
 export type ProductTaxReportLookup = {
   generatedAt: string | null;
+  /** Lookup por identidade (mlItemId) — preferir este; sku-texto não é mais único, `bySku` é só fallback pra linha sem produto resolvido ou snapshot antigo sem mlItemId. */
+  byMlItemId: Map<string, ProductTaxFromReport>;
   bySku: Map<string, ProductTaxFromReport>;
 };
 
@@ -67,10 +69,11 @@ export async function loadProductTaxFromLatestReport(
     (anchor ? anchoredLoadSnapshots(anchor) : defaultLoadSnapshots);
   const payloads = await resolvedLoadSnapshots(sellerId);
   if (payloads.length === 0) {
-    return { generatedAt: null, bySku: new Map() };
+    return { generatedAt: null, byMlItemId: new Map(), bySku: new Map() };
   }
 
   const generatedAt = payloads[0].meta.geradoEm;
+  const byMlItemId = new Map<string, ProductTaxFromReport>();
   const bySku = new Map<string, ProductTaxFromReport>();
 
   for (const payload of payloads) {
@@ -81,6 +84,9 @@ export async function loadProductTaxFromLatestReport(
         year: payload.year,
         month: payload.month,
       };
+      if (row.mlItemId && !byMlItemId.has(row.mlItemId)) {
+        byMlItemId.set(row.mlItemId, entry);
+      }
       const skus = [row.sku, ...(row.skuAliases ?? [])];
       for (const sku of skus) {
         const key = normalizeProductSku(sku);
@@ -91,5 +97,5 @@ export async function loadProductTaxFromLatestReport(
     }
   }
 
-  return { generatedAt, bySku };
+  return { generatedAt, byMlItemId, bySku };
 }

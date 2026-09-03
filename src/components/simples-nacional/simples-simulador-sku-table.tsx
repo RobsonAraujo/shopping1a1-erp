@@ -80,7 +80,7 @@ export function SimplesSimuladorSkuTable({
             ) : (
               sortedRows.map((row) => (
                 <tr
-                  key={row.sku}
+                  key={row.mlItemId ?? row.sku}
                   className="border-b border-[var(--border)] hover:bg-[var(--muted)]/20"
                 >
                   <td className="py-2 pr-3 font-medium">{row.sku}</td>

@@ -30,8 +30,8 @@ export function TaxReportSkuTableMobile({
   return (
     <ul className="space-y-3">
       {rows.map((row) => (
-        <li key={row.sku}>
-          <Link href={skuPathFor(row.sku)} className="block">
+        <li key={row.mlItemId ?? row.sku}>
+          <Link href={skuPathFor(row.mlItemId ?? row.sku)} className="block">
             <Card className="p-4 shadow-sm transition-colors hover:bg-[var(--muted)]/20">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">

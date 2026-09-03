@@ -6,9 +6,14 @@ import {
 } from "@/lib/tax-report/find-sku-in-report";
 import type { SkuAggregation } from "@/lib/tax-report/types";
 
-function row(sku: string, aliases: string[] = []): SkuAggregation {
+function row(
+  sku: string,
+  aliases: string[] = [],
+  mlItemId?: string,
+): SkuAggregation {
   return {
     sku,
+    mlItemId,
     skuAliases: aliases,
     quantidadeVendas: 1,
     unidadesVendidas: 1,
@@ -56,6 +61,20 @@ describe("findSkuInReport", () => {
       [row("SKU-ATUAL", ["SKU-LEGADO"])],
       "  SKU-LEGADO  ",
     );
+    assert.equal(found?.sku, "SKU-ATUAL");
+  });
+
+  it("disambiguates two rows that share the same display sku by mlItemId (Product.sku is not unique)", () => {
+    const rows = [
+      row("SKU-COLIDIU", [], "MLB1"),
+      row("SKU-COLIDIU", [], "MLB2"),
+    ];
+    assert.equal(findSkuInReport(rows, "MLB1")?.mlItemId, "MLB1");
+    assert.equal(findSkuInReport(rows, "MLB2")?.mlItemId, "MLB2");
+  });
+
+  it("falls back to sku text when the row has no mlItemId (snapshot antigo, sem essa identidade)", () => {
+    const found = findSkuInReport([row("SKU-ATUAL", ["SKU-LEGADO"])], "SKU-ATUAL");
     assert.equal(found?.sku, "SKU-ATUAL");
   });
 });

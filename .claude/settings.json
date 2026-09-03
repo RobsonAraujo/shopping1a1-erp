@@ -19,7 +19,9 @@
       "Bash(DATABASE_URL=\"postgresql://erp:erp@localhost:5433/shopping1a1_prod_staging?schema=public\" npx prisma migrate deploy)",
       "Bash(PGPASSWORD=erp psql -h localhost -p 5433 -U erp -d shopping1a1_prod_staging -c \"\\\\d products\")",
       "Bash(PGPASSWORD=erp psql -h localhost -p 5433 -U erp -d shopping1a1_prod_staging -c \"\\\\d kit_items\")",
-      "Bash(PGPASSWORD=erp psql -h localhost -p 5433 -U erp -d shopping1a1_prod_staging -c \"SELECT count\\(*\\) FROM products;\")"
+      "Bash(PGPASSWORD=erp psql -h localhost -p 5433 -U erp -d shopping1a1_prod_staging -c \"SELECT count\\(*\\) FROM products;\")",
+      "Bash(npx eslint *)",
+      "Bash(node --env-file=.env --import tsx --test src/lib/tax-report/aggregation/tests/agregador-por-sku.test.ts)"
     ]
   }
 }
