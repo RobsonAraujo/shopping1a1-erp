@@ -35,53 +35,20 @@ import {
 } from "@/lib/mercadolibre/api";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { getItemSku, getSkuSupplier, isKitItem } from "@/lib/mercadolibre/item-sku";
+import {
+  upsertListingFromItem,
+  upsertListingsFromItems,
+} from "@/lib/mercadolibre/listing-sync";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
 import { computeStockPlanningDisplay } from "@/lib/stock-planning";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import type { StockPlanningDisplay } from "@/lib/stock-planning";
 
-function listingUpsertData(item: ItemBody) {
-  const activeOnMl = item.status === "active" || item.status === "paused";
-  return {
-    titleSnapshot: item.title,
-    catalogListing: item.catalog_listing ?? null,
-    lastSyncedAt: new Date(),
-    activeOnMl,
-    mlStatus: item.status ?? null,
-  };
-}
-
-function listingCreateData(organizationId: string, item: ItemBody) {
-  return {
-    organizationId,
-    mlItemId: item.id,
-    ...listingUpsertData(item),
-  };
-}
-
-async function upsertListingForItem(
-  organizationId: string,
-  item: ItemBody,
-): Promise<void> {
-  if (!item.id) return;
-  await prisma.listing.upsert({
-    where: { mlItemId: item.id },
-    create: listingCreateData(organizationId, item),
-    update: listingUpsertData(item),
-  });
-}
-
 async function ensureListingsForItems(
   organizationId: string,
   items: ItemBody[],
 ): Promise<void> {
-  const chunkSize = 25;
-  for (let i = 0; i < items.length; i += chunkSize) {
-    const chunk = items.slice(i, i + chunkSize);
-    await Promise.all(
-      chunk.map((item) => upsertListingForItem(organizationId, item)),
-    );
-  }
+  await upsertListingsFromItems(organizationId, items);
 }
 
 let replenishmentSyncTail: Promise<void> = Promise.resolve();
@@ -343,11 +310,7 @@ async function createCycleForItem(
   if (!mlItemId) return;
 
   await prisma.$transaction(async (tx) => {
-    await tx.listing.upsert({
-      where: { mlItemId },
-      create: listingCreateData(organizationId, { ...ctx.item, id: mlItemId }),
-      update: listingUpsertData(ctx.item),
-    });
+    await upsertListingFromItem(organizationId, { ...ctx.item, id: mlItemId }, tx);
     await tx.replenishmentCycle.create({
       data: {
         organizationId,

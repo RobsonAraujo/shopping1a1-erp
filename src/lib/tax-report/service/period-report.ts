@@ -1,6 +1,4 @@
 import { monthsInRange } from "@/lib/date-range";
-import { loadSkuAliasMap } from "@/lib/product-sku-alias-data";
-import type { SkuAliasMap } from "@/lib/product-sku-alias";
 import { agregarPorSku, consolidarRelatorio } from "@/lib/tax-report/aggregation/agregador-por-sku";
 import { collectDetalhes } from "@/lib/tax-report/repair-snapshot-apuracao";
 import { loadTaxReportSnapshot } from "@/lib/tax-report/service/generate-monthly-report";
@@ -26,7 +24,6 @@ export function buildPeriodReportPayload(
   snapshots: MonthSnapshotEntry[],
   fromYmd: string,
   toYmd: string,
-  aliasMap?: SkuAliasMap,
 ): PeriodReportResult {
   const missingMonths = snapshots
     .filter((s) => s.payload === null)
@@ -40,7 +37,7 @@ export function buildPeriodReportPayload(
     .flatMap((payload) => collectDetalhes(payload))
     .filter((det) => isWithinRange(det, fromYmd, toYmd));
 
-  const porSku = agregarPorSku(detalhes, aliasMap);
+  const porSku = agregarPorSku(detalhes);
   const consolidado = consolidarRelatorio(detalhes);
 
   const overrides = Object.assign({}, ...payloads.map((p) => p.overrides));
@@ -87,17 +84,14 @@ export async function loadTaxReportForPeriod(
 ): Promise<PeriodReportResult> {
   const months = monthsInRange(fromYmd, toYmd);
 
-  const [aliasMap, snapshots] = await Promise.all([
-    loadSkuAliasMap(organizationId),
-    Promise.all(
-      months.map((m) =>
-        loadTaxReportSnapshot(sellerId, m.year, m.month).then((payload) => ({
-          month: m,
-          payload,
-        })),
-      ),
+  const snapshots = await Promise.all(
+    months.map((m) =>
+      loadTaxReportSnapshot(sellerId, m.year, m.month).then((payload) => ({
+        month: m,
+        payload,
+      })),
     ),
-  ]);
+  );
 
-  return buildPeriodReportPayload(snapshots, fromYmd, toYmd, aliasMap);
+  return buildPeriodReportPayload(snapshots, fromYmd, toYmd);
 }

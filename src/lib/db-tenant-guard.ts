@@ -10,7 +10,6 @@ import { Prisma } from "@/generated/prisma";
 const TENANT_SCOPED_MODELS = new Set([
   "Product",
   "CompanyTaxSettings",
-  "ProductSkuAlias",
   "KitItem",
   "DreProductCostLeveling",
   "DreCostItem",

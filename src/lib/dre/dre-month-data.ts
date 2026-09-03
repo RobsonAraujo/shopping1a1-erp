@@ -20,6 +20,7 @@ import {
   type DreTaxBreakdownItem,
 } from "@/lib/dre/dre-calculations";
 import { loadProductsMapBySku } from "@/lib/product-data";
+import { resolveEffectiveSkuByItemId } from "@/lib/product-resolver";
 import { loadProductTaxFromLatestReport } from "@/lib/product-tax-from-report";
 import { roundMoney } from "@/lib/financial-margin";
 import { getItemSku, isKitItem } from "@/lib/mercadolibre/item-sku";
@@ -118,8 +119,12 @@ async function computeErpCostsFromOrderLines(
   const itemIds = [...new Set(orderLines.map((line) => line.itemId))];
   const items = await fetchItemsByIdsBatched(accessToken, itemIds);
   const itemById = new Map(items.map((item) => [item.id, item]));
-  const skuByItemId = new Map(
-    items.map((item) => [item.id, getItemSku(item)]),
+  // SKU "efetivo": segue o cadastro do Product vinculado ao anúncio via
+  // mlItemId quando existe (estável mesmo se o SKU mudar no anúncio ML);
+  // cai para o SKU ao vivo do anúncio quando não há vínculo ainda.
+  const skuByItemId = await resolveEffectiveSkuByItemId(
+    organizationId,
+    items.map((item) => ({ id: item.id, sku: getItemSku(item) })),
   );
   const kitItemIds = items
     .filter((item) => !getItemSku(item) && isKitItem(item))
@@ -128,8 +133,7 @@ async function computeErpCostsFromOrderLines(
   const kitComponentSkus = [...kitsByMlItemId.values()].flatMap((components) =>
     components.map((c) => c.sku),
   );
-  const skus = items
-    .map((item) => getItemSku(item))
+  const skus = [...skuByItemId.values()]
     .filter((sku): sku is string => Boolean(sku))
     .map((sku) => normalizeProductSku(sku))
     .concat(kitComponentSkus);
@@ -403,6 +407,7 @@ async function computeErpCostsFromOrderLines(
 async function estimateMlCostsFallback(
   accessToken: string,
   sellerId: number,
+  organizationId: string,
   from: Date,
   to: Date,
   orderLines: Array<{ itemId: string; quantity: number; revenue: number }>,
@@ -431,7 +436,10 @@ async function estimateMlCostsFallback(
   const itemIds = [...new Set(orderLines.map((line) => line.itemId))];
   const items = await fetchItemsByIdsBatched(accessToken, itemIds);
   const itemById = new Map(items.map((item) => [item.id, item]));
-  const skuByItemId = new Map(items.map((item) => [item.id, getItemSku(item)]));
+  const skuByItemId = await resolveEffectiveSkuByItemId(
+    organizationId,
+    items.map((item) => ({ id: item.id, sku: getItemSku(item) })),
+  );
 
   const feeCache = new Map<string, number>();
   const shippingCache = new Map<string, number>();
@@ -719,8 +727,9 @@ export async function buildDreMonthSnapshot(
           );
           const adsItems = await fetchItemsByIdsBatched(accessToken, adsItemIds);
           const adsItemById = new Map(adsItems.map((item) => [item.id, item]));
-          const adsSkuByItemId = new Map(
-            adsItems.map((item) => [item.id, getItemSku(item)]),
+          const adsSkuByItemId = await resolveEffectiveSkuByItemId(
+            organizationId,
+            adsItems.map((item) => ({ id: item.id, sku: getItemSku(item) })),
           );
           adsCostBreakdown = adsItemIds
             .map((itemId) => {
@@ -863,6 +872,7 @@ export async function buildDreMonthSnapshot(
         const fallback = await estimateMlCostsFallback(
           accessToken,
           sellerId,
+          organizationId,
           calendarRange.from,
           calendarRange.to,
           orderLines,
@@ -972,6 +982,7 @@ export async function buildDreMonthSnapshot(
         const fallback = await estimateMlCostsFallback(
           accessToken,
           sellerId,
+          organizationId,
           calendarRange.from,
           calendarRange.to,
           orderLines,

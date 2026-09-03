@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Boxes, Plus, RefreshCw, X } from "lucide-react";
+import { Boxes, Plus, RefreshCw } from "lucide-react";
 import { KitsModal } from "@/components/produtos/kits-modal";
 import { ItemListSearch } from "@/components/item-list-search";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import { FormInput } from "@/components/ui/form-input";
 import {
   Sheet,
   SheetBody,
@@ -77,6 +78,7 @@ function taxReportPeriodLabel(year: number, month: number): string {
 }
 
 type ProductFormState = {
+  mlItemId: string;
   sku: string;
   ncm: string;
   unitCostNf: number | null;
@@ -91,8 +93,9 @@ type ProductFormState = {
   pmaPrice: number | null;
 };
 
-function emptyForm(sku = ""): ProductFormState {
+function emptyForm(mlItemId = "", sku = ""): ProductFormState {
   return {
+    mlItemId,
     sku,
     ncm: "",
     unitCostNf: null,
@@ -110,7 +113,8 @@ function emptyForm(sku = ""): ProductFormState {
 
 function formFromProduct(product: ProductView): ProductFormState {
   return {
-    sku: product.sku,
+    mlItemId: product.mlItemId,
+    sku: product.sku ?? "",
     ncm: product.ncm ?? "",
     unitCostNf: product.unitCostNf,
     purchaseIcmsPercent: product.purchaseIcmsPercent,
@@ -165,150 +169,6 @@ function FormSwitchRow({
   );
 }
 
-function ProductSkuAliasesEditor({ canonicalSku }: { canonicalSku: string }) {
-  const [aliases, setAliases] = useState<string[]>([]);
-  const [draft, setDraft] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadAliases = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(
-        `/api/products/${encodeURIComponent(canonicalSku)}/aliases`,
-      );
-      if (!res.ok) {
-        setError(await readApiError(res, "product_aliases_load_failed"));
-        return;
-      }
-      const json = (await res.json()) as { aliases: string[] };
-      setAliases(json.aliases);
-    } catch {
-      setError("Falha ao carregar SKUs associados.");
-    } finally {
-      setLoading(false);
-    }
-  }, [canonicalSku]);
-
-  useEffect(() => {
-    void loadAliases();
-  }, [loadAliases]);
-
-  async function addAlias() {
-    const aliasSku = draft.trim();
-    if (!aliasSku) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const res = await fetch(
-        `/api/products/${encodeURIComponent(canonicalSku)}/aliases`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ aliasSku }),
-        },
-      );
-      if (!res.ok) {
-        setError(await readApiError(res, "product_alias_create_failed"));
-        return;
-      }
-      const json = (await res.json()) as { aliases: string[] };
-      setAliases(json.aliases);
-      setDraft("");
-    } catch {
-      setError("Falha ao associar SKU.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function removeAlias(aliasSku: string) {
-    setSaving(true);
-    setError(null);
-    try {
-      const res = await fetch(
-        `/api/products/${encodeURIComponent(canonicalSku)}/aliases/${encodeURIComponent(aliasSku)}`,
-        { method: "DELETE" },
-      );
-      if (!res.ok) {
-        setError(await readApiError(res, "product_alias_delete_failed"));
-        return;
-      }
-      const json = (await res.json()) as { aliases: string[] };
-      setAliases(json.aliases);
-    } catch {
-      setError("Falha ao remover associação.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="mt-2 space-y-3 rounded-lg border border-[var(--border)] bg-[var(--muted)]/10 p-4 sm:col-span-2">
-      <div>
-        <p className="text-sm font-medium">SKUs equivalentes / anteriores</p>
-        <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-          Use quando renomear o SKU no Mercado Livre. Vendas antigas continuam
-          com o nome original, mas entram nos totais deste cadastro.
-        </p>
-      </div>
-
-      {loading ? (
-        <p className="text-xs text-[var(--muted-foreground)]">Carregando…</p>
-      ) : aliases.length > 0 ? (
-        <ul className="space-y-2">
-          {aliases.map((alias) => (
-            <li
-              key={alias}
-              className="flex items-start justify-between gap-3 rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
-            >
-              <span className="min-w-0 break-all">{alias}</span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 shrink-0 px-2 text-[var(--muted-foreground)]"
-                disabled={saving}
-                onClick={() => void removeAlias(alias)}
-                aria-label={`Remover alias ${alias}`}
-              >
-                <X className="size-4" />
-              </Button>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-xs text-[var(--muted-foreground)]">
-          Nenhum SKU anterior associado.
-        </p>
-      )}
-
-      <div className="flex flex-wrap gap-2">
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="SKU antigo ou alternativo"
-          className="h-11 min-w-[12rem] flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-base sm:h-10 sm:text-sm"
-          disabled={saving}
-        />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={saving || !draft.trim()}
-          onClick={() => void addAlias()}
-        >
-          Associar SKU
-        </Button>
-      </div>
-
-      {error ? <UserFeedback className="mt-2">{error}</UserFeedback> : null}
-    </div>
-  );
-}
-
 const SIMPLES_HIDDEN_FIELD_KEYS = [
   "purchaseIcmsPercent",
   "hasIcmsSt",
@@ -341,7 +201,7 @@ function ProductFormModal({
   const [form, setForm] = useState(initial);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const isEdit = Boolean(initial.sku && initial.unitCostNf !== null);
+  const isEdit = Boolean(initial.mlItemId && initial.unitCostNf !== null);
   const isSimples = taxRegime === "SIMPLES";
 
   useEffect(() => {
@@ -361,7 +221,7 @@ function ProductFormModal({
     setError(null);
     try {
       const url = isEdit
-        ? `/api/products/${encodeURIComponent(form.sku)}`
+        ? `/api/products/${encodeURIComponent(form.mlItemId)}`
         : "/api/products";
       const payload: Record<string, unknown> = { ...form };
       if (isSimples) {
@@ -415,15 +275,37 @@ function ProductFormModal({
         </SheetHeader>
         <SheetBody>
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1 sm:col-span-2">
-              <label className="block text-sm font-medium">SKU</label>
-              <input
-                value={form.sku}
+            <div className="sm:col-span-2">
+              <FormInput
+                label="ID do anúncio no Mercado Livre (MLB...)"
+                value={form.mlItemId}
                 disabled={isEdit}
-                onChange={(e) => setForm((f) => ({ ...f, sku: e.target.value }))}
-                className="h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-base disabled:opacity-60 sm:h-10 sm:text-sm"
+                placeholder="MLB1234567890"
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, mlItemId: e.target.value.trim() }))
+                }
               />
+              {!isEdit ? (
+                <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                  O SKU e o custo são vinculados a este anúncio específico —
+                  buscamos o SKU atual dele automaticamente ao salvar.
+                </p>
+              ) : null}
             </div>
+            {isEdit ? (
+              <div className="space-y-1 sm:col-span-2">
+                <label className="block text-sm font-medium">SKU</label>
+                <input
+                  value={form.sku}
+                  onChange={(e) => setForm((f) => ({ ...f, sku: e.target.value }))}
+                  className="h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-base sm:h-10 sm:text-sm"
+                />
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  Só exibição/filtro — pode ficar desatualizado em relação ao
+                  anúncio, não afeta relatórios.
+                </p>
+              </div>
+            ) : null}
             <div className="space-y-1 sm:col-span-2">
               <label className="block text-sm font-medium">NCM</label>
               <input
@@ -534,7 +416,6 @@ function ProductFormModal({
               onValueChange={(v) => setForm((f) => ({ ...f, pmaPrice: v }))}
             />
           </div>
-          {isEdit ? <ProductSkuAliasesEditor canonicalSku={form.sku} /> : null}
           {error ? (
             <UserFeedback className="mt-4">{error}</UserFeedback>
           ) : null}
@@ -595,7 +476,9 @@ export function ProductsClient() {
   const sortedProducts = useMemo(() => {
     const list = data?.products ?? [];
     return [...list].sort((a, b) =>
-      a.sku.localeCompare(b.sku, "pt-BR", { sensitivity: "base" }),
+      (a.sku ?? a.mlItemId).localeCompare(b.sku ?? b.mlItemId, "pt-BR", {
+        sensitivity: "base",
+      }),
     );
   }, [data?.products]);
 
@@ -603,6 +486,7 @@ export function ProductsClient() {
     () =>
       filterByItemListSearch(sortedProducts, searchQuery, (product) => ({
         sku: product.sku,
+        mlItemId: product.mlItemId,
         extra: [product.ncm],
       })),
     [sortedProducts, searchQuery],
@@ -617,7 +501,7 @@ export function ProductsClient() {
     (product, key) => {
       switch (key) {
         case "sku":
-          return product.sku;
+          return product.sku ?? product.mlItemId;
         case "ncm":
           return product.ncm ?? "";
         case "pricingCost":
@@ -640,26 +524,30 @@ export function ProductsClient() {
         setError(await readApiError(res, "products_suggestions_failed"));
         return;
       }
-      const json = (await res.json()) as { suggestions: string[] };
+      const json = (await res.json()) as {
+        suggestions: { mlItemId: string; sku: string | null }[];
+      };
       if (json.suggestions.length === 0) {
-        setError("Nenhum SKU novo encontrado nos anúncios.");
+        setError("Nenhum anúncio novo encontrado.");
         return;
       }
+      const first = json.suggestions[0];
       setModal({
         mode: "create",
-        form: emptyForm(json.suggestions[0]),
+        form: emptyForm(first.mlItemId, first.sku ?? ""),
       });
     } catch {
-      setError("Falha de rede ao importar SKUs.");
+      setError("Falha de rede ao importar anúncios.");
     } finally {
       setImporting(false);
     }
   }
 
-  async function deleteProduct(sku: string) {
-    if (!confirm(`Remover cadastro do SKU ${sku}?`)) return;
+  async function deleteProduct(mlItemId: string) {
+    const product = sortedProducts.find((p) => p.mlItemId === mlItemId);
+    if (!confirm(`Remover cadastro de ${product?.sku ?? mlItemId}?`)) return;
     try {
-      const res = await fetch(`/api/products/${encodeURIComponent(sku)}`, {
+      const res = await fetch(`/api/products/${encodeURIComponent(mlItemId)}`, {
         method: "DELETE",
       });
       if (!res.ok) {
@@ -832,13 +720,17 @@ export function ProductsClient() {
         onEdit={(product) =>
           setModal({ mode: "edit", form: formFromProduct(product) })
         }
-        onDelete={(sku) => void deleteProduct(sku)}
+        onDelete={(mlItemId) => void deleteProduct(mlItemId)}
       />
 
       {modal ? (
         <ProductFormModal
           initial={modal.form}
-          title={modal.mode === "create" ? "Novo produto" : `Editar ${modal.form.sku}`}
+          title={
+            modal.mode === "create"
+              ? "Novo produto"
+              : `Editar ${modal.form.sku || modal.form.mlItemId}`
+          }
           taxRegime={data?.taxRegime ?? "LUCRO_REAL"}
           onClose={() => setModal(null)}
           onSaved={() => void load()}

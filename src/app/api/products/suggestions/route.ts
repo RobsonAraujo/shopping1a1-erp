@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { normalizeProductSku } from "@/lib/product-pricing";
 import { fetchOperationalListings } from "@/lib/mercadolibre/api";
 import { getItemSku } from "@/lib/mercadolibre/item-sku";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
@@ -15,20 +14,21 @@ export async function GET() {
 
   try {
     const items = await fetchOperationalListings(token, userId, organizationId);
-    const skuSet = new Set<string>();
-    for (const item of items) {
-      const sku = getItemSku(item);
-      if (sku) skuSet.add(normalizeProductSku(sku));
-    }
 
     const existing = await prisma.product.findMany({
-      where: { organizationId, sku: { in: [...skuSet] } },
-      select: { sku: true },
+      where: { organizationId, mlItemId: { in: items.map((item) => item.id) } },
+      select: { mlItemId: true },
     });
-    const existingSet = new Set(existing.map((row) => row.sku));
-    const suggestions = [...skuSet]
-      .filter((sku) => !existingSet.has(sku))
-      .sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }));
+    const existingSet = new Set(existing.map((row) => row.mlItemId));
+
+    const suggestions = items
+      .filter((item) => !existingSet.has(item.id))
+      .map((item) => ({ mlItemId: item.id, sku: getItemSku(item) }))
+      .sort((a, b) =>
+        (a.sku ?? a.mlItemId).localeCompare(b.sku ?? b.mlItemId, "pt-BR", {
+          sensitivity: "base",
+        }),
+      );
 
     return NextResponse.json({ suggestions });
   } catch (e) {

@@ -10,6 +10,7 @@ import type { Product } from "@/generated/prisma/client";
 
 function baseInput(overrides: Partial<ProductWriteInput> = {}): ProductWriteInput {
   return {
+    mlItemId: "MLB1",
     sku: "SKU-A",
     unitCostNf: 50,
     purchaseIcmsPercent: 18,
@@ -52,7 +53,7 @@ describe("productWriteToPrismaData — pmaPrice", () => {
 
 function baseProduct(overrides: Partial<Record<string, unknown>> = {}): Product {
   return {
-    id: "prod-1",
+    mlItemId: "MLB1",
     organizationId: "org-1",
     sku: "SKU-A",
     ncm: null,
@@ -111,6 +112,7 @@ describe("diffLevelableProductFields", () => {
       isImported: true,
     });
     const simplesInput: ProductWriteInput = {
+      mlItemId: "MLB1",
       sku: "SKU-A",
       unitCostNf: 50,
       extraCosts: 0,

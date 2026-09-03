@@ -29,6 +29,14 @@ export function buildTransacoesFromOrder(input: {
   overrides?: Record<string, ManualFiscalOverride>;
   /** Custo total de frete pago pela empresa por pedido (chave = orderId) — rateado por linha proporcionalmente à receita. */
   freightCostByOrderId?: Map<string, number>;
+  /**
+   * SKU efetivo por `mlItemId` (`resolveEffectiveSkuByItemId`) — quando o
+   * anúncio está vinculado a um Product, prevalece sobre o texto de SKU da
+   * linha do pedido (que pode ser um snapshot antigo, capturado quando a
+   * venda foi feita, e já não bater com o SKU cadastrado hoje). Sem entrada
+   * pro item, cai no texto da linha como antes desta migração.
+   */
+  effectiveSkuByItemId?: Map<string, string | null>;
 }): TransacaoVenda[] {
   const orderId = String(input.order.id ?? "");
   const orderDate =
@@ -55,8 +63,13 @@ export function buildTransacoesFromOrder(input: {
 
   for (const line of input.order.order_items ?? []) {
     const itemId = itemIdFromOrderLine(line) ?? "";
+    const effectiveSku = itemId
+      ? input.effectiveSkuByItemId?.get(itemId)
+      : undefined;
     const sku =
-      skuFromOrderLineWithFallback(line, input.itemById) ?? "(sem SKU)";
+      effectiveSku ??
+      skuFromOrderLineWithFallback(line, input.itemById) ??
+      "(sem SKU)";
     const transactionKey = `${orderId}-${itemId}-${sku}`;
     const override = input.overrides?.[transactionKey];
 

@@ -9,15 +9,14 @@ import {
   productPatchToPrismaData,
   validateProductInput,
 } from "@/lib/product-data";
-import { listAliasesForCanonicalSku } from "@/lib/product-sku-alias-data";
-import { normalizeProductSku } from "@/lib/product-pricing";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 import { requireOrganization } from "@/lib/api-auth";
 import { parseJsonBody } from "@/lib/api-validation";
 
-type RouteContext = { params: Promise<{ sku: string }> };
+type RouteContext = { params: Promise<{ mlItemId: string }> };
 
 const productPatchBodySchema = z.object({
+  sku: z.string().trim().nullable().optional(),
   ncm: z.string().nullable().optional(),
   unitCostNf: z.coerce.number().finite(),
   purchaseIcmsPercent: z.coerce.number().finite().optional(),
@@ -38,23 +37,23 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   }
   const { organizationId } = auth.ctx;
 
-  const { sku: skuParam } = await context.params;
-  const sku = normalizeProductSku(decodeURIComponent(skuParam));
+  const { mlItemId } = await context.params;
 
   try {
     const settings = await ensureCompanySettings(organizationId);
     const product = await prisma.product.findUnique({
-      where: { organizationId_sku: { organizationId, sku } },
+      where: { mlItemId, organizationId },
     });
     if (!product) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
-    const aliases = await listAliasesForCanonicalSku(organizationId, sku);
     const companyTaxContext = {
       taxRegime: settings.taxRegime,
       simplesAliquotaEfetivaPercent: settings.simplesAliquotaEfetivaPercent,
     };
-    const imageUrl = await listingImageUrlForSku(organizationId, sku);
+    const imageUrl = product.sku
+      ? await listingImageUrlForSku(organizationId, product.sku)
+      : null;
     return NextResponse.json({
       product: buildProductView(
         product,
@@ -65,10 +64,9 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       ),
       pisCofinsPercent: settings.pisCofinsPercent,
       taxRegime: settings.taxRegime,
-      aliases,
     });
   } catch (e) {
-    logServerError("api/products/[sku] GET", e);
+    logServerError("api/products/[mlItemId] GET", e);
     return NextResponse.json(apiErrorPayload(e, "product_load_failed"), {
       status: 502,
     });
@@ -82,30 +80,48 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
   const { organizationId } = auth.ctx;
 
-  const { sku: skuParam } = await context.params;
-  const sku = normalizeProductSku(decodeURIComponent(skuParam));
+  const { mlItemId } = await context.params;
 
   const parsedBody = await parseJsonBody(request, productPatchBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
-  const parsed = { ...parsedBody.data, sku };
-
-  const validationError = validateProductInput(parsed);
-  if (validationError) {
-    return NextResponse.json({ error: validationError }, { status: 400 });
-  }
 
   try {
     const before = await prisma.product.findUnique({
-      where: { organizationId_sku: { organizationId, sku } },
+      where: { mlItemId, organizationId },
     });
     if (!before) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
 
+    const parsed = {
+      ...parsedBody.data,
+      mlItemId,
+      sku: parsedBody.data.sku?.trim() || before.sku || "",
+    };
+    const validationError = validateProductInput(parsed);
+    if (validationError) {
+      return NextResponse.json({ error: validationError }, { status: 400 });
+    }
+
+    if (parsed.sku && parsed.sku !== before.sku) {
+      const skuInUse = await prisma.product.findFirst({
+        where: { organizationId, sku: parsed.sku, mlItemId: { not: mlItemId } },
+        select: { mlItemId: true },
+      });
+      if (skuInUse) {
+        return NextResponse.json(
+          {
+            error: `Este SKU já está em uso por outro produto (${skuInUse.mlItemId}). SKU é só exibição, mas usar o mesmo texto em dois produtos mistura os dois num relatório só.`,
+          },
+          { status: 409 },
+        );
+      }
+    }
+
     const settings = await ensureCompanySettings(organizationId);
     const data = productPatchToPrismaData(parsed);
     const product = await prisma.product.update({
-      where: { organizationId_sku: { organizationId, sku } },
+      where: { mlItemId, organizationId },
       data,
     });
 
@@ -114,7 +130,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       parsed,
     );
 
-    const imageUrl = await listingImageUrlForSku(organizationId, sku);
+    const imageUrl = product.sku
+      ? await listingImageUrlForSku(organizationId, product.sku)
+      : null;
     return NextResponse.json({
       product: buildProductView(
         product,
@@ -136,7 +154,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           : null,
     });
   } catch (e) {
-    logServerError("api/products/[sku] PATCH", e);
+    logServerError("api/products/[mlItemId] PATCH", e);
     return NextResponse.json(apiErrorPayload(e, "product_update_failed"), {
       status: 502,
     });
@@ -150,16 +168,13 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   }
   const { organizationId } = auth.ctx;
 
-  const { sku: skuParam } = await context.params;
-  const sku = normalizeProductSku(decodeURIComponent(skuParam));
+  const { mlItemId } = await context.params;
 
   try {
-    await prisma.product.delete({
-      where: { organizationId_sku: { organizationId, sku } },
-    });
+    await prisma.product.delete({ where: { mlItemId, organizationId } });
     return NextResponse.json({ ok: true });
   } catch (e) {
-    logServerError("api/products/[sku] DELETE", e);
+    logServerError("api/products/[mlItemId] DELETE", e);
     return NextResponse.json(apiErrorPayload(e, "product_delete_failed"), {
       status: 502,
     });

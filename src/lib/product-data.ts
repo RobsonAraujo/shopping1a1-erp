@@ -7,12 +7,7 @@ import {
   type ResolvedProductPricing,
 } from "@/lib/product-pricing";
 import type { ProductTaxReportLookup } from "@/lib/product-tax-from-report";
-import {
-  indexBySkuWithAliases,
-  resolveCanonicalSku,
-  type SkuAliasMap,
-} from "@/lib/product-sku-alias";
-import { loadSkuAliasMap } from "@/lib/product-sku-alias-data";
+import { loadProductResolverMaps, resolveProductForLine } from "@/lib/product-resolver";
 import {
   DEFAULT_WHOLESALE_REDUCTIONS,
   WHOLESALE_ANCHOR_MIN_PURCHASE_UNIT,
@@ -46,7 +41,9 @@ export function productToPricingRecord(product: Product): ProductRecordForPricin
 }
 
 export type ProductView = ProductRecordForPricing & {
-  sku: string;
+  mlItemId: string;
+  /** Espelho de exibição do anúncio — pode ficar desatualizado, nunca é identidade. */
+  sku: string | null;
   ncm: string | null;
   isImported: boolean;
   pricingCost: number | null;
@@ -77,8 +74,11 @@ export function buildProductView(
   const record = productToPricingRecord(product);
   const resolved = resolveProductPricing(record, pisCofinsPercent);
   const isSimples = companyTaxContext?.taxRegime === "SIMPLES";
-  const reportTax = taxFromReport?.bySku.get(normalizeProductSku(product.sku));
+  const reportTax = product.sku
+    ? taxFromReport?.bySku.get(normalizeProductSku(product.sku))
+    : undefined;
   return {
+    mlItemId: product.mlItemId,
     sku: product.sku,
     ncm: product.ncm,
     ...record,
@@ -239,85 +239,84 @@ export async function getCompanyPisCofinsPercent(
 export async function loadProductsMapBySku(
   organizationId: string,
   skus: string[],
-  aliasMap?: SkuAliasMap,
 ): Promise<Map<string, ResolvedProductPricing>> {
   const normalized = [
     ...new Set(skus.map((s) => normalizeProductSku(s)).filter(Boolean)),
   ];
   if (normalized.length === 0) return new Map();
 
-  const map = aliasMap ?? (await loadSkuAliasMap(organizationId));
-  const canonicalSkus = [
-    ...new Set(normalized.map((sku) => resolveCanonicalSku(sku, map))),
-  ].filter(Boolean);
-
   const pisCofins = await getCompanyPisCofinsPercent(organizationId);
   const products = await prisma.product.findMany({
-    where: { organizationId, sku: { in: canonicalSkus } },
+    where: { organizationId, sku: { in: normalized } },
   });
 
-  const byCanonical = new Map<string, ResolvedProductPricing>();
+  const bySku = new Map<string, ResolvedProductPricing>();
   for (const product of products) {
+    if (!product.sku || bySku.has(product.sku)) continue;
     const record = productToPricingRecord(product);
     const resolved = resolveProductPricing(record, pisCofins);
     if (resolved) {
-      byCanonical.set(product.sku, resolved);
+      bySku.set(product.sku, resolved);
     }
   }
-  return indexBySkuWithAliases(byCanonical, normalized, map);
+  return bySku;
 }
 
-export async function loadStockReportProductsBySku(
-  organizationId: string,
-  skus: string[],
-): Promise<Record<string, StockReportProductInfo>> {
-  const normalized = [
-    ...new Set(skus.map((s) => normalizeProductSku(s)).filter(Boolean)),
-  ];
-  if (normalized.length === 0) return {};
-
-  const aliasMap = await loadSkuAliasMap(organizationId);
-  const canonicalSkus = [
-    ...new Set(normalized.map((sku) => resolveCanonicalSku(sku, aliasMap))),
-  ].filter(Boolean);
-
-  const products = await prisma.product.findMany({
-    where: { organizationId, sku: { in: canonicalSkus } },
-    select: {
-      sku: true,
-      ncm: true,
-      unitCostNf: true,
-      purchaseIcmsPercent: true,
-      hasIcmsSt: true,
-      purchaseCostWithSt: true,
-      ipiPercent: true,
-    },
-  });
-
-  const byCanonical = new Map<string, StockReportProductInfo>();
-  for (const product of products) {
-    const unitCostNf = decimalToNumber(product.unitCostNf) ?? 0;
-    const purchaseIcmsPercent = decimalToNumber(product.purchaseIcmsPercent) ?? 0;
-    const purchaseCostWithSt = decimalToNumber(product.purchaseCostWithSt);
-    const ipiPercent = decimalToNumber(product.ipiPercent) ?? 0;
-    byCanonical.set(product.sku, {
-      ncm: product.ncm,
+function productToStockReportInfo(product: {
+  ncm: string | null;
+  unitCostNf: unknown;
+  purchaseIcmsPercent: unknown;
+  hasIcmsSt: boolean;
+  purchaseCostWithSt: unknown;
+  ipiPercent: unknown;
+}): StockReportProductInfo {
+  const unitCostNf = decimalToNumber(product.unitCostNf) ?? 0;
+  const purchaseIcmsPercent = decimalToNumber(product.purchaseIcmsPercent) ?? 0;
+  const purchaseCostWithSt = decimalToNumber(product.purchaseCostWithSt);
+  const ipiPercent = decimalToNumber(product.ipiPercent) ?? 0;
+  return {
+    ncm: product.ncm,
+    hasIcmsSt: product.hasIcmsSt,
+    unitCost: stockReportUnitCostFromProduct({
+      unitCostNf,
+      purchaseIcmsPercent,
       hasIcmsSt: product.hasIcmsSt,
-      unitCost: stockReportUnitCostFromProduct({
-        unitCostNf,
-        purchaseIcmsPercent,
-        hasIcmsSt: product.hasIcmsSt,
-        purchaseCostWithSt,
-        ipiPercent,
-      }),
-    });
-  }
+      purchaseCostWithSt,
+      ipiPercent,
+    }),
+  };
+}
 
-  const indexed = indexBySkuWithAliases(byCanonical, normalized, aliasMap);
-  return Object.fromEntries(indexed.entries());
+/**
+ * Record por SKU (do anúncio ao vivo) — contrato usado pelo relatório de
+ * Estoque, que agrupa fisicamente por texto de SKU (inclusive "merge
+ * groups" manuais entre SKUs divergentes). Resolve o Product pelo
+ * `mlItemId` direto (identidade real); o SKU aqui é só a chave de saída
+ * pro relatório, não influencia a resolução.
+ */
+export async function loadStockReportProductsForListings(
+  organizationId: string,
+  lines: { mlItemId: string; sku: string | null }[],
+): Promise<Record<string, StockReportProductInfo>> {
+  if (lines.length === 0) return {};
+  const maps = await loadProductResolverMaps(
+    organizationId,
+    lines.map((l) => ({ itemId: l.mlItemId })),
+  );
+
+  const result: Record<string, StockReportProductInfo> = {};
+  for (const line of lines) {
+    const normalizedSku = line.sku ? normalizeProductSku(line.sku) : "";
+    if (!normalizedSku || result[normalizedSku]) continue;
+    const resolution = resolveProductForLine({ itemId: line.mlItemId }, maps);
+    if (!resolution.product) continue;
+    result[normalizedSku] = productToStockReportInfo(resolution.product);
+  }
+  return result;
 }
 
 export type ProductWriteInput = {
+  mlItemId: string;
   sku: string;
   ncm?: string | null;
   unitCostNf: number;
@@ -337,8 +336,7 @@ export type ProductWriteInput = {
 export function validateProductInput(
   input: ProductWriteInput,
 ): string | null {
-  const sku = normalizeProductSku(input.sku);
-  if (!sku) return "SKU é obrigatório";
+  if (!input.mlItemId?.trim()) return "Selecione um anúncio do Mercado Livre";
   if (!Number.isFinite(input.unitCostNf) || input.unitCostNf < 0) {
     return "Custo unitário NF inválido";
   }
@@ -393,9 +391,10 @@ export function productWriteToPrismaData(
   organizationId: string,
   input: ProductWriteInput,
 ) {
-  const sku = normalizeProductSku(input.sku);
+  const sku = normalizeProductSku(input.sku) || null;
   const hasIcmsSt = input.hasIcmsSt ?? false;
   return {
+    mlItemId: input.mlItemId,
     organizationId,
     sku,
     ncm: input.ncm?.trim() || null,

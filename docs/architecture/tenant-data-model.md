@@ -158,7 +158,7 @@ Tabelas que ganham `organizationId` (FK obrigatório após backfill):
 
 | Tabela atual | Mudança de unique |
 |--------------|-------------------|
-| `products` | PK vira `id` sintético (cuid); `sku` deixa de ser `@id`; `@@unique([organizationId, sku])`. `kit_items`, `product_sku_aliases`, `dre_product_cost_levelings` trocam a FK para a chave composta `[organizationId, sku]` |
+| `products` | PK é `ml_item_id` (identidade = anúncio ML, 1:1, ver plano de identidade de produto); `sku` é só espelho de exibição, sem unicidade. `kit_items`, `dre_product_cost_levelings` referenciam por `product_ml_item_id` (FK → `products.ml_item_id`), não mais por sku |
 | `company_tax_settings` | uma linha por org (remover `id: "default"`); `@@unique([organizationId])` |
 | `dre_month_snapshots` | `@@unique([organizationId, year, month])` |
 | `listings`, `kits`, `warehouse_stock`, `replenishment_cycles`, `catalog_competition_snapshots`, `stock_attention_acknowledgements` | `organizationId` como coluna simples (PK natural `ml_item_id` já é única por seller, que já é único por org — sem virar chave composta) |

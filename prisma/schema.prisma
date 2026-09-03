@@ -96,10 +96,18 @@ model OrganizationMlSeller {
 }
 
 /// Anúncio sincronizado do Mercado Livre (chave = ml_item_id, ex. MLB…).
+/// `WarehouseStock`/`ReplenishmentCycle`/`StockAttentionAcknowledgement` só
+/// usam `mlItemId` como chave solta (sem FK) — nunca leem campo desta
+/// tabela, então não há motivo pra exigir que a linha exista aqui primeiro.
+/// Só `CatalogCompetitionSnapshot` mantém FK real: catalog report lê
+/// `titleSnapshot`/`skuSnapshot`/`imageUrlSnapshot` direto do banco.
 model Listing {
   mlItemId           String                    @id @map("ml_item_id")
   organizationId     String                    @map("organization_id")
   titleSnapshot      String?                   @map("title_snapshot")
+  /// Só para exibição (catalog report, thumbnail em "Meus produtos") — sem
+  /// garantia de frescor exigida por identidade de produto. Ver
+  /// `ProductIdentityLink` para o vínculo anúncio → produto.
   skuSnapshot        String?                   @map("sku_snapshot")
   imageUrlSnapshot   String?                   @map("image_url_snapshot")
   catalogListing     Boolean?                  @map("catalog_listing")
@@ -115,10 +123,7 @@ model Listing {
   createdAt          DateTime                  @default(now()) @map("created_at")
   updatedAt          DateTime                  @updatedAt @map("updated_at")
 
-  warehouseStock                 WarehouseStock?
-  competitionSnapshots           CatalogCompetitionSnapshot[]
-  stockAttentionAcknowledgements StockAttentionAcknowledgement[]
-  replenishmentCycles            ReplenishmentCycle[]
+  competitionSnapshots CatalogCompetitionSnapshot[]
 
   @@index([activeOnMl])
   @@index([organizationId])
@@ -212,8 +217,6 @@ model ReplenishmentCycle {
   createdAt             DateTime            @default(now()) @map("created_at")
   updatedAt             DateTime            @updatedAt @map("updated_at")
 
-  listing Listing @relation(fields: [mlItemId], references: [mlItemId], onDelete: Cascade)
-
   @@index([mlItemId, kind, status])
   @@index([status])
   @@index([organizationId])
@@ -268,8 +271,6 @@ model WarehouseStock {
   notes                String?
   updatedAt            DateTime @updatedAt @map("updated_at")
 
-  listing Listing @relation(fields: [mlItemId], references: [mlItemId], onDelete: Cascade)
-
   @@index([organizationId])
   @@map("warehouse_stock")
 }
@@ -292,13 +293,16 @@ enum TaxRegime {
   SIMPLES         @map("simples")
 }
 
-/// Cadastro fiscal/comercial por SKU (chave = SKU do anúncio ML).
-/// PK sintética (`id`) + unique composto `(organizationId, sku)` — dois
-/// vendedores diferentes podem usar o mesmo SKU.
+/// Cadastro fiscal/comercial de produto. Identidade = `mlItemId` (o
+/// "MLB..." do anúncio no Mercado Livre), 1:1 — mesmo padrão já usado por
+/// `Kit`/`Listing` neste schema (mlItemId é confirmado globalmente único no
+/// Mercado Livre, inclusive entre organizações diferentes). `sku` é só
+/// espelho de exibição/filtro (populado no import, pode ficar desatualizado
+/// sem problema) — nunca é lido por nenhuma lógica de identidade/agrupamento.
 model Product {
-  id                  String   @id @default(cuid())
+  mlItemId            String   @id @map("ml_item_id")
   organizationId      String   @map("organization_id")
-  sku                 String
+  sku                 String?
   ncm                 String?
   unitCostNf          Decimal  @map("unit_cost_nf") @db.Decimal(18, 2)
   purchaseIcmsPercent Decimal  @map("purchase_icms_percent") @db.Decimal(8, 4)
@@ -313,11 +317,10 @@ model Product {
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
-  skuAliases       ProductSkuAlias[]        @relation("ProductCanonicalSku")
   kitItems         KitItem[]
   dreCostLevelings DreProductCostLeveling[]
 
-  @@unique([organizationId, sku])
+  @@index([organizationId])
   @@map("products")
 }
 
@@ -337,35 +340,18 @@ model Kit {
 }
 
 model KitItem {
-  kitId          String  @map("kit_id")
-  sku            String
-  organizationId String  @map("organization_id")
-  quantity       Decimal @default(1) @db.Decimal(18, 4)
+  kitId           String  @map("kit_id")
+  organizationId  String  @map("organization_id")
+  productMlItemId String  @map("product_ml_item_id")
+  quantity        Decimal @default(1) @db.Decimal(18, 4)
 
   kit     Kit     @relation(fields: [kitId], references: [mlItemId], onDelete: Cascade)
-  product Product @relation(fields: [organizationId, sku], references: [organizationId, sku], onDelete: Cascade)
+  product Product @relation(fields: [productMlItemId], references: [mlItemId], onDelete: Cascade)
 
-  @@id([kitId, sku])
-  @@index([sku])
+  @@id([kitId, productMlItemId])
+  @@index([productMlItemId])
   @@index([organizationId])
   @@map("kit_items")
-}
-
-/// SKU antigo/alternativo que aponta para o cadastro canônico em products.
-/// `aliasSku` também deixa de ser globalmente único pelo mesmo motivo do
-/// `Product.sku` — dois vendedores podem ter usado o mesmo SKU antigo.
-model ProductSkuAlias {
-  id             String   @id @default(cuid())
-  organizationId String   @map("organization_id")
-  aliasSku       String   @map("alias_sku")
-  canonicalSku   String   @map("canonical_sku")
-  createdAt      DateTime @default(now()) @map("created_at")
-
-  product Product @relation("ProductCanonicalSku", fields: [organizationId, canonicalSku], references: [organizationId, sku], onDelete: Cascade)
-
-  @@unique([organizationId, aliasSku])
-  @@index([canonicalSku])
-  @@map("product_sku_aliases")
 }
 
 /// Configuração fiscal — uma linha por organização (o antigo singleton
@@ -531,8 +517,6 @@ model StockAttentionAcknowledgement {
   acknowledgedAt       DateTime           @default(now()) @map("acknowledged_at")
   updatedAt            DateTime           @updatedAt @map("updated_at")
 
-  listing Listing @relation(fields: [mlItemId], references: [mlItemId], onDelete: Cascade)
-
   @@unique([mlItemId, kind])
   @@index([kind])
   @@index([organizationId])
@@ -604,16 +588,16 @@ model OperationalSettings {
   /// Janela (dias) usada para calcular a média diária de vendas.
   salesAverageWindowDays Int? @map("sales_average_window_days")
   /// Prazo (dias) entre iniciar a reposição e o estoque novo ficar disponível para venda.
-  leadTimeDays Int? @map("lead_time_days")
+  leadTimeDays           Int? @map("lead_time_days")
   /// Dias de antecedência para o novo estoque já estar ativo no anúncio antes do esgotamento previsto.
-  activeStockBufferDays Int? @map("active_stock_buffer_days")
+  activeStockBufferDays  Int? @map("active_stock_buffer_days")
 
   /// Dias de cobertura extra (margem de segurança) além dos prazos operacionais na quantidade sugerida de compra.
   targetCoverageBufferDays Int? @map("target_coverage_buffer_days")
   /// Média de vendas/dia a partir da qual um produto é classificado como rotação "Alta".
-  rotationHighDailyAvg Int? @map("rotation_high_daily_avg")
+  rotationHighDailyAvg     Int? @map("rotation_high_daily_avg")
   /// Média de vendas/dia a partir da qual um produto é classificado como rotação "Média".
-  rotationMediumDailyAvg Int? @map("rotation_medium_daily_avg")
+  rotationMediumDailyAvg   Int? @map("rotation_medium_daily_avg")
 
   /// Dias de antecedência para alertar no painel que uma promoção do Mercado Livre está terminando.
   promotionExpiringSoonDays Int? @map("promotion_expiring_soon_days")
@@ -710,15 +694,23 @@ model DreMonthSnapshot {
 /// Nivelamento de custo unitário por SKU e intervalo de datas — só o DRE usa.
 /// Fora do intervalo, o sync continua com o cadastro atual em `Product`.
 model DreProductCostLeveling {
-  id                 String   @id @default(cuid())
-  organizationId     String   @map("organization_id")
-  sku                String
-  startDate          DateTime @map("start_date") @db.Date
-  endDate            DateTime @map("end_date") @db.Date
-  hasIcmsSt          Boolean  @default(false) @map("has_icms_st")
-  unitCostNf         Decimal  @map("unit_cost_nf") @db.Decimal(18, 2)
-  purchaseCostWithSt Decimal? @map("purchase_cost_with_st") @db.Decimal(18, 2)
-  ipiPercent         Decimal  @default(0) @map("ipi_percent") @db.Decimal(8, 4)
+  id                  String   @id @default(cuid())
+  organizationId      String   @map("organization_id")
+  /// Snapshot histórico do texto de SKU no momento do nivelamento — não é
+  /// mais FK, mantido como registro congelado (ver comentário nos campos
+  /// abaixo sobre histórico completo).
+  sku                 String
+  /// Nullable de propósito, com onDelete SetNull (não Cascade): este
+  /// registro é histórico e deve sobreviver mesmo que o Product atual seja
+  /// excluído (ex.: produto sem anúncio vivo correspondente) — perde só o
+  /// vínculo com o cadastro atual, mantém sku/datas/custo congelados.
+  productMlItemId     String?  @map("product_ml_item_id")
+  startDate           DateTime @map("start_date") @db.Date
+  endDate             DateTime @map("end_date") @db.Date
+  hasIcmsSt           Boolean  @default(false) @map("has_icms_st")
+  unitCostNf          Decimal  @map("unit_cost_nf") @db.Decimal(18, 2)
+  purchaseCostWithSt  Decimal? @map("purchase_cost_with_st") @db.Decimal(18, 2)
+  ipiPercent          Decimal  @default(0) @map("ipi_percent") @db.Decimal(8, 4)
   /// Campos abaixo: histórico completo do cadastro do produto (exceto NCM,
   /// que não varia no tempo). Nullable = "não informado" em registros
   /// antigos. Não usados no cálculo do DRE hoje (só custo/ICMS-ST/IPI acima
@@ -729,12 +721,13 @@ model DreProductCostLeveling {
   saleIcmsPercent     Decimal? @map("sale_icms_percent") @db.Decimal(8, 4)
   isImported          Boolean? @map("is_imported")
   pmaPrice            Decimal? @map("pma_price") @db.Decimal(18, 2)
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
 
-  product Product @relation(fields: [organizationId, sku], references: [organizationId, sku], onDelete: Cascade)
+  product Product? @relation(fields: [productMlItemId], references: [mlItemId], onDelete: SetNull)
 
   @@index([sku])
+  @@index([productMlItemId])
   @@index([startDate, endDate])
   @@index([organizationId])
   @@map("dre_product_cost_levelings")
@@ -748,23 +741,23 @@ enum DreReconciliationImportStatus {
 
 /// Upload da planilha de conciliação ML (Por Vendas) para um mês do DRE.
 model DreReconciliationImport {
-  id                   String                         @id @default(cuid())
-  organizationId       String                         @map("organization_id")
+  id                   String                        @id @default(cuid())
+  organizationId       String                        @map("organization_id")
   year                 Int
   month                Int
-  fileName             String                         @map("file_name")
-  sheetName            String                         @map("sheet_name")
-  rowCount             Int                            @map("row_count")
-  status               DreReconciliationImportStatus  @default(pending)
-  aggregationJson      Json                           @map("aggregation_json")
-  parseWarningsJson    Json?                          @map("parse_warnings_json")
-  previousPayloadJson  Json?                          @map("previous_payload_json")
-  acceptedLineKeysJson Json?                          @map("accepted_line_keys_json")
-  appliedAt            DateTime?                      @map("applied_at")
-  uploadedAt           DateTime                       @default(now()) @map("uploaded_at")
-  confirmedAt          DateTime?                      @map("confirmed_at")
-  createdAt            DateTime                       @default(now()) @map("created_at")
-  updatedAt            DateTime                       @updatedAt @map("updated_at")
+  fileName             String                        @map("file_name")
+  sheetName            String                        @map("sheet_name")
+  rowCount             Int                           @map("row_count")
+  status               DreReconciliationImportStatus @default(pending)
+  aggregationJson      Json                          @map("aggregation_json")
+  parseWarningsJson    Json?                         @map("parse_warnings_json")
+  previousPayloadJson  Json?                         @map("previous_payload_json")
+  acceptedLineKeysJson Json?                         @map("accepted_line_keys_json")
+  appliedAt            DateTime?                     @map("applied_at")
+  uploadedAt           DateTime                      @default(now()) @map("uploaded_at")
+  confirmedAt          DateTime?                     @map("confirmed_at")
+  createdAt            DateTime                      @default(now()) @map("created_at")
+  updatedAt            DateTime                      @updatedAt @map("updated_at")
 
   entries DreReconciliationEntry[]
 
@@ -773,24 +766,24 @@ model DreReconciliationImport {
 }
 
 model DreReconciliationEntry {
-  id                 String   @id @default(cuid())
-  importId           String   @map("import_id")
-  organizationId     String   @map("organization_id")
-  rowIndex           Int      @map("row_index")
+  id                 String    @id @default(cuid())
+  importId           String    @map("import_id")
+  organizationId     String    @map("organization_id")
+  rowIndex           Int       @map("row_index")
   operationDate      DateTime? @map("operation_date") @db.Date
-  operationId        String   @map("operation_id")
-  operationType      String   @map("operation_type")
-  operationStatus    String?  @map("operation_status")
+  operationId        String    @map("operation_id")
+  operationType      String    @map("operation_type")
+  operationStatus    String?   @map("operation_status")
   sku                String?
-  itemTitle          String?  @map("item_title")
+  itemTitle          String?   @map("item_title")
   quantity           Int?
-  grossValue         Decimal? @map("gross_value") @db.Decimal(18, 2)
-  totalFees          Decimal? @map("total_fees") @db.Decimal(18, 2)
-  totalPostpaidFees  Decimal? @map("total_postpaid_fees") @db.Decimal(18, 2)
-  sellerPaidShipping Decimal? @map("seller_paid_shipping") @db.Decimal(18, 2)
-  mappedLineKey      String?  @map("mapped_line_key")
-  mappedAmount       Decimal? @map("mapped_amount") @db.Decimal(18, 2)
-  rawJson            Json     @map("raw_json")
+  grossValue         Decimal?  @map("gross_value") @db.Decimal(18, 2)
+  totalFees          Decimal?  @map("total_fees") @db.Decimal(18, 2)
+  totalPostpaidFees  Decimal?  @map("total_postpaid_fees") @db.Decimal(18, 2)
+  sellerPaidShipping Decimal?  @map("seller_paid_shipping") @db.Decimal(18, 2)
+  mappedLineKey      String?   @map("mapped_line_key")
+  mappedAmount       Decimal?  @map("mapped_amount") @db.Decimal(18, 2)
+  rawJson            Json      @map("raw_json")
 
   import DreReconciliationImport @relation(fields: [importId], references: [id], onDelete: Cascade)
 

@@ -1,10 +1,7 @@
 import { prisma } from "@/lib/db";
 import { normalizeProductSku } from "@/lib/product-pricing";
-import { resolveCanonicalSku, type SkuAliasMap } from "@/lib/product-sku-alias";
-import { loadSkuAliasMap } from "@/lib/product-sku-alias-data";
 import type { CustoProduto } from "@/lib/tax-report/enrichment/custo-produto";
 import { loadCustoBySkuMap } from "@/lib/tax-report/enrichment/obter-custo-por-sku";
-import { findSkuAggregation } from "@/lib/tax-report/aggregation/agregador-por-sku";
 import { calcularRelatorioFromTransacoes } from "@/lib/tax-report/service/compute-report";
 import {
   loadCbsIbsVigencia,
@@ -27,16 +24,9 @@ export function collectDetalhes(payload: TaxReportPayload): DetalhamentoTributar
 export function enrichTransacao(
   transacao: TransacaoVenda,
   custoBySku: Map<string, CustoProduto>,
-  aliasMap?: SkuAliasMap,
 ): TransacaoVenda {
   const normalized = normalizeProductSku(transacao.sku);
-  let custo = custoBySku.get(normalized);
-  if (!custo && aliasMap) {
-    const canonical = resolveCanonicalSku(normalized, aliasMap);
-    if (canonical !== normalized) {
-      custo = custoBySku.get(canonical);
-    }
-  }
+  const custo = custoBySku.get(normalized);
   if (!custo) return transacao;
 
   return {
@@ -55,76 +45,20 @@ export function enrichTransacao(
   };
 }
 
-function needsSkuAliasRepair(
-  payload: TaxReportPayload,
-  aliasMap: SkuAliasMap,
-): boolean {
-  if (aliasMap.size === 0) return false;
-
-  if (
-    payload.porSku.some((row) => {
-      const canonical = resolveCanonicalSku(row.sku, aliasMap);
-      return row.sku !== canonical;
-    })
-  ) {
-    return true;
-  }
-
-  for (const row of payload.porSku) {
-    const expectedAliases = [...aliasMap.entries()]
-      .filter(([, canonical]) => canonical === row.sku)
-      .map(([alias]) => alias)
-      .sort();
-    const currentAliases = [...(row.skuAliases ?? [])].sort();
-    if (expectedAliases.join("\0") !== currentAliases.join("\0")) {
-      return true;
-    }
-  }
-
-  for (const det of collectDetalhes(payload).filter((d) => d.incluidoNaApuracao)) {
-    const canonical = resolveCanonicalSku(det.transacao.sku, aliasMap);
-    const row = findSkuAggregation(payload.porSku, canonical, aliasMap);
-    if (!row) return true;
-  }
-
-  return false;
-}
-
-export function needsAliasCostRepair(
-  detalhes: DetalhamentoTributario[],
-  aliasMap: SkuAliasMap,
-): boolean {
-  if (aliasMap.size === 0) return false;
-
-  return detalhes.some((d) => {
-    if (!d.incluidoNaApuracao) return false;
-    const tx = d.transacao;
-    if (tx.unitCostNf != null && tx.unitCostNf > 0) return false;
-    const normalized = normalizeProductSku(tx.sku);
-    const canonical = resolveCanonicalSku(normalized, aliasMap);
-    return canonical !== normalized;
-  });
-}
-
 export function needsCostEnrichmentRepair(
   detalhes: DetalhamentoTributario[],
   custoBySku: Map<string, CustoProduto>,
-  aliasMap: SkuAliasMap,
 ): boolean {
   return detalhes.some((d) => {
     if (!d.incluidoNaApuracao) return false;
     const tx = d.transacao;
     if (tx.unitCostNf != null && tx.unitCostNf > 0) return false;
-    const enriched = enrichTransacao(tx, custoBySku, aliasMap);
+    const enriched = enrichTransacao(tx, custoBySku);
     return enriched.unitCostNf != null && enriched.unitCostNf > 0;
   });
 }
 
-function needsApuracaoRepair(
-  payload: TaxReportPayload,
-  aliasMap: SkuAliasMap,
-): boolean {
-  if (needsSkuAliasRepair(payload, aliasMap)) return true;
+function needsApuracaoRepair(payload: TaxReportPayload): boolean {
   if (!payload.consolidado.apuracao) return true;
   if (
     payload.consolidado.irpjEstimado != null ||
@@ -134,7 +68,6 @@ function needsApuracaoRepair(
   }
 
   const detalhes = collectDetalhes(payload).filter((d) => d.incluidoNaApuracao);
-  if (needsAliasCostRepair(detalhes, aliasMap)) return true;
 
   return detalhes.some(
     (d) =>
@@ -171,19 +104,17 @@ export async function repairTaxReportPayload(
   const organizationId = link.organizationId;
 
   const synced = repairTaxReportPayloadSync(payload);
-  const aliasMap = await loadSkuAliasMap(organizationId);
   const detalhes = collectDetalhes(synced);
   if (detalhes.length === 0) return synced;
 
   const skus = [...new Set(detalhes.map((d) => d.transacao.sku).filter(Boolean))];
-  const custoBySku = await loadCustoBySkuMap(organizationId, skus, aliasMap);
+  const custoBySku = await loadCustoBySkuMap(organizationId, skus);
   const needsCostRepair = needsCostEnrichmentRepair(
     detalhes.filter((d) => d.incluidoNaApuracao),
     custoBySku,
-    aliasMap,
   );
 
-  if (!needsApuracaoRepair(synced, aliasMap) && !needsCostRepair) return synced;
+  if (!needsApuracaoRepair(synced) && !needsCostRepair) return synced;
 
   const [config, icmsRates, cbsIbsVigencia] = await Promise.all([
     loadTaxCompanyConfig(organizationId),
@@ -191,9 +122,7 @@ export async function repairTaxReportPayload(
     loadCbsIbsVigencia(synced.year),
   ]);
 
-  const transacoes = detalhes.map((d) =>
-    enrichTransacao(d.transacao, custoBySku, aliasMap),
-  );
+  const transacoes = detalhes.map((d) => enrichTransacao(d.transacao, custoBySku));
 
   const recomputed = calcularRelatorioFromTransacoes({
     transacoes,
@@ -204,7 +133,6 @@ export async function repairTaxReportPayload(
     month: synced.month,
     overrides: synced.overrides,
     meta: synced.meta,
-    aliasMap,
   });
 
   return {

@@ -51,14 +51,18 @@ export function ProductsTableMobile({
   return (
     <ul className="space-y-3">
       {filteredProducts.map((product) => (
-        <li key={product.sku}>
+        <li key={product.mlItemId}>
           <Card className="p-4 shadow-sm">
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 items-start gap-2.5">
-                <ProductThumbnail src={product.imageUrl} alt={product.sku} size={44} />
+                <ProductThumbnail
+                  src={product.imageUrl}
+                  alt={product.sku ?? product.mlItemId}
+                  size={44}
+                />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-[var(--foreground)]">
-                    {product.sku}
+                    {product.sku ?? "—"}
                   </p>
                   <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
                     NCM {product.ncm ?? "—"}
@@ -70,7 +74,7 @@ export function ProductsTableMobile({
                   type="button"
                   variant="outline"
                   size="icon-sm"
-                  aria-label={`Editar ${product.sku}`}
+                  aria-label={`Editar ${product.sku ?? product.mlItemId}`}
                   onClick={() => onEdit(product)}
                 >
                   <Pencil className="size-4" aria-hidden />
@@ -79,8 +83,8 @@ export function ProductsTableMobile({
                   type="button"
                   variant="outline"
                   size="icon-sm"
-                  aria-label={`Remover ${product.sku}`}
-                  onClick={() => onDelete(product.sku)}
+                  aria-label={`Remover ${product.sku ?? product.mlItemId}`}
+                  onClick={() => onDelete(product.mlItemId)}
                 >
                   <Trash2 className="size-4" aria-hidden />
                 </Button>

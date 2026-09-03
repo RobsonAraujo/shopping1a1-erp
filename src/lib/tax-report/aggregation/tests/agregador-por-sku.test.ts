@@ -6,10 +6,6 @@ import {
 } from "@/lib/tax-report/aggregation/agregador-por-sku";
 import type { DetalhamentoTributario } from "@/lib/tax-report/types";
 
-const aliasMap = new Map<string, string>([
-  ["SKU-LEGADO", "SKU-ATUAL"],
-]);
-
 function detalhe(sku: string, receita: number): DetalhamentoTributario {
   return {
     transacao: {
@@ -74,20 +70,24 @@ function detalhe(sku: string, receita: number): DetalhamentoTributario {
   };
 }
 
-describe("agregarPorSku with aliases", () => {
-  it("merges legacy and canonical sku into one row preserving original sku on lines", () => {
-    const rows = agregarPorSku(
-      [detalhe("SKU-LEGADO", 100), detalhe("SKU-ATUAL", 200)],
-      aliasMap,
-    );
+describe("agregarPorSku", () => {
+  it("groups transactions by exact sku, without merging distinct skus", () => {
+    const rows = agregarPorSku([detalhe("SKU-A", 100), detalhe("SKU-B", 200)]);
+
+    assert.equal(rows.length, 2);
+    const byB = rows.find((r) => r.sku === "SKU-B");
+    const byA = rows.find((r) => r.sku === "SKU-A");
+    assert.equal(byA?.receitaTotal, 100);
+    assert.equal(byB?.receitaTotal, 200);
+  });
+
+  it("sums multiple transactions with the same sku into one row", () => {
+    const rows = agregarPorSku([detalhe("SKU-A", 100), detalhe("SKU-A", 200)]);
 
     assert.equal(rows.length, 1);
-    assert.equal(rows[0]?.sku, "SKU-ATUAL");
-    assert.deepEqual(rows[0]?.skuAliases, ["SKU-LEGADO"]);
+    assert.equal(rows[0]?.sku, "SKU-A");
     assert.equal(rows[0]?.receitaTotal, 300);
     assert.equal(rows[0]?.quantidadeVendas, 2);
-    assert.equal(rows[0]?.transacoes[0]?.transacao.sku, "SKU-LEGADO");
-    assert.equal(rows[0]?.transacoes[1]?.transacao.sku, "SKU-ATUAL");
   });
 });
 

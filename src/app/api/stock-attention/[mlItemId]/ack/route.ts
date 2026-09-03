@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { fetchItemById } from "@/lib/mercadolibre/api";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
+import { upsertListingFromItem } from "@/lib/mercadolibre/listing-sync";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import { prisma } from "@/lib/db";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
@@ -18,17 +19,6 @@ const ackBodySchema = z.object({
 
 function itemOwnedByUser(item: ItemBody, userId: number): boolean {
   return item.seller_id === userId;
-}
-
-function listingUpsertData(item: ItemBody) {
-  const activeOnMl = item.status === "active" || item.status === "paused";
-  return {
-    titleSnapshot: item.title,
-    catalogListing: item.catalog_listing ?? null,
-    lastSyncedAt: new Date(),
-    activeOnMl,
-    mlStatus: item.status ?? null,
-  };
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
@@ -62,15 +52,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const mlAvailableQuantity = mlAvailableStockUnits(item);
 
     const acknowledgement = await prisma.$transaction(async (tx) => {
-      await tx.listing.upsert({
-        where: { mlItemId },
-        create: {
-          organizationId,
-          mlItemId,
-          ...listingUpsertData(item),
-        },
-        update: listingUpsertData(item),
-      });
+      await upsertListingFromItem(organizationId, item, tx);
 
       return tx.stockAttentionAcknowledgement.upsert({
         where: {

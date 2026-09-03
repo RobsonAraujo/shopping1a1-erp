@@ -5,6 +5,7 @@ import type { ProductView } from "@/lib/product-data";
 
 function sampleView(overrides: Partial<ProductView> = {}): ProductView {
   return {
+    mlItemId: "MLB1",
     sku: "SKU-A",
     ncm: null,
     unitCostNf: 100,

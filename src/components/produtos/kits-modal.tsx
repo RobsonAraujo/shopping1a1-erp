@@ -30,7 +30,7 @@ import { readApiError } from "@/lib/api-client-error";
 import { cn } from "@/lib/utils";
 import type { KitCandidate } from "@/app/api/kits/candidates/route";
 
-export type KitItemRow = { sku: string; quantity: number };
+export type KitItemRow = { productMlItemId: string; sku: string | null; quantity: number };
 export type KitRow = {
   mlItemId: string;
   title: string | null;
@@ -42,16 +42,18 @@ type KitsModalProps = {
   onClose: () => void;
 };
 
-type FormItemRow = { sku: string; quantity: string };
+type ProductOption = { mlItemId: string; sku: string | null };
+
+type FormItemRow = { productMlItemId: string; sku: string; quantity: string };
 
 function emptyFormItems(): FormItemRow[] {
-  return [{ sku: "", quantity: "1" }];
+  return [{ productMlItemId: "", sku: "", quantity: "1" }];
 }
 
 type SkuComboboxFieldProps = {
   value: string;
-  onValueChange: (value: string) => void;
-  options: string[];
+  onValueChange: (option: ProductOption) => void;
+  options: ProductOption[];
   disabled?: boolean;
   className?: string;
 };
@@ -66,23 +68,25 @@ function SkuComboboxField({
   const [open, setOpen] = useState(false);
   const query = value.trim().toLowerCase();
   const filtered = query
-    ? options.filter((sku) => sku.toLowerCase().includes(query)).slice(0, 20)
+    ? options
+        .filter((o) => (o.sku ?? o.mlItemId).toLowerCase().includes(query))
+        .slice(0, 20)
     : options.slice(0, 20);
 
   return (
     <Popover open={open && filtered.length > 0} onOpenChange={setOpen}>
       <PopoverAnchor asChild>
         <FormInput
-          label="SKU"
+          label="Produto"
           value={value}
           onChange={(e) => {
-            onValueChange(e.target.value);
+            onValueChange({ mlItemId: "", sku: e.target.value });
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
           disabled={disabled}
           autoComplete="off"
-          placeholder="Buscar SKU cadastrado…"
+          placeholder="Buscar produto cadastrado…"
           className={className}
         />
       </PopoverAnchor>
@@ -93,18 +97,18 @@ function SkuComboboxField({
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <ul className="max-h-48 overflow-y-auto py-1">
-          {filtered.map((sku) => (
-            <li key={sku}>
+          {filtered.map((option) => (
+            <li key={option.mlItemId}>
               <button
                 type="button"
                 className="block w-full cursor-pointer truncate px-3 py-1.5 text-left text-sm hover:bg-[var(--accent)]/40"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => {
-                  onValueChange(sku);
+                  onValueChange(option);
                   setOpen(false);
                 }}
               >
-                {sku}
+                {option.sku ?? option.mlItemId}
               </button>
             </li>
           ))}
@@ -124,15 +128,16 @@ export function KitsModal({ open, onClose }: KitsModalProps) {
   const [candidatesLoading, setCandidatesLoading] = useState(false);
   const [candidatesError, setCandidatesError] = useState<string | null>(null);
 
-  const productsResource = useApiResource<{ products: { sku: string }[] }>(
-    "/api/products",
-    { enabled: open, fallbackError: "products_load_failed" },
-  );
-  const productSkus = useMemo(
+  const productsResource = useApiResource<{
+    products: { mlItemId: string; sku: string | null }[];
+  }>("/api/products", { enabled: open, fallbackError: "products_load_failed" });
+  const productOptions = useMemo(
     () =>
       (productsResource.data?.products ?? [])
-        .map((p) => p.sku)
-        .sort((a, b) => a.localeCompare(b, "pt-BR")),
+        .map((p) => ({ mlItemId: p.mlItemId, sku: p.sku }))
+        .sort((a, b) =>
+          (a.sku ?? a.mlItemId).localeCompare(b.sku ?? b.mlItemId, "pt-BR"),
+        ),
     [productsResource.data],
   );
 
@@ -206,7 +211,8 @@ export function KitsModal({ open, onClose }: KitsModalProps) {
     setFormItems(
       kit.items.length > 0
         ? kit.items.map((item) => ({
-            sku: item.sku,
+            productMlItemId: item.productMlItemId,
+            sku: item.sku ?? item.productMlItemId,
             quantity: String(item.quantity),
           }))
         : emptyFormItems(),
@@ -220,7 +226,7 @@ export function KitsModal({ open, onClose }: KitsModalProps) {
   }
 
   function addFormItem() {
-    setFormItems((prev) => [...prev, { sku: "", quantity: "1" }]);
+    setFormItems((prev) => [...prev, { productMlItemId: "", sku: "", quantity: "1" }]);
   }
 
   function removeFormItem(index: number) {
@@ -230,11 +236,19 @@ export function KitsModal({ open, onClose }: KitsModalProps) {
   async function saveKit() {
     setError(null);
     const items = formItems
-      .map((row) => ({ sku: row.sku.trim(), quantity: Number(row.quantity) }))
-      .filter((row) => row.sku && Number.isFinite(row.quantity) && row.quantity > 0);
+      .map((row) => ({
+        productMlItemId: row.productMlItemId,
+        quantity: Number(row.quantity),
+      }))
+      .filter(
+        (row) =>
+          row.productMlItemId && Number.isFinite(row.quantity) && row.quantity > 0,
+      );
 
     if (!mlItemId.trim() || items.length === 0) {
-      setError("Informe o ID do anúncio e ao menos um SKU componente com quantidade válida.");
+      setError(
+        "Informe o ID do anúncio e ao menos um produto componente com quantidade válida.",
+      );
       return;
     }
 
@@ -382,8 +396,13 @@ export function KitsModal({ open, onClose }: KitsModalProps) {
                 <div key={index} className="flex flex-wrap items-end gap-2">
                   <SkuComboboxField
                     value={row.sku}
-                    onValueChange={(sku) => updateFormItem(index, { sku })}
-                    options={productSkus}
+                    onValueChange={(option) =>
+                      updateFormItem(index, {
+                        productMlItemId: option.mlItemId,
+                        sku: option.sku ?? option.mlItemId,
+                      })
+                    }
+                    options={productOptions}
                     disabled={busy}
                     className="min-w-[10rem] flex-1"
                   />
@@ -479,8 +498,8 @@ export function KitsModal({ open, onClose }: KitsModalProps) {
                   </div>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {kit.items.map((item) => (
-                      <Badge key={item.sku} variant="secondary">
-                        {item.sku} × {item.quantity}
+                      <Badge key={item.productMlItemId} variant="secondary">
+                        {item.sku ?? item.productMlItemId} × {item.quantity}
                       </Badge>
                     ))}
                   </div>

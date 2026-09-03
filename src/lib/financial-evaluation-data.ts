@@ -33,6 +33,7 @@ import {
 import { fetchSellerShippingCost } from "@/lib/mercadolibre/seller-shipping-cost";
 import type { ItemBody, OrderSearchOrder } from "@/lib/mercadolibre/types";
 import { getCompanySettings, loadProductsMapBySku } from "@/lib/product-data";
+import { resolveEffectiveSkuByItemId } from "@/lib/product-resolver";
 import {
   loadKitsByMlItemId,
   resolveKitPricing,
@@ -256,6 +257,8 @@ async function buildRowForItem(
     kitsByMlItemId: Map<string, KitComponent[]>;
   },
   pmaBySku?: Map<string, number>,
+  /** SKU cadastrado no Product vinculado por mlItemId, quando existe — sobrepõe o SKU ao vivo do anúncio (ver src/lib/product-resolver.ts). */
+  effectiveSku?: string | null,
 ): Promise<
   Omit<
     FinancialEvaluationRow,
@@ -275,7 +278,7 @@ async function buildRowForItem(
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  const sku = getItemSku(item);
+  const sku = effectiveSku ?? getItemSku(item);
   let productCost = pricing?.pricingCost ?? null;
   let extraCosts = pricing?.extraCosts ?? null;
   let taxRatePercent = sku
@@ -446,7 +449,7 @@ async function buildRowForItem(
   return {
     mlItemId: item.id,
     title: item.title,
-    sku: getItemSku(item),
+    sku,
     imageUrl: bestItemImageUrl(item) ?? null,
     permalink: buyerFacingItemPermalink(item.permalink, item.id),
     status: item.status,
@@ -592,6 +595,8 @@ async function buildRowForPeriodItem(
     kitsByMlItemId: Map<string, KitComponent[]>;
   },
   pmaBySku?: Map<string, number>,
+  /** SKU cadastrado no Product vinculado por mlItemId, quando existe — sobrepõe o SKU ao vivo do anúncio (ver src/lib/product-resolver.ts). */
+  effectiveSku?: string | null,
 ): Promise<
   Omit<
     FinancialEvaluationRow,
@@ -611,7 +616,7 @@ async function buildRowForPeriodItem(
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  const sku = getItemSku(item);
+  const sku = effectiveSku ?? getItemSku(item);
   let productCost = pricing?.pricingCost ?? null;
   let extraCosts = pricing?.extraCosts ?? null;
   let taxRatePercent = sku
@@ -753,7 +758,7 @@ async function buildRowForPeriodItem(
   return {
     mlItemId: item.id,
     title: item.title,
-    sku: getItemSku(item),
+    sku,
     imageUrl: bestItemImageUrl(item) ?? null,
     permalink: buyerFacingItemPermalink(item.permalink, item.id),
     status: item.status,
@@ -888,6 +893,14 @@ export async function loadFinancialEvaluationRows(
     isOperationalStatus(item.status),
   );
 
+  // SKU "efetivo" por anúncio: segue o cadastro do Product vinculado via
+  // mlItemId quando existe (estável mesmo se o SKU mudar no anúncio ML);
+  // cai pro SKU ao vivo do anúncio quando não há vínculo.
+  const effectiveSkuByItemId = await resolveEffectiveSkuByItemId(
+    organizationId,
+    operationalItems.map((item) => ({ id: item.id, sku: getItemSku(item) })),
+  );
+
   const kitItemIds = operationalItems
     .filter((item) => !getItemSku(item) && isKitItem(item))
     .map((item) => item.id);
@@ -896,8 +909,7 @@ export async function loadFinancialEvaluationRows(
     components.map((c) => c.sku),
   );
 
-  const skus = operationalItems
-    .map((item) => getItemSku(item))
+  const skus = [...effectiveSkuByItemId.values()]
     .filter((sku): sku is string => Boolean(sku))
     .concat(kitComponentSkus);
   const [pricingBySku, taxFromReport, productsWithPma, companySettings] =
@@ -925,7 +937,7 @@ export async function loadFinancialEvaluationRows(
         );
   const pmaBySku = new Map<string, number>();
   for (const product of productsWithPma) {
-    if (product.pmaPrice == null) continue;
+    if (product.pmaPrice == null || !product.sku) continue;
     pmaBySku.set(normalizeProductSku(product.sku), Number(product.pmaPrice));
   }
 
@@ -933,7 +945,7 @@ export async function loadFinancialEvaluationRows(
     operationalItems,
     5,
     async (item) => {
-      const sku = getItemSku(item);
+      const sku = effectiveSkuByItemId.get(item.id) ?? null;
       const pricing = sku
         ? (pricingBySku.get(normalizeProductSku(sku)) ?? null)
         : null;
@@ -948,6 +960,7 @@ export async function loadFinancialEvaluationRows(
           kitsByMlItemId,
         },
         pmaBySku,
+        sku,
       );
     },
     options?.onRow
@@ -1066,6 +1079,15 @@ export async function loadFinancialEvaluationRowsForPeriod(
   ]);
 
   const itemById = new Map(items.map((item) => [item.id, item]));
+
+  // SKU "efetivo" por anúncio: segue o cadastro do Product vinculado via
+  // mlItemId quando existe (estável mesmo se o SKU mudar no anúncio ML);
+  // cai pro SKU ao vivo do anúncio quando não há vínculo.
+  const effectiveSkuByItemId = await resolveEffectiveSkuByItemId(
+    organizationId,
+    items.map((item) => ({ id: item.id, sku: getItemSku(item) })),
+  );
+
   const kitItemIds = items
     .filter((item) => !getItemSku(item) && isKitItem(item))
     .map((item) => item.id);
@@ -1073,8 +1095,7 @@ export async function loadFinancialEvaluationRowsForPeriod(
   const kitComponentSkus = [...kitsByMlItemId.values()].flatMap((components) =>
     components.map((c) => c.sku),
   );
-  const skus = items
-    .map((item) => getItemSku(item))
+  const skus = [...effectiveSkuByItemId.values()]
     .filter((sku): sku is string => Boolean(sku))
     .concat(kitComponentSkus);
   const [pricingBySku, taxFromReport, productsWithPma, companySettings] =
@@ -1102,7 +1123,7 @@ export async function loadFinancialEvaluationRowsForPeriod(
         );
   const pmaBySku = new Map<string, number>();
   for (const product of productsWithPma) {
-    if (product.pmaPrice == null) continue;
+    if (product.pmaPrice == null || !product.sku) continue;
     pmaBySku.set(normalizeProductSku(product.sku), Number(product.pmaPrice));
   }
 
@@ -1119,7 +1140,7 @@ export async function loadFinancialEvaluationRowsForPeriod(
     orderedAggs,
     5,
     async ({ agg, item }) => {
-      const sku = getItemSku(item);
+      const sku = effectiveSkuByItemId.get(item.id) ?? null;
       const pricing = sku
         ? (pricingBySku.get(normalizeProductSku(sku)) ?? null)
         : null;
@@ -1135,6 +1156,7 @@ export async function loadFinancialEvaluationRowsForPeriod(
           kitsByMlItemId,
         },
         pmaBySku,
+        sku,
       );
     },
     options?.onRow

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { fetchItemById } from "@/lib/mercadolibre/api";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
+import { upsertListingFromItem } from "@/lib/mercadolibre/listing-sync";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import { prisma } from "@/lib/db";
 import { syncPurchaseCycleFromWarehouse } from "@/lib/replenishment-cycle-data";
@@ -18,17 +19,6 @@ type RouteContext = { params: Promise<{ mlItemId: string }> };
 
 function itemOwnedByUser(item: ItemBody, userId: number): boolean {
   return item.seller_id === userId;
-}
-
-function listingUpsertData(item: ItemBody) {
-  const activeOnMl = item.status === "active" || item.status === "paused";
-  return {
-    titleSnapshot: item.title,
-    catalogListing: item.catalog_listing ?? null,
-    lastSyncedAt: new Date(),
-    activeOnMl,
-    mlStatus: item.status ?? null,
-  };
 }
 
 export async function GET(_request: NextRequest, context: RouteContext) {
@@ -48,19 +38,9 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const listingData = listingUpsertData(item);
-
     const { listing, warehouseStock } = await prisma.$transaction(
       async (tx) => {
-        const listingRow = await tx.listing.upsert({
-          where: { mlItemId },
-          create: {
-            organizationId,
-            mlItemId,
-            ...listingData,
-          },
-          update: listingData,
-        });
+        const listingRow = await upsertListingFromItem(organizationId, item, tx);
 
         const stockRow = await tx.warehouseStock.upsert({
           where: { mlItemId },
@@ -118,8 +98,6 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const listingData = listingUpsertData(item);
-
     const existingStock = await prisma.warehouseStock.findUnique({
       where: { mlItemId },
       select: { quantity: true },
@@ -128,15 +106,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     const { listing, warehouseStock } = await prisma.$transaction(
       async (tx) => {
-        const listingRow = await tx.listing.upsert({
-          where: { mlItemId },
-          create: {
-            organizationId,
-            mlItemId,
-            ...listingData,
-          },
-          update: listingData,
-        });
+        const listingRow = await upsertListingFromItem(organizationId, item, tx);
 
         const existing = await tx.warehouseStock.findUnique({
           where: { mlItemId },

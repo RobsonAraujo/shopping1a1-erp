@@ -23,7 +23,6 @@ import {
 } from "@/lib/tax-report/calculators/pis-cofins";
 import type { CbsIbsVigenciaRow } from "@/lib/tax-report/calculators/cbs-ibs";
 import type { ItemAdMetrics } from "@/lib/mercadolibre/product-ads-metrics";
-import type { SkuAliasMap } from "@/lib/product-sku-alias";
 import type {
   DetalhamentoTributario,
   IcmsRateRow,
@@ -147,7 +146,6 @@ export function calcularRelatorioFromTransacoes(input: {
   overrides: Record<string, ManualFiscalOverride>;
   meta: TaxReportPayload["meta"];
   onComputeProgress?: (current: number, total: number) => void;
-  aliasMap?: SkuAliasMap;
   adsMetricsByItem?: Map<string, ItemAdMetrics>;
   receitaTotalByItem?: Map<string, number>;
   /** Receita total do mês inteiro — denominador do rateio do crédito de custos fixos. */
@@ -186,7 +184,7 @@ export function calcularRelatorioFromTransacoes(input: {
     });
   });
 
-  const porSku = agregarPorSku(detalhes, input.aliasMap);
+  const porSku = agregarPorSku(detalhes);
   const consolidado = consolidarRelatorio(detalhes, {
     creditoCustosFixosBaseRegistrada: input.creditoCustosFixosBaseRegistrada,
     creditoCustosFixosBaseCreditavel: input.creditoCustosFixosBaseCreditavel,

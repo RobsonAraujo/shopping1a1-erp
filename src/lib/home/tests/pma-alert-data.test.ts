@@ -38,7 +38,7 @@ describe("buildPmaAlertRows", () => {
     mockSalePrice({ MLB1: 80 });
     const rows = await buildPmaAlertRows(
       "token",
-      new Map([["SKU-A", 100]]),
+      new Map([["MLB1", { sku: "SKU-A", pmaPrice: 100 }]]),
       [item({ id: "MLB1", price: 80, seller_custom_field: "SKU-A" })],
     );
     assert.equal(rows.length, 1);
@@ -52,24 +52,24 @@ describe("buildPmaAlertRows", () => {
     mockSalePrice({ MLB1: 100 });
     const atPma = await buildPmaAlertRows(
       "token",
-      new Map([["SKU-A", 100]]),
+      new Map([["MLB1", { sku: "SKU-A", pmaPrice: 100 }]]),
       [item({ id: "MLB1", price: 100, seller_custom_field: "SKU-A" })],
     );
     const abovePma = await buildPmaAlertRows(
       "token",
-      new Map([["SKU-A", 80]]),
+      new Map([["MLB1", { sku: "SKU-A", pmaPrice: 80 }]]),
       [item({ id: "MLB1", price: 100, seller_custom_field: "SKU-A" })],
     );
     assert.equal(atPma.length, 0);
     assert.equal(abovePma.length, 0);
   });
 
-  it("ignores items whose SKU has no PMA registered", async () => {
-    mockSalePrice({ MLB1: 80 });
+  it("ignores items whose mlItemId has no PMA registered", async () => {
+    mockSalePrice({ MLB2: 80 });
     const rows = await buildPmaAlertRows(
       "token",
-      new Map([["SKU-A", 100]]),
-      [item({ id: "MLB1", price: 80, seller_custom_field: "SKU-B" })],
+      new Map([["MLB1", { sku: "SKU-A", pmaPrice: 100 }]]),
+      [item({ id: "MLB2", price: 80, seller_custom_field: "SKU-B" })],
     );
     assert.equal(rows.length, 0);
   });
@@ -78,7 +78,7 @@ describe("buildPmaAlertRows", () => {
     mockSalePrice({ MLB1: 80 });
     const rows = await buildPmaAlertRows(
       "token",
-      new Map([["SKU-A", 100]]),
+      new Map([["MLB1", { sku: "SKU-A", pmaPrice: 100 }]]),
       [
         item({
           id: "MLB1",
@@ -95,7 +95,7 @@ describe("buildPmaAlertRows", () => {
     mockSalePrice({ MLB1: 80 });
     const rows = await buildPmaAlertRows(
       "token",
-      new Map([["SKU-A", 100]]),
+      new Map([["MLB1", { sku: "SKU-A", pmaPrice: 100 }]]),
       [
         item({
           id: "MLB1",
@@ -113,8 +113,8 @@ describe("buildPmaAlertRows", () => {
     const rows = await buildPmaAlertRows(
       "token",
       new Map([
-        ["SKU-A", 100],
-        ["SKU-B", 100],
+        ["MLB1", { sku: "SKU-A", pmaPrice: 100 }],
+        ["MLB2", { sku: "SKU-B", pmaPrice: 100 }],
       ]),
       [
         item({ id: "MLB1", price: 90, seller_custom_field: "SKU-A" }),
@@ -131,7 +131,7 @@ describe("buildPmaAlertRows", () => {
     mockSalePrice({ MLB1: 99.9 });
     const rows = await buildPmaAlertRows(
       "token",
-      new Map([["SKU-A", 100]]),
+      new Map([["MLB1", { sku: "SKU-A", pmaPrice: 100 }]]),
       [item({ id: "MLB1", price: 100, seller_custom_field: "SKU-A" })],
     );
     assert.equal(rows.length, 1);
@@ -142,7 +142,7 @@ describe("buildPmaAlertRows", () => {
     mockSalePrice({});
     const rows = await buildPmaAlertRows(
       "token",
-      new Map([["SKU-A", 100]]),
+      new Map([["MLB1", { sku: "SKU-A", pmaPrice: 100 }]]),
       [item({ id: "MLB1", price: 80, seller_custom_field: "SKU-A" })],
     );
     assert.equal(rows.length, 1);

@@ -20,7 +20,7 @@ import {
 } from "@/lib/mercadolibre/api";
 import { getItemSku, isKitItem } from "@/lib/mercadolibre/item-sku";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
-import { loadStockReportProductsBySku } from "@/lib/product-data";
+import { loadStockReportProductsForListings } from "@/lib/product-data";
 import type { RevenuePotentialRow } from "@/lib/insights/types";
 
 const LOOKBACK_DAYS = 120;
@@ -58,10 +58,10 @@ export async function loadRevenuePotentialData(
 
   const todayKey = dayKey(now);
 
-  const skus = items
-    .map((item) => getItemSku(item))
-    .filter((sku): sku is string => Boolean(sku?.trim()));
-  const productsBySku = await loadStockReportProductsBySku(organizationId, skus);
+  const productsBySku = await loadStockReportProductsForListings(
+    organizationId,
+    items.map((item) => ({ mlItemId: item.id, sku: getItemSku(item) })),
+  );
 
   const rows: RevenuePotentialRow[] = items.map((item) => {
     const sku = getItemSku(item);

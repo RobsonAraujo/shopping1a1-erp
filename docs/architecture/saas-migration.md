@@ -112,7 +112,7 @@ Detalhes dos modelos: [tenant-data-model.md](tenant-data-model.md).
 |---------------|---------|
 | **Referência global** (compartilhável, nunca por org) | `CbsIbsVigencia`, `TaxpayerVerificationCache`, `FlexDistanceTier` |
 | **Global por padrão, override opcional por org** (schema pronto, sem UI ainda) | `IcmsInternalRate` |
-| **Por tenant — `organizationId` `NOT NULL`, todas as queries escopadas** | `Listing`, `WarehouseStock`, `ReplenishmentCycle`, `CatalogCompetitionSnapshot`, `StockAttentionAcknowledgement`, `DreCostItem`, `DreCostMonthValue`, `CatalogCompetitionPollRun`, `Kit`, `FullShipment`, `TaxFixedCostItem`, `TaxFixedCostMonthValue`, `TaxFixedCostMonthExclusion`, `Product`, `CompanyTaxSettings`, `KitItem`, `ProductSkuAlias`, `DreProductCostLeveling`, `DreMonthSnapshot` |
+| **Por tenant — `organizationId` `NOT NULL`, todas as queries escopadas** | `Listing`, `WarehouseStock`, `ReplenishmentCycle`, `CatalogCompetitionSnapshot`, `StockAttentionAcknowledgement`, `DreCostItem`, `DreCostMonthValue`, `CatalogCompetitionPollRun`, `Kit`, `FullShipment`, `TaxFixedCostItem`, `TaxFixedCostMonthValue`, `TaxFixedCostMonthExclusion`, `Product`, `CompanyTaxSettings`, `KitItem`, `DreProductCostLeveling`, `DreMonthSnapshot` |
 | **Parcial ML** (seller como proxy — `sellerId` já é um limite de tenant válido, 1 seller : 1 org; `organizationId` também `NOT NULL` desde a Fase 7, mas a chave de negócio continua sendo `sellerId`) | `TaxReportMonthSnapshot`, `RevenueSimulation` |
 | **Storage de token, keyed por `mlUserId`** (não é dado de tenant) | `MlSellerCredentials` |
 
@@ -189,6 +189,17 @@ Plano de execução detalhado (arquivos e código concretos): ver plano de imple
 ## Registro de features
 
 Entradas ordenadas da mais recente para a mais antiga. Use o [template](../templates/feature-saas-impact.md).
+
+### Identidade de produto: tabela dedicada `ProductIdentityLink` (Fases 0-4 parcial) — 2026-09-01
+
+- **Tabelas novas/alteradas:** `product_identity_links` nova (`mlItemId` @id, `organizationId`, `productId` FK → `products.id` `onDelete: Cascade`, `linkedVia` enum `auto_sku_match`/`manual`, `linkedSkuSnapshot`, `linkedAt`, `updatedAt`) — migration `20260901163432_add_product_identity_link`. `Listing` não ganhou coluna nenhuma (uma tentativa anterior no mesmo dia adicionou `listings.product_id`; foi revertida no mesmo dia antes de sair do dev local — ver "Ação futura" abaixo).
+- **Precisa `organizationId`?** sim — toda query nova (scripts e libs) recebe `organizationId` obrigatório e filtra por ele; `ProductIdentityLink` registrada em `TENANT_SCOPED_MODELS` (`src/lib/db-tenant-guard.ts`)
+- **APIs afetadas:** nenhuma muda de contrato externo. Resolução interna (via `src/lib/product-resolver.ts`) já trocada em: Estoque, DRE (custo/imposto ERP + 2 breakdowns), Relatório Tributário (o SKU efetivo por `mlItemId` prevalece sobre o texto de SKU da linha do pedido). Lucratividade e Insights ainda pendentes.
+- **Assume singleton?** não
+- **Cron/background:** nenhum dedicado. Decisão de arquitetura (pivot desta sessão, ver plano): a tabela de identidade é escrita só nos momentos em que a decisão de vínculo é tomada de propósito, **desacoplada do ciclo de vida de `Listing`** — que é escrita por 5 pontos independentes (cron/webhook de catálogo, editar estoque, Compras/Operações Full, confirmar alerta) sem nenhum garantir SKU atualizado pra todo anúncio. 2 gatilhos automáticos: (1) `POST /api/products` busca anúncios ao vivo e vincula os que baterem por SKU; (2) checagem oportunista em `/dashboard/inventory` e `GET /api/products/suggestions` (que já buscam anúncios ao vivo por outro motivo) cobre o caso de anúncio novo casando com Product já existente. Nenhum dos dois toca `Listing`. Backfill retroativo via `scripts/backfill-product-identity-links.ts` (usa `resolveSellerAccessToken` pra token fora de sessão HTTP, mesmo padrão do cron de catálogo).
+- **Dados globais vs por org:** vínculo é por organização
+- **Código já tenant-ready?** sim
+- **Ação futura na migração:** motivo raiz — SKU (texto editável no anúncio ML) era usado como chave de identidade de produto em vez de um id estável, causando duplicação em relatórios quando o SKU mudava sem alias cadastrado. Primeira tentativa desta sessão colocou `productId` direto em `Listing` (mirror operacional usado por 4 domínios sem relação com identidade — `WarehouseStock`, `ReplenishmentCycle`, `CatalogCompetitionSnapshot`, `StockAttentionAcknowledgement`); isso criou uma dependência de confiabilidade sobre uma tabela que nunca foi desenhada pra ser sincronizada de forma completa, então foi revertida em favor da tabela dedicada. Plano completo em `/Users/robsonaraujocarmo/.claude/plans/nos-temos-um-problema-rustling-harp.md`. Faltam: Lucratividade/Insights (Fase 4), fila de pareamento manual na UI com poder de repareamento (Fase 5), alerta de "venda sem produto resolvido" na UI (hoje só cai no fallback silencioso), extensão dos snapshots JSON (Fase 6), hardening do fallback de alias (Fase 7). Não é diretamente sobre multi-tenant, mas toca `Product`, daí o registro aqui.
 
 ### Configurações > Planejamento (parâmetros de estoque/compra/promoções editáveis) — 2026-08-28
 

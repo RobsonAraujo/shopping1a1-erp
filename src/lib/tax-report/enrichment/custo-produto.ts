@@ -26,7 +26,7 @@ export function custoProdutoFromView(view: ProductView): CustoProduto {
       ? view.purchaseCostWithSt
       : null;
   return {
-    sku: view.sku,
+    sku: view.sku ?? "",
     pricingCost: view.pricingCost,
     unitCostNf,
     purchaseIcmsPercent: view.purchaseIcmsPercent ?? 0,

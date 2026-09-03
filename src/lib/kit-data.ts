@@ -19,13 +19,19 @@ export async function loadKitsByMlItemId(
   if (mlItemIds.length === 0) return new Map();
   const kits = await prisma.kit.findMany({
     where: { organizationId, mlItemId: { in: mlItemIds } },
-    include: { items: true },
+    include: { items: { include: { product: { select: { sku: true } } } } },
   });
   return new Map(
     kits.map((kit) => [
       kit.mlItemId,
       kit.items.map((item) => ({
-        sku: item.sku,
+        // Componente do kit é identificado por mlItemId (FK real); o sku
+        // aqui é só o espelho de exibição do Product vinculado, usado como
+        // chave de busca de custo/imposto (loadProductsMapBySku). Sem sku
+        // cadastrado, cai no próprio mlItemId — não bate com nada em
+        // pricingBySku/taxBySku, aparece como componente sem custo (mesmo
+        // tratamento de "missingSkus" de antes).
+        sku: item.product.sku ?? item.productMlItemId,
         quantity: Number(item.quantity),
       })),
     ]),

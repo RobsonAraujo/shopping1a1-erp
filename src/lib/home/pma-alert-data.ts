@@ -2,11 +2,7 @@ import { prisma } from "@/lib/db";
 import { fetchOperationalListings } from "@/lib/mercadolibre/api";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { fetchItemSalePrice } from "@/lib/mercadolibre/item-sale-price";
-import { getItemSku } from "@/lib/mercadolibre/item-sku";
 import type { ItemBody } from "@/lib/mercadolibre/types";
-import { normalizeProductSku } from "@/lib/product-pricing";
-import { resolveCanonicalSku, type SkuAliasMap } from "@/lib/product-sku-alias";
-import { loadSkuAliasMap } from "@/lib/product-sku-alias-data";
 
 async function mapWithConcurrency<T, R>(
   items: T[],
@@ -40,26 +36,21 @@ export type PmaAlertRow = {
 
 export async function buildPmaAlertRows(
   accessToken: string,
-  pmaBySku: Map<string, number>,
+  pmaByMlItemId: Map<string, { sku: string; pmaPrice: number }>,
   items: ItemBody[],
-  aliasMap?: SkuAliasMap,
 ): Promise<PmaAlertRow[]> {
-  const candidates: { item: ItemBody; canonicalSku: string; pmaPrice: number }[] = [];
+  const candidates: { item: ItemBody; sku: string; pmaPrice: number }[] = [];
 
   for (const item of items) {
     if (item.status !== "active") continue;
-
-    const canonicalSku = resolveCanonicalSku(getItemSku(item), aliasMap);
-    if (!canonicalSku) continue;
-    const pmaPrice = pmaBySku.get(canonicalSku);
-    if (pmaPrice == null) continue;
-
-    candidates.push({ item, canonicalSku, pmaPrice });
+    const pma = pmaByMlItemId.get(item.id);
+    if (!pma) continue;
+    candidates.push({ item, sku: pma.sku, pmaPrice: pma.pmaPrice });
   }
 
   const rows: PmaAlertRow[] = [];
 
-  await mapWithConcurrency(candidates, 5, async ({ item, canonicalSku, pmaPrice }) => {
+  await mapWithConcurrency(candidates, 5, async ({ item, sku, pmaPrice }) => {
     let currentPrice = item.price;
     try {
       const salePriceInfo = await fetchItemSalePrice(accessToken, item.id, item.price);
@@ -72,7 +63,7 @@ export async function buildPmaAlertRows(
 
     rows.push({
       mlItemId: item.id,
-      sku: canonicalSku,
+      sku,
       title: item.title,
       imageUrl: bestItemImageUrl(item) ?? null,
       pmaPrice,
@@ -91,20 +82,20 @@ export async function loadPmaAlerts(
 ): Promise<PmaAlertRow[]> {
   const productsWithPma = await prisma.product.findMany({
     where: { organizationId, pmaPrice: { not: null } },
-    select: { sku: true, pmaPrice: true },
+    select: { mlItemId: true, sku: true, pmaPrice: true },
   });
   if (productsWithPma.length === 0) return [];
 
-  const pmaBySku = new Map<string, number>();
+  const pmaByMlItemId = new Map<string, { sku: string; pmaPrice: number }>();
   for (const product of productsWithPma) {
     if (product.pmaPrice == null) continue;
-    pmaBySku.set(normalizeProductSku(product.sku), Number(product.pmaPrice));
+    pmaByMlItemId.set(product.mlItemId, {
+      sku: product.sku ?? product.mlItemId,
+      pmaPrice: Number(product.pmaPrice),
+    });
   }
 
-  const [aliasMap, items] = await Promise.all([
-    loadSkuAliasMap(organizationId),
-    fetchOperationalListings(accessToken, userId, organizationId),
-  ]);
+  const items = await fetchOperationalListings(accessToken, userId, organizationId);
 
-  return buildPmaAlertRows(accessToken, pmaBySku, items, aliasMap);
+  return buildPmaAlertRows(accessToken, pmaByMlItemId, items);
 }

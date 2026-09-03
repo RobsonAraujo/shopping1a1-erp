@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { normalizeProductSku } from "@/lib/product-pricing";
 import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
 import { requireOrganization } from "@/lib/api-auth";
 import { parseJsonBody } from "@/lib/api-validation";
@@ -16,7 +15,7 @@ const kitWriteSchema = z.object({
   items: z
     .array(
       z.object({
-        sku: z.string().min(1).transform(normalizeProductSku),
+        productMlItemId: z.string().trim().min(1),
         quantity: z.coerce.number().finite().positive().default(1),
       }),
     )
@@ -34,9 +33,18 @@ export async function GET() {
     const kits = await prisma.kit.findMany({
       where: { organizationId },
       orderBy: { createdAt: "desc" },
-      include: { items: true },
+      include: { items: { include: { product: { select: { sku: true } } } } },
     });
-    return NextResponse.json({ kits });
+    return NextResponse.json({
+      kits: kits.map((kit) => ({
+        ...kit,
+        items: kit.items.map((item) => ({
+          productMlItemId: item.productMlItemId,
+          sku: item.product.sku,
+          quantity: item.quantity,
+        })),
+      })),
+    });
   } catch (e) {
     logServerError("api/kits GET", e);
     return NextResponse.json(apiErrorPayload(e, "kits_load_failed"), {
@@ -65,14 +73,23 @@ export async function POST(request: NextRequest) {
         items: {
           create: parsed.items.map((item) => ({
             organizationId,
-            sku: item.sku,
+            productMlItemId: item.productMlItemId,
             quantity: item.quantity,
           })),
         },
       },
-      include: { items: true },
+      include: { items: { include: { product: { select: { sku: true } } } } },
     });
-    return NextResponse.json({ kit });
+    return NextResponse.json({
+      kit: {
+        ...kit,
+        items: kit.items.map((item) => ({
+          productMlItemId: item.productMlItemId,
+          sku: item.product.sku,
+          quantity: item.quantity,
+        })),
+      },
+    });
   } catch (e) {
     logServerError("api/kits POST", e);
     return NextResponse.json(apiErrorPayload(e, "kit_create_failed"), {

@@ -12,8 +12,7 @@ import {
   fetchItemPriceToWin,
   fetchItemsByIdsBatched,
 } from "@/lib/mercadolibre/api";
-import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
-import { getItemSku } from "@/lib/mercadolibre/item-sku";
+import { upsertListingFromItem } from "@/lib/mercadolibre/listing-sync";
 import { logServerError } from "@/lib/server-public-error";
 import type { CatalogCompetitionSource } from "@/generated/prisma/client";
 
@@ -76,8 +75,6 @@ export async function pollCatalogCompetitionForSeller(
       const priceToWin = extractPriceToWin(payload);
       const item = itemById[itemId];
       const sellerPrice = extractSellerPrice(payload, item);
-      const sku = item ? getItemSku(item) : null;
-      const imageUrl = item ? bestItemImageUrl(item) : null;
 
       const recordSnapshot = shouldRecordCatalogSnapshot({
         latest: latestSnapshotById[itemId] ?? null,
@@ -88,42 +85,39 @@ export async function pollCatalogCompetitionForSeller(
         timeZone: reportsConfig.catalogCompetitionTimezone,
       });
 
+      const catalogFields = {
+        catalogListing: true,
+        catalogStatus: status,
+        catalogSellerPrice: decimalOrNull(sellerPrice),
+        catalogPriceToWin: decimalOrNull(priceToWin),
+        catalogPolledAt: polledAt,
+      };
+
       await prisma.$transaction(async (tx) => {
-        await tx.listing.upsert({
-          where: { mlItemId: itemId },
-          create: {
-            organizationId,
-            mlItemId: itemId,
-            titleSnapshot: item?.title ?? null,
-            skuSnapshot: sku,
-            imageUrlSnapshot: imageUrl ?? null,
-            catalogListing: item?.catalog_listing ?? true,
-            activeOnMl: item
-              ? item.status === "active" || item.status === "paused"
-              : true,
-            mlStatus: item?.status ?? null,
-            lastSyncedAt: polledAt,
-            catalogStatus: status,
-            catalogSellerPrice: decimalOrNull(sellerPrice),
-            catalogPriceToWin: decimalOrNull(priceToWin),
-            catalogPolledAt: polledAt,
-          },
-          update: {
-            titleSnapshot: item?.title ?? undefined,
-            skuSnapshot: sku ?? undefined,
-            imageUrlSnapshot: imageUrl ?? undefined,
-            catalogListing: item?.catalog_listing ?? true,
-            activeOnMl: item
-              ? item.status === "active" || item.status === "paused"
-              : undefined,
-            mlStatus: item?.status ?? undefined,
-            lastSyncedAt: polledAt,
-            catalogStatus: status,
-            catalogSellerPrice: decimalOrNull(sellerPrice),
-            catalogPriceToWin: decimalOrNull(priceToWin),
-            catalogPolledAt: polledAt,
-          },
-        });
+        if (item) {
+          // Campos gerais (título/sku/imagem/status) via upsert central —
+          // depois, camada extra só com os campos exclusivos de catálogo.
+          await upsertListingFromItem(organizationId, item, tx);
+          await tx.listing.update({
+            where: { mlItemId: itemId },
+            data: catalogFields,
+          });
+        } else {
+          // fetchItemsByIdsBatched não trouxe o item pra esse id (raro) —
+          // garante a linha existir com os defaults de sempre, sem dado
+          // derivado do item que não temos.
+          await tx.listing.upsert({
+            where: { mlItemId: itemId },
+            create: {
+              organizationId,
+              mlItemId: itemId,
+              activeOnMl: true,
+              lastSyncedAt: polledAt,
+              ...catalogFields,
+            },
+            update: { lastSyncedAt: polledAt, ...catalogFields },
+          });
+        }
 
         if (recordSnapshot) {
           const rawResponse = JSON.parse(

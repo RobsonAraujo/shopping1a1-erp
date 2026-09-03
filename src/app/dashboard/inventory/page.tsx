@@ -20,7 +20,7 @@ import {
   loadOperationalSettings,
   toStockPlanningValues,
 } from "@/lib/operational-settings";
-import { loadStockReportProductsBySku } from "@/lib/product-data";
+import { loadStockReportProductsForListings } from "@/lib/product-data";
 import type { StockReportProductInfo } from "@/lib/inventory/inventory-stock-report";
 import { prisma } from "@/lib/db";
 import { readSession } from "@/lib/mercadolibre/session";
@@ -55,6 +55,7 @@ async function InventoryDataSection({
     ).filter(
       (item) => !isKitItem(item),
     );
+
     const fulfillmentStockByItem = await enrichItemsWithFulfillmentStock(
       token,
       items,
@@ -138,10 +139,10 @@ async function InventoryDataSection({
     total = items.length;
     statusCounts = countListingsByStatus(items);
 
-    const skus = rows
-      .map((row) => row.sku)
-      .filter((sku): sku is string => Boolean(sku?.trim()));
-    productsBySku = await loadStockReportProductsBySku(organizationId, skus);
+    productsBySku = await loadStockReportProductsForListings(
+      organizationId,
+      rows.map((row) => ({ mlItemId: row.mlItemId, sku: row.sku })),
+    );
   } catch (e) {
     const msg = publicPageLoadMessage(
       "dashboard/inventory",

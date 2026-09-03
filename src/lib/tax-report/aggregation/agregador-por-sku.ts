@@ -1,10 +1,5 @@
 import { roundMoney } from "@/lib/financial-margin";
 import { normalizeProductSku } from "@/lib/product-pricing";
-import {
-  getAliasSkusForCanonical,
-  resolveCanonicalSku,
-  type SkuAliasMap,
-} from "@/lib/product-sku-alias";
 import { consolidarApuracao } from "@/lib/tax-report/aggregation/consolidar-apuracao";
 import { icmsSemDifal } from "@/lib/tax-report/calculators/icms-difal";
 import type {
@@ -22,28 +17,22 @@ function impostoOperacionalLinhaValor(det: DetalhamentoTributario): number {
   );
 }
 
-function aggregationSkuKey(
-  det: DetalhamentoTributario,
-  aliasMap?: SkuAliasMap,
-): string {
+function aggregationSkuKey(det: DetalhamentoTributario): string {
   const raw = det.transacao.sku || "(sem SKU)";
   if (raw === "(sem SKU)") return raw;
-  const normalized = normalizeProductSku(raw);
-  return resolveCanonicalSku(normalized, aliasMap) || normalized || raw;
+  return normalizeProductSku(raw) || raw;
 }
 
 export function agregarPorSku(
   transacoes: DetalhamentoTributario[],
-  aliasMap?: SkuAliasMap,
 ): SkuAggregation[] {
   const map = new Map<string, SkuAggregation>();
 
   for (const det of transacoes) {
     if (!det.incluidoNaApuracao) continue;
-    const sku = aggregationSkuKey(det, aliasMap);
+    const sku = aggregationSkuKey(det);
     const existing = map.get(sku) ?? {
       sku,
-      skuAliases: getAliasSkusForCanonical(sku, aliasMap),
       quantidadeVendas: 0,
       unidadesVendidas: 0,
       receitaTotal: 0,
@@ -82,7 +71,6 @@ export function agregarPorSku(
   return [...map.values()]
     .map((row) => ({
       ...row,
-      skuAliases: getAliasSkusForCanonical(row.sku, aliasMap),
       receitaTotal: roundMoney(row.receitaTotal),
       impostoTotal: roundMoney(row.impostoTotal),
       impostoOperacionalTotal: roundMoney(row.impostoOperacionalTotal ?? 0),
@@ -208,9 +196,7 @@ export function consolidarRelatorio(
 export function findSkuAggregation(
   porSku: SkuAggregation[],
   sku: string,
-  aliasMap?: SkuAliasMap,
 ): SkuAggregation | undefined {
-  const canonical = resolveCanonicalSku(sku, aliasMap);
-  if (!canonical) return undefined;
-  return porSku.find((row) => row.sku === canonical);
+  if (!sku) return undefined;
+  return porSku.find((row) => row.sku === sku);
 }

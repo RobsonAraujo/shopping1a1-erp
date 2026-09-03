@@ -259,7 +259,7 @@ export function DreProductCostLevelingModal({
   } | null>(null);
 
   type ProductSummary = {
-    sku: string;
+    sku: string | null;
     unitCostNf: number;
     hasIcmsSt: boolean;
     purchaseCostWithSt: number | null;
@@ -279,13 +279,14 @@ export function DreProductCostLevelingModal({
     () =>
       (productsResource.data?.products ?? [])
         .map((p) => p.sku)
+        .filter((sku): sku is string => Boolean(sku))
         .sort((a, b) => a.localeCompare(b, "pt-BR")),
     [productsResource.data],
   );
   const productBySku = useMemo(() => {
     const map = new Map<string, ProductSummary>();
     for (const product of productsResource.data?.products ?? []) {
-      map.set(product.sku, product);
+      if (product.sku) map.set(product.sku, product);
     }
     return map;
   }, [productsResource.data]);

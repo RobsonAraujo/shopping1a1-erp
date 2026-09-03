@@ -13,6 +13,9 @@
 # testing
 /coverage
 
+# script output (audits, backfill reports)
+/tmp/
+
 # next.js
 /.next/
 /out/

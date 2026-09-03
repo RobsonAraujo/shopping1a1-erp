@@ -32,10 +32,11 @@ import {
   itemIdFromOrderLine,
   skuFromOrderLineWithFallback,
 } from "@/lib/tax-report/ml/sku-from-order-line";
+import { getItemSku } from "@/lib/mercadolibre/item-sku";
+import { resolveEffectiveSkuByItemId } from "@/lib/product-resolver";
 import { repairTaxReportPayload } from "@/lib/tax-report/repair-snapshot-apuracao";
 import { stripTransacoesForResponse } from "@/lib/tax-report/strip-transacoes-for-response";
 import { calcularRelatorioFromTransacoes } from "@/lib/tax-report/service/compute-report";
-import { loadSkuAliasMap } from "@/lib/product-sku-alias-data";
 import {
   loadCbsIbsVigencia,
   loadIcmsRatesMap,
@@ -218,17 +219,32 @@ export async function generateMonthlyTaxReport(input: {
   const items = await fetchItemsByIdsBatched(input.accessToken, itemIds);
   const itemById = new Map(items.map((item) => [item.id, item]));
 
+  // SKU "efetivo" por anúncio: segue o cadastro do Product vinculado via
+  // mlItemId quando existe (estável mesmo se o SKU mudar no anúncio ML ou o
+  // pedido carregar um snapshot de SKU antigo); cai pro texto de SKU da
+  // linha do pedido quando não há vínculo. Ver docs no plano de migração de
+  // identidade de produto (SKU -> mlItemId).
+  const effectiveSkuByItemId = await resolveEffectiveSkuByItemId(
+    input.organizationId,
+    items.map((item) => ({ id: item.id, sku: getItemSku(item) })),
+  );
+
   input.onProgress?.({
     phase: "compute",
     message: "Carregando custos dos produtos…",
   });
 
-  const allSkus = collectSkusFromOrders(orders, itemById);
-  const aliasMap = await loadSkuAliasMap(input.organizationId);
+  const allSkus = [
+    ...new Set([
+      ...collectSkusFromOrders(orders, itemById),
+      ...[...effectiveSkuByItemId.values()].filter(
+        (sku): sku is string => Boolean(sku),
+      ),
+    ]),
+  ];
   const custoBySku: Map<string, CustoProduto> = await loadCustoBySkuMap(
     input.organizationId,
     allSkus,
-    aliasMap,
   );
 
   input.onProgress?.({
@@ -279,6 +295,7 @@ export async function generateMonthlyTaxReport(input: {
         contributorByCnpj,
         overrides,
         freightCostByOrderId,
+        effectiveSkuByItemId,
       }),
     );
   }
@@ -388,7 +405,6 @@ export async function generateMonthlyTaxReport(input: {
         });
       }
     },
-    aliasMap,
   });
 
   input.onProgress?.({ phase: "done", message: "Relatório gerado." });

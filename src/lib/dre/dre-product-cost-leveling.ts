@@ -173,9 +173,9 @@ export async function createDreProductCostLeveling(
   const input: DreProductCostLevelingInput = { ...raw, sku };
   assertCostInput(input);
 
-  const product = await prisma.product.findUnique({
-    where: { organizationId_sku: { organizationId, sku } },
-    select: { sku: true },
+  const product = await prisma.product.findFirst({
+    where: { organizationId, sku },
+    select: { mlItemId: true },
   });
   if (!product) {
     throw new DreProductCostLevelingError(
@@ -190,6 +190,7 @@ export async function createDreProductCostLeveling(
     data: {
       organizationId,
       sku,
+      productMlItemId: product.mlItemId,
       startDate: new Date(`${input.startDate}T00:00:00.000Z`),
       endDate: new Date(`${input.endDate}T00:00:00.000Z`),
       hasIcmsSt: input.hasIcmsSt,
@@ -227,9 +228,9 @@ export async function updateDreProductCostLeveling(
   const input: DreProductCostLevelingInput = { ...raw, sku };
   assertCostInput(input);
 
-  const product = await prisma.product.findUnique({
-    where: { organizationId_sku: { organizationId, sku } },
-    select: { sku: true },
+  const product = await prisma.product.findFirst({
+    where: { organizationId, sku },
+    select: { mlItemId: true },
   });
   if (!product) {
     throw new DreProductCostLevelingError(
@@ -244,6 +245,7 @@ export async function updateDreProductCostLeveling(
     where: { id },
     data: {
       sku,
+      productMlItemId: product.mlItemId,
       startDate: new Date(`${input.startDate}T00:00:00.000Z`),
       endDate: new Date(`${input.endDate}T00:00:00.000Z`),
       hasIcmsSt: input.hasIcmsSt,

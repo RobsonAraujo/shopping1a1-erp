@@ -93,13 +93,17 @@ export function ProductsTableDesktop({
             ) : (
               filteredProducts.map((product) => (
                 <tr
-                  key={product.sku}
+                  key={product.mlItemId}
                   className="border-t border-[var(--border)] transition-colors hover:bg-[var(--muted)]/25"
                 >
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2.5">
-                      <ProductThumbnail src={product.imageUrl} alt={product.sku} size={40} />
-                      <span className="font-medium">{product.sku}</span>
+                      <ProductThumbnail
+                        src={product.imageUrl}
+                        alt={product.sku ?? product.mlItemId}
+                        size={40}
+                      />
+                      <span className="font-medium">{product.sku ?? "—"}</span>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-[var(--muted-foreground)]">
@@ -158,7 +162,7 @@ export function ProductsTableDesktop({
                         type="button"
                         variant="ghost"
                         size="icon-sm"
-                        aria-label={`Editar ${product.sku}`}
+                        aria-label={`Editar ${product.sku ?? product.mlItemId}`}
                         onClick={() => onEdit(product)}
                       >
                         <Pencil className="size-4" aria-hidden />
@@ -167,8 +171,8 @@ export function ProductsTableDesktop({
                         type="button"
                         variant="ghost"
                         size="icon-sm"
-                        aria-label={`Remover ${product.sku}`}
-                        onClick={() => onDelete(product.sku)}
+                        aria-label={`Remover ${product.sku ?? product.mlItemId}`}
+                        onClick={() => onDelete(product.mlItemId)}
                       >
                         <Trash2 className="size-4" aria-hidden />
                       </Button>

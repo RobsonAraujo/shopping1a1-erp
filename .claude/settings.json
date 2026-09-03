@@ -1,7 +1,25 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(grep -n \"porSku\\\\|Map<string\\\\|\\\\.set\\(sku\\\\|\\\\.set\\(effectiveSku\\\\|groupBy\\\\|new Map\\(\" \"/Users/robsonaraumocarmo/Documents/Robson - Repos/shopping Um a Um/shopping1a1-erp/src/lib/dre/dre-month-data.ts\" 2>/dev/null || grep -n \"porSku\\\\|Map<string\\\\|\\\\.set\\(sku\\\\|\\\\.set\\(effectiveSku\\\\|groupBy\\\\|new Map\\(\" \"/Users/robsonaraujocarmo/Documents/Robson - Repos/shopping Um a Um/shopping1a1-erp/src/lib/dre/dre-month-data.ts\")",
+      "Read(//Users/robsonaraumocarmo/Documents/Robson - Repos/shopping Um a Um/shopping1a1-erp/src/lib/dre/**)",
+      "Bash(PGPASSWORD=erp psql -h localhost -p 5433 -U erp -d shopping1a1 -c ' *)",
+      "Bash(git ls-tree *)",
+      "Bash(cd \"/Users/robsonaraujocarmo/Documents/Robson - Repos/shopping Um a Um/shopping1a1-erp\" && git show HEAD:prisma/schema.prisma > /tmp/prod_schema.prisma && grep -n \"^model Product \\\\|^model KitItem\\\\|^model ProductSkuAlias\\\\|^model DreProductCostLeveling\\\\|^model Kit \" -A 25 /tmp/prod_schema.prisma | head -140)",
+      "Read(//tmp/**)",
+      "Bash(cp /tmp/prod_schema.prisma /tmp/prod_schema_additive.prisma)",
+      "Bash(python3 -)",
+      "Bash(cd \"/Users/robsonaraujocarmo/Documents/Robson - Repos/shopping Um a Um/shopping1a1-erp\" && sed -n '710,740p' /tmp/prod_schema_additive.prisma)",
+      "Read(//private/tmp/**)",
+      "Bash(npx prisma *)",
+      "Bash(cd \"/Users/robsonaraujocarmo/Documents/Robson - Repos/shopping Um a Um/shopping1a1-erp\" && grep -n \"model WarehouseStock\\\\|model ReplenishmentCycle\\\\|model StockAttentionAcknowledgement\" -A 20 /tmp/prod_schema_additive.prisma | grep -n \"listing Listing\\\\|model \")",
+      "Bash(git check-ignore *)",
+      "Bash(mv /tmp/staging_migration_holdback/20260902023947_product_identity_is_ml_item_id prisma/migrations/)",
+      "Bash(DATABASE_URL=\"postgresql://erp:erp@localhost:5433/shopping1a1_prod_staging?schema=public\" npx prisma migrate deploy)",
+      "Bash(PGPASSWORD=erp psql -h localhost -p 5433 -U erp -d shopping1a1_prod_staging -c \"\\\\d products\")",
+      "Bash(PGPASSWORD=erp psql -h localhost -p 5433 -U erp -d shopping1a1_prod_staging -c \"\\\\d kit_items\")",
+      "Bash(PGPASSWORD=erp psql -h localhost -p 5433 -U erp -d shopping1a1_prod_staging -c \"SELECT count\\(*\\) FROM products;\")"
     ]
   }
 }
