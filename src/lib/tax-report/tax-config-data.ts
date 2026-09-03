@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/db";
+import { prisma } from "@/lib/db/db";
 import {
   DEFAULT_COFINS_RATE,
   DEFAULT_IRPJ_ADDITIONAL_THRESHOLD,

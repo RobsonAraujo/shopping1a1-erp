@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
+import { prisma } from "@/lib/db/db";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 import type { OrganizationStatus } from "@/generated/prisma";
 
 const VALID_STATUSES: OrganizationStatus[] = [

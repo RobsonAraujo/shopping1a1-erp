@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { notFound } from "next/navigation";
-import { Breadcrumbs } from "@/components/breadcrumbs";
-import { MonthlyTaxReportSkuClient } from "@/components/relatorio-tributario/monthly-tax-report-sku-client";
+import { Breadcrumbs } from "@/components/shared/Breadcrumbs";
+import { MonthlyTaxReportSkuClient } from "@/components/relatorio-tributario/MonthlyTaxReportSkuClient";
 import { Button } from "@/components/ui/button";
 import { parseTaxReportSkuPeriodParams, taxReportPath } from "@/lib/tax-report/routes";
 

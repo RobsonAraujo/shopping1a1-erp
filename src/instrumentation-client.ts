@@ -1,3 +1,3 @@
-import { initErrorTrackingClient } from "@/lib/error-tracking";
+import { initErrorTrackingClient } from "@/lib/infra/error-tracking";
 
 initErrorTrackingClient();

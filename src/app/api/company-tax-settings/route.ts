@@ -1,21 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/db";
+import { prisma } from "@/lib/db/db";
 import {
   ensureCompanySettings,
   validateWholesaleReductionPercent,
   type CompanySettings,
-} from "@/lib/product-data";
-import { DEFAULT_PIS_COFINS_PERCENT } from "@/lib/product-pricing";
+} from "@/lib/products/product-data";
+import { DEFAULT_PIS_COFINS_PERCENT } from "@/lib/pricing/product-pricing";
 import {
   validateWholesaleDiscountMinPurchaseUnit,
   validateWholesaleReductionSettings,
   WHOLESALE_ANCHOR_MIN_PURCHASE_UNIT,
   type WholesaleReductionSettings,
-} from "@/lib/wholesale-pricing";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireOrganization } from "@/lib/api-auth";
-import { parseJsonBody } from "@/lib/api-validation";
+} from "@/lib/pricing/wholesale-pricing";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
+import { requireOrganization } from "@/lib/api/api-auth";
+import { parseJsonBody } from "@/lib/api/api-validation";
 
 function wholesaleReductionsResponse(
   settings: Pick<

@@ -2,7 +2,7 @@ import {
   computeEffectivePricingCost,
   normalizeProductSku,
   type ResolvedProductPricing,
-} from "@/lib/product-pricing";
+} from "@/lib/pricing/product-pricing";
 
 export type DreProductCostLevelingInput = {
   sku: string;

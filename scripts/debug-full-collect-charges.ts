@@ -6,7 +6,7 @@
  *   npx tsx scripts/debug-full-collect-charges.ts 2026 6 123456789
  */
 import "dotenv/config";
-import { prisma } from "../src/lib/db";
+import { prisma } from "../src/lib/db/db";
 import { fetchFullCollectChargesForPeriod } from "../src/lib/mercadolibre/billing-full-collect";
 import { billingPeriodKey } from "../src/lib/mercadolibre/billing-shared";
 import { resolveSellerAccessToken } from "../src/lib/mercadolibre/persist-seller-tokens";

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { fetchMe } from "@/lib/mercadolibre/api";
-import { requireOrganization } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api/api-auth";
 
 export async function GET() {
   const auth = await requireOrganization();

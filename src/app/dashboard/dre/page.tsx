@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { LineChart } from "lucide-react";
-import { DreClient } from "@/components/dre/dre-client";
+import { DreClient } from "@/components/dre/DreClient";
 
 export const metadata: Metadata = {
   title: "DRE",

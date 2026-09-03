@@ -8,8 +8,8 @@ import { formatSellerListingStartedLabel } from "@/lib/mercadolibre/listing-date
 import {
   ListingStatusBadge,
   listingRowMutedClass,
-} from "@/components/listing-status-badge";
-import { MetricWithHint } from "@/components/metric-with-hint";
+} from "@/components/shared/ListingStatusBadge";
+import { MetricWithHint } from "@/components/shared/MetricWithHint";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";

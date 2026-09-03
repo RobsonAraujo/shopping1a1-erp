@@ -1,4 +1,4 @@
-import { roundMoney } from "@/lib/financial-margin";
+import { roundMoney } from "@/lib/pricing/financial-margin";
 import { isCurrentCalendarMonth } from "@/lib/mercadolibre/revenue-periods";
 import { getZonedParts } from "@/lib/report-timezone";
 import { reportsConfig } from "@/config/reports";

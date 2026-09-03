@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/db";
+import { prisma } from "@/lib/db/db";
 import { fetchOperationalListings } from "@/lib/mercadolibre/api";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { fetchItemSalePrice } from "@/lib/mercadolibre/item-sale-price";

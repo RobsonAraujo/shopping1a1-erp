@@ -1,8 +1,8 @@
-import { roundMoney } from "@/lib/financial-margin";
+import { roundMoney } from "@/lib/pricing/financial-margin";
 import {
   isIcmsStRecuperavelAplicavel,
   purchaseIcmsCreditUnit,
-} from "@/lib/product-pricing";
+} from "@/lib/pricing/product-pricing";
 import type {
   IcmsCreditoCompraBreakdown,
   TransacaoVenda,

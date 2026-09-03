@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loadDreYearView } from "@/lib/dre/dre-year-data";
-import { requireOrganization } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api/api-auth";
 import { getZonedYearMonth } from "@/lib/mercadolibre/revenue-periods";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 
 export async function GET(request: NextRequest) {
   const auth = await requireOrganization();

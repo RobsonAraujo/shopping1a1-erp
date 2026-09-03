@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-import { percentOfSale } from "@/lib/financial-margin";
+import { percentOfSale } from "@/lib/pricing/financial-margin";
 import {
   impostoOperacionalLinha,
   margemOperacionalEstimadaLinha,

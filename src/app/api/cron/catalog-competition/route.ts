@@ -5,8 +5,8 @@ import {
 } from "@/lib/catalog-report/catalog-competition-poll";
 import { recordCatalogPollRun } from "@/lib/catalog-report/catalog-competition-poll-stats";
 import { resolveSellerAccessToken } from "@/lib/mercadolibre/persist-seller-tokens";
-import { logServerError } from "@/lib/server-public-error";
-import { prisma } from "@/lib/db";
+import { logServerError } from "@/lib/infra/server-public-error";
+import { prisma } from "@/lib/db/db";
 
 /**
  * Roda 1x/hora (cron-job.org — configuração externa, não muda por tenant).

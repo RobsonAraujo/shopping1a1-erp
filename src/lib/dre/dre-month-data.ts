@@ -1,7 +1,7 @@
 import { stockPlanningConfig } from "@/config/stock-planning";
 import { reportsConfig } from "@/config/reports";
-import { prisma } from "@/lib/db";
-import { logServerError } from "@/lib/server-public-error";
+import { prisma } from "@/lib/db/db";
+import { logServerError } from "@/lib/infra/server-public-error";
 import {
   applyManualLineEdit,
   applyRestoreLineFromSync,
@@ -20,16 +20,16 @@ import {
   type DreProductCostBreakdownItem,
   type DreTaxBreakdownItem,
 } from "@/lib/dre/dre-calculations";
-import { loadProductsMapBySku } from "@/lib/product-data";
-import { resolveEffectiveSkuByItemId } from "@/lib/product-resolver";
-import { loadProductTaxFromLatestReport } from "@/lib/product-tax-from-report";
-import { roundMoney } from "@/lib/financial-margin";
+import { loadProductsMapBySku } from "@/lib/products/product-data";
+import { resolveEffectiveSkuByItemId } from "@/lib/products/product-resolver";
+import { loadProductTaxFromLatestReport } from "@/lib/products/product-tax-from-report";
+import { roundMoney } from "@/lib/pricing/financial-margin";
 import { getItemSku, isKitItem } from "@/lib/mercadolibre/item-sku";
-import { loadKitsByMlItemId, resolveKitPricing } from "@/lib/kit-data";
+import { loadKitsByMlItemId, resolveKitPricing } from "@/lib/products/kit-data";
 import {
   normalizeProductSku,
   type ResolvedProductPricing,
-} from "@/lib/product-pricing";
+} from "@/lib/pricing/product-pricing";
 import {
   applyLevelingsForOrderDate,
   loadLevelingsOverlappingMonth,

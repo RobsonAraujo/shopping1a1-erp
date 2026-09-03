@@ -6,7 +6,7 @@
  *   npx tsx scripts/debug-full-inbound.ts 2026 6 scan
  */
 import "dotenv/config";
-import { prisma } from "../src/lib/db";
+import { prisma } from "../src/lib/db/db";
 import { fetchSellerFulfillmentInventoryIds } from "../src/lib/mercadolibre/api";
 import {
   fetchFullInboundShipmentsForPeriod,

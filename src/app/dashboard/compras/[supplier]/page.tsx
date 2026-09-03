@@ -8,14 +8,14 @@ import {
   loadDashboardPurchaseData,
   type PurchaseAnalysisItemRow,
 } from "@/lib/compras/dashboard-purchase-data";
-import type { PurchaseAnalysisSettings } from "@/lib/purchase-analysis";
-import { decodeSupplierParam, supplierPathSegment } from "@/lib/purchase-analysis";
-import { Breadcrumbs } from "@/components/breadcrumbs";
-import { SupplierPurchaseAnalysisView } from "@/components/compras/supplier-purchase-analysis-view";
+import type { PurchaseAnalysisSettings } from "@/lib/compras/purchase-analysis";
+import { decodeSupplierParam, supplierPathSegment } from "@/lib/compras/purchase-analysis";
+import { Breadcrumbs } from "@/components/shared/Breadcrumbs";
+import { SupplierPurchaseAnalysisView } from "@/components/compras/SupplierPurchaseAnalysisView";
 import { UserFeedback } from "@/components/ui/user-feedback";
 import { readSession } from "@/lib/mercadolibre/session";
 import { getOrganizationContext } from "@/lib/organizations/context";
-import { publicPageLoadMessage } from "@/lib/server-public-error";
+import { publicPageLoadMessage } from "@/lib/infra/server-public-error";
 
 type PageProps = {
   params: Promise<{ supplier: string }>;

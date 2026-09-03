@@ -1,0 +1,405 @@
+"use client";
+
+import Image from "next/image";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { RefreshCw } from "lucide-react";
+import {
+  ItemListSearch,
+  itemListSearchEmptyMessage,
+} from "@/components/shared/ItemListSearch";
+import {
+  ListingStatusBadge,
+  listingRowMutedClass,
+} from "@/components/shared/ListingStatusBadge";
+import {
+  ShowPausedListingsSwitch,
+  countPausedListings,
+  filterListingsByPausedVisibility,
+} from "@/components/shared/ShowPausedListingsSwitch";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { UserFeedback } from "@/components/ui/user-feedback";
+import { filterByItemListSearch } from "@/lib/item-list-search";
+import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-is-mobile";
+import { SortableTh } from "@/components/ui/sortable-th";
+import { useTableSort } from "@/hooks/use-table-sort";
+
+type ReportItem = {
+  mlItemId: string;
+  titleSnapshot: string | null;
+  skuSnapshot: string | null;
+  imageUrlSnapshot: string | null;
+  mlStatus: string | null;
+  catalogStatus: string | null;
+  catalogSellerPrice: number | null;
+  catalogPriceToWin: number | null;
+  catalogPolledAt: string | null;
+};
+
+type ReportResponse = {
+  pollStats: {
+    todayCount: number;
+    lastRunAt: string | null;
+    lastRunSource: string | null;
+    timezone: string;
+  };
+  items: ReportItem[];
+};
+
+function statusBadgeClass(status: string | null) {
+  if (status === "winning") {
+    return "inline-flex rounded-md bg-emerald-600 px-2 py-1 text-xs font-semibold text-white";
+  }
+  if (status === "losing") {
+    return "inline-flex rounded-md bg-rose-600 px-2 py-1 text-xs font-semibold text-white";
+  }
+  if (status === "shared") {
+    return "inline-flex rounded-md bg-amber-500 px-2 py-1 text-xs font-semibold text-white";
+  }
+  return "inline-flex rounded-md bg-[var(--muted)] px-2 py-1 text-xs font-semibold text-[var(--muted-foreground)]";
+}
+
+function statusLabel(status: string | null) {
+  if (status === "winning") return "Ganhando";
+  if (status === "losing") return "Perdendo";
+  if (status === "shared") return "Compartilhando";
+  return "Sem sinal";
+}
+
+function formatLastRun(iso: string | null, timeZone: string): string {
+  if (!iso) return "—";
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  }).format(new Date(iso));
+}
+
+function itemMlStatus(row: ReportItem): string {
+  return row.mlStatus ?? "active";
+}
+
+/** Ordem lógica de relevância: ganhando > compartilhando > perdendo > sem sinal. */
+const STATUS_RANK: Record<string, number> = {
+  winning: 0,
+  shared: 1,
+  losing: 2,
+};
+
+function statusRank(status: string | null): number {
+  return status !== null && status in STATUS_RANK ? STATUS_RANK[status] : 3;
+}
+
+type ReportSortKey = "item" | "status";
+
+function reportSortValue(row: ReportItem, key: ReportSortKey): string | number {
+  if (key === "status") return statusRank(row.catalogStatus);
+  return row.skuSnapshot ?? row.titleSnapshot ?? row.mlItemId;
+}
+
+export function CatalogCompetitionReportClient() {
+  const isMobile = useIsMobile();
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [data, setData] = useState<ReportResponse | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showPaused, setShowPaused] = useState(false);
+
+  const statusVisibleItems = useMemo(
+    () =>
+      data
+        ? filterListingsByPausedVisibility(data.items, showPaused, itemMlStatus)
+        : [],
+    [data, showPaused],
+  );
+  const pausedCount = useMemo(
+    () => (data ? countPausedListings(data.items, itemMlStatus) : 0),
+    [data],
+  );
+  const filteredItems = useMemo(
+    () =>
+      filterByItemListSearch(statusVisibleItems, searchQuery, (row) => ({
+        sku: row.skuSnapshot,
+        title: row.titleSnapshot,
+        mlItemId: row.mlItemId,
+      })),
+    [statusVisibleItems, searchQuery],
+  );
+  const { sort, sortedRows: sortedItems, onSortChange } = useTableSort<
+    ReportItem,
+    ReportSortKey
+  >(filteredItems, reportSortValue, { key: "item", direction: "asc" });
+
+  async function loadReport() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/reports/catalog-competition");
+      const json = (await res.json()) as ReportResponse | { error?: string };
+      if (!res.ok) {
+        setError(
+          (json as { error?: string }).error ?? "Falha ao carregar relatório.",
+        );
+        return;
+      }
+      setData(json as ReportResponse);
+    } catch {
+      setError("Falha de rede ao carregar relatório.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function collectSnapshot() {
+    setRefreshing(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/ml/catalog-competition/snapshot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        changed?: number;
+      };
+      if (!res.ok) {
+        setError(json.error ?? "Falha ao coletar snapshot.");
+        return;
+      }
+      await loadReport();
+    } catch {
+      setError("Falha de rede ao coletar snapshot.");
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadReport();
+  }, []);
+
+  return (
+    <div className="space-y-6">
+      {data ? (
+        <Card className="border-[var(--border)] bg-[var(--muted)]/20">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
+            <div className="text-sm">
+              <span className="font-medium">Coletas hoje:</span>{" "}
+              <span className="text-lg font-semibold">
+                {data.pollStats.todayCount}
+              </span>
+              <span className="ml-3 text-[var(--muted-foreground)]">
+                Última coleta às{" "}
+                {formatLastRun(
+                  data.pollStats.lastRunAt,
+                  data.pollStats.timezone,
+                )}
+                {data.pollStats.lastRunSource
+                  ? ` (${data.pollStats.lastRunSource === "cron" ? "cron" : "manual"})`
+                  : ""}
+              </span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void collectSnapshot()}
+              disabled={refreshing}
+            >
+              <RefreshCw className="mr-1.5 size-4" />
+              {refreshing ? "Atualizando..." : "Coletar snapshot agora"}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void collectSnapshot()}
+            disabled={refreshing}
+          >
+            <RefreshCw className="mr-1.5 size-4" />
+            {refreshing ? "Atualizando..." : "Coletar snapshot agora"}
+          </Button>
+        </div>
+      )}
+
+      {error ? <UserFeedback>{error}</UserFeedback> : null}
+
+      <Card>
+        <CardHeader className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle className="text-base">Catálogo anúncios</CardTitle>
+            <ShowPausedListingsSwitch
+              checked={showPaused}
+              onCheckedChange={setShowPaused}
+              pausedCount={pausedCount}
+              disabled={loading || !data?.items.length}
+            />
+          </div>
+          {data && data.items.length > 0 ? (
+            <ItemListSearch
+              value={searchQuery}
+              onChange={setSearchQuery}
+              filteredCount={filteredItems.length}
+              totalCount={statusVisibleItems.length}
+            />
+          ) : null}
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <p className="text-sm text-[var(--muted-foreground)]">
+              Carregando...
+            </p>
+          ) : !data || data.items.length === 0 ? (
+            <p className="text-sm text-[var(--muted-foreground)]">
+              Sem dados de catálogo ainda. Clique em &quot;Coletar snapshot
+              agora&quot; ou aguarde a próxima coleta automática.
+            </p>
+          ) : filteredItems.length === 0 ? (
+            <p className="text-sm text-[var(--muted-foreground)]">
+              {itemListSearchEmptyMessage(searchQuery)}
+            </p>
+          ) : isMobile ? (
+            <div className="space-y-2">
+              {sortedItems.map((row) => {
+                const mlStatus = itemMlStatus(row);
+                return (
+                  <Link
+                    key={row.mlItemId}
+                    href={`/dashboard/catalog-report/${row.mlItemId}`}
+                    className={cn(
+                      "flex items-center gap-2.5 rounded-lg border border-[var(--border)] px-3 py-2.5 active:bg-[var(--muted)]/40",
+                      listingRowMutedClass(mlStatus, 0, 0),
+                    )}
+                  >
+                    <span className="relative inline-flex size-11 shrink-0 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--muted)]">
+                      {row.imageUrlSnapshot ? (
+                        <Image
+                          src={row.imageUrlSnapshot}
+                          alt={row.titleSnapshot ?? ""}
+                          fill
+                          sizes="44px"
+                          className="object-contain"
+                        />
+                      ) : null}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="truncate font-medium text-[var(--primary)]">
+                          {row.skuSnapshot ?? "Sem SKU"}
+                        </div>
+                        <ListingStatusBadge
+                          status={mlStatus}
+                          mlStock={0}
+                          warehouseStock={0}
+                        />
+                      </div>
+                      <div className="truncate text-xs text-[var(--muted-foreground)]">
+                        {row.titleSnapshot ?? "Sem título sincronizado"}
+                      </div>
+                      <div className="font-mono text-[11px] text-[var(--muted-foreground)]">
+                        {row.mlItemId}
+                      </div>
+                      <div className="mt-1">
+                        <span className={statusBadgeClass(row.catalogStatus)}>
+                          {statusLabel(row.catalogStatus)}
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[40rem] text-left text-sm">
+                <thead className="border-b border-[var(--border)] text-xs text-[var(--muted-foreground)]">
+                  <tr>
+                    <SortableTh
+                      label="Item"
+                      sortKey="item"
+                      sort={sort}
+                      onSortChange={onSortChange}
+                      align="left"
+                      className="py-2 pr-3"
+                    />
+                    <SortableTh
+                      label="Status"
+                      sortKey="status"
+                      sort={sort}
+                      onSortChange={onSortChange}
+                      align="left"
+                      className="py-2 pr-3"
+                    />
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedItems.map((row) => {
+                    const mlStatus = itemMlStatus(row);
+                    return (
+                      <tr
+                        key={row.mlItemId}
+                        className={cn(
+                          "border-b border-[var(--border)]",
+                          listingRowMutedClass(mlStatus, 0, 0),
+                        )}
+                      >
+                        <td className="py-2 pr-3">
+                          <Link
+                            href={`/dashboard/catalog-report/${row.mlItemId}`}
+                            className="group flex items-center gap-2.5 rounded-md px-1 py-0.5 hover:bg-[var(--muted)]/40"
+                          >
+                            <span className="relative inline-flex size-10 shrink-0 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--muted)]">
+                              {row.imageUrlSnapshot ? (
+                                <Image
+                                  src={row.imageUrlSnapshot}
+                                  alt={row.titleSnapshot ?? ""}
+                                  fill
+                                  sizes="40px"
+                                  className="object-contain"
+                                />
+                              ) : null}
+                            </span>
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <div className="truncate font-medium text-[var(--primary)] group-hover:underline">
+                                  {row.skuSnapshot ?? "Sem SKU"}
+                                </div>
+                                <ListingStatusBadge
+                                  status={mlStatus}
+                                  mlStock={0}
+                                  warehouseStock={0}
+                                />
+                              </div>
+                              <div className="max-w-[400px] truncate text-xs text-[var(--muted-foreground)]">
+                                {row.titleSnapshot ?? "Sem título sincronizado"}
+                              </div>
+                              <div className="font-mono text-[11px] text-[var(--muted-foreground)]">
+                                {row.mlItemId}
+                              </div>
+                            </div>
+                          </Link>
+                        </td>
+                        <td className="py-2 pr-3">
+                          <span className={statusBadgeClass(row.catalogStatus)}>
+                            {statusLabel(row.catalogStatus)}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

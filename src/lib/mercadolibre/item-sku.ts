@@ -1,5 +1,5 @@
 import type { ItemBody } from "@/lib/mercadolibre/types";
-import { normalizeProductSku } from "@/lib/product-pricing";
+import { normalizeProductSku } from "@/lib/pricing/product-pricing";
 
 const NO_SUPPLIER_LABEL = "Sem fornecedor";
 

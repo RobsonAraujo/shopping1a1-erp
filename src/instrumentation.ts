@@ -1,5 +1,5 @@
 import type { Instrumentation } from "next";
-import { captureRequestError, initErrorTrackingServer } from "@/lib/error-tracking";
+import { captureRequestError, initErrorTrackingServer } from "@/lib/infra/error-tracking";
 
 export function register(): void {
   initErrorTrackingServer();

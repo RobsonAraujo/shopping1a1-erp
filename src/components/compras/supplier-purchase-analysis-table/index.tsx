@@ -8,7 +8,7 @@ import type {
   SupplierPurchaseAnalysisSortKey,
   SupplierPurchaseAnalysisTableProps,
 } from "@/components/compras/supplier-purchase-analysis-table/types";
-import type { PurchaseAnalysisItemRow } from "@/lib/purchase-analysis-rows";
+import type { PurchaseAnalysisItemRow } from "@/lib/compras/purchase-analysis-rows";
 
 function getSortValue(
   row: PurchaseAnalysisItemRow,

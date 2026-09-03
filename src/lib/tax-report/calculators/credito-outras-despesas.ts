@@ -1,4 +1,4 @@
-import { roundMoney } from "@/lib/financial-margin";
+import { roundMoney } from "@/lib/pricing/financial-margin";
 import { FIXED_COST_CREDIT_RATE } from "@/lib/tax-report/fixed-cost-credit";
 import type { CreditoOutrasDespesasBreakdown } from "@/lib/tax-report/types";
 

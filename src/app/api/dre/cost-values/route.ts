@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/db";
+import { prisma } from "@/lib/db/db";
 import { loadDreYearView } from "@/lib/dre/dre-year-data";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireOrganization } from "@/lib/api-auth";
-import { parseJsonBody } from "@/lib/api-validation";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
+import { requireOrganization } from "@/lib/api/api-auth";
+import { parseJsonBody } from "@/lib/api/api-validation";
 
 const costValueSchema = z.object({
   costItemId: z.string().trim().min(1),

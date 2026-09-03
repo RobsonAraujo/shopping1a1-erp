@@ -4,16 +4,16 @@ import { fetchItemById } from "@/lib/mercadolibre/api";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
 import { upsertListingFromItem } from "@/lib/mercadolibre/listing-sync";
 import type { ItemBody } from "@/lib/mercadolibre/types";
-import { prisma } from "@/lib/db";
-import { syncPurchaseCycleFromWarehouse } from "@/lib/replenishment-cycle-data";
-import { computeStockPlanningDisplay } from "@/lib/stock-planning";
+import { prisma } from "@/lib/db/db";
+import { syncPurchaseCycleFromWarehouse } from "@/lib/compras/replenishment-cycle-data";
+import { computeStockPlanningDisplay } from "@/lib/compras/stock-planning";
 import {
   loadOperationalSettings,
   toStockPlanningValues,
-} from "@/lib/operational-settings";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireOrganization } from "@/lib/api-auth";
-import { parseJsonBody } from "@/lib/api-validation";
+} from "@/lib/configuracoes/operational-settings";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
+import { requireOrganization } from "@/lib/api/api-auth";
+import { parseJsonBody } from "@/lib/api/api-validation";
 
 type RouteContext = { params: Promise<{ mlItemId: string }> };
 

@@ -1,5 +1,5 @@
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
-import type { PurchaseAnalysisItemRow } from "@/lib/purchase-analysis-rows";
+import type { PurchaseAnalysisItemRow } from "@/lib/compras/purchase-analysis-rows";
 import type { RupturaRow } from "./types";
 
 export function buildRupturaRows(rows: PurchaseAnalysisItemRow[]): RupturaRow[] {

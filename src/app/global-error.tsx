@@ -3,8 +3,8 @@
 import { useEffect } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import { FullPageError } from "@/components/ui/full-page-error";
-import { GENERIC_USER_ERROR } from "@/lib/api-client-error";
-import { captureError } from "@/lib/error-tracking";
+import { GENERIC_USER_ERROR } from "@/lib/api/api-client-error";
+import { captureError } from "@/lib/infra/error-tracking";
 import "./globals.css";
 
 const geistSans = Geist({

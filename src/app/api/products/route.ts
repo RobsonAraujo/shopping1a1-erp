@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
-import { prisma } from "@/lib/db";
+import { prisma } from "@/lib/db/db";
 import {
   buildProductView,
   ensureCompanySettings,
@@ -9,13 +9,13 @@ import {
   loadListingImageUrlsBySku,
   productWriteToPrismaData,
   validateProductInput,
-} from "@/lib/product-data";
-import { loadProductTaxFromLatestReport } from "@/lib/product-tax-from-report";
+} from "@/lib/products/product-data";
+import { loadProductTaxFromLatestReport } from "@/lib/products/product-tax-from-report";
 import { fetchItemById } from "@/lib/mercadolibre/api";
 import { getItemSku } from "@/lib/mercadolibre/item-sku";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireOrganization } from "@/lib/api-auth";
-import { parseJsonBody } from "@/lib/api-validation";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
+import { requireOrganization } from "@/lib/api/api-auth";
+import { parseJsonBody } from "@/lib/api/api-validation";
 
 const productWriteSchema = z.object({
   mlItemId: z.string().trim().min(1, "Selecione um anúncio do Mercado Livre"),

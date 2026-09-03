@@ -2,7 +2,7 @@ import { reportsConfig } from "@/config/reports";
 import { getCalendarMonthRange, formatCalendarRangeYmd } from "./revenue-periods";
 import { getMercadoLibreConfig } from "./config";
 import { fetchWithRetry, MlApiFetchError } from "./fetch-with-retry";
-import { shipmentShippedAtInCalendarMonth } from "@/lib/full-shipment-period";
+import { shipmentShippedAtInCalendarMonth } from "@/lib/envios-full/full-shipment-period";
 
 export type InboundOperationSummary = {
   inboundId: string;

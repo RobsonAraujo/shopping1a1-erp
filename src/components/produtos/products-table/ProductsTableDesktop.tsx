@@ -4,11 +4,11 @@ import { Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { PlanningInfoTrigger } from "@/components/planning-info-trigger";
-import { ProductThumbnail } from "@/components/produtos/product-thumbnail";
-import { itemListSearchEmptyMessage } from "@/components/item-list-search";
+import { PlanningInfoTrigger } from "@/components/shared/PlanningInfoTrigger";
+import { ProductThumbnail } from "@/components/produtos/ProductThumbnail";
+import { itemListSearchEmptyMessage } from "@/components/shared/ItemListSearch";
 import { SortableTh } from "@/components/ui/sortable-th";
-import { formatFinancialMoney, formatFinancialPercent } from "@/lib/financial-margin";
+import { formatFinancialMoney, formatFinancialPercent } from "@/lib/pricing/financial-margin";
 import type { ProductsTableProps } from "@/components/produtos/products-table/types";
 
 export function ProductsTableDesktop({

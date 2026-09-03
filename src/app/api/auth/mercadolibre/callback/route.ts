@@ -5,7 +5,7 @@ import { fetchMe } from "@/lib/mercadolibre/api";
 import {
   logServerError,
   oauthRedirectErrorParam,
-} from "@/lib/server-public-error";
+} from "@/lib/infra/server-public-error";
 import { upsertSellerCredentials } from "@/lib/mercadolibre/persist-seller-tokens";
 import {
   clearOAuthStateCookie,

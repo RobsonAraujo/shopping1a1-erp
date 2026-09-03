@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { reportsConfig } from "@/config/reports";
-import { prisma } from "@/lib/db";
+import { prisma } from "@/lib/db/db";
 import {
   buildTimeline,
   catalogStatusLabel,
@@ -9,14 +9,14 @@ import {
   formatCatalogMoney,
   type CompetitionPoint,
   type CompetitionStatus,
-} from "@/lib/catalog-competition";
-import { requireOrganization } from "@/lib/api-auth";
+} from "@/lib/catalog-report/catalog-competition";
+import { requireOrganization } from "@/lib/api/api-auth";
 import {
   countItemSaleEventsBetween,
   fetchItemSaleEventsInDateRange,
 } from "@/lib/mercadolibre/api";
 import { loadCatalogMockSaleEvents } from "@/lib/catalog-report/catalog-report-mock-sales";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 
 type RouteContext = { params: Promise<{ itemId: string }> };
 

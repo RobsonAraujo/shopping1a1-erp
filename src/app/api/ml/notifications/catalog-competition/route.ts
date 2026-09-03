@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import { prisma } from "@/lib/db/db";
 import {
   type CompetitionStatus,
   deriveStatusFromPriceToWin,
   extractPriceToWin,
   extractSellerPrice,
-} from "@/lib/catalog-competition";
+} from "@/lib/catalog-report/catalog-competition";
 import { fetchItemById, fetchItemPriceToWin } from "@/lib/mercadolibre/api";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import { resolveSellerAccessToken } from "@/lib/mercadolibre/persist-seller-tokens";
-import { logServerError } from "@/lib/server-public-error";
-import { isEncryptionKeyConfigured } from "@/lib/app-secret-crypto";
+import { logServerError } from "@/lib/infra/server-public-error";
+import { isEncryptionKeyConfigured } from "@/lib/infra/app-secret-crypto";
 
 /**
  * ML catalog competition webhooks are triggers only: the POST body usually has no

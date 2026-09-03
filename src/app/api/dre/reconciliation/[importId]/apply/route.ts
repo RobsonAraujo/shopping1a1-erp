@@ -4,10 +4,10 @@ import {
   DRE_EDITABLE_LINE_KEYS,
   type DreEditableLineKey,
 } from "@/lib/dre/dre-calculations";
-import { requireOrganization } from "@/lib/api-auth";
-import { parseJsonBody } from "@/lib/api-validation";
+import { requireOrganization } from "@/lib/api/api-auth";
+import { parseJsonBody } from "@/lib/api/api-validation";
 import { applyReconciliationImport } from "@/lib/dre/reconciliation/reconciliation-data";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 
 const applySchema = z.object({
   acceptedLineKeys: z.array(

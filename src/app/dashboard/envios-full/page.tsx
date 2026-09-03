@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import { FullShipmentsClient } from "@/components/envios-full/full-shipments-client";
+import { FullShipmentsClient } from "@/components/envios-full/FullShipmentsClient";
 import { UserFeedback } from "@/components/ui/user-feedback";
 import {
   listFullShipmentsForPeriod,
@@ -9,7 +9,7 @@ import {
 import { getZonedYearMonth } from "@/lib/mercadolibre/revenue-periods";
 import { readSession } from "@/lib/mercadolibre/session";
 import { getOrganizationContext } from "@/lib/organizations/context";
-import { publicPageLoadMessage } from "@/lib/server-public-error";
+import { publicPageLoadMessage } from "@/lib/infra/server-public-error";
 
 export const metadata: Metadata = {
   title: "Relatório de Envios",

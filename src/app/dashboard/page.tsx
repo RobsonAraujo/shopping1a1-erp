@@ -3,10 +3,10 @@ import { cache, Suspense } from "react";
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { Award, ExternalLink } from "lucide-react";
-import { DashboardHomeShortcuts } from "@/components/home/dashboard-home-shortcuts";
-import { DashboardOperationsSummary } from "@/components/home/dashboard-operations-summary";
-import { DashboardPmaAlertPanel } from "@/components/home/dashboard-pma-alert-panel";
-import { DashboardSummaryClient } from "@/components/home/dashboard-summary-client";
+import { DashboardHomeShortcuts } from "@/components/home/DashboardHomeShortcuts";
+import { DashboardOperationsSummary } from "@/components/home/DashboardOperationsSummary";
+import { DashboardPmaAlertPanel } from "@/components/home/DashboardPmaAlertPanel";
+import { DashboardSummaryClient } from "@/components/home/DashboardSummaryClient";
 import { Card, CardContent } from "@/components/ui/card";
 import { UserFeedback } from "@/components/ui/user-feedback";
 import { fetchMe } from "@/lib/mercadolibre/api";
@@ -16,9 +16,9 @@ import {
   buildSellerReputationBadge,
   type SellerReputationBadge,
 } from "@/lib/mercadolibre/seller-reputation";
-import { loadOperationsSummaryFromDb } from "@/lib/replenishment-cycle-data";
+import { loadOperationsSummaryFromDb } from "@/lib/compras/replenishment-cycle-data";
 import { loadPmaAlerts } from "@/lib/home/pma-alert-data";
-import { publicPageLoadMessage } from "@/lib/server-public-error";
+import { publicPageLoadMessage } from "@/lib/infra/server-public-error";
 import { cn } from "@/lib/utils";
 
 async function PmaAlertSection({

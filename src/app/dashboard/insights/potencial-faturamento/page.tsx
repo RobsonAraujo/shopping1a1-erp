@@ -5,8 +5,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { readSession } from "@/lib/mercadolibre/session";
 import { getOrganizationContext } from "@/lib/organizations/context";
 import { loadRevenuePotentialData } from "@/lib/insights/revenue-potential";
-import { RevenuePotentialView } from "@/components/insights/revenue-potential-view";
-import { RevenuePotentialSkeleton } from "@/components/insights/revenue-potential-skeleton";
+import { RevenuePotentialView } from "@/components/insights/RevenuePotentialView";
+import { RevenuePotentialSkeleton } from "@/components/insights/RevenuePotentialSkeleton";
 
 async function RevenuePotentialSection({
   token,

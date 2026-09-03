@@ -1,11 +1,11 @@
 import type { FullShipment } from "@/generated/prisma/client";
 import { reportsConfig } from "@/config/reports";
-import { prisma } from "@/lib/db";
+import { prisma } from "@/lib/db/db";
 import {
   defaultShippedAtForBillingPeriod,
   fetchFullInboundShipmentsForPeriod,
 } from "@/lib/mercadolibre/billing-full-collect";
-import { activityMonthBounds } from "@/lib/full-shipment-period";
+import { activityMonthBounds } from "@/lib/envios-full/full-shipment-period";
 import {
   type FullShipmentRecord,
   type FullShipmentWriteInput,

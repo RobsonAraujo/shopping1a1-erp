@@ -1,4 +1,4 @@
-import { normalizeProductSku } from "@/lib/product-pricing";
+import { normalizeProductSku } from "@/lib/pricing/product-pricing";
 
 export const TAX_REPORT_MONTH_NAMES = [
   "Janeiro",

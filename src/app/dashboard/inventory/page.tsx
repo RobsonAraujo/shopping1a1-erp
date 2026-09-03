@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { cookies } from "next/headers";
-import { InventoryStockTable, type InventoryRow } from "@/components/inventory/inventory-stock-table";
-import { InventoryStockTableSkeleton } from "@/components/inventory/inventory-stock-table-skeleton";
+import { InventoryStockTable, type InventoryRow } from "@/components/inventory/InventoryStockTable";
+import { InventoryStockTableSkeleton } from "@/components/inventory/InventoryStockTableSkeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { UserFeedback } from "@/components/ui/user-feedback";
 import {
@@ -15,17 +15,17 @@ import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { getItemSku, isKitItem } from "@/lib/mercadolibre/item-sku";
 import { countListingsByStatus } from "@/lib/mercadolibre/listing-status";
-import { computeStockPlanningDisplay } from "@/lib/stock-planning";
+import { computeStockPlanningDisplay } from "@/lib/compras/stock-planning";
 import {
   loadOperationalSettings,
   toStockPlanningValues,
-} from "@/lib/operational-settings";
-import { loadStockReportProductsForListings } from "@/lib/product-data";
+} from "@/lib/configuracoes/operational-settings";
+import { loadStockReportProductsForListings } from "@/lib/products/product-data";
 import type { StockReportProductInfo } from "@/lib/inventory/inventory-stock-report";
-import { prisma } from "@/lib/db";
+import { prisma } from "@/lib/db/db";
 import { readSession } from "@/lib/mercadolibre/session";
 import { getOrganizationContext } from "@/lib/organizations/context";
-import { publicPageLoadMessage } from "@/lib/server-public-error";
+import { publicPageLoadMessage } from "@/lib/infra/server-public-error";
 
 function stockUnits(value: number | null | undefined): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return 0;

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loadTaxReportForPeriod } from "@/lib/tax-report/service/period-report";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireOrganization } from "@/lib/api-auth";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
+import { requireOrganization } from "@/lib/api/api-auth";
 import { stripTransacoesForResponse } from "@/lib/tax-report/strip-transacoes-for-response";
 
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;

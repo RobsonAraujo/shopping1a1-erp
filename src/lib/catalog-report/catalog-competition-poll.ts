@@ -5,15 +5,15 @@ import {
   extractSellerPrice,
   loadLatestCatalogCompetitionSnapshots,
   shouldRecordCatalogSnapshot,
-} from "@/lib/catalog-competition";
-import { prisma } from "@/lib/db";
+} from "@/lib/catalog-report/catalog-competition";
+import { prisma } from "@/lib/db/db";
 import {
   fetchAllUserItemIds,
   fetchItemPriceToWin,
   fetchItemsByIdsBatched,
 } from "@/lib/mercadolibre/api";
 import { upsertListingFromItem } from "@/lib/mercadolibre/listing-sync";
-import { logServerError } from "@/lib/server-public-error";
+import { logServerError } from "@/lib/infra/server-public-error";
 import type { CatalogCompetitionSource } from "@/generated/prisma/client";
 
 export type CatalogPollSource = Extract<

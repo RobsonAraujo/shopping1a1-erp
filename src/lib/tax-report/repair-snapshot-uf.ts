@@ -1,4 +1,4 @@
-import { roundMoney } from "@/lib/financial-margin";
+import { roundMoney } from "@/lib/pricing/financial-margin";
 import { resolveUfDestino } from "@/lib/tax-report/brazilian-ufs";
 import { icmsSemDifal } from "@/lib/tax-report/calculators/icms-difal";
 import type { TaxReportPayload } from "@/lib/tax-report/types";

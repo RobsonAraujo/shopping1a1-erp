@@ -11,7 +11,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { SortableTh } from "@/components/ui/sortable-th";
-import { formatFinancialMoney } from "@/lib/financial-margin";
+import { formatFinancialMoney } from "@/lib/pricing/financial-margin";
 import {
   formatShipmentDate,
   sourceLabel,

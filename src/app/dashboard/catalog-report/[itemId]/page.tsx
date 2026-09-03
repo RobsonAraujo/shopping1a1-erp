@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
-import { Breadcrumbs } from "@/components/breadcrumbs";
-import { CatalogCompetitionItemReportClient } from "@/components/catalog-report/catalog-competition-item-report-client";
+import { Breadcrumbs } from "@/components/shared/Breadcrumbs";
+import { CatalogCompetitionItemReportClient } from "@/components/catalog-report/CatalogCompetitionItemReportClient";
 import { Button } from "@/components/ui/button";
 
 type PageProps = {

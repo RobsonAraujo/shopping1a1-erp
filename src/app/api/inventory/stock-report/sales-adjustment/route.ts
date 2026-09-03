@@ -5,8 +5,8 @@ import {
   parseStockReportSnapshotDateInput,
   stockReportSalesAdjustmentRange,
 } from "@/lib/inventory/inventory-stock-report";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireOrganization } from "@/lib/api-auth";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
+import { requireOrganization } from "@/lib/api/api-auth";
 
 function parseItemIds(value: string | null): string[] {
   if (!value?.trim()) return [];

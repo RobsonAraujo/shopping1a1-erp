@@ -1,4 +1,4 @@
-import type { ProductView } from "@/lib/product-data";
+import type { ProductView } from "@/lib/products/product-data";
 
 export type CustoProduto = {
   sku: string;

@@ -3,8 +3,8 @@
  * Se um campo for renomeado na fonte, TypeScript quebra o build aqui — não no runtime.
  */
 import type { SkuAggregation } from "@/lib/tax-report/types";
-import type { FinancialEvaluationRow } from "@/lib/financial-evaluation-data";
-import type { PurchaseAnalysisItemRow } from "@/lib/purchase-analysis-rows";
+import type { FinancialEvaluationRow } from "@/lib/lucratividade/financial-evaluation-data";
+import type { PurchaseAnalysisItemRow } from "@/lib/compras/purchase-analysis-rows";
 
 // ---------------------------------------------------------------------------
 // Slow movers — produtos com cobertura acima do threshold configurável

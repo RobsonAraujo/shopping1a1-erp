@@ -1,4 +1,4 @@
-import { roundMoney } from "@/lib/financial-margin";
+import { roundMoney } from "@/lib/pricing/financial-margin";
 import { icmsSemDifal } from "@/lib/tax-report/calculators/icms-difal";
 import type {
   ApuracaoConsolidada,

@@ -1,5 +1,5 @@
 import { reportsConfig } from "@/config/reports";
-import { roundMoney } from "@/lib/financial-margin";
+import { roundMoney } from "@/lib/pricing/financial-margin";
 import {
   type CalendarDateRange,
   getCalendarMonthRange,

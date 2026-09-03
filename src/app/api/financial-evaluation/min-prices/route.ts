@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { loadFinancialEvaluationRows } from "@/lib/financial-evaluation-data";
-import type { MarginBasis } from "@/lib/financial-margin";
-import { requireOrganization } from "@/lib/api-auth";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
+import { loadFinancialEvaluationRows } from "@/lib/lucratividade/financial-evaluation-data";
+import type { MarginBasis } from "@/lib/pricing/financial-margin";
+import { requireOrganization } from "@/lib/api/api-auth";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 
 export async function GET(request: NextRequest) {
   const auth = await requireOrganization();

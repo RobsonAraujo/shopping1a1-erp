@@ -12,15 +12,15 @@ import {
 } from "@/lib/mercadolibre/item-quantity-prices";
 import { siteIdFromItemId } from "@/lib/mercadolibre/listing-fees";
 import type { ItemBody } from "@/lib/mercadolibre/types";
-import { ensureCompanySettings } from "@/lib/product-data";
-import { loadFinancialEvaluationRows } from "@/lib/financial-evaluation-data";
+import { ensureCompanySettings } from "@/lib/products/product-data";
+import { loadFinancialEvaluationRows } from "@/lib/lucratividade/financial-evaluation-data";
 import {
   computeWholesalePricesForListing,
   mlDiscountMinPurchaseUnitForLevel,
   wholesaleReductionsToTuple,
-} from "@/lib/wholesale-pricing";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireOrganization } from "@/lib/api-auth";
+} from "@/lib/pricing/wholesale-pricing";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
+import { requireOrganization } from "@/lib/api/api-auth";
 
 type RouteContext = { params: Promise<{ id: string }> };
 

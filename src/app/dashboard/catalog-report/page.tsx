@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { CatalogCompetitionReportClient } from "@/components/catalog-report/catalog-competition-report-client";
+import { CatalogCompetitionReportClient } from "@/components/catalog-report/CatalogCompetitionReportClient";
 
 export const metadata: Metadata = {
   title: "Catálogo",

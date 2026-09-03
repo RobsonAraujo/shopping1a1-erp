@@ -10,7 +10,7 @@
 import "dotenv/config";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { prisma } from "../src/lib/db";
+import { prisma } from "../src/lib/db/db";
 
 const SQL_PATH = path.join(process.cwd(), "prisma", "seeds", "seed.sql");
 

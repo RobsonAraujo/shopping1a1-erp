@@ -1,5 +1,5 @@
-import { roundMoney } from "@/lib/financial-margin";
-import { purchasePisCofinsCreditBaseUnit } from "@/lib/product-pricing";
+import { roundMoney } from "@/lib/pricing/financial-margin";
+import { purchasePisCofinsCreditBaseUnit } from "@/lib/pricing/product-pricing";
 import type { PisCofinsBreakdown, TaxCompanyConfig, TransacaoVenda } from "@/lib/tax-report/types";
 
 export type PisCofinsInput = {

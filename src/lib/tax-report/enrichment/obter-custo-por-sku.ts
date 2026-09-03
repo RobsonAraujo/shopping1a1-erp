@@ -1,9 +1,9 @@
-import { prisma } from "@/lib/db";
+import { prisma } from "@/lib/db/db";
 import {
   buildProductView,
   getCompanyPisCofinsPercent,
-} from "@/lib/product-data";
-import { normalizeProductSku } from "@/lib/product-pricing";
+} from "@/lib/products/product-data";
+import { normalizeProductSku } from "@/lib/pricing/product-pricing";
 import {
   custoProdutoFromView,
   type CustoProduto,

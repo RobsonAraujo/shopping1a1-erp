@@ -1,5 +1,5 @@
-import { prisma } from "@/lib/db";
-import { normalizeProductSku } from "@/lib/product-pricing";
+import { prisma } from "@/lib/db/db";
+import { normalizeProductSku } from "@/lib/pricing/product-pricing";
 import type { CustoLookup } from "@/lib/tax-report/enrichment/obter-custo-por-sku";
 import { loadCustoBySkuMap } from "@/lib/tax-report/enrichment/obter-custo-por-sku";
 import { calcularRelatorioFromTransacoes } from "@/lib/tax-report/service/compute-report";

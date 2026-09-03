@@ -1,5 +1,5 @@
 import type { Listing } from "@/generated/prisma/client";
-import { prisma } from "@/lib/db";
+import { prisma } from "@/lib/db/db";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { getItemSku } from "@/lib/mercadolibre/item-sku";
 import type { ItemBody } from "@/lib/mercadolibre/types";

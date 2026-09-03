@@ -3,8 +3,8 @@ import {
   fetchItemsByIds,
   fetchUserItemsSearch,
 } from "@/lib/mercadolibre/api";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireOrganization } from "@/lib/api-auth";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
+import { requireOrganization } from "@/lib/api/api-auth";
 
 export async function GET(request: NextRequest) {
   const auth = await requireOrganization();

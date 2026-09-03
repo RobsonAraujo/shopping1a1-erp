@@ -47,12 +47,12 @@
  *   npx tsx scripts/backfill-product-ml-item-id.ts --apply --org <organizationId>
  */
 import "dotenv/config";
-import { prisma } from "../src/lib/db";
+import { prisma } from "../src/lib/db/db";
 import { Prisma } from "../src/generated/prisma/client";
 import { fetchOperationalListings, fetchAllUserItemIds, fetchItemsByIdsBatched } from "../src/lib/mercadolibre/api";
 import { resolveSellerAccessToken } from "../src/lib/mercadolibre/persist-seller-tokens";
 import { getItemSku } from "../src/lib/mercadolibre/item-sku";
-import { normalizeProductSku } from "../src/lib/product-pricing";
+import { normalizeProductSku } from "../src/lib/pricing/product-pricing";
 import type { ItemBody } from "../src/lib/mercadolibre/types";
 
 type ProductRow = {

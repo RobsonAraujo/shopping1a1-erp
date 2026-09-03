@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { loadOperationsBoards } from "@/lib/replenishment-cycle-data";
-import { requireOrganization } from "@/lib/api-auth";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
+import { loadOperationsBoards } from "@/lib/compras/replenishment-cycle-data";
+import { requireOrganization } from "@/lib/api/api-auth";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 
 export async function GET() {
   const auth = await requireOrganization();

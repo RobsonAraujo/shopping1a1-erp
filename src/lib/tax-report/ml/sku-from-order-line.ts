@@ -1,6 +1,6 @@
 import type { OrderSearchOrderItem } from "@/lib/mercadolibre/types";
 import { getItemSku } from "@/lib/mercadolibre/item-sku";
-import { normalizeProductSku } from "@/lib/product-pricing";
+import { normalizeProductSku } from "@/lib/pricing/product-pricing";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 
 function normalizeOrderSku(sku: string | null | undefined): string | null {

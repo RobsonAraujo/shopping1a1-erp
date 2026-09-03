@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ensureCompanySettings } from "@/lib/product-data";
-import { calendarYmdRangeToUtc } from "@/lib/financial-evaluation-period";
+import { ensureCompanySettings } from "@/lib/products/product-data";
+import { calendarYmdRangeToUtc } from "@/lib/lucratividade/financial-evaluation-period";
 import {
   loadFinancialEvaluationRows,
   loadFinancialEvaluationRowsForPeriod,
   type FinancialEvaluationRow,
-} from "@/lib/financial-evaluation-data";
-import { requireOrganization } from "@/lib/api-auth";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
+} from "@/lib/lucratividade/financial-evaluation-data";
+import { requireOrganization } from "@/lib/api/api-auth";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 
 export const maxDuration = 300;
 

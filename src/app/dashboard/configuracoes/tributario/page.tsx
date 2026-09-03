@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { TaxConfigClient } from "@/components/configuracoes/tax-config-client";
+import { TaxConfigClient } from "@/components/configuracoes/TaxConfigClient";
 
 export const metadata: Metadata = {
   title: "Tributário — Configurações",

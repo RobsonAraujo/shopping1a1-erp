@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { MonthlyTaxReportClient } from "@/components/relatorio-tributario/monthly-tax-report-client";
+import { MonthlyTaxReportClient } from "@/components/relatorio-tributario/MonthlyTaxReportClient";
 
 export const metadata: Metadata = {
   title: "Tributário",

@@ -5,9 +5,9 @@ import {
   updateFullShipment,
 } from "@/lib/envios-full/full-shipment-data";
 import { FullShipmentValidationError } from "@/lib/envios-full/full-shipment";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireOrganization } from "@/lib/api-auth";
-import { parseJsonBody } from "@/lib/api-validation";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
+import { requireOrganization } from "@/lib/api/api-auth";
+import { parseJsonBody } from "@/lib/api/api-validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
 

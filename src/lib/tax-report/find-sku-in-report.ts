@@ -1,4 +1,4 @@
-import { normalizeProductSku } from "@/lib/product-pricing";
+import { normalizeProductSku } from "@/lib/pricing/product-pricing";
 import type { SkuAggregation } from "@/lib/tax-report/types";
 
 /**

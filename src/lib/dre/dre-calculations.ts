@@ -1,5 +1,5 @@
-import { roundMoney } from "@/lib/financial-margin";
-import { normalizeProductSku } from "@/lib/product-pricing";
+import { roundMoney } from "@/lib/pricing/financial-margin";
+import { normalizeProductSku } from "@/lib/pricing/product-pricing";
 
 export type DreLineAmounts = {
   revenueMl: number;

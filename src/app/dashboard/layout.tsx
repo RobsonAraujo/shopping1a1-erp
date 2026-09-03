@@ -1,10 +1,10 @@
 import Image from "next/image";
 import Link from "next/link";
 import { LogOut } from "lucide-react";
-import { DashboardNav } from "@/components/dashboard-nav";
-import { MobileDashboardMenu } from "@/components/mobile-dashboard-menu";
+import { DashboardNav } from "@/components/shared/DashboardNav";
+import { MobileDashboardMenu } from "@/components/shared/MobileDashboardMenu";
 import { Button } from "@/components/ui/button";
-import { AccountBlockedNotice } from "@/components/account-blocked-notice";
+import { AccountBlockedNotice } from "@/components/shared/AccountBlockedNotice";
 import { getOrganizationContext } from "@/lib/organizations/context";
 
 export default async function DashboardLayout({

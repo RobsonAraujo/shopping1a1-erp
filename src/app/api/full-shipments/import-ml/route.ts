@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { importFullCollectChargesFromBilling } from "@/lib/envios-full/full-shipment-data";
 import { FullShipmentValidationError } from "@/lib/envios-full/full-shipment";
 import { MlApiFetchError } from "@/lib/mercadolibre/fetch-with-retry";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireOrganization } from "@/lib/api-auth";
-import { parseJsonBody, yearMonthSchema } from "@/lib/api-validation";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
+import { requireOrganization } from "@/lib/api/api-auth";
+import { parseJsonBody, yearMonthSchema } from "@/lib/api/api-validation";
 
 export const maxDuration = 300;
 

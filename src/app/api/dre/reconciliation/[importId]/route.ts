@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireOrganization } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api/api-auth";
 import { discardReconciliationImport } from "@/lib/dre/reconciliation/reconciliation-data";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 
 export async function DELETE(
   _request: NextRequest,

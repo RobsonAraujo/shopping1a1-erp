@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { formatApiErrorMessage, readApiError } from "@/lib/api-client-error";
+import { formatApiErrorMessage, readApiError } from "@/lib/api/api-client-error";
 
 export type ApiResourceState<T> = {
   data: T | null;

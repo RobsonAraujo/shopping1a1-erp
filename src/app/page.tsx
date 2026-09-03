@@ -5,7 +5,7 @@ import {
   getSessionAccessState,
   refreshSessionPath,
 } from "@/lib/mercadolibre/session";
-import { MarketingLanding } from "@/components/marketing/landing";
+import { MarketingLanding } from "@/components/marketing/Landing";
 
 export const metadata: Metadata = {
   title: "Painel para vendedores Mercado Livre — margem, imposto e DRE",

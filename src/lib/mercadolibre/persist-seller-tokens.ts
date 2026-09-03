@@ -2,9 +2,9 @@ import {
   decryptAppSecret,
   encryptAppSecret,
   isEncryptionKeyConfigured,
-} from "@/lib/app-secret-crypto";
-import { prisma } from "@/lib/db";
-import { logServerError } from "@/lib/server-public-error";
+} from "@/lib/infra/app-secret-crypto";
+import { prisma } from "@/lib/db/db";
+import { logServerError } from "@/lib/infra/server-public-error";
 import { refreshAccessToken } from "@/lib/mercadolibre/oauth";
 import type { TokenResponse } from "@/lib/mercadolibre/types";
 

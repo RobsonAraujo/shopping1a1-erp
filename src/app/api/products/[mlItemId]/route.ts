@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/db";
+import { prisma } from "@/lib/db/db";
 import {
   buildProductView,
   diffLevelableProductFields,
@@ -8,10 +8,10 @@ import {
   listingImageUrlForSku,
   productPatchToPrismaData,
   validateProductInput,
-} from "@/lib/product-data";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireOrganization } from "@/lib/api-auth";
-import { parseJsonBody } from "@/lib/api-validation";
+} from "@/lib/products/product-data";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
+import { requireOrganization } from "@/lib/api/api-auth";
+import { parseJsonBody } from "@/lib/api/api-validation";
 
 type RouteContext = { params: Promise<{ mlItemId: string }> };
 

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
-import { Breadcrumbs } from "@/components/breadcrumbs";
+import { Breadcrumbs } from "@/components/shared/Breadcrumbs";
 import {
   ItemDetailCatalogSection,
   ItemDetailHeroMeta,
@@ -10,7 +10,7 @@ import {
   ItemDetailOperationsSection,
   ItemDetailStockSection,
   ItemDetailVariationsSection,
-} from "@/components/items/item-detail-sections";
+} from "@/components/items/ItemDetailSections";
 import { Card, CardContent } from "@/components/ui/card";
 import { loadItemDetailContext } from "@/lib/items/item-detail-data";
 import { fetchItemById } from "@/lib/mercadolibre/api";

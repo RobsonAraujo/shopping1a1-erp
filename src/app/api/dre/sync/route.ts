@@ -10,9 +10,9 @@ import {
   persistDreMonthSnapshot,
   type DreSyncProgress,
 } from "@/lib/dre/dre-month-data";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireOrganization } from "@/lib/api-auth";
-import { parseJsonBody } from "@/lib/api-validation";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
+import { requireOrganization } from "@/lib/api/api-auth";
+import { parseJsonBody } from "@/lib/api/api-validation";
 import { isDreMonthSyncable } from "@/lib/mercadolibre/revenue-periods";
 
 export const maxDuration = 300;

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { SimplesNacionalClient } from "@/components/simples-nacional/simples-nacional-client";
+import { SimplesNacionalClient } from "@/components/simples-nacional/SimplesNacionalClient";
 
 export const metadata: Metadata = {
   title: "Simples Nacional",

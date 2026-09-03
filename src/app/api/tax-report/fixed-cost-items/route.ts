@@ -4,9 +4,9 @@ import {
   createTaxFixedCostItem,
   loadTaxFixedCostItemsWithMonthValue,
 } from "@/lib/tax-report/tax-fixed-cost-data";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireOrganization } from "@/lib/api-auth";
-import { parseJsonBody } from "@/lib/api-validation";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
+import { requireOrganization } from "@/lib/api/api-auth";
+import { parseJsonBody } from "@/lib/api/api-validation";
 
 const createFixedCostItemSchema = z
   .object({

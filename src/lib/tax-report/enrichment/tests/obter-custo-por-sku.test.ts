@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { custoProdutoFromView } from "@/lib/tax-report/enrichment/custo-produto";
-import type { ProductView } from "@/lib/product-data";
+import type { ProductView } from "@/lib/products/product-data";
 
 function sampleView(overrides: Partial<ProductView> = {}): ProductView {
   return {

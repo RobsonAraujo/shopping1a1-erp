@@ -5,14 +5,14 @@ import {
   advanceReplenishmentCycle,
   loadOperationsBoards,
   transitionReplenishmentCycle,
-} from "@/lib/replenishment-cycle-data";
+} from "@/lib/compras/replenishment-cycle-data";
 import {
   isValidStatusForKind,
-} from "@/lib/replenishment-cycle";
-import { requireOrganization } from "@/lib/api-auth";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { parseJsonBody } from "@/lib/api-validation";
-import { prisma } from "@/lib/db";
+} from "@/lib/compras/replenishment-cycle";
+import { requireOrganization } from "@/lib/api/api-auth";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
+import { parseJsonBody } from "@/lib/api/api-validation";
+import { prisma } from "@/lib/db/db";
 
 type RouteContext = { params: Promise<{ id: string }> };
 

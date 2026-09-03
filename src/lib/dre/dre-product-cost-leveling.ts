@@ -1,6 +1,6 @@
-import { prisma } from "@/lib/db";
-import { decimalToNumber } from "@/lib/catalog-competition";
-import { normalizeProductSku } from "@/lib/product-pricing";
+import { prisma } from "@/lib/db/db";
+import { decimalToNumber } from "@/lib/catalog-report/catalog-competition";
+import { normalizeProductSku } from "@/lib/pricing/product-pricing";
 import {
   computeLevelingPricingCost,
   dateRangeOverlapsMonth,

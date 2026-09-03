@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/db";
+import { prisma } from "@/lib/db/db";
 import type { Organization } from "@/generated/prisma";
 
 /**

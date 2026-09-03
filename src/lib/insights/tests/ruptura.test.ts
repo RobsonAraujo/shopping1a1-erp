@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildRupturaRows } from "../ruptura";
-import type { PurchaseAnalysisItemRow } from "@/lib/purchase-analysis-rows";
+import type { PurchaseAnalysisItemRow } from "@/lib/compras/purchase-analysis-rows";
 
 function row(overrides: {
   id?: string;

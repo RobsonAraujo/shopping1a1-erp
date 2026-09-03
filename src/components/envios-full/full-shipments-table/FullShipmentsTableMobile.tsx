@@ -4,7 +4,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { formatFinancialMoney } from "@/lib/financial-margin";
+import { formatFinancialMoney } from "@/lib/pricing/financial-margin";
 import {
   formatShipmentDate,
   sourceLabel,

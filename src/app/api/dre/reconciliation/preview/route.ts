@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { requireOrganization } from "@/lib/api-auth";
-import { readSingleFileField } from "@/lib/api-validation";
+import { requireOrganization } from "@/lib/api/api-auth";
+import { readSingleFileField } from "@/lib/api/api-validation";
 import { ReconciliationParseError } from "@/lib/dre/reconciliation/types";
 import { parseReconciliationWorkbook } from "@/lib/dre/reconciliation/xlsx-parser";
 import { createPendingReconciliationImport } from "@/lib/dre/reconciliation/reconciliation-data";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 import { isFutureCalendarMonth } from "@/lib/mercadolibre/revenue-periods";
 
 const MAX_BYTES = 15 * 1024 * 1024;

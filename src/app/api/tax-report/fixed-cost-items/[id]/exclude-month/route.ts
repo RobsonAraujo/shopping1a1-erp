@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { excludeTaxFixedCostMonth } from "@/lib/tax-report/tax-fixed-cost-data";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireOrganization } from "@/lib/api-auth";
-import { parseJsonBody, yearMonthSchema } from "@/lib/api-validation";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
+import { requireOrganization } from "@/lib/api/api-auth";
+import { parseJsonBody, yearMonthSchema } from "@/lib/api/api-validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
 

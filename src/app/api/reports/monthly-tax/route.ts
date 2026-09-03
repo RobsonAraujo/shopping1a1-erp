@@ -6,8 +6,8 @@ import {
   type GenerateMonthlyReportProgress,
 } from "@/lib/tax-report/service/generate-monthly-report";
 import type { ManualFiscalOverride } from "@/lib/tax-report/types";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireOrganization } from "@/lib/api-auth";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
+import { requireOrganization } from "@/lib/api/api-auth";
 import { stripTransacoesForResponse } from "@/lib/tax-report/strip-transacoes-for-response";
 
 export const maxDuration = 300;

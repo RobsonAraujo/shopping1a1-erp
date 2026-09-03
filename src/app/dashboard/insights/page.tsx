@@ -16,10 +16,10 @@ import { loadLatestTaxReportSnapshot } from "@/lib/tax-report/service/generate-m
 import { mapToSlowMoverRows } from "@/lib/insights/slow-movers";
 import { buildDifalMap } from "@/lib/insights/difal-map";
 import { buildParetoRows, paretoConcentration } from "@/lib/insights/pareto";
-import { SlowMoversInsightCard } from "@/components/insights/slow-movers-insight-card";
-import { SlowMoversKpiTile } from "@/components/insights/slow-movers-kpi-tile";
-import { TaxInsightsRangeSection } from "@/components/insights/tax-insights-range-section";
-import { InsightsPageSkeleton } from "@/components/insights/insights-page-skeleton";
+import { SlowMoversInsightCard } from "@/components/insights/SlowMoversInsightCard";
+import { SlowMoversKpiTile } from "@/components/insights/SlowMoversKpiTile";
+import { TaxInsightsRangeSection } from "@/components/insights/TaxInsightsRangeSection";
+import { InsightsPageSkeleton } from "@/components/insights/InsightsPageSkeleton";
 
 const MONTH_NAMES = [
   "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",

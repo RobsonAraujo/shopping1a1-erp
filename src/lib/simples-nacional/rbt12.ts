@@ -1,5 +1,5 @@
-import { prisma } from "@/lib/db";
-import { roundMoney } from "@/lib/financial-margin";
+import { prisma } from "@/lib/db/db";
+import { roundMoney } from "@/lib/pricing/financial-margin";
 import {
   fetchPaidOrdersByPeriod,
   paidOrderLinesFromOrders,

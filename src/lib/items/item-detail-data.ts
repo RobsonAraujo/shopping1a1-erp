@@ -2,9 +2,9 @@ import type {
   OperationCycleKind,
   ReplenishmentStatus,
 } from "@/generated/prisma/client";
-import { prisma } from "@/lib/db";
-import { loadFinancialEvaluationRows } from "@/lib/financial-evaluation-data";
-import type { FinancialEvaluationRow } from "@/lib/financial-evaluation-data";
+import { prisma } from "@/lib/db/db";
+import { loadFinancialEvaluationRows } from "@/lib/lucratividade/financial-evaluation-data";
+import type { FinancialEvaluationRow } from "@/lib/lucratividade/financial-evaluation-data";
 import {
   fetchCategoryById,
   fetchUnitsSoldForItemsInWindow,
@@ -14,11 +14,11 @@ import type { ItemBody } from "@/lib/mercadolibre/types";
 import {
   computeStockPlanningDisplay,
   type StockPlanningDisplay,
-} from "@/lib/stock-planning";
+} from "@/lib/compras/stock-planning";
 import {
   loadOperationalSettings,
   toStockPlanningValues,
-} from "@/lib/operational-settings";
+} from "@/lib/configuracoes/operational-settings";
 
 export type ItemCatalogContext = {
   catalogStatus: string | null;

@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { AlertTriangle, CheckCircle2, Info, X, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatApiErrorMessage } from "@/lib/api-client-error";
+import { formatApiErrorMessage } from "@/lib/api/api-client-error";
 
 export type UserFeedbackTone = "error" | "warning" | "success" | "info";
 

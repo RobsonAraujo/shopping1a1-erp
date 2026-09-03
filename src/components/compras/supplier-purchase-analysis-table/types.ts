@@ -1,9 +1,9 @@
-import type { PurchaseAnalysisItemRow } from "@/lib/purchase-analysis-rows";
+import type { PurchaseAnalysisItemRow } from "@/lib/compras/purchase-analysis-rows";
 import type {
   PurchasePerformanceTier,
   PurchaseRecommendation,
   PurchaseStatus,
-} from "@/lib/purchase-analysis";
+} from "@/lib/compras/purchase-analysis";
 import type { TableSort } from "@/components/ui/sortable-th";
 
 export type SupplierPurchaseAnalysisTableProps = {

@@ -1,5 +1,5 @@
 import { getMercadoLibreConfig } from "./config";
-import { listingTypeLabelFromId } from "@/lib/financial-margin";
+import { listingTypeLabelFromId } from "@/lib/pricing/financial-margin";
 
 export type ListingSaleFee = {
   feeAmount: number;

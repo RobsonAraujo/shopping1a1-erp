@@ -11,8 +11,8 @@ import {
   revenueFromOrderItemLine,
   skuFromOrderLineWithFallback,
 } from "@/lib/tax-report/ml/sku-from-order-line";
-import { normalizeProductSku } from "@/lib/product-pricing";
-import { roundMoney } from "@/lib/financial-margin";
+import { normalizeProductSku } from "@/lib/pricing/product-pricing";
+import { roundMoney } from "@/lib/pricing/financial-margin";
 import type { CustoLookup } from "@/lib/tax-report/enrichment/obter-custo-por-sku";
 import type {
   ManualFiscalOverride,

@@ -6,11 +6,11 @@ import { ImageOff, Pencil, Settings } from "lucide-react";
 import {
   ListingStatusBadge,
   listingRowMutedClass,
-} from "@/components/listing-status-badge";
+} from "@/components/shared/ListingStatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { itemListSearchEmptyMessage } from "@/components/item-list-search";
+import { itemListSearchEmptyMessage } from "@/components/shared/ItemListSearch";
 import { cn } from "@/lib/utils";
 import type { InventoryStockTableGridProps } from "@/components/inventory/inventory-stock-table/types";
 import {

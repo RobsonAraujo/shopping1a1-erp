@@ -3,7 +3,7 @@
  * Usage: npx tsx scripts/debug-kit-item.ts MLB1234567890
  */
 import "dotenv/config";
-import { prisma } from "../src/lib/db";
+import { prisma } from "../src/lib/db/db";
 import { getMercadoLibreConfig } from "../src/lib/mercadolibre/config";
 import { resolveSellerAccessToken } from "../src/lib/mercadolibre/persist-seller-tokens";
 

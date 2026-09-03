@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { computeStockPlanningDisplay } from "../stock-planning";
+import { computeStockPlanningDisplay } from "../compras/stock-planning";
 import { stockPlanningConfig } from "@/config/stock-planning";
 
 const NOW = new Date("2026-06-15T12:00:00");

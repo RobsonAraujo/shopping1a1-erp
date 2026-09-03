@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { cookies } from "next/headers";
 import { Kanban } from "lucide-react";
-import { OperationsKanban } from "@/components/operacoes-full/operations-kanban";
-import { OperationsKanbanSkeleton } from "@/components/operacoes-full/operations-kanban-skeleton";
+import { OperationsKanban } from "@/components/operacoes-full/OperationsKanban";
+import { OperationsKanbanSkeleton } from "@/components/operacoes-full/OperationsKanbanSkeleton";
 import { UserFeedback } from "@/components/ui/user-feedback";
-import { loadOperationsBoards } from "@/lib/replenishment-cycle-data";
+import { loadOperationsBoards } from "@/lib/compras/replenishment-cycle-data";
 import { readSession } from "@/lib/mercadolibre/session";
 import { getOrganizationContext } from "@/lib/organizations/context";
-import { publicPageLoadMessage } from "@/lib/server-public-error";
+import { publicPageLoadMessage } from "@/lib/infra/server-public-error";
 
 async function OperacoesFullDataSection({
   token,

@@ -1,5 +1,5 @@
 import { Prisma } from "@/generated/prisma";
-import { prisma } from "@/lib/db";
+import { prisma } from "@/lib/db/db";
 import {
   applyManualLineEdit,
   commitReconciledLinesAsTruth,

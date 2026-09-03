@@ -16,7 +16,7 @@ import {
 } from "./billing-summary";
 import type { FullInboundShipment } from "./billing-full-collect-types";
 export type { FullInboundShipment } from "./billing-full-collect-types";
-import { shipmentShippedAtInCalendarMonth } from "@/lib/full-shipment-period";
+import { shipmentShippedAtInCalendarMonth } from "@/lib/envios-full/full-shipment-period";
 import {
   filterShipmentsByActivityMonth,
   mergeOperationsWithBillingCosts,

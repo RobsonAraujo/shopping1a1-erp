@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchItemOrderMetricsForCalendarMonths } from "@/lib/mercadolibre/api";
-import { requireOrganization } from "@/lib/api-auth";
+import { requireOrganization } from "@/lib/api/api-auth";
 import {
   sumRevenueForItems,
   sumUnitsForItems,
 } from "@/lib/mercadolibre/revenue-periods";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 
 type RouteContext = {
   params: Promise<{ supplier: string }>;

@@ -8,7 +8,7 @@
  * Requires DATABASE_URL, ENCRYPTION_KEY and ML credentials in DB.
  */
 import "dotenv/config";
-import { prisma } from "../src/lib/db";
+import { prisma } from "../src/lib/db/db";
 import {
   aggregateMlBillingDetails,
   fetchAllMlBillingDetails,

@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/db";
+import { prisma } from "@/lib/db/db";
 import { fetchItemsByIdsBatched, fetchPaidOrdersByPeriod } from "@/lib/mercadolibre/api";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import type { OrderSearchOrder } from "@/lib/mercadolibre/types";
@@ -30,7 +30,7 @@ import {
   skuFromOrderLineWithFallback,
 } from "@/lib/tax-report/ml/sku-from-order-line";
 import { getItemSku } from "@/lib/mercadolibre/item-sku";
-import { resolveEffectiveSkuByItemId } from "@/lib/product-resolver";
+import { resolveEffectiveSkuByItemId } from "@/lib/products/product-resolver";
 import { repairTaxReportPayload } from "@/lib/tax-report/repair-snapshot-apuracao";
 import { stripTransacoesForResponse } from "@/lib/tax-report/strip-transacoes-for-response";
 import { calcularRelatorioFromTransacoes } from "@/lib/tax-report/service/compute-report";

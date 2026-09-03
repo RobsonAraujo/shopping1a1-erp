@@ -1,5 +1,5 @@
 import { reportsConfig } from "@/config/reports";
-import { shipmentShippedAtInCalendarMonth } from "@/lib/full-shipment-period";
+import { shipmentShippedAtInCalendarMonth } from "@/lib/envios-full/full-shipment-period";
 import { getZonedParts } from "@/lib/report-timezone";
 import type { InboundOperationDiscovery } from "./fulfillment-inbound-operations";
 import type { FullInboundShipment } from "./billing-full-collect-types";

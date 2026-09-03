@@ -1,5 +1,5 @@
-import { roundMoney } from "@/lib/financial-margin";
-import { normalizeProductSku } from "@/lib/product-pricing";
+import { roundMoney } from "@/lib/pricing/financial-margin";
+import { normalizeProductSku } from "@/lib/pricing/product-pricing";
 import { consolidarApuracao } from "@/lib/tax-report/aggregation/consolidar-apuracao";
 import { icmsSemDifal } from "@/lib/tax-report/calculators/icms-difal";
 import type {

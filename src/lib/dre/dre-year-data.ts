@@ -11,7 +11,7 @@ import {
   type DreProductCostBreakdownItem,
   type DreTaxBreakdownItem,
 } from "@/lib/dre/dre-calculations";
-import { prisma } from "@/lib/db";
+import { prisma } from "@/lib/db/db";
 import {
   parseSnapshotPayload,
   snapshotPayloadToLines,

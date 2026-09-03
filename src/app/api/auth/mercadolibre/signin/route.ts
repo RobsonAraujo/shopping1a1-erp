@@ -4,7 +4,7 @@ import { buildAuthorizationUrl } from "@/lib/mercadolibre/oauth";
 import {
   logServerError,
   oauthRedirectErrorParam,
-} from "@/lib/server-public-error";
+} from "@/lib/infra/server-public-error";
 import { setOAuthStateCookie } from "@/lib/mercadolibre/session";
 
 export async function GET(request: Request) {

@@ -1,10 +1,10 @@
 import { reportsConfig } from "@/config/reports";
-import { roundMoney } from "@/lib/financial-margin";
+import { roundMoney } from "@/lib/pricing/financial-margin";
 import { getZonedParts, zonedLocalToUtc } from "@/lib/report-timezone";
 import {
   computeEffectivePricingCost,
   normalizeProductSku,
-} from "@/lib/product-pricing";
+} from "@/lib/pricing/product-pricing";
 
 const MONTH_NAMES_PT = [
   "Janeiro",

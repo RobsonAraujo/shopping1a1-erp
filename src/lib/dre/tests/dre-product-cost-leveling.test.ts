@@ -10,7 +10,7 @@ import {
   resolveLevelingCostForOrderDate,
   type DreProductCostLevelingInput,
 } from "../dre-product-cost-leveling-shared";
-import type { ResolvedProductPricing } from "@/lib/product-pricing";
+import type { ResolvedProductPricing } from "@/lib/pricing/product-pricing";
 
 describe("dre-product-cost-leveling helpers", () => {
   it("validates inclusive date periods", () => {

@@ -8,9 +8,9 @@ import {
   upsertCbsIbsVigencia,
   upsertIcmsInternalRate,
 } from "@/lib/tax-report/tax-config-data";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireOrganization } from "@/lib/api-auth";
-import { parseJsonBody } from "@/lib/api-validation";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
+import { requireOrganization } from "@/lib/api/api-auth";
+import { parseJsonBody } from "@/lib/api/api-validation";
 
 export async function GET() {
   const auth = await requireOrganization();

@@ -1,4 +1,4 @@
-import { loadLatestCatalogCompetitionSnapshots } from "@/lib/catalog-competition";
+import { loadLatestCatalogCompetitionSnapshots } from "@/lib/catalog-report/catalog-competition";
 import {
   fetchCategoriesByIds,
   fetchOperationalListingIds,
@@ -12,34 +12,34 @@ import {
   buildPurchasePlan,
   computePurchaseAnalysis,
   type PurchaseAnalysisSettings,
-} from "@/lib/purchase-analysis";
+} from "@/lib/compras/purchase-analysis";
 import {
   loadOperationalSettings,
   toPurchaseAnalysisValues,
   toStockPlanningValues,
-} from "@/lib/operational-settings";
+} from "@/lib/configuracoes/operational-settings";
 import type {
   PurchaseAnalysisItemRow,
-} from "@/lib/purchase-analysis-rows";
-import { prisma } from "@/lib/db";
+} from "@/lib/compras/purchase-analysis-rows";
+import { prisma } from "@/lib/db/db";
 import { Prisma } from "@/generated/prisma/client";
 import {
   isActiveReplenishmentStatus,
   isCompletedCycleStillValid,
-} from "@/lib/replenishment-cycle";
+} from "@/lib/compras/replenishment-cycle";
 import type { ReplenishmentStatus } from "@/generated/prisma/client";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 
 export type {
   PurchaseAnalysisItemRow,
   SupplierSummary,
-} from "@/lib/purchase-analysis-rows";
-export { buildSupplierSummaries } from "@/lib/purchase-analysis-rows";
+} from "@/lib/compras/purchase-analysis-rows";
+export { buildSupplierSummaries } from "@/lib/compras/purchase-analysis-rows";
 export {
   filterRowsBySupplier,
   mergeSupplierRevenueIntoRows,
   sumSupplierRevenue,
-} from "@/lib/purchase-analysis-rows";
+} from "@/lib/compras/purchase-analysis-rows";
 
 export type WarehouseStockRow = {
   quantity: number;

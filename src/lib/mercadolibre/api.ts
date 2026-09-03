@@ -1,6 +1,6 @@
 import { stockPlanningConfig } from "@/config/stock-planning";
-import { prisma } from "@/lib/db";
-import { roundMoney } from "@/lib/financial-margin";
+import { prisma } from "@/lib/db/db";
+import { roundMoney } from "@/lib/pricing/financial-margin";
 import { getMercadoLibreConfig } from "./config";
 import { fetchWithRetry } from "./fetch-with-retry";
 import { mapWithConcurrency } from "./concurrency";

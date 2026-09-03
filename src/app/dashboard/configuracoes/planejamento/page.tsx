@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { OperationalSettingsClient } from "@/components/configuracoes/operational-settings-client";
+import { OperationalSettingsClient } from "@/components/configuracoes/OperationalSettingsClient";
 
 export const metadata: Metadata = {
   title: "Planejamento — Configurações",

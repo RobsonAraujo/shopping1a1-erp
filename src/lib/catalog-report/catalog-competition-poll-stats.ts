@@ -1,6 +1,6 @@
 import { reportsConfig } from "@/config/reports";
-import { prisma } from "@/lib/db";
-import { logServerError } from "@/lib/server-public-error";
+import { prisma } from "@/lib/db/db";
+import { logServerError } from "@/lib/infra/server-public-error";
 
 const EMPTY_POLL_STATS = (timeZone: string) => ({
   todayCount: 0,

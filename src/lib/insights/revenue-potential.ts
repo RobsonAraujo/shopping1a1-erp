@@ -20,7 +20,7 @@ import {
 } from "@/lib/mercadolibre/api";
 import { getItemSku, isKitItem } from "@/lib/mercadolibre/item-sku";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
-import { loadStockReportProductsByMlItemId } from "@/lib/product-data";
+import { loadStockReportProductsByMlItemId } from "@/lib/products/product-data";
 import type { RevenuePotentialRow } from "@/lib/insights/types";
 
 const LOOKBACK_DAYS = 120;

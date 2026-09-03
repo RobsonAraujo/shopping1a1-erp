@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { itemListSearchEmptyMessage } from "@/components/item-list-search";
-import { formatFinancialMoney, formatFinancialPercent } from "@/lib/financial-margin";
+import { itemListSearchEmptyMessage } from "@/components/shared/ItemListSearch";
+import { formatFinancialMoney, formatFinancialPercent } from "@/lib/pricing/financial-margin";
 import {
   skuImpostoOperacionalMedio,
   skuImpostoOperacionalPercentual,

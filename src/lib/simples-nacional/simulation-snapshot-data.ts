@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/db";
+import { prisma } from "@/lib/db/db";
 import { repairTaxReportPayload } from "@/lib/tax-report/repair-snapshot-apuracao";
 import { slimTaxReportPayloadForStorage } from "@/lib/tax-report/service/snapshot-storage";
 import { stripTransacoesForResponse } from "@/lib/tax-report/strip-transacoes-for-response";

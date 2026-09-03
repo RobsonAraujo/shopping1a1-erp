@@ -6,13 +6,13 @@ import {
   loadDashboardPurchaseData,
 } from "@/lib/compras/dashboard-purchase-data";
 import { ShoppingCart } from "lucide-react";
-import { ComprasPageClient } from "@/components/compras/compras-page-client";
-import { ComprasPageSkeleton } from "@/components/compras/compras-page-skeleton";
+import { ComprasPageClient } from "@/components/compras/ComprasPageClient";
+import { ComprasPageSkeleton } from "@/components/compras/ComprasPageSkeleton";
 import { UserFeedback } from "@/components/ui/user-feedback";
-import { loadOperationsBoards } from "@/lib/replenishment-cycle-data";
+import { loadOperationsBoards } from "@/lib/compras/replenishment-cycle-data";
 import { readSession } from "@/lib/mercadolibre/session";
 import { getOrganizationContext } from "@/lib/organizations/context";
-import { publicPageLoadMessage } from "@/lib/server-public-error";
+import { publicPageLoadMessage } from "@/lib/infra/server-public-error";
 
 async function ComprasDataSection({
   token,

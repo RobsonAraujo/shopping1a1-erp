@@ -9,8 +9,8 @@ import {
   marginBasisLabel,
   type MarginBasis,
   type MinSalePriceResult,
-} from "@/lib/financial-margin";
-import type { FinancialEvaluationRow } from "@/lib/financial-evaluation-data";
+} from "@/lib/pricing/financial-margin";
+import type { FinancialEvaluationRow } from "@/lib/lucratividade/financial-evaluation-data";
 import { cn } from "@/lib/utils";
 import type { SortDir, SortKey } from "@/components/lucratividade/financial-evaluation-table/types";
 

@@ -1,5 +1,5 @@
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
-import type { PurchaseAnalysisItemRow } from "@/lib/purchase-analysis-rows";
+import type { PurchaseAnalysisItemRow } from "@/lib/compras/purchase-analysis-rows";
 import type { SlowMoverRow } from "./types";
 
 export const DEFAULT_SLOW_MOVER_THRESHOLD_DAYS = 30;

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireOrganization } from "@/lib/api-auth";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
+import { requireOrganization } from "@/lib/api/api-auth";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 import { loadRbt12 } from "@/lib/simples-nacional/rbt12";
 import { getZonedYearMonth } from "@/lib/mercadolibre/revenue-periods";
 

@@ -3,7 +3,7 @@
  * Usage: npx tsx scripts/debug-shipping-cost.ts MLB5236253058
  */
 import "dotenv/config";
-import { prisma } from "../src/lib/db";
+import { prisma } from "../src/lib/db/db";
 import { getMercadoLibreConfig } from "../src/lib/mercadolibre/config";
 import { resolveSellerAccessToken } from "../src/lib/mercadolibre/persist-seller-tokens";
 import { fetchItemSalePrice } from "../src/lib/mercadolibre/item-sale-price";

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { readApiError } from "@/lib/api-client-error";
+import { readApiError } from "@/lib/api/api-client-error";
 
 /**
  * Lê um `Response` no formato `text/event-stream` (linhas `data: {...json...}\n\n`,

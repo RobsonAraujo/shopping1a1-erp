@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import { itemListSearchEmptyMessage } from "@/components/item-list-search";
-import { TaxReportHeaderWithTip } from "@/components/relatorio-tributario/tax-report-transaction-table";
+import { itemListSearchEmptyMessage } from "@/components/shared/ItemListSearch";
+import { TaxReportHeaderWithTip } from "@/components/relatorio-tributario/TaxReportTransactionTable";
 import { SortableTh } from "@/components/ui/sortable-th";
-import { formatFinancialMoney, formatFinancialPercent } from "@/lib/financial-margin";
+import { formatFinancialMoney, formatFinancialPercent } from "@/lib/pricing/financial-margin";
 import {
   skuImpostoOperacionalMedio,
   skuImpostoOperacionalPercentual,

@@ -1,5 +1,5 @@
-import type { MarginBasis } from "@/lib/financial-margin";
-import type { FinancialEvaluationRow } from "@/lib/financial-evaluation-data";
+import type { MarginBasis } from "@/lib/pricing/financial-margin";
+import type { FinancialEvaluationRow } from "@/lib/lucratividade/financial-evaluation-data";
 
 export type SortKey = "product" | "price" | "margin" | "afterAds";
 export type SortDir = "asc" | "desc";

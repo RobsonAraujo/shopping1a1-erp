@@ -4,10 +4,10 @@ import { z } from "zod";
 import {
   loadOperationalSettings,
   updateOperationalSettings,
-} from "@/lib/operational-settings";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireOrganization } from "@/lib/api-auth";
-import { parseJsonBody } from "@/lib/api-validation";
+} from "@/lib/configuracoes/operational-settings";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
+import { requireOrganization } from "@/lib/api/api-auth";
+import { parseJsonBody } from "@/lib/api/api-validation";
 
 export async function GET() {
   const auth = await requireOrganization();

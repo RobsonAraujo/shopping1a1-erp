@@ -4,8 +4,8 @@ import {
   pollCatalogCompetitionForSeller,
 } from "@/lib/catalog-report/catalog-competition-poll";
 import { recordCatalogPollRun } from "@/lib/catalog-report/catalog-competition-poll-stats";
-import { apiErrorPayload, logServerError } from "@/lib/server-public-error";
-import { requireOrganization } from "@/lib/api-auth";
+import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
+import { requireOrganization } from "@/lib/api/api-auth";
 
 const bodySchema = z.object({
   itemIds: z.array(z.string()).optional(),

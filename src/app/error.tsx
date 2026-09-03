@@ -2,8 +2,8 @@
 
 import { useEffect } from "react";
 import { FullPageError } from "@/components/ui/full-page-error";
-import { GENERIC_USER_ERROR } from "@/lib/api-client-error";
-import { captureError } from "@/lib/error-tracking";
+import { GENERIC_USER_ERROR } from "@/lib/api/api-client-error";
+import { captureError } from "@/lib/infra/error-tracking";
 
 export default function Error({
   error,
