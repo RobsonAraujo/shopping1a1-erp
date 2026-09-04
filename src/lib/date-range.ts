@@ -46,34 +46,17 @@ export function monthsInRange(
   return months;
 }
 
-function ymdToLocalDate(ymd: string): Date {
-  const [y, m, d] = ymd.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
 /**
- * Meses (mais recente primeiro) cobertos pelos últimos `days` dias corridos
- * terminando hoje, com quantos desses dias caem em cada mês — usado para
- * ponderar dados já agregados por mês (ex.: % de imposto do relatório
- * tributário) por uma janela móvel, sem reagregar por transação/dia. A soma
- * de `weightDays` de todos os meses retornados é sempre `days`.
+ * Mês civil fechado anterior a `reference` (hoje, por padrão) — ex.: em
+ * qualquer dia de setembro, retorna agosto. Usado como âncora padrão do
+ * imposto "ao vivo" (Produtos/Lucratividade): nunca olha pro mês em
+ * andamento, que teria poucos dias de amostra no início do período.
  */
-export function lastDaysMonthWeights(
-  days: 30,
-): { year: number; month: number; weightDays: number }[] {
-  const { from, to } = lastDaysYmdRange(days);
-  const fromDate = ymdToLocalDate(from);
-  const toDate = ymdToLocalDate(to);
-
-  return monthsInRange(from, to)
-    .map(({ year, month }) => {
-      const monthStart = new Date(year, month - 1, 1);
-      const monthEnd = new Date(year, month, 0);
-      const rangeStart = monthStart > fromDate ? monthStart : fromDate;
-      const rangeEnd = monthEnd < toDate ? monthEnd : toDate;
-      const weightDays =
-        Math.round((rangeEnd.getTime() - rangeStart.getTime()) / 86_400_000) + 1;
-      return { year, month, weightDays };
-    })
-    .reverse();
+export function lastClosedMonth(
+  reference: Date = new Date(),
+): { year: number; month: number } {
+  const year = reference.getFullYear();
+  const currentMonthIndex0 = reference.getMonth(); // 0-11 do mês atual
+  if (currentMonthIndex0 === 0) return { year: year - 1, month: 12 };
+  return { year, month: currentMonthIndex0 }; // já é (mês atual 1-based - 1)
 }

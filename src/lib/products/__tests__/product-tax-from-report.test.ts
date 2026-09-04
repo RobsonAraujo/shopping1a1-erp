@@ -1,21 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  blendByMonthWeights,
-  loadProductTaxFromLatestReport,
-  type ProductTaxFromReport,
-} from "@/lib/products/product-tax-from-report";
+import { loadProductTaxFromLatestReport } from "@/lib/products/product-tax-from-report";
 import type { SkuAggregation, TaxReportPayload } from "@/lib/tax-report/types";
-
-function entry(overrides: Partial<ProductTaxFromReport> = {}): ProductTaxFromReport {
-  return {
-    taxPercent: 10,
-    generatedAt: "2026-09-01T00:00:00.000Z",
-    year: 2026,
-    month: 9,
-    ...overrides,
-  };
-}
 
 function sampleSku(overrides: Partial<SkuAggregation> = {}): SkuAggregation {
   return {
@@ -167,87 +153,5 @@ describe("loadProductTaxFromLatestReport", () => {
       { year: 2026, month: 1 },
     );
     assert.ok(result.bySku.get("SKU-A"));
-  });
-});
-
-describe("blendByMonthWeights", () => {
-  it("returns undefined when there are no candidate entries", () => {
-    assert.equal(
-      blendByMonthWeights([], [{ year: 2026, month: 9, weightDays: 30 }]),
-      undefined,
-    );
-  });
-
-  it("blends the two months of the window weighted by their day counts", () => {
-    const sep = entry({ year: 2026, month: 9, taxPercent: 20, generatedAt: "sep" });
-    const aug = entry({ year: 2026, month: 8, taxPercent: 12, generatedAt: "aug" });
-    const result = blendByMonthWeights(
-      [sep, aug],
-      [
-        { year: 2026, month: 9, weightDays: 4 },
-        { year: 2026, month: 8, weightDays: 26 },
-      ],
-    );
-    assert.ok(result);
-    // (20*4 + 12*26) / 30 = 13.0666...
-    assert.ok(Math.abs(result!.taxPercent - 13.066_666_666) < 1e-6);
-    assert.equal(result!.generatedAt, "sep");
-    assert.equal(result!.year, 2026);
-    assert.equal(result!.month, 9);
-  });
-
-  it("collapses to 100% of the only available month when there is not enough history", () => {
-    const sep = entry({ year: 2026, month: 9, taxPercent: 20 });
-    const result = blendByMonthWeights(
-      [sep],
-      [
-        { year: 2026, month: 9, weightDays: 4 },
-        { year: 2026, month: 8, weightDays: 26 },
-      ],
-    );
-    assert.ok(result);
-    assert.equal(result!.taxPercent, 20);
-  });
-
-  it("falls back to the closest older snapshot when a window month has no snapshot of its own (gap month)", () => {
-    const sep = entry({ year: 2026, month: 9, taxPercent: 20 });
-    const jul = entry({ year: 2026, month: 7, taxPercent: 10 });
-    // Agosto não tem snapshot (buraco) — o slot de agosto deve cair pro
-    // snapshot disponível mais próximo (julho), sem pular o mês.
-    const result = blendByMonthWeights(
-      [sep, jul],
-      [
-        { year: 2026, month: 9, weightDays: 4 },
-        { year: 2026, month: 8, weightDays: 26 },
-      ],
-    );
-    assert.ok(result);
-    // (20*4 + 10*26) / 30 = 11.333...
-    assert.ok(Math.abs(result!.taxPercent - 11.333_333_333) < 1e-6);
-  });
-
-  it("never reuses the same entry across two slots when more history is available", () => {
-    const sep = entry({ year: 2026, month: 9, taxPercent: 20 });
-    const alsoSep = entry({ year: 2026, month: 9, taxPercent: 30 });
-    const result = blendByMonthWeights(
-      [sep, alsoSep],
-      [
-        { year: 2026, month: 9, weightDays: 4 },
-        { year: 2026, month: 9, weightDays: 26 },
-      ],
-    );
-    assert.ok(result);
-    // (20*4 + 30*26) / 30 = 28.666... — cada slot consome uma entrada distinta.
-    assert.ok(Math.abs(result!.taxPercent - 28.666_666_666) < 1e-6);
-  });
-
-  it("falls back to the most recent candidate when no window slot has a qualifying (older-or-equal) entry", () => {
-    const jul = entry({ year: 2026, month: 7, taxPercent: 15 });
-    const result = blendByMonthWeights(
-      [jul],
-      [{ year: 2025, month: 12, weightDays: 30 }],
-    );
-    assert.ok(result);
-    assert.equal(result!.taxPercent, 15);
   });
 });

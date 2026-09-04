@@ -659,10 +659,10 @@ export function ProductsClient() {
 
       {data?.taxRegime !== "SIMPLES" && data?.taxReportGeneratedAt ? (
         <p className="text-xs text-[var(--muted-foreground)]">
-          Coluna Imposto calculada com base nos últimos 30 dias, combinando os
-          relatórios tributários mensais mais recentes (o mais recente gerado
-          em {DATE_TIME_FORMATTER.format(new Date(data.taxReportGeneratedAt))}
-          , {daysSince(data.taxReportGeneratedAt)} dia(s) atrás). Se houve
+          Coluna Imposto calculada com base no último mês fechado do
+          relatório tributário (gerado em{" "}
+          {DATE_TIME_FORMATTER.format(new Date(data.taxReportGeneratedAt))},{" "}
+          {daysSince(data.taxReportGeneratedAt)} dia(s) atrás). Se houve
           vendas ou mudanças fiscais recentes,{" "}
           <Link
             href="/dashboard/relatorio-tributario"
@@ -746,7 +746,7 @@ export function ProductsClient() {
                 product.taxPercentGeneratedAt &&
                 product.taxPercentYear !== null &&
                 product.taxPercentMonth !== null
-              ? `Média % operacional de imposto apurada nos últimos 30 dias, combinando os relatórios tributários mensais mais recentes (o mais recente usado foi ${taxReportPeriodLabel(product.taxPercentYear, product.taxPercentMonth)}, recalculado em ${DATE_TIME_FORMATTER.format(new Date(product.taxPercentGeneratedAt))}, ${daysSince(product.taxPercentGeneratedAt)} dia(s) atrás). Se houve vendas ou mudanças fiscais recentes, recalcule o relatório tributário para atualizar este valor.`
+              ? `Média % operacional de imposto apurada no relatório tributário do último mês fechado (${taxReportPeriodLabel(product.taxPercentYear, product.taxPercentMonth)}, recalculado em ${DATE_TIME_FORMATTER.format(new Date(product.taxPercentGeneratedAt))}, ${daysSince(product.taxPercentGeneratedAt)} dia(s) atrás). Se o produto não vendeu nesse mês, usamos o mês fechado mais recente em que ele aparece. Se houve vendas ou mudanças fiscais recentes, recalcule o relatório tributário para atualizar este valor.`
               : "Este SKU ainda não aparece em nenhum relatório tributário calculado. Gere/recalcule o relatório tributário para obter o imposto médio deste produto."
         }
         onEdit={(product) =>

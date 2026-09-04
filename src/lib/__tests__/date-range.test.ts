@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { lastDaysMonthWeights, lastDaysYmdRange, monthsInRange } from "@/lib/date-range";
+import { lastClosedMonth, monthsInRange } from "@/lib/date-range";
 
 describe("monthsInRange", () => {
   it("returns a single month when the range stays within it", () => {
@@ -30,43 +30,23 @@ describe("monthsInRange", () => {
   });
 });
 
-describe("lastDaysMonthWeights", () => {
-  it("returns months most-recent-first with weights summing to the window size", () => {
-    const result = lastDaysMonthWeights(30);
-    const totalWeight = result.reduce((sum, m) => sum + m.weightDays, 0);
-    assert.equal(totalWeight, 30);
-    for (const { weightDays } of result) {
-      assert.ok(weightDays > 0 && weightDays <= 30);
-    }
-    for (let i = 1; i < result.length; i++) {
-      const prev = result[i - 1];
-      const curr = result[i];
-      assert.ok(
-        prev.year > curr.year || (prev.year === curr.year && prev.month > curr.month),
-        "months must be strictly descending",
-      );
-    }
+describe("lastClosedMonth", () => {
+  it("returns the previous month within the same year", () => {
+    assert.deepEqual(lastClosedMonth(new Date(2026, 8, 15)), { year: 2026, month: 8 });
   });
 
-  it("covers exactly the months (and only those) returned by monthsInRange for the same window", () => {
-    const { from, to } = lastDaysYmdRange(30);
-    const expectedMonths = monthsInRange(from, to);
-    const result = lastDaysMonthWeights(30);
-    const resultAscending = [...result].reverse().map((m) => ({
-      year: m.year,
-      month: m.month,
-    }));
-    assert.deepEqual(resultAscending, expectedMonths);
+  it("returns the previous month right after a month boundary", () => {
+    assert.deepEqual(lastClosedMonth(new Date(2026, 8, 1)), { year: 2026, month: 8 });
   });
 
-  it("weights the most recent month by today's day-of-month when the window spans two months", () => {
-    const result = lastDaysMonthWeights(30);
+  it("crosses a year boundary in January", () => {
+    assert.deepEqual(lastClosedMonth(new Date(2026, 0, 10)), { year: 2025, month: 12 });
+  });
+
+  it("defaults to today when no reference is given", () => {
     const today = new Date();
-    if (result.length === 2) {
-      assert.equal(result[0].weightDays, today.getDate());
-    } else {
-      assert.equal(result.length, 1);
-      assert.equal(result[0].weightDays, 30);
-    }
+    const expectedMonth = today.getMonth() === 0 ? 12 : today.getMonth();
+    const expectedYear = today.getMonth() === 0 ? today.getFullYear() - 1 : today.getFullYear();
+    assert.deepEqual(lastClosedMonth(), { year: expectedYear, month: expectedMonth });
   });
 });
