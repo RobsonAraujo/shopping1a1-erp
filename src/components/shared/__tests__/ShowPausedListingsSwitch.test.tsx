@@ -1,36 +1,12 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createRoot } from "react-dom/client";
-import { act } from "react";
+import { act, renderIntoDocument } from "@/test-setup/render";
 import {
   ShowPausedListingsSwitch,
   isPausedListingStatus,
   filterListingsByPausedVisibility,
   countPausedListings,
-} from "./ShowPausedListingsSwitch";
-
-function renderIntoDocument(element: React.ReactElement) {
-  const container = document.createElement("div");
-  document.body.appendChild(container);
-  const root = createRoot(container);
-  act(() => {
-    root.render(element);
-  });
-  return {
-    container,
-    rerender: (next: React.ReactElement) => {
-      act(() => {
-        root.render(next);
-      });
-    },
-    unmount: () => {
-      act(() => {
-        root.unmount();
-      });
-      container.remove();
-    },
-  };
-}
+} from "../ShowPausedListingsSwitch";
 
 describe("ShowPausedListingsSwitch", () => {
   it("shows the paused count only when there are paused listings", () => {

@@ -123,7 +123,12 @@ export function resolveFixedCostCreditForMonth(input: {
   );
 
   const diasNoMes = new Date(input.year, input.month, 0).getDate();
-  const mesEmAndamento = isCurrentCalendarMonth(input.year, input.month, timeZone);
+  const mesEmAndamento = isCurrentCalendarMonth(
+    input.year,
+    input.month,
+    timeZone,
+    input.now,
+  );
 
   if (!mesEmAndamento) {
     return {

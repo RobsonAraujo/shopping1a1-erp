@@ -1,5 +1,13 @@
-import { after } from "node:test";
+import { after, mock } from "node:test";
 import { JSDOM } from "jsdom";
+
+void mock.module("@sentry/nextjs", {
+  namedExports: {
+    init() {},
+    captureException() {},
+    captureRequestError() {},
+  },
+});
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", {
   url: "http://localhost/",
@@ -29,6 +37,8 @@ const globals: Record<string, unknown> = {
   getComputedStyle: window.getComputedStyle,
   requestAnimationFrame: (cb: FrameRequestCallback) => setTimeout(cb, 0),
   cancelAnimationFrame: (id: number) => clearTimeout(id),
+  localStorage: window.localStorage,
+  sessionStorage: window.sessionStorage,
   IntersectionObserver: StubObserver,
   ResizeObserver: StubObserver,
   matchMedia: (query: string) => ({

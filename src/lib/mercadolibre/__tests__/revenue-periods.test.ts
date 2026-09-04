@@ -26,6 +26,16 @@ describe("getZonedYearMonth", () => {
 });
 
 describe("isCurrentCalendarMonth / isFutureCalendarMonth / isDreMonthSyncable", () => {
+  it("respects an injected clock instead of the process date", () => {
+    const now = new Date("2026-08-03T15:00:00.000Z");
+    assert.equal(isCurrentCalendarMonth(2026, 8, TZ, now), true);
+    assert.equal(isCurrentCalendarMonth(2026, 9, TZ, now), false);
+    assert.equal(isFutureCalendarMonth(2026, 9, TZ, now), true);
+    assert.equal(isFutureCalendarMonth(2026, 8, TZ, now), false);
+    assert.equal(isDreMonthSyncable(2026, 8, TZ, now), true);
+    assert.equal(isDreMonthSyncable(2026, 9, TZ, now), false);
+  });
+
   it("detects the current month as not future and syncable", () => {
     const { year, month } = getZonedYearMonth(new Date(), TZ);
     assert.equal(isCurrentCalendarMonth(year, month, TZ), true);

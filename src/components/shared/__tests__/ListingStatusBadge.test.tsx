@@ -1,26 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createRoot } from "react-dom/client";
-import { act } from "react";
-import { ListingStatusBadge, listingRowMutedClass } from "./ListingStatusBadge";
-
-function renderIntoDocument(element: React.ReactElement) {
-  const container = document.createElement("div");
-  document.body.appendChild(container);
-  const root = createRoot(container);
-  act(() => {
-    root.render(element);
-  });
-  return {
-    container,
-    unmount: () => {
-      act(() => {
-        root.unmount();
-      });
-      container.remove();
-    },
-  };
-}
+import { renderIntoDocument } from "@/test-setup/render";
+import { ListingStatusBadge, listingRowMutedClass } from "../ListingStatusBadge";
 
 describe("ListingStatusBadge", () => {
   it("renders nothing for an active listing", () => {

@@ -1,26 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createRoot } from "react-dom/client";
-import { act } from "react";
-import { Breadcrumbs } from "./Breadcrumbs";
-
-function renderIntoDocument(element: React.ReactElement) {
-  const container = document.createElement("div");
-  document.body.appendChild(container);
-  const root = createRoot(container);
-  act(() => {
-    root.render(element);
-  });
-  return {
-    container,
-    unmount: () => {
-      act(() => {
-        root.unmount();
-      });
-      container.remove();
-    },
-  };
-}
+import { renderIntoDocument } from "@/test-setup/render";
+import { Breadcrumbs } from "../Breadcrumbs";
 
 describe("Breadcrumbs", () => {
   it("renders every item's label in the desktop trail", () => {
