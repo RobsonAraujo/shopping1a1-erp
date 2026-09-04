@@ -2,11 +2,6 @@
 
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 
-export const DASHBOARD_ATTENTION_FULL_OPEN_KEY =
-  "dashboard-attention-full-open";
-export const DASHBOARD_ATTENTION_PURCHASE_OPEN_KEY =
-  "dashboard-attention-purchase-open";
-
 function readPersistedOpen(storageKey: string, defaultOpen: boolean): boolean {
   try {
     const raw = localStorage.getItem(storageKey);

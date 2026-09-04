@@ -55,7 +55,7 @@ export function WorkingCapitalCard({ rows }: { rows: WorkingCapitalInputRow[] })
     const set = new Set<string>();
     for (const row of rows) {
       if (row.isExcluded) continue;
-      set.add(getSkuSupplier(row.sku));
+      set.add(row.supplierName ?? getSkuSupplier(row.sku));
     }
     return [...set].sort((a, b) => a.localeCompare(b, "pt-BR"));
   }, [rows]);

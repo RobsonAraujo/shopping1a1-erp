@@ -30,6 +30,7 @@ const productWriteSchema = z.object({
   isImported: z.boolean().optional(),
   saleIcmsPercent: z.coerce.number().finite().optional(),
   pmaPrice: z.coerce.number().finite().nullable().optional(),
+  supplierId: z.string().trim().nullable().optional(),
 });
 
 export async function GET() {
@@ -42,7 +43,11 @@ export async function GET() {
   try {
     const [settings, products, taxFromReport] = await Promise.all([
       ensureCompanySettings(organizationId),
-      prisma.product.findMany({ where: { organizationId }, orderBy: { sku: "asc" } }),
+      prisma.product.findMany({
+        where: { organizationId },
+        orderBy: { sku: "asc" },
+        include: { supplier: { select: { id: true, name: true } } },
+      }),
       loadProductTaxFromLatestReport(userId),
     ]);
     const skus = products
@@ -65,6 +70,7 @@ export async function GET() {
           taxFromReport,
           companyTaxContext,
           p.sku ? (imageUrlsBySku.get(p.sku) ?? null) : null,
+          p.supplier,
         ),
       ),
     });
@@ -104,7 +110,10 @@ export async function POST(request: NextRequest) {
   try {
     const settings = await ensureCompanySettings(organizationId);
     const data = productWriteToPrismaData(organizationId, input);
-    const product = await prisma.product.create({ data });
+    const product = await prisma.product.create({
+      data,
+      include: { supplier: { select: { id: true, name: true } } },
+    });
 
     const imageUrl = product.sku
       ? await listingImageUrlForSku(organizationId, product.sku)
@@ -119,6 +128,7 @@ export async function POST(request: NextRequest) {
           simplesAliquotaEfetivaPercent: settings.simplesAliquotaEfetivaPercent,
         },
         imageUrl,
+        product.supplier,
       ),
     });
   } catch (e) {
@@ -126,6 +136,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Este anúncio já está cadastrado como produto" },
         { status: 409 },
+      );
+    }
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2003") {
+      return NextResponse.json(
+        { error: "Fornecedor selecionado não existe" },
+        { status: 400 },
       );
     }
     logServerError("api/products POST", e);

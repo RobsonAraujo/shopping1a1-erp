@@ -21,6 +21,7 @@ import {
   toStockPlanningValues,
 } from "@/lib/configuracoes/operational-settings";
 import { loadStockReportProductsForListings } from "@/lib/products/product-data";
+import { loadSupplierNamesByMlItemId } from "@/lib/products/product-resolver";
 import type { StockReportProductInfo } from "@/lib/inventory/inventory-stock-report";
 import { prisma } from "@/lib/db/db";
 import { readSession } from "@/lib/mercadolibre/session";
@@ -45,6 +46,7 @@ async function InventoryDataSection({
   let statusCounts = { active: 0, paused: 0, other: 0 };
   let warehouseLoadFailed = false;
   let productsBySku: Record<string, StockReportProductInfo> = {};
+  let supplierNames: Record<string, string> = {};
   let rows: InventoryRow[] = [];
 
   try {
@@ -143,6 +145,11 @@ async function InventoryDataSection({
       organizationId,
       rows.map((row) => ({ mlItemId: row.mlItemId, sku: row.sku })),
     );
+    const supplierNamesMap = await loadSupplierNamesByMlItemId(
+      organizationId,
+      rows.map((row) => row.mlItemId),
+    );
+    supplierNames = Object.fromEntries(supplierNamesMap);
   } catch (e) {
     const msg = publicPageLoadMessage(
       "dashboard/inventory",
@@ -169,7 +176,11 @@ async function InventoryDataSection({
         </Card>
       ) : null}
 
-      <InventoryStockTable rows={rows} productsBySku={productsBySku} />
+      <InventoryStockTable
+        rows={rows}
+        productsBySku={productsBySku}
+        supplierNames={supplierNames}
+      />
 
       <Card>
         <CardContent className="p-4 text-sm text-[var(--muted-foreground)] sm:py-4">

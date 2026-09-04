@@ -59,6 +59,33 @@ export async function loadProductResolverMaps(
   return { productByMlItemId };
 }
 
+/**
+ * Nome do fornecedor cadastrado por `mlItemId`, para os consumidores que só
+ * têm o SKU do anúncio (Compras, Estoque, Kanban) e precisam preferir o
+ * fornecedor real cadastrado ao inferido por SKU (`getSkuSupplier`). Query
+ * dedicada e leve — não usa `loadProductResolverMaps` (que traz o `Product`
+ * inteiro) — uma chamada em lote, não por linha. Produtos sem fornecedor
+ * cadastrado simplesmente não aparecem no Map; o chamador cai no fallback.
+ */
+export async function loadSupplierNamesByMlItemId(
+  organizationId: string,
+  mlItemIds: string[],
+): Promise<Map<string, string>> {
+  const uniqueIds = [...new Set(mlItemIds.filter(Boolean))];
+  if (uniqueIds.length === 0) return new Map();
+
+  const products = await prisma.product.findMany({
+    where: { organizationId, mlItemId: { in: uniqueIds }, supplierId: { not: null } },
+    select: { mlItemId: true, supplier: { select: { name: true } } },
+  });
+
+  const result = new Map<string, string>();
+  for (const product of products) {
+    if (product.supplier) result.set(product.mlItemId, product.supplier.name);
+  }
+  return result;
+}
+
 /** Conveniência: carrega os mapas e devolve uma função de resolução por linha. */
 export async function createProductResolver(
   organizationId: string,

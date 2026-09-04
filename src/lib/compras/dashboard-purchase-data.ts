@@ -8,6 +8,7 @@ import {
 import { formatCategoryPath } from "@/lib/mercadolibre/category-labels";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
 import { getItemSku, getSkuSupplier, isKitItem } from "@/lib/mercadolibre/item-sku";
+import { loadSupplierNamesByMlItemId } from "@/lib/products/product-resolver";
 import {
   buildPurchasePlan,
   computePurchaseAnalysis,
@@ -213,7 +214,7 @@ export async function loadDashboardPurchaseData(
   const dateField = stockPlanning.salesWindowDateField;
 
   const allIds = await fetchOperationalListingIds(token, userId, organizationId);
-  const [rawItems, salesByItem, warehouseStocks, replenishmentCycles, latestSnapshotById] =
+  const [rawItems, salesByItem, warehouseStocks, replenishmentCycles, latestSnapshotById, supplierNames] =
     await Promise.all([
       fetchItemsByIdsBatched(token, allIds),
       fetchUnitsSoldForItemsInWindowBatched(
@@ -234,6 +235,7 @@ export async function loadDashboardPurchaseData(
       }),
       loadLatestPurchaseCyclesByItem(organizationId, allIds),
       loadLatestCatalogCompetitionSnapshots(allIds),
+      loadSupplierNamesByMlItemId(organizationId, allIds),
     ]);
   const items = rawItems.filter((item) => !isKitItem(item));
 
@@ -264,7 +266,7 @@ export async function loadDashboardPurchaseData(
 
   const rows: PurchaseAnalysisItemRow[] = items.map((item) => {
     const sku = getItemSku(item);
-    const supplier = getSkuSupplier(sku);
+    const supplier = supplierNames.get(item.id) ?? getSkuSupplier(sku);
     const warehouse = warehouseById[item.id];
     const warehouseStock = warehouse?.quantity ?? 0;
     const purchaseLead = warehouse?.purchaseLeadTimeDays ?? 0;

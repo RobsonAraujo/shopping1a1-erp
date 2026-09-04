@@ -11,6 +11,7 @@ function inputRow(overrides: Partial<WorkingCapitalInputRow>): WorkingCapitalInp
     unitCost: 10,
     hasIcmsSt: false,
     isExcluded: false,
+    supplierName: null,
     ...overrides,
   };
 }
@@ -97,6 +98,23 @@ describe("buildWorkingCapitalRows", () => {
       {},
     );
     assert.equal(rows[0].mlItemId, "BIG");
+  });
+
+  it("prefers the registered supplier name over the sku-derived fallback for the installments lookup", () => {
+    const { rows } = buildWorkingCapitalRows(
+      [
+        inputRow({
+          sku: "MXT 1",
+          supplierName: "Fornecedor Cadastrado",
+          effectiveDailyAvg: 1,
+          unitCost: 100,
+        }),
+      ],
+      10,
+      { MXT: 4, "Fornecedor Cadastrado": 2 },
+    );
+    assert.equal(rows[0].supplier, "Fornecedor Cadastrado");
+    assert.equal(rows[0].installments, 2);
   });
 
   it("sums totalCapital across all included rows", () => {

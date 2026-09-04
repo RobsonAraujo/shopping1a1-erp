@@ -59,6 +59,8 @@ export type ProductView = ProductRecordForPricing & {
   updatedAt: string;
   /** Thumbnail do anúncio ML (snapshot em `Listing.imageUrlSnapshot`) — null se nenhum anúncio com esse SKU foi sincronizado ainda. */
   imageUrl: string | null;
+  supplierId: string | null;
+  supplierName: string | null;
 };
 
 export function buildProductView(
@@ -70,6 +72,7 @@ export function buildProductView(
     simplesAliquotaEfetivaPercent: number | null;
   },
   imageUrl: string | null = null,
+  supplier: { id: string; name: string } | null = null,
 ): ProductView {
   const record = productToPricingRecord(product);
   const resolved = resolveProductPricing(record, pisCofinsPercent);
@@ -96,6 +99,8 @@ export function buildProductView(
     createdAt: product.createdAt.toISOString(),
     updatedAt: product.updatedAt.toISOString(),
     imageUrl,
+    supplierId: supplier?.id ?? null,
+    supplierName: supplier?.name ?? null,
   };
 }
 
@@ -394,6 +399,7 @@ export type ProductWriteInput = {
   isImported?: boolean;
   saleIcmsPercent?: number;
   pmaPrice?: number | null;
+  supplierId?: string | null;
 };
 
 export function validateProductInput(
@@ -471,6 +477,7 @@ export function productWriteToPrismaData(
     isImported: input.isImported ?? false,
     saleIcmsPercent: input.saleIcmsPercent ?? 0,
     pmaPrice: input.pmaPrice ?? null,
+    supplierId: input.supplierId || null,
   };
 }
 
@@ -499,6 +506,11 @@ export function productPatchToPrismaData(
   if (input.isImported !== undefined) data.isImported = input.isImported;
   if (input.saleIcmsPercent !== undefined) data.saleIcmsPercent = input.saleIcmsPercent;
   if (input.pmaPrice !== undefined) data.pmaPrice = input.pmaPrice ?? null;
+  if (input.supplierId !== undefined) {
+    data.supplier = input.supplierId
+      ? { connect: { id: input.supplierId } }
+      : { disconnect: true };
+  }
   return data;
 }
 

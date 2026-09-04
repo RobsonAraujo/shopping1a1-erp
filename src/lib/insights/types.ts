@@ -96,6 +96,9 @@ export type RevenuePotentialRow = {
   /** Custo unitário cadastrado em "Meus produtos" (NF ou compra+ST); null se não cadastrado. */
   unitCost: number | null;
   hasIcmsSt: boolean;
+  /** Nome do fornecedor cadastrado em "Meus produtos"; null se o produto não
+   * tem fornecedor vinculado (cai no fallback por SKU, `getSkuSupplier`). */
+  supplierName: string | null;
 };
 
 // ---------------------------------------------------------------------------

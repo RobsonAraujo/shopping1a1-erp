@@ -314,14 +314,35 @@ model Product {
   saleIcmsPercent     Decimal  @map("sale_icms_percent") @db.Decimal(8, 4)
   isImported          Boolean  @default(false) @map("is_imported")
   pmaPrice            Decimal? @map("pma_price") @db.Decimal(18, 2)
+  supplierId          String?  @map("supplier_id")
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
+  supplier         Supplier?                @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   kitItems         KitItem[]
   dreCostLevelings DreProductCostLeveling[]
 
   @@index([organizationId])
+  @@index([organizationId, supplierId])
   @@map("products")
+}
+
+/// Cadastro simples de fornecedor. Fallback quando `Product.supplierId` é
+/// nulo continua sendo `getSkuSupplier` (primeira palavra do SKU) — não há
+/// migração automática de fornecedores "implícitos" a partir do SKU.
+model Supplier {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  name           String
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  products Product[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("suppliers")
 }
 
 /// Anúncio "kit" do Mercado Livre (sem SKU próprio) cadastrado manualmente com

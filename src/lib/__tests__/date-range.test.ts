@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { monthsInRange } from "@/lib/date-range";
+import { lastDaysMonthWeights, lastDaysYmdRange, monthsInRange } from "@/lib/date-range";
 
 describe("monthsInRange", () => {
   it("returns a single month when the range stays within it", () => {
@@ -27,5 +27,46 @@ describe("monthsInRange", () => {
       { year: 2025, month: 12 },
       { year: 2026, month: 1 },
     ]);
+  });
+});
+
+describe("lastDaysMonthWeights", () => {
+  it("returns months most-recent-first with weights summing to the window size", () => {
+    const result = lastDaysMonthWeights(30);
+    const totalWeight = result.reduce((sum, m) => sum + m.weightDays, 0);
+    assert.equal(totalWeight, 30);
+    for (const { weightDays } of result) {
+      assert.ok(weightDays > 0 && weightDays <= 30);
+    }
+    for (let i = 1; i < result.length; i++) {
+      const prev = result[i - 1];
+      const curr = result[i];
+      assert.ok(
+        prev.year > curr.year || (prev.year === curr.year && prev.month > curr.month),
+        "months must be strictly descending",
+      );
+    }
+  });
+
+  it("covers exactly the months (and only those) returned by monthsInRange for the same window", () => {
+    const { from, to } = lastDaysYmdRange(30);
+    const expectedMonths = monthsInRange(from, to);
+    const result = lastDaysMonthWeights(30);
+    const resultAscending = [...result].reverse().map((m) => ({
+      year: m.year,
+      month: m.month,
+    }));
+    assert.deepEqual(resultAscending, expectedMonths);
+  });
+
+  it("weights the most recent month by today's day-of-month when the window spans two months", () => {
+    const result = lastDaysMonthWeights(30);
+    const today = new Date();
+    if (result.length === 2) {
+      assert.equal(result[0].weightDays, today.getDate());
+    } else {
+      assert.equal(result.length, 1);
+      assert.equal(result[0].weightDays, 30);
+    }
   });
 });

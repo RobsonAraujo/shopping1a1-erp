@@ -66,6 +66,12 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
     kind: "dropdown",
     items: [
       {
+        href: "/dashboard/fornecedores",
+        label: "Meus Fornecedores",
+        description: "Cadastro de fornecedores",
+        icon: Truck,
+      },
+      {
         href: "/dashboard/produtos",
         label: "Meus produtos",
         description: "Cadastro fiscal e custo por SKU",

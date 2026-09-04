@@ -17,6 +17,8 @@ export type WorkingCapitalInputRow = {
   unitCost: number | null;
   hasIcmsSt: boolean;
   isExcluded: boolean;
+  /** Nome do fornecedor cadastrado; null cai no fallback por SKU (`getSkuSupplier`). */
+  supplierName: string | null;
 };
 
 export function buildWorkingCapitalRows(
@@ -37,7 +39,7 @@ export function buildWorkingCapitalRows(
   const workingCapitalRows: WorkingCapitalRow[] = considered
     .filter((r): r is WorkingCapitalInputRow & { unitCost: number } => r.unitCost !== null)
     .map((r) => {
-      const supplier = getSkuSupplier(r.sku);
+      const supplier = r.supplierName ?? getSkuSupplier(r.sku);
       const installments = Math.max(1, installmentsBySupplier[supplier] ?? 1);
       const unitsNeeded = Math.ceil(r.effectiveDailyAvg * periodDays);
       const grossCapital = unitsNeeded * r.unitCost;

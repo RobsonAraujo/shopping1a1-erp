@@ -9,6 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { FormInput } from "@/components/ui/form-input";
+import { FormSelect } from "@/components/ui/form-select";
+import { useApiResource } from "@/hooks/use-api-resource";
+import type { SupplierRow } from "@/components/fornecedores/FornecedoresClient";
 import {
   Sheet,
   SheetBody,
@@ -94,6 +97,7 @@ type ProductFormState = {
   isImported: boolean;
   saleIcmsPercent: number | null;
   pmaPrice: number | null;
+  supplierId: string | null;
 };
 
 function emptyForm(mlItemId = "", sku = ""): ProductFormState {
@@ -111,6 +115,7 @@ function emptyForm(mlItemId = "", sku = ""): ProductFormState {
     isImported: false,
     saleIcmsPercent: null,
     pmaPrice: null,
+    supplierId: null,
   };
 }
 
@@ -129,6 +134,7 @@ function formFromProduct(product: ProductView): ProductFormState {
     isImported: product.isImported,
     saleIcmsPercent: product.saleIcmsPercent,
     pmaPrice: product.pmaPrice,
+    supplierId: product.supplierId,
   };
 }
 
@@ -206,6 +212,16 @@ function ProductFormModal({
   const [error, setError] = useState<string | null>(null);
   const isEdit = Boolean(initial.mlItemId && initial.unitCostNf !== null);
   const isSimples = taxRegime === "SIMPLES";
+  const suppliersResource = useApiResource<{ suppliers: SupplierRow[] }>(
+    "/api/suppliers?active=true",
+  );
+  const supplierOptions = [
+    { value: "", label: "Sem fornecedor" },
+    ...(suppliersResource.data?.suppliers ?? []).map((s) => ({
+      value: s.id,
+      label: s.name,
+    })),
+  ];
 
   useEffect(() => {
     setForm(initial);
@@ -324,6 +340,15 @@ function ProductFormModal({
                 className="h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-base sm:h-10 sm:text-sm"
               />
             </div>
+            <FormSelect
+              label="Fornecedor"
+              value={form.supplierId ?? ""}
+              onValueChange={(value) =>
+                setForm((f) => ({ ...f, supplierId: value || null }))
+              }
+              options={supplierOptions}
+              className="sm:col-span-2"
+            />
             <MaskedMoneyField
               id="unit-cost-nf"
               label="Custo unitário NF"
@@ -634,10 +659,11 @@ export function ProductsClient() {
 
       {data?.taxRegime !== "SIMPLES" && data?.taxReportGeneratedAt ? (
         <p className="text-xs text-[var(--muted-foreground)]">
-          Coluna Imposto calculada a partir do relatório tributário gerado em{" "}
-          {DATE_TIME_FORMATTER.format(new Date(data.taxReportGeneratedAt))} (
-          {daysSince(data.taxReportGeneratedAt)} dia(s) atrás). Se houve vendas
-          ou mudanças fiscais recentes,{" "}
+          Coluna Imposto calculada com base nos últimos 30 dias, combinando os
+          relatórios tributários mensais mais recentes (o mais recente gerado
+          em {DATE_TIME_FORMATTER.format(new Date(data.taxReportGeneratedAt))}
+          , {daysSince(data.taxReportGeneratedAt)} dia(s) atrás). Se houve
+          vendas ou mudanças fiscais recentes,{" "}
           <Link
             href="/dashboard/relatorio-tributario"
             className="font-medium text-[var(--primary)] underline underline-offset-2"
@@ -720,7 +746,7 @@ export function ProductsClient() {
                 product.taxPercentGeneratedAt &&
                 product.taxPercentYear !== null &&
                 product.taxPercentMonth !== null
-              ? `Média % operacional de imposto apurada no relatório tributário de ${taxReportPeriodLabel(product.taxPercentYear, product.taxPercentMonth)} (recalculado em ${DATE_TIME_FORMATTER.format(new Date(product.taxPercentGeneratedAt))}, ${daysSince(product.taxPercentGeneratedAt)} dia(s) atrás). Se houve vendas ou mudanças fiscais recentes, recalcule o relatório tributário para atualizar este valor.`
+              ? `Média % operacional de imposto apurada nos últimos 30 dias, combinando os relatórios tributários mensais mais recentes (o mais recente usado foi ${taxReportPeriodLabel(product.taxPercentYear, product.taxPercentMonth)}, recalculado em ${DATE_TIME_FORMATTER.format(new Date(product.taxPercentGeneratedAt))}, ${daysSince(product.taxPercentGeneratedAt)} dia(s) atrás). Se houve vendas ou mudanças fiscais recentes, recalcule o relatório tributário para atualizar este valor.`
               : "Este SKU ainda não aparece em nenhum relatório tributário calculado. Gere/recalcule o relatório tributário para obter o imposto médio deste produto."
         }
         onEdit={(product) =>

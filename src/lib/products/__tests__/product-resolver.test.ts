@@ -22,6 +22,7 @@ function sampleProduct(overrides: Partial<Product> = {}): Product {
     saleIcmsPercent: 0 as unknown as Product["saleIcmsPercent"],
     isImported: false,
     pmaPrice: null,
+    supplierId: null,
     createdAt: new Date("2026-01-01"),
     updatedAt: new Date("2026-01-01"),
     ...overrides,

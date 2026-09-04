@@ -35,6 +35,7 @@ import {
 } from "@/lib/mercadolibre/api";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { getItemSku, getSkuSupplier, isKitItem } from "@/lib/mercadolibre/item-sku";
+import { loadSupplierNamesByMlItemId } from "@/lib/products/product-resolver";
 import {
   upsertListingFromItem,
   upsertListingsFromItems,
@@ -598,6 +599,7 @@ function buildCardFromCycle(
   },
   ctx: ItemPlanningContext,
   item: ItemBody,
+  supplierNames: Map<string, string>,
 ): OperationsBoardCard {
   const sku = getItemSku(item);
   return {
@@ -607,7 +609,7 @@ function buildCardFromCycle(
     status: cycle.status,
     title: item.title,
     sku,
-    supplier: getSkuSupplier(sku),
+    supplier: supplierNames.get(item.id) ?? getSkuSupplier(sku),
     imageUrl: bestItemImageUrl(item) ?? null,
     mlStock: mlAvailableStockUnits(item),
     warehouseStock: ctx.warehouseStock,
@@ -671,7 +673,7 @@ export async function loadOperationsBoards(
   const dateField = stockPlanning.salesWindowDateField;
   const listingIds = await fetchOperationalListingIds(token, userId, organizationId);
 
-  const [rawItems, salesByItem, warehouseStocks] = await Promise.all([
+  const [rawItems, salesByItem, warehouseStocks, supplierNames] = await Promise.all([
     fetchItemsByIdsBatched(token, listingIds),
     fetchUnitsSoldForItemsInWindowBatched(
       token,
@@ -688,6 +690,7 @@ export async function loadOperationsBoards(
         purchaseLeadTimeDays: true,
       },
     }),
+    loadSupplierNamesByMlItemId(organizationId, listingIds),
   ]);
   const items = rawItems.filter((item) => !isKitItem(item));
 
@@ -745,7 +748,7 @@ export async function loadOperationsBoards(
       stockPlanning,
       purchaseAnalysisValues,
     );
-    const card = buildCardFromCycle(cycle, ctx, item);
+    const card = buildCardFromCycle(cycle, ctx, item, supplierNames);
 
     if (cycle.kind === "purchase") {
       purchaseCards.push(card);

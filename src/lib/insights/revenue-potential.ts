@@ -21,6 +21,7 @@ import {
 import { getItemSku, isKitItem } from "@/lib/mercadolibre/item-sku";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { loadStockReportProductsByMlItemId } from "@/lib/products/product-data";
+import { loadSupplierNamesByMlItemId } from "@/lib/products/product-resolver";
 import type { RevenuePotentialRow } from "@/lib/insights/types";
 
 const LOOKBACK_DAYS = 120;
@@ -62,6 +63,10 @@ export async function loadRevenuePotentialData(
     organizationId,
     items.map((item) => item.id),
   );
+  const supplierNames = await loadSupplierNamesByMlItemId(
+    organizationId,
+    items.map((item) => item.id),
+  );
 
   const rows: RevenuePotentialRow[] = items.map((item) => {
     const sku = getItemSku(item);
@@ -70,6 +75,7 @@ export async function loadRevenuePotentialData(
     const hasIcmsSt = costInfo?.hasIcmsSt ?? false;
     const byDay = dailyByItem[item.id] ?? {};
     const soldDays = Object.keys(byDay).sort();
+    const supplierName = supplierNames.get(item.id) ?? null;
 
     if (soldDays.length === 0) {
       return {
@@ -86,6 +92,7 @@ export async function loadRevenuePotentialData(
         estimateBasis: "historical",
         unitCost,
         hasIcmsSt,
+        supplierName,
       };
     }
 
@@ -129,6 +136,7 @@ export async function loadRevenuePotentialData(
       estimateBasis: isCurrentlySelling ? "recent" : "historical",
       unitCost,
       hasIcmsSt,
+      supplierName,
     };
   });
 

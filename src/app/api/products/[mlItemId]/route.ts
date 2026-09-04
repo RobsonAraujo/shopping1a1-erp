@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/db";
 import {
   buildProductView,
@@ -28,6 +29,7 @@ const productPatchBodySchema = z.object({
   isImported: z.boolean().optional(),
   saleIcmsPercent: z.coerce.number().finite().optional(),
   pmaPrice: z.coerce.number().finite().nullable().optional(),
+  supplierId: z.string().trim().nullable().optional(),
 });
 
 export async function GET(_request: NextRequest, context: RouteContext) {
@@ -43,6 +45,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     const settings = await ensureCompanySettings(organizationId);
     const product = await prisma.product.findUnique({
       where: { mlItemId, organizationId },
+      include: { supplier: { select: { id: true, name: true } } },
     });
     if (!product) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
@@ -61,6 +64,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
         undefined,
         companyTaxContext,
         imageUrl,
+        product.supplier,
       ),
       pisCofinsPercent: settings.pisCofinsPercent,
       taxRegime: settings.taxRegime,
@@ -123,6 +127,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const product = await prisma.product.update({
       where: { mlItemId, organizationId },
       data,
+      include: { supplier: { select: { id: true, name: true } } },
     });
 
     const { changedFields, previousValues } = diffLevelableProductFields(
@@ -143,6 +148,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           simplesAliquotaEfetivaPercent: settings.simplesAliquotaEfetivaPercent,
         },
         imageUrl,
+        product.supplier,
       ),
       levelingSuggestion:
         changedFields.length > 0
@@ -154,6 +160,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           : null,
     });
   } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2003") {
+      return NextResponse.json(
+        { error: "Fornecedor selecionado não existe" },
+        { status: 400 },
+      );
+    }
     logServerError("api/products/[mlItemId] PATCH", e);
     return NextResponse.json(apiErrorPayload(e, "product_update_failed"), {
       status: 502,

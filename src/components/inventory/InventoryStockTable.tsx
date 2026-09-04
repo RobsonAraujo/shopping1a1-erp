@@ -26,7 +26,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ItemListSearch } from "@/components/shared/ItemListSearch";
-import { groupBySkuSupplier } from "@/lib/mercadolibre/item-sku";
+import { getSkuSupplier, groupBySupplierName } from "@/lib/mercadolibre/item-sku";
 import { filterByItemListSearch } from "@/lib/item-list-search";
 import type { StockReportProductInfo } from "@/lib/inventory/inventory-stock-report";
 import { InventoryStockReportLauncher } from "@/components/inventory/InventoryStockReportDialog";
@@ -57,6 +57,10 @@ export type InventoryRow = {
 type InventoryStockTableProps = {
   rows: InventoryRow[];
   productsBySku: Record<string, StockReportProductInfo>;
+  /** Nome do fornecedor cadastrado por `mlItemId` — fallback para o
+   * inferido pelo SKU (`getSkuSupplier`) quando o produto não tem
+   * fornecedor vinculado. */
+  supplierNames?: Record<string, string>;
 };
 
 function leadTimeToForm(days: number | null): {
@@ -71,6 +75,7 @@ function leadTimeToForm(days: number | null): {
 export function InventoryStockTable({
   rows,
   productsBySku,
+  supplierNames = {},
 }: InventoryStockTableProps) {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
@@ -104,8 +109,12 @@ export function InventoryStockTable({
     ? (rows.find((r) => r.mlItemId === settingsId) ?? null)
     : null;
   const supplierGroups = useMemo(
-    () => groupBySkuSupplier(filteredRows, (row) => row.sku),
-    [filteredRows],
+    () =>
+      groupBySupplierName(
+        filteredRows,
+        (row) => supplierNames[row.mlItemId] ?? getSkuSupplier(row.sku),
+      ),
+    [filteredRows, supplierNames],
   );
 
   const { sort, onSortChange } = useTableSort<InventoryRow, InventorySortKey>(
