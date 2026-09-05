@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   buildDreTableRows,
+  dreEditableLineLabel,
   filterRowsByVisibility,
+  isColoredRow,
   rowBackgroundClass,
   rowLabelClass,
   valueToneClass,
@@ -405,5 +407,59 @@ describe("dreMonthHeaderColorClass / dreMonthShortLabel", () => {
   it("falls back to the raw number for out-of-range months", () => {
     assert.equal(dreMonthShortLabel(0), "0");
     assert.equal(dreMonthShortLabel(13), "13");
+  });
+});
+
+describe("dreEditableLineLabel", () => {
+  it("resolves an editable line key to its display label", () => {
+    assert.equal(dreEditableLineLabel("revenueMl"), "Faturamento ML");
+    assert.equal(dreEditableLineLabel("productCostErp"), "Custo produto");
+  });
+
+  it("resolves adsCost (matched by id, since it has no lineKey field)", () => {
+    assert.equal(dreEditableLineLabel("adsCost"), "Campanhas ADS");
+  });
+
+  it("also resolves non-editable static row ids (e.g. result rows)", () => {
+    assert.equal(dreEditableLineLabel("totalEntrada"), "(+) Total de Entrada");
+  });
+
+  it("falls back to the raw key when it matches no static row", () => {
+    assert.equal(dreEditableLineLabel("bogusKey"), "bogusKey");
+  });
+});
+
+describe("isColoredRow", () => {
+  it("is true for entrada-total, custo-total and resultado static rows", () => {
+    const totalEntrada = DRE_STATIC_ROWS.find((r) => r.id === "totalEntrada")!;
+    const totalCustoOperacional = DRE_STATIC_ROWS.find(
+      (r) => r.id === "totalCustoOperacional",
+    )!;
+    const margemContribuicao = DRE_STATIC_ROWS.find(
+      (r) => r.id === "margemContribuicao",
+    )!;
+    assert.equal(isColoredRow(totalEntrada), true);
+    assert.equal(isColoredRow(totalCustoOperacional), true);
+    assert.equal(isColoredRow(margemContribuicao), true);
+  });
+
+  it("is false for entrada-detail and custo-detail static rows", () => {
+    const revenueMl = DRE_STATIC_ROWS.find((r) => r.id === "revenueMl")!;
+    const saleFeeMl = DRE_STATIC_ROWS.find((r) => r.id === "saleFeeMl")!;
+    assert.equal(isColoredRow(revenueMl), false);
+    assert.equal(isColoredRow(saleFeeMl), false);
+  });
+
+  it("is false for manual cost-item rows regardless of kind", () => {
+    const row: DreTableRow = {
+      type: "fixed-cost",
+      id: "fixed:c1",
+      costItemId: "c1",
+      kind: "custo-detail",
+      label: "Aluguel",
+      source: "manual",
+      indent: true,
+    };
+    assert.equal(isColoredRow(row), false);
   });
 });

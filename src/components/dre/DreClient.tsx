@@ -11,7 +11,6 @@ import {
   Info,
   MousePointerClick,
   Plus,
-  RefreshCw,
   Scale,
   Settings2,
   SquarePen,
@@ -23,6 +22,7 @@ import { DreProductCostLevelingModal } from "@/components/dre/DreProductCostLeve
 import { DreSyncOverlay } from "@/components/dre/DreSyncOverlay";
 import { DreYearTable } from "@/components/dre/DreYearTable";
 import { DreReconciliationModal } from "@/components/dre/DreReconciliationModal";
+import { useDreSync } from "@/components/dre/use-dre-sync";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,26 +43,16 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { UserFeedback } from "@/components/ui/user-feedback";
-import { consumeSSEStream } from "@/hooks/use-sse-stream";
-import { formatApiErrorMessage, readApiError } from "@/lib/api/api-client-error";
+import { readApiError } from "@/lib/api/api-client-error";
 import {
   formatFinancialMoney,
 } from "@/lib/pricing/financial-margin";
 import type { DreEditableLineKey } from "@/lib/dre/dre-calculations";
 import { downloadDreYearCsv } from "@/lib/dre/dre-export-csv";
-import {
-  dreEditableLineLabel,
-  type DreVisibilitySettings,
-} from "@/lib/dre/dre-table-rows";
+import type { DreVisibilitySettings } from "@/lib/dre/dre-table-rows";
 import type { DreYearView } from "@/lib/dre/dre-year-data";
-import type { DreSyncProgressPhase } from "@/lib/dre/dre-month-data";
-import {
-  getZonedYearMonth,
-  isDreMonthSyncable,
-} from "@/lib/mercadolibre/revenue-periods";
+import { getZonedYearMonth } from "@/lib/mercadolibre/revenue-periods";
 import { cn } from "@/lib/utils";
-
-const SYNC_ALL_CONCURRENCY = 2;
 
 const HELP_TONE_CLASS: Record<string, string> = {
   primary: "bg-[var(--primary)]/10 text-[var(--primary)]",
@@ -111,64 +101,6 @@ const HELP_TIPS: Array<{
   },
 ];
 
-type DreSyncSseEvent =
-  | {
-      type: "progress";
-      phase: DreSyncProgressPhase;
-      message: string;
-    }
-  | {
-      type: "complete";
-      syncedAt: string;
-      year: number;
-      yearView: DreYearView;
-    }
-  | { type: "error"; message: string };
-
-type SyncConfirmState =
-  | { mode: "month"; month: number }
-  | { mode: "all" }
-  | null;
-
-type SyncAdjustmentItem = {
-  id: string;
-  month: number;
-  monthLabel: string;
-  lineKey: DreEditableLineKey;
-  lineLabel: string;
-  amount: number;
-};
-
-function collectSyncAdjustments(
-  data: DreYearView,
-  scope: SyncConfirmState,
-): SyncAdjustmentItem[] {
-  if (!scope) return [];
-  const months =
-    scope.mode === "month"
-      ? data.months.filter((m) => m.month === scope.month)
-      : data.months.filter((m) => isDreMonthSyncable(data.year, m.month));
-
-  const items: SyncAdjustmentItem[] = [];
-  for (const month of months) {
-    for (const lineKey of month.manuallyEditedLineKeys) {
-      const amount =
-        lineKey === "adsCost"
-          ? -Math.max(0, month.adsCost ?? 0)
-          : (month.lines?.[lineKey] ?? 0);
-      items.push({
-        id: `${month.month}:${lineKey}`,
-        month: month.month,
-        monthLabel: month.label,
-        lineKey,
-        lineLabel: dreEditableLineLabel(lineKey),
-        amount,
-      });
-    }
-  }
-  return items;
-}
-
 export function DreClient({
   initialYear,
   initialData,
@@ -184,26 +116,27 @@ export function DreClient({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(true);
+  const toggleShowDetails = useCallback(
+    () => setShowDetails((v) => !v),
+    [],
+  );
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
-  const [fixedCostsModalOpen, setFixedCostsModalOpen] = useState(false);
-  const [operationalCostsModalOpen, setOperationalCostsModalOpen] =
-    useState(false);
-  const [investmentCostsModalOpen, setInvestmentCostsModalOpen] =
-    useState(false);
-  const [nonOperationalOutModalOpen, setNonOperationalOutModalOpen] =
-    useState(false);
-  const [nonOperationalInModalOpen, setNonOperationalInModalOpen] =
-    useState(false);
-  const [levelingModalOpen, setLevelingModalOpen] = useState(false);
-  const [syncingMonths, setSyncingMonths] = useState<Set<number>>(new Set());
-  const [syncingMonthMessages, setSyncingMonthMessages] = useState<
-    Record<number, string>
-  >({});
-  const [syncingAll, setSyncingAll] = useState(false);
-  const [syncConfirm, setSyncConfirm] = useState<SyncConfirmState>(null);
-  const [preserveAdjustmentIds, setPreserveAdjustmentIds] = useState<
-    Set<string>
-  >(new Set());
+  // As 7 Sheets abaixo (5 modais de custo + nivelamento + conciliação) nunca
+  // abrem ao mesmo tempo — a exclusão mútua hoje é garantida pelo overlay
+  // modal do Radix Sheet (cada trigger fecha o teclado/mouse do resto da
+  // página), não por lógica de estado. Um único `activeModal` remove a
+  // possibilidade de dois ficarem "abertos" ao mesmo tempo no estado, sem
+  // mudar nenhum comportamento observável.
+  const [activeModal, setActiveModal] = useState<
+    | "fixedCosts"
+    | "operational"
+    | "investment"
+    | "nonOperationalOut"
+    | "nonOperationalIn"
+    | "leveling"
+    | "reconcile"
+    | null
+  >(null);
   /** Marca visual "ajustado" + restore — só na sessão atual (some no reload). */
   const [sessionAdjustedByMonth, setSessionAdjustedByMonth] = useState<
     Record<number, DreEditableLineKey[]>
@@ -213,13 +146,7 @@ export function DreClient({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [displaySettings, setDisplaySettings] =
     useState<DreVisibilitySettings>(initialDisplaySettings);
-  const [reconcileOpen, setReconcileOpen] = useState(false);
   const [reconciliationBusy, setReconciliationBusy] = useState(false);
-  const [reconcileAfterSync, setReconcileAfterSync] = useState(false);
-  /** Um AbortController por mês em sincronização (sync-all roda concorrência 2). */
-  const syncControllersRef = useRef<Map<number, AbortController>>(new Map());
-  /** true enquanto um "Sincronizar tudo" cancelado não deve puxar o próximo mês da fila. */
-  const syncAllCancelledRef = useRef(false);
   /** Ano inicial já chega via prop (carregado no servidor) — só refaz a busca
    * quando o usuário troca o ano. */
   const skipNextYearFetch = useRef(true);
@@ -244,22 +171,6 @@ export function DreClient({
     };
   }, [data, sessionAdjustedByMonth]);
 
-  const syncAdjustments = useMemo(
-    () =>
-      data && syncConfirm ? collectSyncAdjustments(data, syncConfirm) : [],
-    [data, syncConfirm],
-  );
-
-  useEffect(() => {
-    if (!syncConfirm) {
-      setPreserveAdjustmentIds(new Set());
-      return;
-    }
-    if (!data) return;
-    const items = collectSyncAdjustments(data, syncConfirm);
-    setPreserveAdjustmentIds(new Set(items.map((item) => item.id)));
-  }, [syncConfirm, data]);
-
   const loadYear = useCallback(async (targetYear: number) => {
     setLoading(true);
     setError(null);
@@ -276,6 +187,31 @@ export function DreClient({
       setLoading(false);
     }
   }, []);
+
+  const {
+    syncingMonths,
+    syncingMonthMessages,
+    syncingAll,
+    syncConfirm,
+    setSyncConfirm,
+    preserveAdjustmentIds,
+    setPreserveAdjustmentIds,
+    reconcileAfterSync,
+    setReconcileAfterSync,
+    syncAdjustments,
+    requestSyncMonth,
+    syncAffectedMonths,
+    cancelSyncingMonths,
+    togglePreserveAdjustment,
+    confirmSyncOverwrite,
+  } = useDreSync({
+    year,
+    data,
+    setData,
+    setSessionAdjustedByMonth,
+    loadYear,
+    setError,
+  });
 
   useEffect(() => {
     if (skipNextYearFetch.current) {
@@ -331,299 +267,6 @@ export function DreClient({
     },
     [],
   );
-
-  const syncMonth = useCallback(
-    async (
-      month: number,
-      preserveLineKeys: DreEditableLineKey[] = [],
-    ): Promise<boolean> => {
-      if (!isDreMonthSyncable(year, month)) {
-        return true;
-      }
-
-      setSyncingMonths((prev) => new Set(prev).add(month));
-      setSyncingMonthMessages((prev) => ({
-        ...prev,
-        [month]: "Iniciando sincronização…",
-      }));
-      const controller = new AbortController();
-      syncControllersRef.current.set(month, controller);
-      try {
-        const res = await fetch("/api/dre/sync?stream=1", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ year, month, preserveLineKeys }),
-          signal: controller.signal,
-        });
-        if (!res.ok) {
-          setError(await readApiError(res, "dre_sync_failed"));
-          return false;
-        }
-
-        let completed = false;
-        await consumeSSEStream<DreSyncSseEvent>(res, (event) => {
-          if (event.type === "progress") {
-            setSyncingMonthMessages((prev) => ({
-              ...prev,
-              [month]: event.message,
-            }));
-            return;
-          }
-          if (event.type === "error") {
-            setError(
-              formatApiErrorMessage(event.message || "dre_sync_failed"),
-            );
-            return;
-          }
-          if (event.type === "complete") {
-            completed = true;
-            setData((prev) => {
-              if (!prev) {
-                return event.yearView;
-              }
-              if (prev.year !== event.yearView.year) {
-                // Usuário trocou de ano enquanto esta sync estava em voo —
-                // os dados já carregados são de outro ano, não sobrescrever.
-                return prev;
-              }
-              // Sync-all (concorrência 2): um yearView antigo não pode
-              // sobrescrever mês já atualizado por outra sync em paralelo.
-              const prevByMonth = new Map(
-                prev.months.map((row) => [row.month, row]),
-              );
-              const months = event.yearView.months.map((row) => {
-                const existing = prevByMonth.get(row.month);
-                if (!existing) return row;
-                const existingTs = existing.syncedAt
-                  ? Date.parse(existing.syncedAt)
-                  : 0;
-                const nextTs = row.syncedAt ? Date.parse(row.syncedAt) : 0;
-                return nextTs >= existingTs ? row : existing;
-              });
-              return { ...event.yearView, months };
-            });
-            setSessionAdjustedByMonth((prev) => {
-              if (preserveLineKeys.length === 0) {
-                if (!(month in prev)) return prev;
-                const next = { ...prev };
-                delete next[month];
-                return next;
-              }
-              return { ...prev, [month]: [...preserveLineKeys] };
-            });
-            setReconcileAfterSync(true);
-          }
-        });
-
-        if (!completed) {
-          setError("Sincronização interrompida antes de concluir.");
-          return false;
-        }
-        return true;
-      } catch (err) {
-        if (err instanceof DOMException && err.name === "AbortError") {
-          setError("Sincronização cancelada.");
-        } else {
-          setError("Falha de rede ao sincronizar. Verifique sua conexão.");
-        }
-        return false;
-      } finally {
-        syncControllersRef.current.delete(month);
-        setSyncingMonths((prev) => {
-          const next = new Set(prev);
-          next.delete(month);
-          return next;
-        });
-        setSyncingMonthMessages((prev) => {
-          if (!(month in prev)) return prev;
-          const next = { ...prev };
-          delete next[month];
-          return next;
-        });
-      }
-    },
-    [year],
-  );
-
-  const cancelSyncingMonths = useCallback(() => {
-    syncAllCancelledRef.current = true;
-    for (const controller of syncControllersRef.current.values()) {
-      controller.abort();
-    }
-  }, []);
-
-  const monthHasSnapshot = useCallback(
-    (month: number) => {
-      const row = data?.months.find((m) => m.month === month);
-      return Boolean(row?.syncedAt || row?.lines);
-    },
-    [data],
-  );
-
-  const requestSyncMonth = useCallback(
-    (month: number) => {
-      if (!isDreMonthSyncable(year, month)) return;
-      if (monthHasSnapshot(month)) {
-        setSyncConfirm({ mode: "month", month });
-        return;
-      }
-      void syncMonth(month);
-    },
-    [year, monthHasSnapshot, syncMonth],
-  );
-
-  const syncAllMonths = useCallback(
-    async (
-      preserveByMonth: Map<number, DreEditableLineKey[]> = new Map(),
-    ) => {
-      setSyncingAll(true);
-      setError(null);
-      syncAllCancelledRef.current = false;
-      const failures: number[] = [];
-      const months: number[] = [];
-      for (let month = 1; month <= 12; month += 1) {
-        if (!isDreMonthSyncable(year, month)) continue;
-        months.push(month);
-      }
-
-      try {
-        let cursor = 0;
-        async function worker() {
-          while (cursor < months.length && !syncAllCancelledRef.current) {
-            const month = months[cursor];
-            cursor += 1;
-            const ok = await syncMonth(
-              month,
-              preserveByMonth.get(month) ?? [],
-            );
-            if (!ok) failures.push(month);
-          }
-        }
-
-        const workers = Array.from(
-          {
-            length: Math.min(SYNC_ALL_CONCURRENCY, Math.max(months.length, 1)),
-          },
-          () => worker(),
-        );
-        await Promise.all(workers);
-
-        if (syncAllCancelledRef.current) {
-          setError("Sincronização cancelada.");
-        } else if (failures.length > 0) {
-          setError(
-            `Falha ao sincronizar ${failures.length} mês(es), começando por ${failures[0]}. Corrija o erro e tente novamente.`,
-          );
-        } else {
-          // Garante yearTotals consistentes após merges concorrentes.
-          await loadYear(year);
-        }
-      } finally {
-        setSyncingAll(false);
-      }
-    },
-    [syncMonth, year, loadYear],
-  );
-
-  const requestSyncAll = useCallback(() => {
-    const anyExisting = Boolean(
-      data?.months.some(
-        (m) =>
-          isDreMonthSyncable(year, m.month) &&
-          Boolean(m.syncedAt || m.lines),
-      ),
-    );
-    if (anyExisting) {
-      setSyncConfirm({ mode: "all" });
-      return;
-    }
-    void syncAllMonths();
-  }, [data, year, syncAllMonths]);
-
-  /** Re-sync após nivelamento: atualiza Custo produto sem preservar edições manuais dessa linha. */
-  const syncAffectedMonths = useCallback(
-    async (months: number[]) => {
-      const unique = [...new Set(months)]
-        .filter((month) => isDreMonthSyncable(year, month))
-        .sort((a, b) => a - b);
-      if (unique.length === 0) return;
-
-      setSyncingAll(true);
-      setError(null);
-      const failures: number[] = [];
-      try {
-        let cursor = 0;
-        async function worker() {
-          while (cursor < unique.length) {
-            const month = unique[cursor];
-            cursor += 1;
-            const preserve = (
-              data?.months.find((m) => m.month === month)
-                ?.manuallyEditedLineKeys ?? []
-            ).filter((key) => key !== "productCostErp");
-            const ok = await syncMonth(month, preserve);
-            if (!ok) failures.push(month);
-          }
-        }
-        const workers = Array.from(
-          {
-            length: Math.min(SYNC_ALL_CONCURRENCY, Math.max(unique.length, 1)),
-          },
-          () => worker(),
-        );
-        await Promise.all(workers);
-        if (failures.length > 0) {
-          setError(
-            `Falha ao sincronizar ${failures.length} mês(es) afetados pelo nivelamento.`,
-          );
-        } else {
-          await loadYear(year);
-        }
-      } finally {
-        setSyncingAll(false);
-      }
-    },
-    [year, data, syncMonth, loadYear],
-  );
-
-  const buildPreserveByMonth = useCallback(() => {
-    const map = new Map<number, DreEditableLineKey[]>();
-    for (const item of syncAdjustments) {
-      if (!preserveAdjustmentIds.has(item.id)) continue;
-      const list = map.get(item.month) ?? [];
-      list.push(item.lineKey);
-      map.set(item.month, list);
-    }
-    return map;
-  }, [syncAdjustments, preserveAdjustmentIds]);
-
-  const confirmSyncOverwrite = useCallback(
-    (preserveSelected: boolean) => {
-      const pending = syncConfirm;
-      setSyncConfirm(null);
-      if (!pending) return;
-
-      if (pending.mode === "month") {
-        const keys = preserveSelected
-          ? (buildPreserveByMonth().get(pending.month) ?? [])
-          : [];
-        void syncMonth(pending.month, keys);
-        return;
-      }
-
-      void syncAllMonths(preserveSelected ? buildPreserveByMonth() : new Map());
-    },
-    [syncConfirm, syncMonth, syncAllMonths, buildPreserveByMonth],
-  );
-
-  const togglePreserveAdjustment = useCallback((id: string) => {
-    setPreserveAdjustmentIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
 
   const handleManualCostChange = useCallback(
     async (costItemId: string, month: number, amount: number | null) => {
@@ -784,9 +427,9 @@ export function DreClient({
   );
 
   const syncConfirmMonthLabel =
-    syncConfirm?.mode === "month"
-      ? (data?.months.find((m) => m.month === syncConfirm.month)?.label ??
-        `mês ${syncConfirm.month}`)
+    syncConfirm !== null
+      ? (data?.months.find((m) => m.month === syncConfirm)?.label ??
+        `mês ${syncConfirm}`)
       : null;
 
   return (
@@ -847,7 +490,7 @@ export function DreClient({
                     className="cursor-pointer rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--muted)]"
                     onClick={() => {
                       setCadastroOpen(false);
-                      setOperationalCostsModalOpen(true);
+                      setActiveModal("operational");
                     }}
                   >
                     Custos operacionais
@@ -857,7 +500,7 @@ export function DreClient({
                     className="cursor-pointer rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--muted)]"
                     onClick={() => {
                       setCadastroOpen(false);
-                      setFixedCostsModalOpen(true);
+                      setActiveModal("fixedCosts");
                     }}
                   >
                     Custos fixos
@@ -867,7 +510,7 @@ export function DreClient({
                     className="cursor-pointer rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--muted)]"
                     onClick={() => {
                       setCadastroOpen(false);
-                      setInvestmentCostsModalOpen(true);
+                      setActiveModal("investment");
                     }}
                   >
                     Investimentos
@@ -881,7 +524,7 @@ export function DreClient({
                     className="cursor-pointer rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--muted)]"
                     onClick={() => {
                       setCadastroOpen(false);
-                      setNonOperationalOutModalOpen(true);
+                      setActiveModal("nonOperationalOut");
                     }}
                   >
                     Saídas não operacionais
@@ -891,7 +534,7 @@ export function DreClient({
                     className="cursor-pointer rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--muted)]"
                     onClick={() => {
                       setCadastroOpen(false);
-                      setNonOperationalInModalOpen(true);
+                      setActiveModal("nonOperationalIn");
                     }}
                   >
                     Entradas não operacionais
@@ -972,7 +615,7 @@ export function DreClient({
               variant="outline"
               size="sm"
               className="h-10 gap-1.5 rounded-xl"
-              onClick={() => setLevelingModalOpen(true)}
+              onClick={() => setActiveModal("leveling")}
             >
               <Scale className="size-3.5" aria-hidden />
               Nivelar custos
@@ -995,20 +638,6 @@ export function DreClient({
               className="mx-1 hidden h-6 w-px bg-[var(--border)] sm:block"
               aria-hidden
             />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-10 rounded-xl"
-              disabled={syncingAll || loading}
-              onClick={() => requestSyncAll()}
-            >
-              <RefreshCw
-                className={syncingAll ? "size-4 animate-spin" : "size-4"}
-                aria-hidden
-              />
-              Sincronizar
-            </Button>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -1018,7 +647,7 @@ export function DreClient({
                   disabled={!data || loading}
                   onClick={() => {
                     setReconcileAfterSync(false);
-                    setReconcileOpen(true);
+                    setActiveModal("reconcile");
                   }}
                 >
                   <Upload className="size-3.5" aria-hidden />
@@ -1092,7 +721,7 @@ export function DreClient({
               variant={reconcileAfterSync ? "default" : "outline"}
               onClick={() => {
                 setReconcileAfterSync(false);
-                setReconcileOpen(true);
+                setActiveModal("reconcile");
               }}
             >
               Conciliar agora
@@ -1175,90 +804,76 @@ export function DreClient({
             data={viewData}
             visibility={displaySettings}
             showDetails={showDetails}
-            onToggleDetails={() => setShowDetails((v) => !v)}
+            onToggleDetails={toggleShowDetails}
             selectedMonth={selectedMonth}
             onSelectedMonthChange={setSelectedMonth}
             syncingMonths={syncingMonths}
             syncingMonthMessages={syncingMonthMessages}
             onSyncMonth={requestSyncMonth}
-            onLineChange={(lineKey, month, amount) =>
-              void handleLineChange(lineKey, month, amount)
-            }
-            onLineRestore={(lineKey, month) =>
-              void handleLineRestore(lineKey, month)
-            }
-            onFixedCostChange={(costItemId, month, amount) =>
-              void handleManualCostChange(costItemId, month, amount)
-            }
-            onOperationalCostChange={(costItemId, month, amount) =>
-              void handleManualCostChange(costItemId, month, amount)
-            }
-            onInvestmentCostChange={(costItemId, month, amount) =>
-              void handleManualCostChange(costItemId, month, amount)
-            }
-            onNonOperationalOutChange={(costItemId, month, amount) =>
-              void handleManualCostChange(costItemId, month, amount)
-            }
-            onNonOperationalInChange={(costItemId, month, amount) =>
-              void handleManualCostChange(costItemId, month, amount)
-            }
+            onLineChange={handleLineChange}
+            onLineRestore={handleLineRestore}
+            onFixedCostChange={handleManualCostChange}
+            onOperationalCostChange={handleManualCostChange}
+            onInvestmentCostChange={handleManualCostChange}
+            onNonOperationalOutChange={handleManualCostChange}
+            onNonOperationalInChange={handleManualCostChange}
           />
         ) : null}
 
         <DreCostItemsModal
-          open={fixedCostsModalOpen}
+          open={activeModal === "fixedCosts"}
           section="fixed"
           title="Cadastrar custos fixos"
           description="1) Cadastre o nome do item aqui. 2) Depois, na tabela do DRE, dê dois cliques na célula do mês para informar o valor."
           costItems={data?.costItems ?? []}
-          onClose={() => setFixedCostsModalOpen(false)}
+          onClose={() => setActiveModal(null)}
           onChanged={() => void loadYear(year)}
           onError={setError}
         />
         <DreCostItemsModal
-          open={operationalCostsModalOpen}
+          open={activeModal === "operational"}
           section="operational"
           title="Cadastrar custos operacionais"
           description="1) Cadastre o nome do item aqui (além das linhas do ML). 2) Depois, na tabela do DRE, dê dois cliques na célula do mês para informar o valor."
           costItems={data?.operationalCostItems ?? []}
-          onClose={() => setOperationalCostsModalOpen(false)}
+          onClose={() => setActiveModal(null)}
           onChanged={() => void loadYear(year)}
           onError={setError}
         />
         <DreCostItemsModal
-          open={investmentCostsModalOpen}
+          open={activeModal === "investment"}
           section="investment"
           title="Cadastrar investimentos"
           description="1) Cadastre o nome do item aqui (ex.: marketing institucional, CAPEX). 2) Depois, na tabela do DRE, dê dois cliques na célula do mês para informar o valor. Esses itens entram após o Lucro Operacional Antes dos Investimentos."
           costItems={data?.investmentCostItems ?? []}
-          onClose={() => setInvestmentCostsModalOpen(false)}
+          onClose={() => setActiveModal(null)}
           onChanged={() => void loadYear(year)}
           onError={setError}
         />
         <DreCostItemsModal
-          open={nonOperationalOutModalOpen}
+          open={activeModal === "nonOperationalOut"}
           section="nonOperationalOut"
           title="Cadastrar saídas não operacionais"
           description="1) Cadastre o nome do item aqui (ex.: multa, prejuízo com processo). 2) Depois, na tabela do DRE, dê dois cliques na célula do mês para informar o valor. Esses itens entram após o Lucro Operacional."
           costItems={data?.nonOperationalOutItems ?? []}
-          onClose={() => setNonOperationalOutModalOpen(false)}
+          onClose={() => setActiveModal(null)}
           onChanged={() => void loadYear(year)}
           onError={setError}
         />
         <DreCostItemsModal
-          open={nonOperationalInModalOpen}
+          open={activeModal === "nonOperationalIn"}
           section="nonOperationalIn"
           title="Cadastrar entradas não operacionais"
           description="1) Cadastre o nome do item aqui (ex.: venda de imobilizado, reembolso). 2) Depois, na tabela do DRE, dê dois cliques na célula do mês para informar o valor. Esses itens somam ao Resultado Líquido."
           costItems={data?.nonOperationalInItems ?? []}
-          onClose={() => setNonOperationalInModalOpen(false)}
+          onClose={() => setActiveModal(null)}
           onChanged={() => void loadYear(year)}
           onError={setError}
         />
         <DreProductCostLevelingModal
-          open={levelingModalOpen}
+          open={activeModal === "leveling"}
           year={year}
-          onClose={() => setLevelingModalOpen(false)}
+          onClose={() => setActiveModal(null)}
           onError={setError}
           onSyncAffectedMonths={(months) => {
             void syncAffectedMonths(months);
@@ -1274,16 +889,12 @@ export function DreClient({
           <AlertDialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
             <AlertDialogHeader>
               <AlertDialogTitle>
-                {syncConfirm?.mode === "all"
-                  ? "Sincronizar todos os meses?"
-                  : `Sincronizar ${syncConfirmMonthLabel}?`}
+                {`Sincronizar ${syncConfirmMonthLabel}?`}
               </AlertDialogTitle>
               <AlertDialogDescription>
                 {syncAdjustments.length > 0
                   ? "Há valores ajustados manualmente. Escolha o que deseja manter; o restante será atualizado com os dados importados."
-                  : syncConfirm?.mode === "all"
-                    ? "Já existem valores salvos. A sincronização busca os dados novamente e substitui as linhas importadas."
-                    : "Já existem valores salvos neste mês. A sincronização busca os dados novamente e substitui as linhas importadas."}{" "}
+                  : "Já existem valores salvos neste mês. A sincronização busca os dados novamente e substitui as linhas importadas."}{" "}
                 Custos fixos, operacionais e investimentos cadastrados não são
                 apagados.
               </AlertDialogDescription>
@@ -1336,12 +947,6 @@ export function DreClient({
                             <span className="font-medium text-[var(--foreground)]">
                               {item.lineLabel}
                             </span>
-                            {syncConfirm?.mode === "all" ? (
-                              <span className="text-[var(--muted-foreground)]">
-                                {" "}
-                                · {item.monthLabel}
-                              </span>
-                            ) : null}
                           </span>
                           <span className="shrink-0 tabular-nums text-[var(--muted-foreground)]">
                             {formatFinancialMoney(item.amount)}
@@ -1393,7 +998,7 @@ export function DreClient({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-        {reconcileOpen && data ? (
+        {activeModal === "reconcile" && data ? (
           <DreReconciliationModal
             open
             year={year}
@@ -1404,7 +1009,7 @@ export function DreClient({
               data.months.find((item) => !item.isFutureMonth)?.month ??
               1
             }
-            onClose={() => setReconcileOpen(false)}
+            onClose={() => setActiveModal(null)}
             onApplied={handleReconciliationApplied}
             onError={setError}
           />

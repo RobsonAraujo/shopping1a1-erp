@@ -105,7 +105,7 @@ export type DreYearView = {
 };
 
 
-function buildMonthTotals(
+export function buildMonthTotals(
   payload: DreMonthSnapshotPayload | null,
   lines: DreLineAmounts | null,
   fixedCostItems: DreCostItemView[],
@@ -186,7 +186,7 @@ function buildMonthTotals(
   );
 }
 
-function buildEffectiveCostMaps(
+export function buildEffectiveCostMaps(
   costItems: DreCostItemView[],
   year: number,
   explicitMap: Map<string, number>,
@@ -471,7 +471,7 @@ export async function loadDreYearView(
   };
 }
 
-function buildYearTotals(
+export function buildYearTotals(
   months: DreMonthView[],
   costItems: DreCostItemView[],
   operationalCostItems: DreCostItemView[],

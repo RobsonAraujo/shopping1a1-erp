@@ -5,14 +5,28 @@ import {
   applyManualLineEdit,
   applyRestoreLineFromSync,
   breakdownIdentityKey,
+  buildSyncedLineBaseline,
+  captureSyncedBreakdowns,
+  commitReconciledLinesAsTruth,
   computeDreTotals,
+  getEditableLineAmount,
+  getYearLineBreakdown,
+  getYearProductCostBreakdown,
+  getYearTaxBreakdown,
+  isDreEditableLineKey,
+  mergeLineBreakdowns,
   mergePreservedManualLines,
   mergeProductCostBreakdowns,
+  mergeTaxBreakdowns,
+  normalizeProductCostAuditMergeKey,
   percentOfRevenue,
   productCostAuditKey,
   sumYearLineAmounts,
   withSyncLineBaseline,
+  type DreLineBreakdownItem,
   type DreMonthSnapshotPayload,
+  type DreProductCostBreakdownItem,
+  type DreTaxBreakdownItem,
 } from "../dre-calculations";
 import { mapBillingSummaryToDreLines } from "../../mercadolibre/billing-summary";
 
@@ -440,5 +454,324 @@ describe("breakdownIdentityKey", () => {
   it("falls back to normalized sku text when itemId is absent (defensive)", () => {
     assert.equal(breakdownIdentityKey(null, "  sku-a  "), "sku-a");
     assert.equal(breakdownIdentityKey(undefined, null), "(sem SKU)");
+  });
+});
+
+describe("isDreEditableLineKey", () => {
+  it("accepts every real editable line key", () => {
+    for (const key of [
+      "revenueMl",
+      "productCostErp",
+      "taxErp",
+      "adsCost",
+      "affiliateFeeMl",
+    ]) {
+      assert.equal(isDreEditableLineKey(key), true);
+    }
+  });
+
+  it("rejects unknown keys", () => {
+    assert.equal(isDreEditableLineKey("bogusKey"), false);
+    assert.equal(isDreEditableLineKey(""), false);
+  });
+});
+
+describe("getEditableLineAmount", () => {
+  it("reads the stored amount for a key", () => {
+    const payload = emptyPayload({ revenueMl: 500 });
+    assert.equal(getEditableLineAmount(payload, "revenueMl"), 500);
+  });
+
+  it("defaults to 0 when the field is missing/undefined", () => {
+    const payload = { ...emptyPayload(), revenueMl: undefined } as unknown as DreMonthSnapshotPayload;
+    assert.equal(getEditableLineAmount(payload, "revenueMl"), 0);
+  });
+});
+
+describe("buildSyncedLineBaseline", () => {
+  it("captures all 15 editable line keys, defaulting missing ones to 0", () => {
+    const payload = emptyPayload({ revenueMl: 1000, saleFeeMl: -50, adsCost: 30 });
+    const baseline = buildSyncedLineBaseline(payload);
+    assert.equal(baseline.revenueMl, 1000);
+    assert.equal(baseline.saleFeeMl, -50);
+    assert.equal(baseline.adsCost, 30);
+    assert.equal(baseline.taxErp, 0);
+    assert.equal(Object.keys(baseline).length, 15);
+  });
+});
+
+describe("captureSyncedBreakdowns", () => {
+  it("captures only breakdown fields that are actually present on the payload", () => {
+    const payload = emptyPayload({
+      saleFeeBreakdown: [
+        { key: "a", sku: null, title: "x", quantity: 1, amount: -10 },
+      ],
+    });
+    const captured = captureSyncedBreakdowns(payload);
+    assert.ok(captured.saleFeeBreakdown);
+    assert.equal(captured.saleFeeBreakdown?.length, 1);
+    assert.equal("revenueBreakdown" in captured, false);
+    assert.equal("productCostBreakdown" in captured, false);
+  });
+});
+
+describe("normalizeProductCostAuditMergeKey", () => {
+  it("appends ::leveled or ::cadastro when the key doesn't already have a suffix", () => {
+    assert.equal(
+      normalizeProductCostAuditMergeKey({ key: "SKU-A", leveled: true }),
+      "SKU-A::leveled",
+    );
+    assert.equal(
+      normalizeProductCostAuditMergeKey({ key: "SKU-A", leveled: false }),
+      "SKU-A::cadastro",
+    );
+  });
+
+  it("leaves an already-suffixed key untouched", () => {
+    assert.equal(
+      normalizeProductCostAuditMergeKey({ key: "SKU-A::leveled", leveled: false }),
+      "SKU-A::leveled",
+    );
+  });
+});
+
+describe("commitReconciledLinesAsTruth", () => {
+  it("moves the current value of the given keys into the baseline and clears their manual-edit mark", () => {
+    const edited = applyManualLineEdit(
+      withSyncLineBaseline(emptyPayload({ revenueMl: 1000, saleFeeMl: -100 })),
+      "revenueMl",
+      1250,
+    );
+    assert.deepEqual(edited.manuallyEditedLineKeys, ["revenueMl"]);
+
+    const committed = commitReconciledLinesAsTruth(edited, ["revenueMl"]);
+    assert.equal(committed.syncedLineBaseline?.revenueMl, 1250);
+    assert.deepEqual(committed.manuallyEditedLineKeys, []);
+    // Untouched keys keep their existing baseline.
+    assert.equal(committed.syncedLineBaseline?.saleFeeMl, -100);
+  });
+});
+
+describe("cancelledIncludeOverlay invalidation", () => {
+  const withOverlay = () =>
+    withSyncLineBaseline(
+      emptyPayload({
+        revenueMl: 1000,
+        saleFeeMl: -50,
+        cancelledIncludeOverlay: {
+          revenueGross: 100,
+          productCostErp: -20,
+          taxErp: -5,
+        },
+      }),
+    );
+
+  it("applyManualLineEdit clears the overlay when editing revenueMl/productCostErp/taxErp", () => {
+    assert.equal(
+      applyManualLineEdit(withOverlay(), "revenueMl", 1100).cancelledIncludeOverlay,
+      undefined,
+    );
+    assert.equal(
+      applyManualLineEdit(withOverlay(), "productCostErp", -30).cancelledIncludeOverlay,
+      undefined,
+    );
+    assert.equal(
+      applyManualLineEdit(withOverlay(), "taxErp", -10).cancelledIncludeOverlay,
+      undefined,
+    );
+  });
+
+  it("applyManualLineEdit keeps the overlay when editing an unrelated key", () => {
+    const edited = applyManualLineEdit(withOverlay(), "saleFeeMl", -60);
+    assert.ok(edited.cancelledIncludeOverlay);
+    assert.equal(edited.cancelledIncludeOverlay?.revenueGross, 100);
+  });
+
+  it("mergePreservedManualLines clears the overlay when a preserved key is revenueMl/productCostErp/taxErp", () => {
+    const previous = applyManualLineEdit(withOverlay(), "revenueMl", 1300);
+    const fresh = emptyPayload({ revenueMl: 1500 });
+    const merged = mergePreservedManualLines(fresh, previous, ["revenueMl"]);
+    assert.equal(merged.cancelledIncludeOverlay, undefined);
+  });
+
+  it("applyRestoreLineFromSync clears the overlay when restoring revenueMl/productCostErp/taxErp", () => {
+    const edited = applyManualLineEdit(withOverlay(), "revenueMl", 1100);
+    const restored = applyRestoreLineFromSync(edited, "revenueMl");
+    assert.ok(restored);
+    assert.equal(restored?.cancelledIncludeOverlay, undefined);
+  });
+});
+
+describe("mergePreservedManualLines — baseline-drift edge case", () => {
+  it("stops marking a key as adjusted once the new sync's baseline happens to match the preserved manual value", () => {
+    // User edited revenueMl from 1000 -> 1200 (old baseline 1000).
+    const previous = applyManualLineEdit(
+      withSyncLineBaseline(emptyPayload({ revenueMl: 1000 })),
+      "revenueMl",
+      1200,
+    );
+    // A fresh sync now reports 1200 as the real baseline — the same amount
+    // the user had manually set. The preserved value must be compared
+    // against the NEW baseline (1200), not the old one (1000).
+    const fresh = emptyPayload({ revenueMl: 1200 });
+    const merged = mergePreservedManualLines(fresh, previous, ["revenueMl"]);
+    assert.equal(merged.revenueMl, 1200);
+    assert.equal(merged.syncedLineBaseline?.revenueMl, 1200);
+    assert.deepEqual(merged.manuallyEditedLineKeys, []);
+  });
+});
+
+describe("mergeTaxBreakdowns", () => {
+  const item = (overrides: Partial<DreTaxBreakdownItem> = {}): DreTaxBreakdownItem => ({
+    key: "item:MLB1",
+    sku: "SKU-A",
+    title: "Produto A",
+    quantity: 1,
+    revenue: 100,
+    taxPercent: 10,
+    totalTax: 10,
+    missingTax: false,
+    ...overrides,
+  });
+
+  it("sums quantity/revenue/totalTax by key and recomputes taxPercent", () => {
+    const merged = mergeTaxBreakdowns([
+      [item({ quantity: 2, revenue: 200, totalTax: 20 })],
+      [item({ quantity: 3, revenue: 300, totalTax: 45 })],
+    ]);
+    assert.equal(merged.length, 1);
+    assert.equal(merged[0].quantity, 5);
+    assert.equal(merged[0].revenue, 500);
+    assert.equal(merged[0].totalTax, 65);
+    assert.equal(merged[0].taxPercent, 13);
+  });
+
+  it("keeps distinct keys separate and sorts descending by totalTax", () => {
+    const merged = mergeTaxBreakdowns([
+      [item({ key: "item:A", totalTax: 5 }), item({ key: "item:B", totalTax: 50 })],
+    ]);
+    assert.deepEqual(
+      merged.map((m) => m.key),
+      ["item:B", "item:A"],
+    );
+  });
+
+  it("OR's missingTax across merged entries", () => {
+    const merged = mergeTaxBreakdowns([
+      [item({ missingTax: false })],
+      [item({ missingTax: true })],
+    ]);
+    assert.equal(merged[0].missingTax, true);
+  });
+});
+
+describe("mergeLineBreakdowns", () => {
+  const item = (overrides: Partial<DreLineBreakdownItem> = {}): DreLineBreakdownItem => ({
+    key: "item:MLB1",
+    sku: "SKU-A",
+    title: "Produto A",
+    quantity: 1,
+    amount: 10,
+    ...overrides,
+  });
+
+  it("sums quantity and amount by key", () => {
+    const merged = mergeLineBreakdowns([
+      [item({ quantity: 2, amount: 20 })],
+      [item({ quantity: 3, amount: 30 })],
+    ]);
+    assert.equal(merged.length, 1);
+    assert.equal(merged[0].quantity, 5);
+    assert.equal(merged[0].amount, 50);
+  });
+
+  it("keeps quantity null when every merged entry has a null quantity", () => {
+    const merged = mergeLineBreakdowns([
+      [item({ quantity: null, amount: 10 })],
+      [item({ quantity: null, amount: 20 })],
+    ]);
+    assert.equal(merged[0].quantity, null);
+    assert.equal(merged[0].amount, 30);
+  });
+
+  it("treats a null quantity as 0 when merged with a non-null quantity", () => {
+    const merged = mergeLineBreakdowns([
+      [item({ quantity: null, amount: 10 })],
+      [item({ quantity: 4, amount: 20 })],
+    ]);
+    assert.equal(merged[0].quantity, 4);
+  });
+
+  it("sorts descending by amount", () => {
+    const merged = mergeLineBreakdowns([
+      [item({ key: "item:A", amount: 5 }), item({ key: "item:B", amount: 50 })],
+    ]);
+    assert.deepEqual(
+      merged.map((m) => m.key),
+      ["item:B", "item:A"],
+    );
+  });
+});
+
+describe("getYearProductCostBreakdown / getYearTaxBreakdown / getYearLineBreakdown", () => {
+  const productCostItem = (overrides: Partial<DreProductCostBreakdownItem> = {}): DreProductCostBreakdownItem => ({
+    key: "item:MLB1",
+    sku: "SKU-A",
+    title: "Produto A",
+    quantity: 1,
+    unitCost: 10,
+    totalCost: 10,
+    missingCost: false,
+    ...overrides,
+  });
+
+  it("getYearProductCostBreakdown filters out months without a breakdown and merges the rest", () => {
+    const result = getYearProductCostBreakdown([
+      { productCostBreakdown: [productCostItem({ quantity: 2, totalCost: 20 })] },
+      { productCostBreakdown: null },
+      { productCostBreakdown: [productCostItem({ quantity: 3, totalCost: 30 })] },
+    ]);
+    assert.equal(result.length, 1);
+    assert.equal(result[0].quantity, 5);
+    assert.equal(result[0].totalCost, 50);
+  });
+
+  it("getYearTaxBreakdown filters out months without a breakdown and merges the rest", () => {
+    const taxItem = (overrides: Partial<DreTaxBreakdownItem> = {}): DreTaxBreakdownItem => ({
+      key: "item:MLB1",
+      sku: "SKU-A",
+      title: "Produto A",
+      quantity: 1,
+      revenue: 100,
+      taxPercent: 10,
+      totalTax: 10,
+      missingTax: false,
+      ...overrides,
+    });
+    const result = getYearTaxBreakdown([
+      { taxBreakdown: [taxItem({ totalTax: 10 })] },
+      { taxBreakdown: null },
+      { taxBreakdown: [taxItem({ totalTax: 15 })] },
+    ]);
+    assert.equal(result.length, 1);
+    assert.equal(result[0].totalTax, 25);
+  });
+
+  it("getYearLineBreakdown filters null lists and merges the rest", () => {
+    const lineItem = (overrides: Partial<DreLineBreakdownItem> = {}): DreLineBreakdownItem => ({
+      key: "item:MLB1",
+      sku: "SKU-A",
+      title: "Produto A",
+      quantity: 1,
+      amount: 10,
+      ...overrides,
+    });
+    const result = getYearLineBreakdown([
+      [lineItem({ amount: 10 })],
+      null,
+      [lineItem({ amount: 20 })],
+    ]);
+    assert.equal(result.length, 1);
+    assert.equal(result[0].amount, 30);
   });
 });

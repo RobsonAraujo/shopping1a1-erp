@@ -55,21 +55,28 @@ import {
 import { DreProductCostAuditModal } from "@/components/dre/DreProductCostAuditModal";
 import { DreTaxAuditModal } from "@/components/dre/DreTaxAuditModal";
 import { DreLineAuditModal } from "@/components/dre/DreLineAuditModal";
+import { DreMonthHeaderCell } from "@/components/dre/DreMonthHeaderCell";
+import { DreRevenuePie, WaterfallConnector } from "@/components/dre/DreRevenuePie";
+import {
+  useDreAuditTarget,
+  auditTargetNeedsResync,
+  getAuditKindForRow,
+  type AuditKind,
+} from "@/components/dre/use-dre-audit-target";
+import {
+  DIM_CLASS,
+  formatSyncTime,
+  getMonthAlertMessages,
+} from "@/components/dre/DreYearTableShared";
 import type { DreMonthView, DreYearView } from "@/lib/dre/dre-year-data";
 import {
-  getYearLineBreakdown,
-  getYearProductCostBreakdown,
-  getYearTaxBreakdown,
   isDreEditableLineKey,
   percentOfRevenue,
-  type DreComputedTotals,
   type DreEditableLineKey,
-  type DreLineBreakdownItem,
 } from "@/lib/dre/dre-calculations";
 import {
   buildDreTableRows,
   DEFAULT_DRE_VISIBILITY,
-  dreMonthShortLabel,
   filterRowsByVisibility,
   getCellValue,
   isColoredRow,
@@ -87,12 +94,6 @@ import {
   CATEGORY_ROW_TINT_CLASS as GROUP_ROW_TINT_CLASS,
   type CategoryTone,
 } from "@/lib/ui/tone";
-import { reportsConfig } from "@/config/reports";
-import {
-  formatCalendarRangeYmd,
-  getCalendarMonthRange,
-} from "@/lib/mercadolibre/revenue-periods";
-import { buildMercadoLivreCostsMetricsUrl } from "@/lib/mercadolibre/costs-metrics-url";
 import { cn } from "@/lib/utils";
 
 const PERCENT_ROW_DIVIDER_STYLE = {
@@ -114,17 +115,6 @@ const MAIN_ROW_DIVIDER_STYLE = {
 } as const;
 
 const SELECTED_MONTH_CELL_CLASS = "relative";
-
-/**
- * Esmaece e desativa a interação das células que não estão em foco.
- * Usado ao destacar uma coluna de mês, e também na edição inline
- * (quando tudo fica esmaecido exceto a célula sendo editada).
- * `opacity` funciona de forma uniforme em cima de qualquer cor de fundo
- * (verde/vermelho/branco). `pointer-events-none` desliga ícones/botões
- * das áreas esmaecidas.
- */
-const DIM_CLASS =
-  "pointer-events-none opacity-40 transition-opacity duration-150";
 
 /** Transição de abrir/fechar linhas de detalhe (Ocultar / Mostrar detalhes). */
 const DETAILS_REVEAL_EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
@@ -271,117 +261,6 @@ type DreYearTableProps = {
     amount: number | null,
   ) => void;
 };
-
-function formatSyncTime(iso: string | null): string {
-  if (!iso) return "Nunca sincronizado";
-  return new Intl.DateTimeFormat("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(iso));
-}
-
-function getMonthAlertMessages(month: DreMonthView): string[] {
-  const messages: string[] = [];
-
-  if (month.isPartial) {
-    messages.push(
-      "Período parcial — mês em andamento ou custos ML ainda incompletos.",
-    );
-  }
-  if (month.billingSource === "fallback" && month.syncedAt) {
-    messages.push(
-      "Custos ML estimados pelos pedidos (faturamento oficial indisponível ou incompleto).",
-    );
-  }
-  messages.push(...month.syncWarnings);
-
-  return messages;
-}
-
-function MonthAlertsTooltip({
-  month,
-  messages,
-}: {
-  month: DreMonthView;
-  messages: string[];
-}) {
-  if (messages.length === 0) return null;
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          className="inline-flex size-5 shrink-0 items-center justify-center rounded-full p-1 text-amber-500/70 opacity-60 hover:opacity-100 hover:text-amber-600 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]"
-          aria-label={`Ver avisos de ${month.label}`}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <AlertCircle className="size-2.5" aria-hidden />
-        </button>
-      </TooltipTrigger>
-      <TooltipContent
-        side="bottom"
-        align="center"
-        className="max-w-[18rem] space-y-2 text-left"
-      >
-        <p className="font-semibold text-[var(--foreground)]">
-          Avisos — {month.label}
-        </p>
-        <ul className="list-disc space-y-1 pl-4 text-[11px] leading-snug">
-          {messages.map((message) => (
-            <li key={message}>{message}</li>
-          ))}
-        </ul>
-        <p className="border-t border-[var(--border)] pt-2 text-[10px] text-[var(--muted-foreground)]">
-          Última sync: {formatSyncTime(month.syncedAt)}
-        </p>
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-function MonthSyncTooltip({
-  year,
-  month,
-  children,
-}: {
-  year: number;
-  month: DreMonthView;
-  children: ReactNode;
-}) {
-  const civilRange = getCalendarMonthRange(
-    year,
-    month.month,
-    reportsConfig.catalogCompetitionTimezone,
-  );
-  const civilPeriod = formatCalendarRangeYmd(
-    civilRange,
-    reportsConfig.catalogCompetitionTimezone,
-  );
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent side="bottom" align="center" className="text-left">
-        <p className="font-medium">{month.label}</p>
-        <p className="mt-1 text-[var(--muted-foreground)]">
-          Período civil: {civilPeriod.from} → {civilPeriod.to}
-        </p>
-        <p className="mt-1 text-[var(--muted-foreground)]">
-          Sync: {formatSyncTime(month.syncedAt)}
-        </p>
-        {month.isCurrentMonth ? (
-          <p className="mt-1 text-[var(--muted-foreground)]">Mês atual</p>
-        ) : null}
-        {month.isFutureMonth ? (
-          <p className="mt-1 text-[var(--muted-foreground)]">Mês futuro</p>
-        ) : null}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
 
 function sourceOriginLabel(source: string): string {
   switch (source) {
@@ -903,219 +782,6 @@ function getEditableLineKey(row: DreTableRow): DreEditableLineKey | null {
     return row.lineKey;
   }
   return null;
-}
-
-type AuditKind =
-  | "productCost"
-  | "tax"
-  | "revenue"
-  | "cancelledSales"
-  | "saleFee"
-  | "sellerShipping"
-  | "adsCost"
-  | "partialReturns"
-  | "returnFee"
-  | "specialFees"
-  | "fullShipping"
-  | "fullStorage"
-  | "fullNonCompliance"
-  | "minhaPagina"
-  | "affiliateFee";
-type AuditTarget = { kind: AuditKind; period: number | "year" } | null;
-
-/** Linhas estáticas do DRE que abrem auditoria ao clicar no valor. */
-const ROW_ID_TO_AUDIT_KIND: Partial<Record<DreStaticRowId, AuditKind>> = {
-  productCostErp: "productCost",
-  taxErp: "tax",
-  revenueMl: "revenue",
-  cancelledSalesMl: "cancelledSales",
-  saleFeeMl: "saleFee",
-  sellerShippingMl: "sellerShipping",
-  adsCost: "adsCost",
-  partialReturnsMl: "partialReturns",
-  returnFeeMl: "returnFee",
-  specialFeesMl: "specialFees",
-  fullShippingMl: "fullShipping",
-  fullStorageMl: "fullStorage",
-  fullNonComplianceMl: "fullNonCompliance",
-  minhaPaginaMl: "minhaPagina",
-  affiliateFeeMl: "affiliateFee",
-};
-
-function getAuditKindForRow(row: DreTableRow): AuditKind | null {
-  return row.type === "static" ? (ROW_ID_TO_AUDIT_KIND[row.id] ?? null) : null;
-}
-
-/** Textos do modal de auditoria genérica, por tipo de linha (exceto Custo produto/Imposto ML, que têm modal próprio). */
-const LINE_AUDIT_TEXT: Partial<
-  Record<AuditKind, { rowLabel: string; amountLabel: string; description: string }>
-> = {
-  revenue: {
-    rowLabel: "Faturamento ML",
-    amountLabel: "Faturamento",
-    description:
-      "Soma do valor de venda de cada pedido pago no mês, por anúncio/SKU (inclui as vendas canceladas somadas de volta ao faturamento).",
-  },
-  cancelledSales: {
-    rowLabel: "Canceladas / devolvidas",
-    amountLabel: "Valor cancelado/devolvido",
-    description:
-      "Soma do valor bruto de cada pedido cancelado ou devolvido no mês, por anúncio/SKU.",
-  },
-  saleFee: {
-    rowLabel: "Tarifa ML",
-    amountLabel: "Tarifa",
-    description:
-      "Tarifas de venda da fatura ML (por label da cobrança) ou, se o mês foi estimado pelos pedidos, por anúncio/SKU.",
-  },
-  sellerShipping: {
-    rowLabel: "Frete vendedor",
-    amountLabel: "Frete",
-    description:
-      "Frete da fatura ML (por label) ou, se estimado pelos pedidos, por anúncio/SKU.",
-  },
-  adsCost: {
-    rowLabel: "Campanhas ADS",
-    amountLabel: "Gasto ADS",
-    description:
-      "Gasto com campanhas de Product Ads no mês, por anúncio.",
-  },
-  partialReturns: {
-    rowLabel: "Devoluções parciais",
-    amountLabel: "Valor",
-    description:
-      "Reembolsos parciais da fatura ML, agrupados pelo label da cobrança.",
-  },
-  returnFee: {
-    rowLabel: "Tarifa de devolução",
-    amountLabel: "Tarifa",
-    description:
-      "Tarifas de devolução da fatura ML (e estornos), por label da cobrança.",
-  },
-  specialFees: {
-    rowLabel: "Tarifas especiais",
-    amountLabel: "Tarifa",
-    description:
-      "Cobranças especiais da fatura ML (DIFAL, CDLIT e correlatas), por label. A planilha Por Vendas não traz esse agrupamento.",
-  },
-  fullShipping: {
-    rowLabel: "Full envios",
-    amountLabel: "Custo",
-    description: "Tarifas de envio Full da conciliação ML.",
-  },
-  fullStorage: {
-    rowLabel: "Full armazém",
-    amountLabel: "Custo",
-    description: "Cobrança de armazenamento Full no mês.",
-  },
-  fullNonCompliance: {
-    rowLabel: "Full inconform.",
-    amountLabel: "Custo",
-    description: "Multas por inconformidade no envio ao Full.",
-  },
-  minhaPagina: {
-    rowLabel: "Minha Página",
-    amountLabel: "Tarifa",
-    description: "Tarifa de manutenção da Minha Página / E-Shop.",
-  },
-  affiliateFee: {
-    rowLabel: "Comissão Afiliados",
-    amountLabel: "Comissão",
-    description: "Comissão paga a afiliados.",
-  },
-};
-
-/** Link para o painel "Tarifas e investimentos" do ML, só para "Tarifas especiais" de um mês específico (não para o total do ano). */
-function buildSpecialFeesExternalLink(
-  year: number,
-  auditTarget: AuditTarget,
-): { href: string; label: string; hint: string } | null {
-  if (
-    auditTarget === null ||
-    auditTarget.kind !== "specialFees" ||
-    auditTarget.period === "year"
-  ) {
-    return null;
-  }
-  return {
-    href: buildMercadoLivreCostsMetricsUrl(year, auditTarget.period),
-    label: "Abrir métricas de custos no Mercado Livre",
-    hint: "Para conferir o valor exato de \"Outras Tarifas\": no painel do Mercado Livre, vá em Tarifas e investimentos e passe o mouse sobre a linha \"Outras Tarifas\".",
-  };
-}
-
-const LINE_BREAKDOWN_FIELD: Partial<
-  Record<AuditKind, keyof DreMonthView>
-> = {
-  revenue: "revenueBreakdown",
-  cancelledSales: "cancelledSalesBreakdown",
-  saleFee: "saleFeeBreakdown",
-  sellerShipping: "sellerShippingBreakdown",
-  adsCost: "adsCostBreakdown",
-  partialReturns: "partialReturnsBreakdown",
-  returnFee: "returnFeeBreakdown",
-  specialFees: "specialFeesBreakdown",
-  fullShipping: "fullShippingBreakdown",
-  fullStorage: "fullStorageBreakdown",
-  fullNonCompliance: "fullNonComplianceBreakdown",
-  minhaPagina: "minhaPaginaBreakdown",
-  affiliateFee: "affiliateFeeBreakdown",
-};
-
-type LineAuditState = {
-  items: DreLineBreakdownItem[];
-  unavailable: boolean;
-  needsResync: boolean;
-};
-
-/** Resolve itens/estado do modal de auditoria genérica para as linhas que não são Custo produto/Imposto ML. */
-function resolveLineAuditState(
-  data: DreYearView,
-  target: AuditTarget,
-): LineAuditState {
-  if (target === null || target.kind === "productCost" || target.kind === "tax") {
-    return { items: [], unavailable: false, needsResync: false };
-  }
-
-  const months =
-    target.period === "year"
-      ? data.months
-      : data.months.filter((m) => m.month === target.period);
-  const relevantMonths = months.filter((m) => m.lines !== null);
-
-  const field = LINE_BREAKDOWN_FIELD[target.kind];
-  if (!field) return { items: [], unavailable: false, needsResync: false };
-
-  const items = getYearLineBreakdown(
-    months.map((m) => (m[field] as DreLineBreakdownItem[] | null) ?? null),
-  );
-
-  if (target.kind === "saleFee" || target.kind === "sellerShipping") {
-    const billingOnly =
-      relevantMonths.length > 0 &&
-      relevantMonths.every((m) => m.billingSource === "billing");
-    const anyFallbackMissing = relevantMonths.some(
-      (m) => m.billingSource === "fallback" && m[field] === null,
-    );
-    return { items, unavailable: billingOnly, needsResync: anyFallbackMissing };
-  }
-
-  const needsResync = relevantMonths.some((m) => m[field] === null);
-  return { items, unavailable: false, needsResync };
-}
-
-/** true quando algum mês do alvo de auditoria tem lançamentos mas não tem o detalhamento salvo (sincronizado antes desta funcionalidade). */
-function auditTargetNeedsResync(data: DreYearView, target: AuditTarget): boolean {
-  if (target === null) return false;
-  const months =
-    target.period === "year"
-      ? data.months
-      : data.months.filter((m) => m.month === target.period);
-  return months.some((m) =>
-    target.kind === "productCost"
-      ? m.lines !== null && m.productCostBreakdown === null
-      : m.lines !== null && m.taxBreakdown === null,
-  );
 }
 
 function renderLabelCell(row: DreTableRow) {
@@ -1644,6 +1310,10 @@ function DreMobileRow({
   const isTotal = selection === "total";
   const month = isTotal ? null : data.months[selection];
   const auditKind = getAuditKindForRow(row);
+  // Computado uma vez por linha (em vez de a cada uso abaixo) — sem isso,
+  // getYearTotalForRow (que soma os 12 meses pra linhas de custo) rodava 3x
+  // por linha na coluna "Total".
+  const yearTotal = isTotal ? getYearTotalForRow(row, data) : null;
 
   const valueNode = isTotal ? (
     <div
@@ -1679,7 +1349,7 @@ function DreMobileRow({
             : undefined
         }
       >
-        {formatFinancialMoney(getYearTotalForRow(row, data).amount)}
+        {formatFinancialMoney(yearTotal!.amount)}
       </div>
     </div>
   ) : (
@@ -1699,10 +1369,10 @@ function DreMobileRow({
   );
 
   const percent = isTotal
-    ? getYearTotalForRow(row, data).percent
+    ? yearTotal!.percent
     : getCellValue(row, month!).percent;
   const revenueAmount = isTotal
-    ? getYearTotalForRow(row, data).amount
+    ? yearTotal!.amount
     : getCellValue(row, month!).amount;
   const revenueBase = isTotal
     ? data.yearTotals?.totalEntrada
@@ -1781,7 +1451,16 @@ function DreYearTableMobile({
   }, [data.months]);
 
   const [selection, setSelection] = useState<DreMobileSelection>(defaultIndex);
-  const [auditTarget, setAuditTarget] = useState<AuditTarget>(null);
+  const {
+    auditTarget,
+    setAuditTarget,
+    productCostAuditItems,
+    taxAuditItems,
+    auditTitle,
+    lineAuditState,
+    lineAuditText,
+    specialFeesExternalLink,
+  } = useDreAuditTarget(data);
 
   function updateSelection(next: DreMobileSelection) {
     setSelection(next);
@@ -1792,35 +1471,6 @@ function DreYearTableMobile({
     }
     onSelectedMonthChange(data.months[next]?.month ?? null);
   }
-
-  const productCostAuditItems =
-    auditTarget === null || auditTarget.kind !== "productCost"
-      ? []
-      : auditTarget.period === "year"
-        ? getYearProductCostBreakdown(data.months)
-        : (data.months.find((m) => m.month === auditTarget.period)
-            ?.productCostBreakdown ?? []);
-  const taxAuditItems =
-    auditTarget === null || auditTarget.kind !== "tax"
-      ? []
-      : auditTarget.period === "year"
-        ? getYearTaxBreakdown(data.months)
-        : (data.months.find((m) => m.month === auditTarget.period)
-            ?.taxBreakdown ?? []);
-  const auditTitle =
-    auditTarget === null
-      ? ""
-      : auditTarget.period === "year"
-        ? `Ano ${data.year}`
-        : (data.months.find((m) => m.month === auditTarget.period)?.label ??
-          `Mês ${auditTarget.period}`);
-  const lineAuditState = resolveLineAuditState(data, auditTarget);
-  const lineAuditText =
-    auditTarget !== null ? LINE_AUDIT_TEXT[auditTarget.kind] : undefined;
-  const specialFeesExternalLink = buildSpecialFeesExternalLink(
-    data.year,
-    auditTarget,
-  );
 
   const selectedMonth = selection === "total" ? null : data.months[selection];
   const alertMessages = selectedMonth ? getMonthAlertMessages(selectedMonth) : [];
@@ -2032,99 +1682,6 @@ function DreYearTableMobile({
   );
 }
 
-function MonthHeaderCell({
-  year,
-  month,
-  syncing,
-  syncMessage,
-  selected,
-  dimmed,
-  onSync,
-  onToggleSelect,
-}: {
-  year: number;
-  month: DreMonthView;
-  syncing: boolean;
-  syncMessage?: string;
-  selected: boolean;
-  dimmed: boolean;
-  onSync: () => void;
-  onToggleSelect: () => void;
-}) {
-  const alertMessages = getMonthAlertMessages(month);
-  const hasAlert = alertMessages.length > 0;
-
-  return (
-    <th
-      className={cn(
-        "relative cursor-pointer border-b border-[var(--border)] px-1 py-2 text-center font-normal transition-colors",
-        selected
-          ? "bg-[var(--primary)]/10"
-          : "bg-[var(--card)] hover:bg-[var(--muted)]/50",
-        month.isFutureMonth && "opacity-45",
-        dimmed && DIM_CLASS,
-      )}
-      onClick={onToggleSelect}
-      role="button"
-      tabIndex={0}
-      aria-pressed={selected}
-      aria-label={`Destacar coluna de ${month.label}`}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onToggleSelect();
-        }
-      }}
-    >
-      <div className="flex items-center justify-center gap-0.5">
-        <MonthSyncTooltip year={year} month={month}>
-          <span
-            className={cn(
-              "cursor-pointer text-[11px] font-semibold tracking-wide text-[var(--muted-foreground)]",
-              month.isCurrentMonth && "text-[var(--primary)]",
-              !month.syncedAt && !month.isFutureMonth && "text-amber-700",
-              selected && "text-[var(--primary)]",
-            )}
-          >
-            {dreMonthShortLabel(month.month)}
-          </span>
-        </MonthSyncTooltip>
-        {hasAlert ? (
-          <MonthAlertsTooltip month={month} messages={alertMessages} />
-        ) : null}
-        {month.canSync ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="size-6 shrink-0 rounded-sm border border-[var(--border)] p-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-            aria-label={
-              syncing
-                ? `Sincronizando ${month.label}: ${syncMessage ?? "em andamento"}`
-                : `Sincronizar ${month.label}`
-            }
-            title={
-              syncing
-                ? (syncMessage ?? "Sincronizando…")
-                : `Sincronizar ${month.label}`
-            }
-            disabled={syncing}
-            onClick={(e) => {
-              e.stopPropagation();
-              onSync();
-            }}
-          >
-            <RefreshCw
-              className={cn("size-3", syncing && "animate-spin")}
-              aria-hidden
-            />
-          </Button>
-        ) : null}
-      </div>
-    </th>
-  );
-}
-
 function DreLayoutToggle({
   layout,
   onChange,
@@ -2160,280 +1717,6 @@ function DreLayoutToggle({
         <Columns3 className="size-3.5" aria-hidden />
         Comparar meses
       </button>
-    </div>
-  );
-}
-
-type DrePieDisplayMode = "both" | "percent" | "value";
-
-const PIE_DISPLAY_OPTIONS: Array<{ value: DrePieDisplayMode; label: string }> = [
-  { value: "both", label: "R$ e %" },
-  { value: "percent", label: "Só %" },
-  { value: "value", label: "Só R$" },
-];
-
-function polarToCartesian(cx: number, cy: number, r: number, angleDeg: number) {
-  const rad = ((angleDeg - 90) * Math.PI) / 180;
-  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
-}
-
-/** Caminho de uma fatia de rosca (donut) entre dois ângulos, em graus. */
-function donutSlicePath(
-  cx: number,
-  cy: number,
-  rOuter: number,
-  rInner: number,
-  startAngle: number,
-  endAngle: number,
-) {
-  const startOuter = polarToCartesian(cx, cy, rOuter, endAngle);
-  const endOuter = polarToCartesian(cx, cy, rOuter, startAngle);
-  const startInner = polarToCartesian(cx, cy, rInner, endAngle);
-  const endInner = polarToCartesian(cx, cy, rInner, startAngle);
-  const largeArc = endAngle - startAngle > 180 ? 1 : 0;
-  return [
-    `M ${startOuter.x} ${startOuter.y}`,
-    `A ${rOuter} ${rOuter} 0 ${largeArc} 0 ${endOuter.x} ${endOuter.y}`,
-    `L ${endInner.x} ${endInner.y}`,
-    `A ${rInner} ${rInner} 0 ${largeArc} 1 ${startInner.x} ${startInner.y}`,
-    "Z",
-  ].join(" ");
-}
-
-/** Reduz a fonte do valor central do donut conforme o texto formatado cresce, pra nunca estourar o buraco. */
-function pieCenterValueSizeClass(formatted: string): string {
-  if (formatted.length > 14) return "text-[10px] sm:text-xs";
-  if (formatted.length > 10) return "text-xs sm:text-sm";
-  return "text-sm sm:text-base";
-}
-
-/**
- * Gráfico de rosca: Custos Variáveis, Custo Fixo, Investimentos e Lucro
- * Operacional como fatias — cada uma proporcional ao próprio valor absoluto
- * (não à Entrada), para funcionar mesmo em prejuízo. O centro mostra a
- * Entrada; a legenda ao lado tem um alternador pra ver só valor, só % (da
- * receita) ou os dois.
- */
-function DreRevenuePie({
-  totals,
-  visibility = DEFAULT_DRE_VISIBILITY,
-}: {
-  totals: DreComputedTotals | null | undefined;
-  visibility?: DreVisibilitySettings;
-}) {
-  const [mode, setMode] = useState<DrePieDisplayMode>("both");
-  const base = totals?.totalEntrada ?? null;
-
-  if (!totals || base == null || base <= 0) {
-    return (
-      <div className="flex h-24 items-center justify-center rounded-2xl border border-dashed border-[var(--border)] text-sm text-[var(--muted-foreground)]">
-        Sem dados suficientes para o período.
-      </div>
-    );
-  }
-
-  const lucro = totals.lucroOperacional;
-  const isLoss = lucro < 0;
-
-  const rawItems = [
-    {
-      id: "totalCustoOperacional",
-      label: "Custos Variáveis",
-      value: totals.totalCustoOperacional,
-      icon: Receipt,
-      fillClass: "fill-rose-500",
-      dotClass: "bg-rose-500",
-    },
-    {
-      id: "totalCustoFixo",
-      label: "Custo Fixo",
-      value: totals.totalCustoFixo,
-      icon: Landmark,
-      fillClass: "fill-slate-400",
-      dotClass: "bg-slate-400",
-    },
-    ...(visibility.showInvestments
-      ? [
-          {
-            id: "totalInvestimento",
-            label: "Investimentos",
-            value: totals.totalInvestimento,
-            icon: Rocket,
-            fillClass: "fill-sky-400",
-            dotClass: "bg-sky-400",
-          },
-        ]
-      : []),
-    {
-      id: "lucroOperacional",
-      label: "Lucro Operacional",
-      value: lucro,
-      icon: TrendingUp,
-      fillClass: isLoss ? "fill-amber-500" : "fill-emerald-500",
-      dotClass: isLoss ? "bg-amber-500" : "bg-emerald-500",
-    },
-  ];
-
-  const weights = rawItems.map((item) => Math.abs(item.value));
-  const totalWeight = weights.reduce((sum, w) => sum + w, 0) || 1;
-
-  const slices = rawItems.reduce<
-    Array<
-      (typeof rawItems)[number] & {
-        percent: number;
-        startAngle: number;
-        endAngle: number;
-        fraction: number;
-      }
-    >
-  >((acc, item, index) => {
-    const previousEnd = acc.length > 0 ? acc[acc.length - 1].endAngle : 0;
-    const fraction = weights[index] / totalWeight;
-    const startAngle = previousEnd;
-    const endAngle = Math.min(360, startAngle + fraction * 360);
-    acc.push({
-      ...item,
-      percent: (item.value / base) * 100,
-      startAngle,
-      endAngle: Math.min(endAngle, startAngle + 359.9),
-      fraction,
-    });
-    return acc;
-  }, []);
-
-  const showValue = mode !== "percent";
-  const showPercent = mode !== "value";
-
-  return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-4 sm:px-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs font-medium text-[var(--muted-foreground)]">
-          Visão geral do período
-        </p>
-        <div className="inline-flex rounded-full bg-[var(--muted)] p-1">
-          {PIE_DISPLAY_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              className={cn(
-                "cursor-pointer rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
-                mode === option.value
-                  ? "bg-[var(--card)] text-[var(--foreground)] shadow-sm"
-                  : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
-              )}
-              onClick={() => setMode(option.value)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-4 flex flex-col items-center gap-6 sm:flex-row">
-        <div className="relative shrink-0">
-          <svg viewBox="0 0 200 200" className="size-44 sm:size-48" aria-hidden>
-            {slices
-              .filter((slice) => slice.fraction > 0)
-              .map((slice) => (
-                <Tooltip key={slice.id}>
-                  <TooltipTrigger asChild>
-                    <path
-                      d={donutSlicePath(
-                        100,
-                        100,
-                        94,
-                        66,
-                        slice.startAngle,
-                        slice.endAngle,
-                      )}
-                      className={cn(
-                        slice.fillClass,
-                        "cursor-default transition-[filter] duration-150 hover:brightness-110",
-                      )}
-                      stroke="var(--card)"
-                      strokeWidth={2}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="text-xs">
-                    <p className="font-semibold">{slice.label}</p>
-                    <p className="mt-0.5 font-semibold tabular-nums">
-                      {formatFinancialMoney(slice.value)} ·{" "}
-                      {formatFinancialPercent(slice.percent)}
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              ))}
-          </svg>
-          <div
-            className={cn(
-              "pointer-events-none absolute left-1/2 top-1/2 flex w-[62%] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center overflow-hidden px-1",
-            )}
-          >
-            <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
-              Entrada
-            </p>
-            <p
-              className={cn(
-                "w-full truncate text-center font-bold tabular-nums text-[var(--foreground)]",
-                pieCenterValueSizeClass(formatFinancialMoney(base)),
-              )}
-            >
-              {formatFinancialMoney(base)}
-            </p>
-          </div>
-        </div>
-
-        <div className="w-full flex-1 space-y-1">
-          {slices.map((slice) => {
-            const Icon = slice.icon;
-            return (
-              <div
-                key={slice.id}
-                className="flex items-center justify-between gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-[var(--muted)]/40"
-              >
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <span
-                    className={cn("size-2.5 shrink-0 rounded-full", slice.dotClass)}
-                    aria-hidden
-                  />
-                  <Icon
-                    className="size-4 shrink-0 text-[var(--muted-foreground)]"
-                    aria-hidden
-                  />
-                  <span className="truncate text-sm text-[var(--foreground)]">
-                    {slice.label}
-                  </span>
-                </div>
-                <div className="flex shrink-0 items-baseline gap-2">
-                  {showValue ? (
-                    <span
-                      className={cn(
-                        "text-sm font-semibold tabular-nums",
-                        valueToneClass(slice.value),
-                      )}
-                    >
-                      {formatFinancialMoney(slice.value)}
-                    </span>
-                  ) : null}
-                  {showPercent ? (
-                    <span className="tabular-nums text-xs text-[var(--muted-foreground)]">
-                      {formatFinancialPercent(slice.percent)}
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {isLoss ? (
-        <div className="mt-3 flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
-          <AlertCircle className="size-3.5 shrink-0" aria-hidden />
-          Prejuízo operacional: {formatFinancialMoney(lucro)} (
-          {formatFinancialPercent((lucro / base) * 100)})
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -2865,25 +2148,6 @@ function DreStatementPanel({
   }
 }
 
-function WaterfallConnector({ operator }: { operator: "+" | "-" | "=" }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-1" aria-hidden>
-      <div className="h-3 w-px bg-[var(--border)]" />
-      <span
-        className={cn(
-          "-my-px flex size-5 shrink-0 items-center justify-center rounded-full border text-[11px] font-bold leading-none",
-          operator === "="
-            ? "border-[var(--primary)]/40 bg-[var(--primary)]/10 text-[var(--primary)]"
-            : "border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)]",
-        )}
-      >
-        {operator}
-      </span>
-      <div className="h-3 w-px bg-[var(--border)]" />
-    </div>
-  );
-}
-
 export function DreYearTable(props: DreYearTableProps) {
   const isMobile = useIsMobile();
   if (isMobile) {
@@ -2940,7 +2204,16 @@ function DreYearTableDesktop({
     rowId: string;
   } | null>(null);
   const [layout, setLayout] = useState<"statement" | "year">("statement");
-  const [auditTarget, setAuditTarget] = useState<AuditTarget>(null);
+  const {
+    auditTarget,
+    setAuditTarget,
+    productCostAuditItems,
+    taxAuditItems,
+    auditTitle,
+    lineAuditState,
+    lineAuditText,
+    specialFeesExternalLink,
+  } = useDreAuditTarget(data);
   const isEditing = editingCell !== null;
   const columnFocusMonth = isEditing ? null : selectedMonth;
 
@@ -2952,76 +2225,66 @@ function DreYearTableDesktop({
     );
   }
 
-  const productCostAuditItems =
-    auditTarget === null || auditTarget.kind !== "productCost"
-      ? []
-      : auditTarget.period === "year"
-        ? getYearProductCostBreakdown(data.months)
-        : (data.months.find((m) => m.month === auditTarget.period)
-            ?.productCostBreakdown ?? []);
-  const taxAuditItems =
-    auditTarget === null || auditTarget.kind !== "tax"
-      ? []
-      : auditTarget.period === "year"
-        ? getYearTaxBreakdown(data.months)
-        : (data.months.find((m) => m.month === auditTarget.period)
-            ?.taxBreakdown ?? []);
-  const auditTitle =
-    auditTarget === null
-      ? ""
-      : auditTarget.period === "year"
-        ? `Ano ${data.year}`
-        : (data.months.find((m) => m.month === auditTarget.period)?.label ??
-          `Mês ${auditTarget.period}`);
-  const lineAuditState = resolveLineAuditState(data, auditTarget);
-  const lineAuditText =
-    auditTarget !== null ? LINE_AUDIT_TEXT[auditTarget.kind] : undefined;
-  const specialFeesExternalLink = buildSpecialFeesExternalLink(
-    data.year,
-    auditTarget,
-  );
-
-  const rows = filterRowsByVisibility(
-    buildDreTableRows(
+  // Antes recomputado (junto com detailIndexById/rowSection abaixo) em TODO
+  // render deste componente — inclusive quando só uma célula entra/sai de
+  // edição, que não muda o shape das linhas. Memoizado com as mesmas deps do
+  // ramo mobile (buildDreTableRows/filterRowsByVisibility não dependem de
+  // month/showDetails, só do catálogo de custos + visibilidade).
+  const rows = useMemo(
+    () =>
+      filterRowsByVisibility(
+        buildDreTableRows(
+          data.costItems,
+          data.operationalCostItems,
+          data.investmentCostItems,
+          data.nonOperationalOutItems,
+          data.nonOperationalInItems,
+          true,
+        ),
+        visibility,
+      ),
+    [
       data.costItems,
       data.operationalCostItems,
       data.investmentCostItems,
       data.nonOperationalOutItems,
       data.nonOperationalInItems,
-      true,
-    ),
-    visibility,
+      visibility,
+    ],
   );
-  const detailIndexById = buildDetailIndexMap(rows);
+  const detailIndexById = useMemo(() => buildDetailIndexMap(rows), [rows]);
   const detailCount = detailIndexById.size;
 
   // Mesmo agrupamento por categoria do Demonstrativo — usado pra abrir um
   // respiro visual (spacer row) entre seções e deixar as linhas de
   // resultado (Margem de Contribuição, Lucro Operacional...) soltas, fora
   // das "caixas" de cada categoria.
-  const rowSection = new Map<
-    string,
-    { position: SectionBoxPosition; tone: CategoryTone }
-  >();
-  for (const group of buildStatementGroups(rows)) {
-    if (group.header.type !== "static") continue;
-    const visual = GROUP_VISUALS[group.header.id];
-    if (!visual) continue;
-    const groupRows = [group.header, ...group.items];
-    groupRows.forEach((r, i) => {
-      rowSection.set(r.id, {
-        tone: visual.tone,
-        position:
-          groupRows.length === 1
-            ? "only"
-            : i === 0
-              ? "first"
-              : i === groupRows.length - 1
-                ? "last"
-                : "middle",
+  const rowSection = useMemo(() => {
+    const map = new Map<
+      string,
+      { position: SectionBoxPosition; tone: CategoryTone }
+    >();
+    for (const group of buildStatementGroups(rows)) {
+      if (group.header.type !== "static") continue;
+      const visual = GROUP_VISUALS[group.header.id];
+      if (!visual) continue;
+      const groupRows = [group.header, ...group.items];
+      groupRows.forEach((r, i) => {
+        map.set(r.id, {
+          tone: visual.tone,
+          position:
+            groupRows.length === 1
+              ? "only"
+              : i === 0
+                ? "first"
+                : i === groupRows.length - 1
+                  ? "last"
+                  : "middle",
+        });
       });
-    });
-  }
+    }
+    return map;
+  }, [rows]);
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -3091,7 +2354,7 @@ function DreYearTableDesktop({
                 Linha
               </th>
               {data.months.map((month) => (
-                <MonthHeaderCell
+                <DreMonthHeaderCell
                   key={month.month}
                   year={data.year}
                   month={month}
@@ -3144,6 +2407,11 @@ function DreYearTableDesktop({
               const rowClassName = bg;
               const cellStyle = dividerStyle;
               const yearAuditKind = getAuditKindForRow(row);
+              // Computado uma vez por linha (era chamado separadamente 4x
+              // logo abaixo) — pra linhas de custo, getYearTotalForRow soma
+              // os 12 meses por chamada, então isso evitava somar o ano 4x
+              // por linha em todo render da tabela.
+              const yearTotal = getYearTotalForRow(row, data);
               const section = rowSection.get(row.id);
               const sectionPosition = section?.position;
               const sectionColor = section
@@ -3292,7 +2560,7 @@ function DreYearTableDesktop({
                             tabIndex={yearAuditKind ? 0 : undefined}
                             className={cn(
                               "whitespace-nowrap text-center text-[12.5px] font-bold tabular-nums leading-tight",
-                              valueToneClass(getYearTotalForRow(row, data).amount),
+                              valueToneClass(yearTotal.amount),
                               yearAuditKind &&
                                 "cursor-pointer rounded-sm underline decoration-dotted decoration-1 underline-offset-2 hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]",
                             )}
@@ -3324,12 +2592,10 @@ function DreYearTableDesktop({
                                 : undefined
                             }
                           >
-                            {formatFinancialMoney(
-                              getYearTotalForRow(row, data).amount,
-                            )}
+                            {formatFinancialMoney(yearTotal.amount)}
                           </div>
                         </div>,
-                        getYearTotalForRow(row, data).amount,
+                        yearTotal.amount,
                         data.yearTotals?.totalEntrada,
                       )}
                     </DetailAnimatedCell>
@@ -3393,9 +2659,7 @@ function DreYearTableDesktop({
                           sectionColor,
                         )}
                       >
-                        {renderPercentCell(
-                          getYearTotalForRow(row, data).percent,
-                        )}
+                        {renderPercentCell(yearTotal.percent)}
                       </td>
                     </tr>
                   ) : null}
