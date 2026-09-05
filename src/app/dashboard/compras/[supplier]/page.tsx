@@ -100,7 +100,7 @@ export default async function SupplierPurchasePage({ params }: PageProps) {
           className="mt-3 mb-4 inline-flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
         >
           <ArrowLeft className="size-4" aria-hidden />
-          Voltar para fornecedores
+          Voltar para o Kanban de compras
         </Link>
         <h1 className="text-3xl font-bold tracking-tight text-[var(--primary)]">
           Análise de compra — {supplier}

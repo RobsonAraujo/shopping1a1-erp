@@ -2,11 +2,19 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
+import { DndContext, DragOverlay, type DragEndEvent } from "@dnd-kit/core";
 import {
   ItemListSearch,
   itemListSearchEmptyMessage,
 } from "@/components/shared/ItemListSearch";
-import { OperationsKanbanBoard } from "@/components/operacoes-full/OperationsKanbanBoard";
+import {
+  OPERATIONS_COLUMN_DROP_ID_PREFIX,
+  OperationsKanbanBoard,
+} from "@/components/operacoes-full/OperationsKanbanBoard";
+import {
+  OPERATIONS_DRAG_ID_PREFIX,
+  OperationsCardBody,
+} from "@/components/operacoes-full/OperationsKanbanCard";
 import { Button } from "@/components/ui/button";
 import { UserFeedback } from "@/components/ui/user-feedback";
 import type {
@@ -14,7 +22,8 @@ import type {
   OperationsBoardsData,
 } from "@/lib/compras/replenishment-cycle-data";
 import { filterByItemListSearch } from "@/lib/item-list-search";
-import type { OperationCycleKind } from "@/generated/prisma/client";
+import { useDndSensors } from "@/hooks/use-dnd-sensors";
+import type { OperationCycleKind, ReplenishmentStatus } from "@/generated/prisma/client";
 import { cn } from "@/lib/utils";
 
 type OperationsKanbanProps = {
@@ -56,6 +65,8 @@ export function OperationsKanban({ initialData, kind }: OperationsKanbanProps) {
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [activeDragCycleId, setActiveDragCycleId] = useState<string | null>(null);
+  const sensors = useDndSensors();
 
   const activeCards =
     kind === "purchase" ? data.purchase.cards : data.full.cards;
@@ -121,9 +132,36 @@ export function OperationsKanban({ initialData, kind }: OperationsKanbanProps) {
     [],
   );
 
+  const activeDragCard = activeDragCycleId
+    ? activeCards.find((card) => card.cycleId === activeDragCycleId)
+    : undefined;
+
+  function handleDragEnd(event: DragEndEvent) {
+    setActiveDragCycleId(null);
+    const cycleId = String(event.active.id).replace(OPERATIONS_DRAG_ID_PREFIX, "");
+    const overId = event.over?.id ? String(event.over.id) : null;
+    if (!overId) return;
+    const targetStatus = overId.replace(
+      OPERATIONS_COLUMN_DROP_ID_PREFIX,
+      "",
+    ) as ReplenishmentStatus;
+    const card = activeCards.find((c) => c.cycleId === cycleId);
+    if (!card || card.status === targetStatus) return;
+    void patchCycle(cycleId, { status: targetStatus });
+  }
+
   const config = KIND_CONFIG[kind];
 
   return (
+    <DndContext
+      sensors={sensors}
+      autoScroll={false}
+      onDragStart={(event) =>
+        setActiveDragCycleId(String(event.active.id).replace(OPERATIONS_DRAG_ID_PREFIX, ""))
+      }
+      onDragEnd={handleDragEnd}
+      onDragCancel={() => setActiveDragCycleId(null)}
+    >
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="text-base font-semibold text-[var(--foreground)]">
@@ -174,10 +212,14 @@ export function OperationsKanban({ initialData, kind }: OperationsKanbanProps) {
         kind={kind}
         cards={filteredActive}
         busyId={busyId}
-        onAdvance={(cycleId) => patchCycle(cycleId, { advance: true })}
-        onMove={(cycleId, status) => patchCycle(cycleId, { status })}
       />
     </div>
+      <DragOverlay>
+        {activeDragCard ? (
+          <OperationsCardBody card={activeDragCard} className="w-[85vw] sm:w-72" />
+        ) : null}
+      </DragOverlay>
+    </DndContext>
   );
 }
 

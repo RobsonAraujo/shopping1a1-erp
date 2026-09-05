@@ -79,6 +79,11 @@ export type OperationsBoardCard = {
   searchIsOverdue: boolean;
   purchaseStartsOn: string | null;
   searchStartsOn: string | null;
+  /** Explica de onde vem `purchaseStartsOn`/`searchStartsOn` (esgotamento
+   * previsto − lead time) — mesmo texto já usado em outras telas via
+   * `MetricWithHint`, evita datas "soltas" sem contexto pro usuário. */
+  purchaseStartsOnTooltip: string;
+  searchStartsOnTooltip: string;
   needsSchedulingAttention: boolean;
   notes: string | null;
   warehouseQtyAtOrder: number | null;
@@ -618,6 +623,8 @@ function buildCardFromCycle(
     searchIsOverdue: ctx.fullPlan.searchIsOverdue,
     purchaseStartsOn: ctx.purchasePlan.purchaseStartsOn,
     searchStartsOn: ctx.fullPlan.searchStartsOn,
+    purchaseStartsOnTooltip: ctx.purchasePlan.tooltips.purchase,
+    searchStartsOnTooltip: ctx.fullPlan.tooltips.search,
     needsSchedulingAttention: ctx.fullPlan.needsSchedulingAttention,
     notes: cycle.notes,
     warehouseQtyAtOrder: cycle.warehouseQtyAtOrder,
@@ -821,6 +828,82 @@ export async function transitionReplenishmentCycle(
       ...(options?.notes !== undefined ? { notes: options.notes } : {}),
     },
   });
+}
+
+export type BatchTransitionResult = {
+  cycleId: string;
+  status: ReplenishmentStatus;
+  warehouseQtyAtOrder: number | null;
+  mlQtyAtCollection: number | null;
+};
+
+/**
+ * Transiciona vários ciclos de uma vez (drag-and-drop do card de
+ * fornecedor em Compras — arrastar move todos os ciclos daquele fornecedor
+ * de uma vez). Diferente de `transitionReplenishmentCycle`, nunca busca
+ * estoque ao vivo no Mercado Livre — as transições entre as colunas do
+ * board (attention/analyzing/quoted/ordered) só precisam do estoque do
+ * galpão (sempre atualizado no banco), então o lote inteiro roda sem
+ * nenhuma chamada de rede externa. Ciclos já completados ou não encontrados
+ * são ignorados silenciosamente (podem ter sido concluídos por outra aba
+ * entre o carregamento do board e o drag).
+ */
+export async function transitionReplenishmentCyclesBatch(
+  organizationId: string,
+  updates: { cycleId: string; nextStatus: ReplenishmentStatus }[],
+): Promise<BatchTransitionResult[]> {
+  if (updates.length === 0) return [];
+
+  const cycleIds = [...new Set(updates.map((u) => u.cycleId))];
+  const cycles = await prisma.replenishmentCycle.findMany({
+    where: { id: { in: cycleIds }, organizationId },
+  });
+  const cycleById = new Map(cycles.map((c) => [c.id, c]));
+
+  const mlItemIds = [...new Set(cycles.map((c) => c.mlItemId))];
+  const warehouseRows =
+    mlItemIds.length > 0
+      ? await prisma.warehouseStock.findMany({
+          where: { organizationId, mlItemId: { in: mlItemIds } },
+          select: { mlItemId: true, quantity: true, purchaseLeadTimeDays: true },
+        })
+      : [];
+  const warehouseByItem = new Map(warehouseRows.map((w) => [w.mlItemId, w]));
+
+  const targetByCycleId = new Map(updates.map((u) => [u.cycleId, u.nextStatus]));
+
+  const writes = cycleIds
+    .map((cycleId) => {
+      const cycle = cycleById.get(cycleId);
+      const nextStatus = targetByCycleId.get(cycleId);
+      if (!cycle || !nextStatus || !isActiveReplenishmentStatus(cycle.status)) {
+        return null;
+      }
+      const warehouse = warehouseByItem.get(cycle.mlItemId);
+      const snapshot: ReplenishmentSnapshot = {
+        mlQty: cycle.triggerMlQty,
+        warehouseQty: warehouse?.quantity ?? cycle.triggerWarehouseQty,
+        leadTimeDays:
+          warehouse?.purchaseLeadTimeDays ?? cycle.triggerLeadTimeDays ?? 0,
+      };
+      const patch = buildStatusTransition(toCycleRecord(cycle), nextStatus, snapshot);
+      return prisma.replenishmentCycle.update({
+        where: { id: cycleId, organizationId },
+        data: patch,
+      });
+    })
+    .filter((write): write is NonNullable<typeof write> => write !== null);
+
+  if (writes.length === 0) return [];
+
+  const updated = await prisma.$transaction(writes);
+
+  return updated.map((cycle) => ({
+    cycleId: cycle.id,
+    status: cycle.status,
+    warehouseQtyAtOrder: cycle.warehouseQtyAtOrder,
+    mlQtyAtCollection: cycle.mlQtyAtCollection,
+  }));
 }
 
 export async function advanceReplenishmentCycle(

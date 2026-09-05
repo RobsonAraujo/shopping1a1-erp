@@ -2,54 +2,22 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useDraggable } from "@dnd-kit/core";
 import { ExternalLink, ImageOff } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  boardColumnsForKind,
-  nextStatusForKind,
-  statusLabelsForKind,
-} from "@/lib/compras/replenishment-cycle";
-import type { OperationsBoardCard } from "@/lib/compras/replenishment-cycle-data";
+import { MetricWithHint } from "@/components/shared/MetricWithHint";
 import { supplierPathSegment } from "@/lib/compras/purchase-analysis";
-import type { ReplenishmentStatus } from "@/generated/prisma/client";
+import type { OperationsBoardCard } from "@/lib/compras/replenishment-cycle-data";
 import { cn } from "@/lib/utils";
 
-type OperationsKanbanCardProps = {
-  card: OperationsBoardCard;
-  onAdvance: () => void | Promise<void>;
-  onMove: (status: ReplenishmentStatus) => void | Promise<void>;
-  busy: boolean;
-};
+export const OPERATIONS_DRAG_ID_PREFIX = "cycle:";
 
-export function OperationsKanbanCard({
-  card,
-  onAdvance,
-  onMove,
-  busy,
-}: OperationsKanbanCardProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const next = nextStatusForKind(card.kind, card.status);
-  const labels = statusLabelsForKind(card.kind);
-  const columns = boardColumnsForKind(card.kind);
-  const urgent =
-    card.kind === "purchase"
-      ? card.purchaseIsOverdue
-      : card.searchIsOverdue;
-
-  const advanceLabel =
-    card.kind === "full" && card.status === "scheduled"
-      ? "Coletado"
-      : "Avançar";
+function OperationsCardHeader({ card }: { card: OperationsBoardCard }) {
+  const urgent = card.kind === "purchase" ? card.purchaseIsOverdue : card.searchIsOverdue;
 
   return (
-    <article
-      className={cn(
-        "rounded-lg border bg-[var(--card)] p-3 shadow-sm",
-        urgent ? "border-rose-200" : "border-[var(--border)]",
-      )}
-    >
+    <div className="p-3">
       <div className="flex items-start gap-2.5">
         {card.imageUrl ? (
           <Image
@@ -68,12 +36,8 @@ export function OperationsKanbanCard({
           <p className="truncate text-sm font-semibold" title={card.sku ?? card.title}>
             {card.sku ?? card.title}
           </p>
-          <p className="truncate text-xs text-[var(--muted-foreground)]">
-            {card.mlItemId}
-          </p>
-          <p className="mt-0.5 text-[11px] text-[var(--muted-foreground)]">
-            {card.supplier}
-          </p>
+          <p className="truncate text-xs text-[var(--muted-foreground)]">{card.mlItemId}</p>
+          <p className="mt-0.5 text-[11px] text-[var(--muted-foreground)]">{card.supplier}</p>
         </div>
       </div>
 
@@ -81,9 +45,7 @@ export function OperationsKanbanCard({
         <span>ML {card.mlStock}</span>
         <span>·</span>
         <span>Galpão {card.warehouseStock}</span>
-        {card.kind === "purchase" &&
-        card.suggestedQty != null &&
-        card.suggestedQty > 0 ? (
+        {card.kind === "purchase" && card.suggestedQty != null && card.suggestedQty > 0 ? (
           <>
             <span>·</span>
             <span>Sug. {card.suggestedQty} un.</span>
@@ -92,14 +54,24 @@ export function OperationsKanbanCard({
       </div>
 
       {card.kind === "purchase" && card.purchaseStartsOn ? (
-        <p className="mt-1.5 text-[11px] text-[var(--muted-foreground)]">
+        <MetricWithHint
+          content={card.purchaseStartsOnTooltip}
+          className="mt-1.5 text-[11px] text-[var(--muted-foreground)]"
+        >
           Comprar em {card.purchaseStartsOn}
-        </p>
+        </MetricWithHint>
       ) : null}
       {card.kind === "full" && card.searchStartsOn ? (
-        <p className="mt-1.5 text-[11px] text-[var(--muted-foreground)]">
-          Full em {card.searchStartsOn}
-        </p>
+        // Data pra COMEÇAR a agendar/buscar o envio ao Full (esgotamento
+        // previsto do estoque ML menos o lead time) — não é "quando fica
+        // Full". Nome bate com a coluna "Agendado" do board; o tooltip
+        // (ícone de ajuda) explica a conta pro usuário.
+        <MetricWithHint
+          content={card.searchStartsOnTooltip}
+          className="mt-1.5 text-[11px] text-[var(--muted-foreground)]"
+        >
+          Agendar em {card.searchStartsOn}
+        </MetricWithHint>
       ) : null}
 
       {urgent ? (
@@ -107,80 +79,84 @@ export function OperationsKanbanCard({
           Urgente
         </Badge>
       ) : null}
+    </div>
+  );
+}
 
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {next ? (
-          <Button
-            type="button"
-            size="sm"
-            className="h-7 px-2 text-xs"
-            disabled={busy}
-            onClick={() => void onAdvance()}
-          >
-            {advanceLabel}
-          </Button>
-        ) : null}
-        <div className="relative">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-7 px-2 text-xs"
-            disabled={busy}
-            onClick={() => setMenuOpen((open) => !open)}
-          >
-            Mover para…
-          </Button>
-          {menuOpen ? (
-            <div className="absolute right-0 z-20 mt-1 min-w-[10rem] rounded-md border border-[var(--border)] bg-[var(--card)] py-1 shadow-lg">
-              {columns
-                .filter((status) => status !== card.status)
-                .map((status) => (
-                  <button
-                    key={status}
-                    type="button"
-                    className="block w-full px-3 py-1.5 text-left text-xs hover:bg-[var(--muted)]"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      void onMove(status);
-                    }}
-                  >
-                    {labels[status]}
-                  </button>
-                ))}
-              <button
-                type="button"
-                className="block w-full border-t border-[var(--border)] px-3 py-1.5 text-left text-xs hover:bg-[var(--muted)]"
-                onClick={() => {
-                  setMenuOpen(false);
-                  void onMove("completed");
-                }}
-              >
-                Concluído
-              </button>
-            </div>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
-        <Link
-          href={`/dashboard/items/${card.mlItemId}`}
-          className="inline-flex items-center gap-1 text-[var(--primary)] hover:underline"
-        >
-          Anúncio
-          <ExternalLink className="size-3" aria-hidden />
+/** Único link de ação do card. Avançar/mover etapa agora é só via
+ * drag-and-drop (arrastar o card entre colunas) — os botões "Avançar"/
+ * "Mover para…" saíram pra não duplicar visualmente o que o drag já faz. */
+function OperationsCardFooter({ card }: { card: OperationsBoardCard }) {
+  return (
+    <div className="flex items-center gap-2 border-t border-[var(--border)] bg-[var(--muted)]/20 px-3 py-2">
+      <Button asChild size="sm" variant="secondary" className="h-7 w-full gap-1.5 text-xs font-semibold">
+        <Link href={`/dashboard/items/${card.mlItemId}`}>
+          Ver anúncio
+          <ExternalLink className="size-3.5" aria-hidden />
         </Link>
-        {card.kind === "purchase" ? (
-          <Link
-            href={`/dashboard/compras/${supplierPathSegment(card.supplier)}`}
-            className="inline-flex items-center gap-1 text-[var(--primary)] hover:underline"
-          >
+      </Button>
+      {card.kind === "purchase" ? (
+        <Button asChild size="sm" variant="outline" className="h-7 w-full gap-1.5 text-xs font-semibold">
+          <Link href={`/dashboard/compras/${supplierPathSegment(card.supplier)}`}>
             Análise
-            <ExternalLink className="size-3" aria-hidden />
+            <ExternalLink className="size-3.5" aria-hidden />
           </Link>
-        ) : null}
-      </div>
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+/** Aparência completa do card (cabeçalho + rodapé) — usada tanto pelo card
+ * "de verdade" (arrastável) quanto pela cópia flutuante do `DragOverlay`.
+ * Ter uma só definição visual evita que o card "se desmonte" durante o
+ * arrasto (a cópia flutuante do overlay é sempre o card inteiro). */
+export function OperationsCardBody({
+  card,
+  className,
+}: {
+  card: OperationsBoardCard;
+  className?: string;
+}) {
+  const urgent = card.kind === "purchase" ? card.purchaseIsOverdue : card.searchIsOverdue;
+
+  return (
+    <article
+      className={cn(
+        "overflow-hidden rounded-lg border bg-[var(--card)] shadow-sm",
+        urgent ? "border-rose-200" : "border-[var(--border)]",
+        className,
+      )}
+    >
+      <OperationsCardHeader card={card} />
+      <OperationsCardFooter card={card} />
     </article>
+  );
+}
+
+export function OperationsKanbanCard({
+  card,
+  busy,
+}: {
+  card: OperationsBoardCard;
+  busy: boolean;
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `${OPERATIONS_DRAG_ID_PREFIX}${card.cycleId}`,
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      className={cn(
+        "cursor-grab touch-none active:cursor-grabbing",
+        isDragging && "opacity-0",
+        busy && "pointer-events-none opacity-60",
+      )}
+    >
+      <OperationsCardBody card={card} />
+    </div>
   );
 }

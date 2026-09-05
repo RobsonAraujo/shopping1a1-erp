@@ -7,20 +7,42 @@ import {
   statusLabelsForKind,
 } from "@/lib/compras/replenishment-cycle";
 import type { OperationsBoardCard } from "@/lib/compras/replenishment-cycle-data";
+import { useDropHighlight } from "@/hooks/use-drop-highlight";
 import type { ReplenishmentStatus } from "@/generated/prisma/client";
+import { cn } from "@/lib/utils";
+
+export const OPERATIONS_COLUMN_DROP_ID_PREFIX = "column:";
 
 type OperationsKanbanBoardProps = {
   kind: OperationCycleKind;
   cards: OperationsBoardCard[];
   busyId: string | null;
-  onAdvance: (cycleId: string) => void | Promise<void>;
-  onMove: (
-    cycleId: string,
-    status: ReplenishmentStatus,
-  ) => void | Promise<void>;
   title?: string;
   description?: string;
 };
+
+function DroppableColumn({
+  status,
+  children,
+}: {
+  status: ReplenishmentStatus;
+  children: React.ReactNode;
+}) {
+  const { setNodeRef, className } = useDropHighlight(
+    `${OPERATIONS_COLUMN_DROP_ID_PREFIX}${status}`,
+  );
+  return (
+    <section
+      ref={setNodeRef}
+      className={cn(
+        "flex w-[85vw] shrink-0 snap-center flex-col rounded-xl border border-[var(--border)] bg-[var(--muted)]/15 sm:w-72 sm:snap-align-none",
+        className,
+      )}
+    >
+      {children}
+    </section>
+  );
+}
 
 export function OperationsKanbanBoard({
   title,
@@ -28,8 +50,6 @@ export function OperationsKanbanBoard({
   kind,
   cards,
   busyId,
-  onAdvance,
-  onMove,
 }: OperationsKanbanBoardProps) {
   const columns = boardColumnsForKind(kind);
   const labels = statusLabelsForKind(kind);
@@ -59,10 +79,7 @@ export function OperationsKanbanBoard({
         {columns.map((status) => {
           const columnCards = cardsByStatus.get(status) ?? [];
           return (
-            <section
-              key={status}
-              className="flex w-[85vw] shrink-0 snap-center flex-col rounded-xl border border-[var(--border)] bg-[var(--muted)]/15 sm:w-72 sm:snap-align-none"
-            >
+            <DroppableColumn key={status} status={status}>
               <header className="border-b border-[var(--border)] px-3 py-2.5">
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="text-sm font-semibold">{labels[status]}</h3>
@@ -82,15 +99,11 @@ export function OperationsKanbanBoard({
                       key={card.cycleId}
                       card={card}
                       busy={busyId === card.cycleId}
-                      onAdvance={() => void onAdvance(card.cycleId)}
-                      onMove={(nextStatus) =>
-                        void onMove(card.cycleId, nextStatus)
-                      }
                     />
                   ))
                 )}
               </div>
-            </section>
+            </DroppableColumn>
           );
         })}
       </div>

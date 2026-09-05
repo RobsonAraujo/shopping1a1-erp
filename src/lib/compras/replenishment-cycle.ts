@@ -91,6 +91,12 @@ export function isActiveReplenishmentStatus(
   return status !== "completed";
 }
 
+/** Índice do status dentro das colunas do board de compra (`PURCHASE_BOARD_COLUMNS`),
+ * ou -1 se não for uma coluna visível desse board (ex.: `completed`, `scheduled`). */
+export function purchaseStatusOrderIndex(status: ReplenishmentStatus): number {
+  return PURCHASE_BOARD_COLUMNS.indexOf(status);
+}
+
 export function nextStatusForKind(
   kind: OperationCycleKind,
   status: ReplenishmentStatus,

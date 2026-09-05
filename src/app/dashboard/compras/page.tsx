@@ -1,10 +1,6 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { Suspense } from "react";
-import {
-  buildSupplierSummaries,
-  loadDashboardPurchaseData,
-} from "@/lib/compras/dashboard-purchase-data";
 import { ShoppingCart } from "lucide-react";
 import { ComprasPageClient } from "@/components/compras/ComprasPageClient";
 import { ComprasPageSkeleton } from "@/components/compras/ComprasPageSkeleton";
@@ -23,22 +19,12 @@ async function ComprasDataSection({
   userId: number;
   organizationId: string;
 }) {
+  let cards: Awaited<ReturnType<typeof loadOperationsBoards>>["purchase"]["cards"] | null =
+    null;
   let loadError: string | null = null;
-  let summaries: ReturnType<typeof buildSupplierSummaries> = [];
-  let rows: Awaited<ReturnType<typeof loadDashboardPurchaseData>>["rows"] = [];
-  let boards: Awaited<ReturnType<typeof loadOperationsBoards>> | null = null;
-
   try {
-    const [purchaseData, operationsBoards] = await Promise.all([
-      loadDashboardPurchaseData(token, userId, organizationId),
-      loadOperationsBoards(token, userId, organizationId),
-    ]);
-    summaries = buildSupplierSummaries(
-      purchaseData.rows,
-      purchaseData.needsPurchase,
-    );
-    rows = purchaseData.rows;
-    boards = operationsBoards;
+    const boards = await loadOperationsBoards(token, userId, organizationId);
+    cards = boards.purchase.cards;
   } catch (e) {
     loadError = publicPageLoadMessage(
       "dashboard/compras",
@@ -47,7 +33,7 @@ async function ComprasDataSection({
     );
   }
 
-  if (loadError || !boards) {
+  if (loadError || !cards) {
     return (
       <UserFeedback title="Não foi possível carregar as compras">
         {loadError ?? "Não foi possível carregar as compras agora. Tente de novo em instantes."}
@@ -55,7 +41,7 @@ async function ComprasDataSection({
     );
   }
 
-  return <ComprasPageClient summaries={summaries} rows={rows} boards={boards} />;
+  return <ComprasPageClient cards={cards} />;
 }
 
 export const metadata: Metadata = {
@@ -86,8 +72,8 @@ export default async function ComprasPage() {
             Compras
           </h1>
           <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-[var(--muted-foreground)]">
-            Análise por fornecedor e kanban de reposição. Pausados ficam ocultos
-            por padrão.
+            Kanban de compras agrupado por fornecedor — arraste um card para
+            avançar a etapa de compra dos produtos daquele fornecedor.
           </p>
         </div>
       </header>
