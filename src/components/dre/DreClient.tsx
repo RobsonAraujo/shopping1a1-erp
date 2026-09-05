@@ -51,7 +51,6 @@ import {
 import type { DreEditableLineKey } from "@/lib/dre/dre-calculations";
 import { downloadDreYearCsv } from "@/lib/dre/dre-export-csv";
 import {
-  DEFAULT_DRE_VISIBILITY,
   dreEditableLineLabel,
   type DreVisibilitySettings,
 } from "@/lib/dre/dre-table-rows";
@@ -170,11 +169,19 @@ function collectSyncAdjustments(
   return items;
 }
 
-export function DreClient() {
+export function DreClient({
+  initialYear,
+  initialData,
+  initialDisplaySettings,
+}: {
+  initialYear: number;
+  initialData: DreYearView;
+  initialDisplaySettings: DreVisibilitySettings;
+}) {
   const currentYear = useMemo(() => getZonedYearMonth().year, []);
-  const [year, setYear] = useState(currentYear);
-  const [data, setData] = useState<DreYearView | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [year, setYear] = useState(initialYear);
+  const [data, setData] = useState<DreYearView | null>(initialData);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
@@ -204,9 +211,8 @@ export function DreClient() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [cadastroOpen, setCadastroOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [displaySettings, setDisplaySettings] = useState<DreVisibilitySettings>(
-    DEFAULT_DRE_VISIBILITY,
-  );
+  const [displaySettings, setDisplaySettings] =
+    useState<DreVisibilitySettings>(initialDisplaySettings);
   const [reconcileOpen, setReconcileOpen] = useState(false);
   const [reconciliationBusy, setReconciliationBusy] = useState(false);
   const [reconcileAfterSync, setReconcileAfterSync] = useState(false);
@@ -214,6 +220,9 @@ export function DreClient() {
   const syncControllersRef = useRef<Map<number, AbortController>>(new Map());
   /** true enquanto um "Sincronizar tudo" cancelado não deve puxar o próximo mês da fila. */
   const syncAllCancelledRef = useRef(false);
+  /** Ano inicial já chega via prop (carregado no servidor) — só refaz a busca
+   * quando o usuário troca o ano. */
+  const skipNextYearFetch = useRef(true);
 
   const yearOptions = useMemo(
     () =>
@@ -269,6 +278,10 @@ export function DreClient() {
   }, []);
 
   useEffect(() => {
+    if (skipNextYearFetch.current) {
+      skipNextYearFetch.current = false;
+      return;
+    }
     void loadYear(year);
   }, [year, loadYear]);
 
@@ -276,24 +289,6 @@ export function DreClient() {
     setSelectedMonth(null);
     setSessionAdjustedByMonth({});
   }, [year]);
-
-  // Preferência de exibição por organização — independente do ano, busca 1x.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/dre/display-settings");
-        if (!res.ok || cancelled) return;
-        const json = (await res.json()) as DreVisibilitySettings;
-        if (!cancelled) setDisplaySettings(json);
-      } catch {
-        // Preferência puramente visual — se falhar, fica no default (tudo visível).
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const toggleDisplaySetting = useCallback(
     (key: keyof DreVisibilitySettings) => {

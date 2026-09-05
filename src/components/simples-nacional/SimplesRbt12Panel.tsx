@@ -122,7 +122,7 @@ export function SimplesRbt12Panel({
             {formatFinancialPercent(aliquotaEfetivaNominal)}
             {simplesAliquotaEfetivaPercent != null &&
             Math.abs(simplesAliquotaEfetivaPercent - aliquotaEfetivaNominal) > 0.5 ? (
-              <span className="ml-2 text-xs font-normal text-amber-700 dark:text-amber-300">
+              <span className="ml-2 text-xs font-normal text-amber-700">
                 (configurada: {formatFinancialPercent(simplesAliquotaEfetivaPercent)})
               </span>
             ) : null}

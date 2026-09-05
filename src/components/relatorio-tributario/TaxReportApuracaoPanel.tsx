@@ -331,12 +331,12 @@ export function TaxReportApuracaoPanel({
 
       {apuracao.icmsStRecuperavelEstimado &&
       apuracao.icmsStRecuperavelEstimado > 0 ? (
-        <Card className="border-emerald-200 bg-emerald-50/50 p-4 text-sm dark:border-emerald-900 dark:bg-emerald-950/20">
-          <p className="font-medium text-emerald-900 dark:text-emerald-200">
+        <Card className="border-emerald-200 bg-emerald-50/50 p-4 text-sm">
+          <p className="font-medium text-emerald-900">
             ICMS-ST recuperável estimado:{" "}
             {formatFinancialMoney(apuracao.icmsStRecuperavelEstimado)}
           </p>
-          <p className="mt-1 text-xs text-emerald-800 dark:text-emerald-300">
+          <p className="mt-1 text-xs text-emerald-800">
             Produtos comprados com ICMS-ST e vendidos para outro estado —
             nesses casos o fato gerador presumido (venda dentro da UF de
             origem) não se confirma, e o ICMS-ST pago na entrada é, em tese,
@@ -348,11 +348,11 @@ export function TaxReportApuracaoPanel({
       ) : null}
 
       {diag.linhasSemCustoCadastrado > 0 ? (
-        <Card className="border-amber-200 bg-amber-50/50 p-4 text-sm dark:border-amber-900 dark:bg-amber-950/20">
-          <p className="font-medium text-amber-900 dark:text-amber-200">
+        <Card className="border-amber-200 bg-amber-50/50 p-4 text-sm">
+          <p className="font-medium text-amber-900">
             Créditos possivelmente subestimados
           </p>
-          <p className="mt-1 text-xs text-amber-800 dark:text-amber-300">
+          <p className="mt-1 text-xs text-amber-800">
             {diag.linhasSemCustoCadastrado} venda
             {diag.linhasSemCustoCadastrado === 1 ? "" : "s"} (
             {formatFinancialPercent(pctSemCusto)} da receita) sem custo NF

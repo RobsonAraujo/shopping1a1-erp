@@ -404,7 +404,7 @@ function AdjustedBadge({
   return (
     <span className="inline-flex items-center gap-0.5">
       <span
-        className="rounded bg-amber-100 px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-950/60 dark:text-amber-200"
+        className="rounded bg-amber-100 px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-amber-800"
         title="Valor ajustado manualmente após o último sync"
       >
         ajustado
@@ -412,7 +412,7 @@ function AdjustedBadge({
       {onRestore ? (
         <button
           type="button"
-          className="inline-flex size-5 items-center justify-center rounded text-amber-800 hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)] dark:text-amber-200 dark:hover:bg-amber-950/60"
+          className="inline-flex size-5 items-center justify-center rounded text-amber-800 hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]"
           title="Restaurar valor do último sync"
           aria-label="Restaurar valor do último sync"
           onClick={(e) => {
@@ -683,7 +683,7 @@ function DreInlineMoneyCell({
             {adjusted && onRestore ? (
               <button
                 type="button"
-                className="inline-flex w-full items-center justify-center gap-1.5 text-sm font-medium text-amber-800 dark:text-amber-200"
+                className="inline-flex w-full items-center justify-center gap-1.5 text-sm font-medium text-amber-800"
                 onClick={() => {
                   cancelEditing();
                   onRestore();
@@ -825,7 +825,7 @@ function DreInlineMoneyCell({
         className={cn(
           "whitespace-nowrap text-[12.5px] font-bold tabular-nums leading-tight",
           muted && "text-[var(--muted-foreground)]",
-          adjusted && "text-amber-900 dark:text-amber-200",
+          adjusted && "text-amber-900",
           !muted && !adjusted && valueToneClass(displayAmount),
           (!disabled || onAudit) &&
             "cursor-pointer rounded-sm hover:bg-[var(--muted)]",
@@ -2817,16 +2817,16 @@ function DreStatementPanel({
         className={cn(
           "overflow-hidden rounded-2xl border-2",
           isLoss
-            ? "border-rose-300 dark:border-rose-900"
-            : "border-emerald-300 dark:border-emerald-900",
+            ? "border-rose-300"
+            : "border-emerald-300",
         )}
       >
         <div
           className={cn(
             "flex items-center justify-between gap-3 px-4 py-3.5",
             isLoss
-              ? "bg-rose-50 dark:bg-rose-950/30"
-              : "bg-emerald-50 dark:bg-emerald-950/30",
+              ? "bg-rose-50"
+              : "bg-emerald-50",
           )}
         >
           <div className="flex min-w-0 items-center gap-2.5">
@@ -2834,8 +2834,8 @@ function DreStatementPanel({
               className={cn(
                 "flex size-8 shrink-0 items-center justify-center rounded-lg",
                 isLoss
-                  ? "bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-200"
-                  : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-200",
+                  ? "bg-rose-100 text-rose-700"
+                  : "bg-emerald-100 text-emerald-700",
               )}
             >
               <TrendingUp className="size-4" aria-hidden />

@@ -229,7 +229,7 @@ export function RevenuePotentialTableDesktop({
               <td className="py-2 pr-3 text-right text-[var(--muted-foreground)]">
                 {fmtBrl(row.currentMonthlyRevenue)}
               </td>
-              <td className="py-2 pr-3 text-right font-medium text-emerald-700 dark:text-emerald-400">
+              <td className="py-2 pr-3 text-right font-medium text-emerald-700">
                 {fmtBrl(row.effectiveGap)}
               </td>
               <td className="py-2 text-right">

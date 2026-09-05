@@ -23,22 +23,22 @@ const SECTION_TONES: Record<
   { icon: string; border: string; chip: string; chipHover: string }
 > = {
   sky: {
-    icon: "bg-sky-100 text-sky-900 dark:bg-sky-950/50 dark:text-sky-200",
-    border: "border-l-4 border-l-sky-400 dark:border-l-sky-600",
-    chip: "border-sky-200/80 bg-sky-50 text-sky-900 dark:border-sky-900/60 dark:bg-sky-950/40 dark:text-sky-100",
-    chipHover: "hover:bg-sky-100 dark:hover:bg-sky-950/70",
+    icon: "bg-sky-100 text-sky-900",
+    border: "border-l-4 border-l-sky-400",
+    chip: "border-sky-200/80 bg-sky-50 text-sky-900",
+    chipHover: "hover:bg-sky-100",
   },
   emerald: {
-    icon: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200",
-    border: "border-l-4 border-l-emerald-400 dark:border-l-emerald-600",
-    chip: "border-emerald-200/80 bg-emerald-50 text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-100",
-    chipHover: "hover:bg-emerald-100 dark:hover:bg-emerald-950/70",
+    icon: "bg-emerald-100 text-emerald-900",
+    border: "border-l-4 border-l-emerald-400",
+    chip: "border-emerald-200/80 bg-emerald-50 text-emerald-900",
+    chipHover: "hover:bg-emerald-100",
   },
   amber: {
-    icon: "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200",
-    border: "border-l-4 border-l-amber-400 dark:border-l-amber-600",
-    chip: "border-amber-200/80 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100",
-    chipHover: "hover:bg-amber-100 dark:hover:bg-amber-950/70",
+    icon: "bg-amber-100 text-amber-900",
+    border: "border-l-4 border-l-amber-400",
+    chip: "border-amber-200/80 bg-amber-50 text-amber-900",
+    chipHover: "hover:bg-amber-100",
   },
 };
 

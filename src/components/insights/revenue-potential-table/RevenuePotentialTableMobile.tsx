@@ -182,7 +182,7 @@ export function RevenuePotentialTableMobile({
                 </div>
                 <div className="col-span-2">
                   <div className="text-[var(--muted-foreground)]">Gap</div>
-                  <div className="font-medium text-emerald-700 dark:text-emerald-400">
+                  <div className="font-medium text-emerald-700">
                     {fmtBrl(row.effectiveGap)}
                   </div>
                 </div>

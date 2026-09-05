@@ -809,7 +809,7 @@ export function FinancialEvaluationClient() {
                     )}
                   </p>
                   {minPriceStale ? (
-                    <p className="text-xs text-amber-700 dark:text-amber-500">
+                    <p className="text-xs text-amber-700">
                       Meta alterada — atualize os preços mínimos com taxa e
                       frete ML.
                     </p>
@@ -966,15 +966,15 @@ function MarginPriceSuggestion({
 
   if (refining) {
     return (
-      <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 px-3 py-3 text-sm dark:border-sky-800 dark:bg-sky-950/30">
-        <p className="font-medium text-sky-900 dark:text-sky-100">
+      <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 px-3 py-3 text-sm">
+        <p className="font-medium text-sky-900">
           Sugestão de preço
         </p>
         <div className="mt-2 space-y-2">
-          <div className="h-4 w-full max-w-md animate-pulse rounded bg-sky-200/80 dark:bg-sky-800/50" />
-          <div className="h-3 w-48 animate-pulse rounded bg-sky-200/60 dark:bg-sky-800/40" />
+          <div className="h-4 w-full max-w-md animate-pulse rounded bg-sky-200/80" />
+          <div className="h-3 w-48 animate-pulse rounded bg-sky-200/60" />
         </div>
-        <p className="mt-2 text-xs text-sky-800 dark:text-sky-200">
+        <p className="mt-2 text-xs text-sky-800">
           Consultando taxa e frete ML…
         </p>
       </div>
@@ -1505,7 +1505,7 @@ function FinancialDetailModal({
                           "font-semibold",
                         line.key === "ads" && "text-[var(--muted-foreground)]",
                         line.key === "mlFeeRebate" &&
-                          "text-emerald-700 dark:text-emerald-400",
+                          "text-emerald-700",
                       )}
                     >
                       <td className="py-2 pr-4">{line.label}</td>
@@ -1523,7 +1523,7 @@ function FinancialDetailModal({
           ) : null}
 
           <div className="mt-6 space-y-3 border-t border-[var(--border)] pt-6">
-            <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-100">
+            <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
               {row.isKitComposition && row.kitComponents ? (
                 <>
                   Anúncio &quot;kit&quot; sem SKU próprio — custo e imposto calculados a

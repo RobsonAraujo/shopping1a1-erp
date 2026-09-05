@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useMemo, useState } from "react";
 import Image from "next/image";
 import { ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { DndContext, DragOverlay, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
@@ -34,21 +34,19 @@ import { filterByItemListSearch } from "@/lib/item-list-search";
 import { readApiError } from "@/lib/api/api-client-error";
 import { useDndSensors } from "@/hooks/use-dnd-sensors";
 import { useDropHighlight } from "@/hooks/use-drop-highlight";
+import type {
+  AssignedProduct,
+  SupplierRow,
+  UnassignedProduct,
+} from "@/lib/fornecedores/fornecedores-data";
 import { cn } from "@/lib/utils";
 
-export type SupplierRow = {
-  id: string;
-  name: string;
-  active: boolean;
-  productCount: number;
-};
+export type { SupplierRow } from "@/lib/fornecedores/fornecedores-data";
 
 /** Sentinela de id pro drop-target da caixa "sem fornecedor" — nunca colide
  * com um id real de fornecedor (cuid). */
 const UNASSIGNED_DROP_ID = "unassigned";
 
-type UnassignedProduct = { mlItemId: string; sku: string | null; imageUrl: string | null };
-type AssignedProduct = { mlItemId: string; sku: string | null; supplierId: string };
 type DraggedProduct = UnassignedProduct | Pick<AssignedProduct, "mlItemId" | "sku">;
 
 type FormState = { name: string; active: boolean };
@@ -98,9 +96,17 @@ function DroppableUnassignedTray({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function FornecedoresClient() {
-  const [suppliers, setSuppliers] = useState<SupplierRow[]>([]);
-  const [loading, setLoading] = useState(true);
+export function FornecedoresClient({
+  initialSuppliers,
+  initialUnassignedProducts,
+  initialAssignedProducts,
+}: {
+  initialSuppliers: SupplierRow[];
+  initialUnassignedProducts: UnassignedProduct[];
+  initialAssignedProducts: AssignedProduct[];
+}) {
+  const [suppliers, setSuppliers] = useState<SupplierRow[]>(initialSuppliers);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [modal, setModal] = useState<
@@ -109,15 +115,19 @@ export function FornecedoresClient() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [pendingDeactivate, setPendingDeactivate] = useState<SupplierRow | null>(null);
-  const [unassignedProducts, setUnassignedProducts] = useState<UnassignedProduct[]>([]);
-  const [loadingUnassigned, setLoadingUnassigned] = useState(true);
-  const [assignedProducts, setAssignedProducts] = useState<AssignedProduct[]>([]);
+  const [unassignedProducts, setUnassignedProducts] =
+    useState<UnassignedProduct[]>(initialUnassignedProducts);
+  const [assignedProducts, setAssignedProducts] =
+    useState<AssignedProduct[]>(initialAssignedProducts);
   const [assignError, setAssignError] = useState<string | null>(null);
   const [productSearchQuery, setProductSearchQuery] = useState("");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const sensors = useDndSensors();
 
+  // Recarrega só a lista de fornecedores após criar/editar/desativar um —
+  // produtos vinculados/sem vínculo mudam por drag-and-drop (estado local
+  // otimista, não por refetch).
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -135,43 +145,6 @@ export function FornecedoresClient() {
       setLoading(false);
     }
   }, []);
-
-  const loadUnassigned = useCallback(async () => {
-    setLoadingUnassigned(true);
-    try {
-      const res = await fetch("/api/products/unassigned");
-      if (!res.ok) {
-        setAssignError(await readApiError(res, "unassigned_products_load_failed"));
-        return;
-      }
-      const json = (await res.json()) as { products: UnassignedProduct[] };
-      setUnassignedProducts(json.products);
-    } catch {
-      setAssignError("Falha de rede ao carregar produtos sem fornecedor.");
-    } finally {
-      setLoadingUnassigned(false);
-    }
-  }, []);
-
-  const loadAssigned = useCallback(async () => {
-    try {
-      const res = await fetch("/api/products/assigned");
-      if (!res.ok) {
-        setAssignError(await readApiError(res, "assigned_products_load_failed"));
-        return;
-      }
-      const json = (await res.json()) as { products: AssignedProduct[] };
-      setAssignedProducts(json.products);
-    } catch {
-      setAssignError("Falha de rede ao carregar produtos vinculados.");
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-    void loadUnassigned();
-    void loadAssigned();
-  }, [load, loadUnassigned, loadAssigned]);
 
   const assignedBySupplierId = useMemo(() => {
     const map = new Map<string, AssignedProduct[]>();
@@ -379,7 +352,7 @@ export function FornecedoresClient() {
         </Button>
       </div>
 
-      {!loadingUnassigned && unassignedProducts.length > 0 ? (
+      {unassignedProducts.length > 0 ? (
         <Card className="space-y-2 p-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
             Produtos sem fornecedor ({unassignedProducts.length}) — arraste para um

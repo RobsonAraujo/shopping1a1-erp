@@ -45,9 +45,9 @@ const loadSellerProfile = cache(async (token: string) =>
 );
 
 const REPUTATION_BADGE_CLASS: Record<SellerReputationBadge["variant"], string> = {
-  success: "border-emerald-300 bg-[var(--card)] text-emerald-800 dark:border-emerald-800 dark:text-emerald-300",
-  warning: "border-amber-300 bg-[var(--card)] text-amber-800 dark:border-amber-800 dark:text-amber-300",
-  destructive: "border-rose-300 bg-[var(--card)] text-rose-800 dark:border-rose-800 dark:text-rose-300",
+  success: "border-emerald-300 bg-[var(--card)] text-emerald-800",
+  warning: "border-amber-300 bg-[var(--card)] text-amber-800",
+  destructive: "border-rose-300 bg-[var(--card)] text-rose-800",
 };
 
 function ReputationPill({ badge }: { badge: SellerReputationBadge }) {

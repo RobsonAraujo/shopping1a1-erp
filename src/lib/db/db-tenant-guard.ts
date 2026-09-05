@@ -2,10 +2,9 @@ import { Prisma } from "@/generated/prisma";
 
 /**
  * Modelos cujas queries já foram escopadas por `organizationId` (ver
- * docs/architecture/saas-migration.md). Cresce conforme mais módulos da
- * Fase 5 forem escopados — só entra aqui depois que TODO ponto de leitura em
- * lote do modelo já passa `organizationId` no `where`, senão o guard quebra
- * features que hoje funcionam (mesmo sem isolamento real ainda).
+ * docs/architecture/tenant-data-model.md). Só entra aqui depois que TODO
+ * ponto de leitura em lote do modelo já passa `organizationId` no `where`,
+ * senão o guard quebra features que hoje funcionam.
  */
 const TENANT_SCOPED_MODELS = new Set([
   "Product",
@@ -36,7 +35,7 @@ const TENANT_SCOPED_MODELS = new Set([
  * `TaxReportMonthSnapshot` e `RevenueSimulation` ficam de fora de propósito:
  * são escopadas por `sellerId` (não `organizationId`), um proxy válido — 1
  * seller ML pertence a no máximo 1 org (`OrganizationMlSeller.mlUserId` é
- * @unique). Ver docs/architecture/saas-migration.md ("Parcial ML").
+ * @unique). Ver docs/architecture/tenant-data-model.md ("Parcial ML").
  */
 
 /** Operações em lote — onde "esqueci o filtro" pode vazar/apagar N linhas de outra org de uma vez. */

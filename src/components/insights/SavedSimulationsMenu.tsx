@@ -312,7 +312,7 @@ export function SavedSimulationsMenu({
         onClick={handleSaveClick}
         className={cn(
           savedFlash &&
-            "bg-emerald-600 text-white hover:bg-emerald-600 dark:bg-emerald-500 dark:hover:bg-emerald-500",
+            "bg-emerald-600 text-white hover:bg-emerald-600",
         )}
       >
         {savedFlash ? (

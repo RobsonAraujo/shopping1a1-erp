@@ -6,6 +6,7 @@ import {
 import { recordCatalogPollRun } from "@/lib/catalog-report/catalog-competition-poll-stats";
 import { resolveSellerAccessToken } from "@/lib/mercadolibre/persist-seller-tokens";
 import { logServerError } from "@/lib/infra/server-public-error";
+import { authorizeBearerSecret } from "@/lib/api/api-auth";
 import { prisma } from "@/lib/db/db";
 
 /**
@@ -20,16 +21,8 @@ import { prisma } from "@/lib/db/db";
  */
 const CRON_BATCH_SIZE = 10;
 
-function authorizeCron(request: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET?.trim();
-  if (!secret) return false;
-  const auth = request.headers.get("authorization") ?? "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-  return token.length > 0 && token === secret;
-}
-
 export async function POST(request: NextRequest) {
-  if (!authorizeCron(request)) {
+  if (!authorizeBearerSecret(request, process.env.CRON_SECRET)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -33,6 +33,7 @@ import {
   fetchOperationalListingIds,
   fetchUnitsSoldForItemsInWindowBatched,
 } from "@/lib/mercadolibre/api";
+import { mapWithConcurrency } from "@/lib/mercadolibre/concurrency";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { getItemSku, getSkuSupplier, isKitItem } from "@/lib/mercadolibre/item-sku";
 import { loadSupplierNamesByMlItemId } from "@/lib/products/product-resolver";
@@ -44,6 +45,12 @@ import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
 import { computeStockPlanningDisplay } from "@/lib/compras/stock-planning";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import type { StockPlanningDisplay } from "@/lib/compras/stock-planning";
+
+/** Cada item do board sincroniza de forma independente (auto-completar ou
+ * criar ciclo) — rodar em paralelo, com um teto, em vez de um `for await`
+ * sequencial, evita que abrir o board vire N round-trips de banco em série
+ * (N = itens ativos do seller) a cada carregamento. */
+const SYNC_CONCURRENCY = 8;
 
 async function ensureListingsForItems(
   organizationId: string,
@@ -422,7 +429,7 @@ export async function syncPurchaseCyclesForItems(
     "purchase",
   );
 
-  for (const ctx of contexts) {
+  await mapWithConcurrency(contexts, SYNC_CONCURRENCY, async (ctx) => {
     const { active, latestCompleted } =
       cycleMap.get(ctx.item.id) ?? { active: null, latestCompleted: null };
     const snapshot = snapshotForItem(
@@ -433,7 +440,7 @@ export async function syncPurchaseCyclesForItems(
 
     if (active) {
       await maybeAutoCompletePurchaseCycle(organizationId, active, ctx, snapshot);
-      continue;
+      return;
     }
 
     const shouldCreate = shouldCreatePurchaseCycle(
@@ -446,10 +453,10 @@ export async function syncPurchaseCyclesForItems(
       latestCompleted ? toCycleRecord(latestCompleted) : null,
     );
 
-    if (!shouldCreate || !ctx.item.id.trim()) continue;
+    if (!shouldCreate || !ctx.item.id.trim()) return;
 
     await createCycleForItem(organizationId, "purchase", ctx, snapshot, "attention");
-  }
+  });
 }
 
 export async function syncFullCyclesForItems(
@@ -485,7 +492,7 @@ export async function syncFullCyclesForItems(
     "full",
   );
 
-  for (const ctx of contexts) {
+  await mapWithConcurrency(contexts, SYNC_CONCURRENCY, async (ctx) => {
     const { active, latestCompleted } =
       cycleMap.get(ctx.item.id) ?? { active: null, latestCompleted: null };
     const snapshot = snapshotForItem(
@@ -496,7 +503,7 @@ export async function syncFullCyclesForItems(
 
     if (active) {
       await maybeAutoCompleteFullCycle(organizationId, active, ctx, snapshot);
-      continue;
+      return;
     }
 
     const shouldCreate = shouldCreateFullCycle(
@@ -507,10 +514,10 @@ export async function syncFullCyclesForItems(
       latestCompleted ? toCycleRecord(latestCompleted) : null,
     );
 
-    if (!shouldCreate || !ctx.item.id.trim()) continue;
+    if (!shouldCreate || !ctx.item.id.trim()) return;
 
     await createCycleForItem(organizationId, "full", ctx, snapshot, "attention");
-  }
+  });
 }
 
 export async function syncOperationCyclesForItems(

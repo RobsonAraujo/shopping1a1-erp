@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db/db";
 import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 import { requireOrganization } from "@/lib/api/api-auth";
 import { parseJsonBody } from "@/lib/api/api-validation";
+import { loadSuppliers } from "@/lib/fornecedores/fornecedores-data";
 
 const supplierWriteSchema = z.object({
   name: z.string().trim().min(1, "Informe o nome do fornecedor"),
@@ -20,24 +21,8 @@ export async function GET(request: NextRequest) {
   const onlyActive = request.nextUrl.searchParams.get("active") === "true";
 
   try {
-    const suppliers = await prisma.supplier.findMany({
-      where: { organizationId, ...(onlyActive ? { active: true } : {}) },
-      orderBy: { name: "asc" },
-      select: {
-        id: true,
-        name: true,
-        active: true,
-        _count: { select: { products: true } },
-      },
-    });
-    return NextResponse.json({
-      suppliers: suppliers.map((s) => ({
-        id: s.id,
-        name: s.name,
-        active: s.active,
-        productCount: s._count.products,
-      })),
-    });
+    const suppliers = await loadSuppliers(organizationId, { onlyActive });
+    return NextResponse.json({ suppliers });
   } catch (e) {
     logServerError("api/suppliers GET", e);
     return NextResponse.json(apiErrorPayload(e, "suppliers_load_failed"), {

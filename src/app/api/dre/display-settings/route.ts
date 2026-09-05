@@ -4,19 +4,10 @@ import { prisma } from "@/lib/db/db";
 import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 import { requireOrganization } from "@/lib/api/api-auth";
 import { parseJsonBody } from "@/lib/api/api-validation";
-
-/** Preferências de exibição do DRE — puramente visuais, nunca afetam o cálculo. */
-function settingsResponse(row: {
-  showInvestments: boolean;
-  showNonOperationalOut: boolean;
-  showNonOperationalIn: boolean;
-}) {
-  return {
-    showInvestments: row.showInvestments,
-    showNonOperationalOut: row.showNonOperationalOut,
-    showNonOperationalIn: row.showNonOperationalIn,
-  };
-}
+import {
+  loadDreDisplaySettings,
+  toDreVisibilitySettings,
+} from "@/lib/dre/dre-display-settings-data";
 
 export async function GET() {
   const auth = await requireOrganization();
@@ -25,12 +16,8 @@ export async function GET() {
   }
 
   try {
-    const row = await prisma.dreDisplaySettings.upsert({
-      where: { organizationId: auth.ctx.organizationId },
-      create: { organizationId: auth.ctx.organizationId },
-      update: {},
-    });
-    return NextResponse.json(settingsResponse(row));
+    const settings = await loadDreDisplaySettings(auth.ctx.organizationId);
+    return NextResponse.json(settings);
   } catch (e) {
     logServerError("api/dre/display-settings GET", e);
     return NextResponse.json(
@@ -81,7 +68,7 @@ export async function PATCH(request: NextRequest) {
           : {}),
       },
     });
-    return NextResponse.json(settingsResponse(row));
+    return NextResponse.json(toDreVisibilitySettings(row));
   } catch (e) {
     logServerError("api/dre/display-settings PATCH", e);
     return NextResponse.json(

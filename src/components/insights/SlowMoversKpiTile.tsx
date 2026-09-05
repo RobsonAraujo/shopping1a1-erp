@@ -9,7 +9,7 @@ import type { SlowMoverRow } from "@/lib/insights/types";
 export function SlowMoversKpiTile({ allRows }: { allRows: SlowMoverRow[] }) {
   const [threshold] = useSlowMoverThreshold();
   const slowCount = filterSlowMoverRows(allRows, threshold).length;
-  const tone = slowCount === 0 ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400";
+  const tone = slowCount === 0 ? "text-emerald-700" : "text-amber-700";
 
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/30 px-4 py-3">

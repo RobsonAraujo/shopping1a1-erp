@@ -87,9 +87,9 @@ async function InsightsDataSection({
   }>;
 
   const toneStyles: Record<string, string> = {
-    success: "text-emerald-700 dark:text-emerald-400",
-    warning: "text-amber-700 dark:text-amber-400",
-    destructive: "text-red-700 dark:text-red-400",
+    success: "text-emerald-700",
+    warning: "text-amber-700",
+    destructive: "text-red-700",
     secondary: "text-[var(--primary)]",
   };
 

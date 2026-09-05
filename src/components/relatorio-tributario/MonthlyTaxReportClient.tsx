@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw, Scale, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -68,10 +68,22 @@ function SummaryCard({
   );
 }
 
-export function MonthlyTaxReportClient() {
+export function MonthlyTaxReportClient({
+  initialYear,
+  initialMonth,
+  initialCompanyTaxRegime,
+  initialFixedCostItems,
+  initialReport,
+}: {
+  initialYear: number;
+  initialMonth: number;
+  initialCompanyTaxRegime: string | null;
+  initialFixedCostItems: TaxFixedCostItemRow[];
+  initialReport: TaxReportPayload | null;
+}) {
   const now = getZonedYearMonth();
-  const [year, setYear] = useState(now.year);
-  const [month, setMonth] = useState(now.month);
+  const [year, setYear] = useState(initialYear);
+  const [month, setMonth] = useState(initialMonth);
   const [mode, setMode] = useState<"month" | "period">("month");
   const [fromDate, setFromDate] = useState(todayYmdLocal);
   const [toDate, setToDate] = useState(todayYmdLocal);
@@ -79,16 +91,19 @@ export function MonthlyTaxReportClient() {
   const [missingMonths, setMissingMonths] = useState<
     { year: number; month: number }[]
   >([]);
-  const [report, setReport] = useState<TaxReportPayload | null>(null);
+  const [report, setReport] = useState<TaxReportPayload | null>(initialReport);
   const [loading, setLoading] = useState(false);
   const [generateProgress, setGenerateProgress] =
     useState<TaxReportProgressState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [fixedCostModalOpen, setFixedCostModalOpen] = useState(false);
-  const [fixedCostItems, setFixedCostItems] = useState<TaxFixedCostItemRow[]>([]);
-  const [companyTaxRegime, setCompanyTaxRegime] = useState<string | null>(null);
+  const [fixedCostItems, setFixedCostItems] =
+    useState<TaxFixedCostItemRow[]>(initialFixedCostItems);
+  const [companyTaxRegime] = useState<string | null>(initialCompanyTaxRegime);
   const isPeriodMode = mode === "period";
+  const skipNextFixedCostFetch = useRef(true);
+  const skipNextReportFetch = useRef(true);
 
   const applyPreset = useCallback((days: 7 | 15 | 30) => {
     const { from, to } = lastDaysYmdRange(days);
@@ -121,6 +136,12 @@ export function MonthlyTaxReportClient() {
   }, [year, month]);
 
   useEffect(() => {
+    // O ano/mês inicial já chega via prop (carregado no servidor) — só refaz
+    // a busca quando o usuário troca o período.
+    if (skipNextFixedCostFetch.current) {
+      skipNextFixedCostFetch.current = false;
+      return;
+    }
     void loadFixedCostItems();
   }, [loadFixedCostItems]);
 
@@ -205,23 +226,13 @@ export function MonthlyTaxReportClient() {
   );
 
   useEffect(() => {
+    // Idem: relatório do ano/mês inicial já vem via prop.
+    if (skipNextReportFetch.current) {
+      skipNextReportFetch.current = false;
+      return;
+    }
     void loadReport();
   }, [loadReport]);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/tax-config")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((json: { company?: { taxRegime?: string } } | null) => {
-        if (!cancelled && json?.company?.taxRegime) {
-          setCompanyTaxRegime(json.company.taxRegime);
-        }
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const years = useMemo(() => {
     const current = now.year;

@@ -8,14 +8,14 @@ Stack: **Next.js**, **PostgreSQL**, **Prisma**, Mercado Livre OAuth.
 
 ## Architecture
 
-Cross-cutting design, SaaS migration plans, and feature impact tracking live in **[docs/](docs/README.md)**.
+Cross-cutting design docs live in **[docs/](docs/README.md)**.
 
 Key documents:
 
-- [SaaS multi-tenant migration](docs/architecture/saas-migration.md) — current single-tenant state, target model, roadmap
-- [Tenant data model (proposal)](docs/architecture/tenant-data-model.md) — `Organization`, `User`, ML linkage
+- [Tenant data model](docs/architecture/tenant-data-model.md) — multi-tenancy (migration complete): `Organization`, `User`, `OrganizationMlSeller`, isolation guard-rail, conventions for new code
+- [Scale triggers](docs/architecture/saas-scale-triggers.md) — what to change when tenant count or revenue grows
 
-When adding features that touch data, APIs, or auth, update the feature registry in the SaaS migration doc (see [AGENTS.md](AGENTS.md)).
+When adding features that touch data, APIs, or auth, follow the conventions in the tenant data model doc (see [AGENTS.md](AGENTS.md)).
 
 ---
 

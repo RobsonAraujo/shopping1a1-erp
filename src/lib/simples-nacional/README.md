@@ -92,5 +92,5 @@ alíquota efetiva pra todo SKU (o DAS não discrimina por anúncio).
 
 Já nasce tenant-ready — `TaxReportSimulationSnapshot` e
 `SimplesRevenueMonthSnapshot` têm `organizationId` na unique key desde o dia 1
-e estão em `TENANT_SCOPED_MODELS`. Registro completo em
-[`docs/architecture/saas-migration.md`](../../../docs/architecture/saas-migration.md).
+e estão em `TENANT_SCOPED_MODELS`. Modelo completo em
+[`docs/architecture/tenant-data-model.md`](../../../docs/architecture/tenant-data-model.md).

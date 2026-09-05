@@ -230,7 +230,7 @@ export function RevenuePotentialView({ rows }: { rows: RevenuePotentialRow[] }) 
       key: "gap",
       label: "Oportunidade (gap)",
       value: fmtBrl(totals.totalGap),
-      tone: "text-emerald-700 dark:text-emerald-400",
+      tone: "text-emerald-700",
     },
   ];
 
@@ -245,8 +245,8 @@ export function RevenuePotentialView({ rows }: { rows: RevenuePotentialRow[] }) 
   return (
     <div className="space-y-6">
       {hasChanges && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/30">
-          <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
+          <p className="text-sm font-medium text-amber-900">
             {activeSimulation
               ? `Você está editando a simulação salva "${activeSimulation.name}".`
               : "Você está vendo uma simulação: alguns produtos foram editados ou não considerados na análise."}

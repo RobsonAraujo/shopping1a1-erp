@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/db";
 import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
+import { authorizeBearerSecret } from "@/lib/api/api-auth";
 import type { OrganizationStatus } from "@/generated/prisma";
 
 const VALID_STATUSES: OrganizationStatus[] = [
@@ -9,14 +10,6 @@ const VALID_STATUSES: OrganizationStatus[] = [
   "past_due",
   "canceled",
 ];
-
-function authorizeAdmin(request: NextRequest): boolean {
-  const secret = process.env.ADMIN_SECRET?.trim();
-  if (!secret) return false;
-  const auth = request.headers.get("authorization") ?? "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-  return token.length > 0 && token === secret;
-}
 
 /**
  * Troca manual do status de pagamento de uma organização — sem gateway de
@@ -31,7 +24,7 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (!authorizeAdmin(request)) {
+  if (!authorizeBearerSecret(request, process.env.ADMIN_SECRET)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

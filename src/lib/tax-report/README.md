@@ -61,19 +61,19 @@ O status de contribuinte ICMS vem do campo `taxpayer_type` do `billing_info` do 
 - CBS/IBS 2026: informativo, compensado com PIS/COFINS no mesmo período
 - DRE existente continua com % simplificado por SKU (não substituído)
 
-## Multi-tenant (futuro)
+## Multi-tenant
 
-Impacto SaaS deste módulo (registro completo em [`docs/architecture/saas-migration.md`](../../../docs/architecture/saas-migration.md)):
+Migração concluída — estado atual deste módulo:
 
-| Aspecto | Hoje | Na migração |
-|---------|------|-------------|
-| Snapshot mensal | `sellerId` + ano/mês — ok para múltiplos sellers ML | Adicionar `organizationId`; unique `(org, seller, year, month)` |
-| Config fiscal | `company_tax_settings.id = "default"` — global | Uma linha por `organizationId` |
-| CMV / produtos | `products.sku` global | `@@unique([organizationId, sku])` |
-| ICMS interno | `icms_internal_rates` global (editável na UI) | Seed global + override por org, se necessário |
-| Geração | `generateMonthlyTaxReport` usa seller da sessão | Resolver org → sellers ML da org |
+| Aspecto | Estado |
+|---------|--------|
+| Snapshot mensal (`TaxReportMonthSnapshot`) | `organizationId` + `sellerId` + ano/mês (`sellerId` mantido — útil se uma org tiver >1 seller ML) |
+| Config fiscal (`CompanyTaxSettings`) | Uma linha por `organizationId`, `@@unique([organizationId])` — sem singleton |
+| CMV / produtos (`Product`) | PK é `mlItemId` (identidade = anúncio ML), escopado por `organizationId`; `sku` é só espelho de exibição |
+| ICMS interno (`IcmsInternalRate`) | Global (tabela nacional, PK `uf`) — sem override por org implementado |
+| Geração | `generateMonthlyTaxReport` resolve o seller a partir da sessão/organização via `requireOrganization()` |
 
-**Ao alterar este módulo:** atualizar o registro em `docs/architecture/saas-migration.md` (template em `docs/templates/feature-saas-impact.md`).
+Modelo completo e convenções para código novo: [`docs/architecture/tenant-data-model.md`](../../../docs/architecture/tenant-data-model.md).
 
 ## Testes
 

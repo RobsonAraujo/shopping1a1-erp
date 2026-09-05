@@ -4,16 +4,15 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
-## SaaS multi-tenant (documentação viva)
+## SaaS multi-tenant
 
-O ERP hoje é **single-tenant** (uma empresa por deployment). A evolução para SaaS está documentada em [`docs/architecture/saas-migration.md`](docs/architecture/saas-migration.md).
+O ERP é **multi-tenant** (migração concluída) — toda tabela de negócio tem `organizationId` obrigatório, com um guard-rail em runtime (`src/lib/db/db-tenant-guard.ts`) recusando queries em lote sem esse filtro. Modelo completo e convenções: [`docs/architecture/tenant-data-model.md`](docs/architecture/tenant-data-model.md).
 
 Ao implementar **feature nova** ou alterar módulo que toca **dados, APIs ou autenticação**:
 
-1. Ler [`docs/architecture/saas-migration.md`](docs/architecture/saas-migration.md)
-2. Adicionar entrada na seção **Registro de features** usando o template em [`docs/templates/feature-saas-impact.md`](docs/templates/feature-saas-impact.md)
-3. Quando o custo for baixo, escrever código **tenant-ready**: passar `organizationId` em funções novas; **não** criar novos singletons (`id: "default"`)
-4. Módulos com README próprio (ex.: `src/lib/tax-report/README.md`) podem ganhar subseção **Multi-tenant (futuro)** se o impacto for específico do domínio
+1. `organizationId` é o primeiro parâmetro obrigatório em toda função nova que toca modelo de negócio; **nunca** criar singletons (`id: "default"`)
+2. Rota de API nova: usar `requireOrganization()` (não `requireAuth()` puro)
+3. Query em lote nova sobre modelo de negócio: `organizationId` no `where` — se o modelo for tenant-scoped, adicioná-lo a `TENANT_SCOPED_MODELS`
 
 Índice geral: [`docs/README.md`](docs/README.md).
 

@@ -132,7 +132,7 @@ export function SimplesSimuladorPanel() {
         empresa nem gera nenhuma obrigação.
       </p>
 
-      <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/60 p-3 text-xs text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+      <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/60 p-3 text-xs text-amber-950">
         <p className="font-medium">Comparação parcial</p>
         <p className="mt-1 leading-relaxed">
           O simulador calcula só PIS/COFINS e ICMS/DIFAL (tributos

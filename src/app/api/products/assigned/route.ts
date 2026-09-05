@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/db/db";
+import { loadAssignedProducts } from "@/lib/fornecedores/fornecedores-data";
 import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 import { requireOrganization } from "@/lib/api/api-auth";
 
@@ -19,16 +19,7 @@ export async function GET() {
   const { organizationId } = auth.ctx;
 
   try {
-    const rows = await prisma.product.findMany({
-      where: { organizationId, supplierId: { not: null } },
-      orderBy: { sku: "asc" },
-      select: { mlItemId: true, sku: true, supplierId: true },
-    });
-    const products = rows.map((p) => ({
-      mlItemId: p.mlItemId,
-      sku: p.sku,
-      supplierId: p.supplierId as string,
-    }));
+    const products = await loadAssignedProducts(organizationId);
     return NextResponse.json({ products });
   } catch (e) {
     logServerError("api/products/assigned GET", e);

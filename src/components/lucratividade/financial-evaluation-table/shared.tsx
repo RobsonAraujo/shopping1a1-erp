@@ -17,7 +17,7 @@ import type { SortDir, SortKey } from "@/components/lucratividade/financial-eval
 export const currentSectionClass = "bg-[var(--muted)]/10";
 
 export const decisionSectionClass =
-  "border-l border-sky-200/90 bg-sky-50/50 px-2 dark:border-sky-800/80 dark:bg-sky-950/25";
+  "border-l border-sky-200/90 bg-sky-50/50 px-2";
 
 export const tableCellPad = "px-3 py-3";
 export const tableHeadPad = "px-3 py-2";
@@ -27,7 +27,7 @@ export function sectionGroupPill(variant: "current" | "decision") {
     "inline-block rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide",
     variant === "current"
       ? "bg-[var(--muted)]/40 text-[var(--muted-foreground)]"
-      : "bg-sky-100 text-sky-900 dark:bg-sky-900/50 dark:text-sky-100",
+      : "bg-sky-100 text-sky-900",
   );
 }
 
@@ -190,7 +190,7 @@ export function StackedMarginCell({
 export function MinPriceCellSkeleton() {
   return (
     <div
-      className="ml-auto h-4 w-16 animate-pulse rounded bg-sky-200/80 dark:bg-sky-800/50"
+      className="ml-auto h-4 w-16 animate-pulse rounded bg-sky-200/80"
       aria-hidden
     />
   );
@@ -255,7 +255,7 @@ export function MinPriceTableCell({
         "font-medium tabular-nums",
         meetsOrBeatsTarget && !needsHigherPrice
           ? "text-emerald-600"
-          : "text-amber-700 dark:text-amber-500",
+          : "text-amber-700",
       )}
       title={`Mínimo para ${formatFinancialPercent(targetMarginPercent)} de ${marginBasisLabel(marginBasis)} · atual ${formatFinancialMoney(row.salePrice)} (${formatFinancialPercent(suggestion.currentMarginPercent)})${suggestion.refined ? " · taxa e frete ML no preço sugerido" : isProportionalFallback ? " · estimativa proporcional (clique em Atualizar)" : " · estimativa proporcional"}`}
     >

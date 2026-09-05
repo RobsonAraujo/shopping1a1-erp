@@ -1,8 +1,33 @@
+import { timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { getValidAccessToken, readSession } from "@/lib/mercadolibre/session";
 import { prisma } from "@/lib/db/db";
 import type { OrganizationStatus } from "@/generated/prisma";
+
+/**
+ * Compara o bearer token do request contra um segredo de env (`CRON_SECRET`,
+ * `ADMIN_SECRET`) em tempo constante — `===` vaza timing information sobre
+ * quantos caracteres iniciais batem, que em tese ajuda um ataque de força
+ * bruta a segredos internos. Baixo risco real (rotas internas, baixo
+ * tráfego), mas o fix é de graça.
+ */
+export function authorizeBearerSecret(
+  request: NextRequest,
+  expected: string | undefined,
+): boolean {
+  const secret = expected?.trim();
+  if (!secret) return false;
+  const auth = request.headers.get("authorization") ?? "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  if (!token) return false;
+
+  const a = Buffer.from(token);
+  const b = Buffer.from(secret);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
 
 export type AuthContext = {
   token: string;

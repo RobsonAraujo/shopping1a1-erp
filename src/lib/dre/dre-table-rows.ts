@@ -690,18 +690,18 @@ export function filterRowsByVisibility(
 }
 
 export const DRE_MONTH_HEADER_COLORS = [
-  "bg-sky-100/90 dark:bg-sky-950/50",
-  "bg-indigo-100/90 dark:bg-indigo-950/50",
-  "bg-violet-100/90 dark:bg-violet-950/50",
-  "bg-fuchsia-100/90 dark:bg-fuchsia-950/50",
-  "bg-pink-100/90 dark:bg-pink-950/50",
-  "bg-rose-100/90 dark:bg-rose-950/50",
-  "bg-orange-100/90 dark:bg-orange-950/50",
-  "bg-amber-100/90 dark:bg-amber-950/50",
-  "bg-lime-100/90 dark:bg-lime-950/50",
-  "bg-emerald-100/90 dark:bg-emerald-950/50",
-  "bg-teal-100/90 dark:bg-teal-950/50",
-  "bg-cyan-100/90 dark:bg-cyan-950/50",
+  "bg-sky-100/90",
+  "bg-indigo-100/90",
+  "bg-violet-100/90",
+  "bg-fuchsia-100/90",
+  "bg-pink-100/90",
+  "bg-rose-100/90",
+  "bg-orange-100/90",
+  "bg-amber-100/90",
+  "bg-lime-100/90",
+  "bg-emerald-100/90",
+  "bg-teal-100/90",
+  "bg-cyan-100/90",
 ] as const;
 
 export function dreMonthHeaderColorClass(month: number): string {

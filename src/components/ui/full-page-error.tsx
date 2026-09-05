@@ -36,9 +36,9 @@ export function FullPageError({
 
       <main className="flex flex-1 items-center justify-center px-4 py-16 sm:px-6">
         <div className="mx-auto flex max-w-lg flex-col items-center text-center">
-          <div className="flex size-16 items-center justify-center rounded-2xl border border-rose-200/90 bg-rose-50/90 shadow-sm dark:border-rose-900/60 dark:bg-rose-950/35 sm:size-20">
+          <div className="flex size-16 items-center justify-center rounded-2xl border border-rose-200/90 bg-rose-50/90 shadow-sm sm:size-20">
             <TriangleAlert
-              className="size-8 text-rose-700 dark:text-rose-200 sm:size-10"
+              className="size-8 text-rose-700 sm:size-10"
               strokeWidth={1.5}
               aria-hidden
             />

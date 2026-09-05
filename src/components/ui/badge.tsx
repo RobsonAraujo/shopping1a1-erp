@@ -15,9 +15,9 @@ const badgeVariants = cva(
         destructive:
           "border-transparent bg-[var(--destructive)] text-[var(--destructive-foreground)] shadow",
         warning:
-          "border-amber-200/80 bg-amber-100 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100",
+          "border-amber-200/80 bg-amber-100 text-amber-950",
         success:
-          "border-emerald-200/80 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100",
+          "border-emerald-200/80 bg-emerald-50 text-emerald-900",
         muted:
           "border-transparent bg-[var(--muted)] text-[var(--muted-foreground)]",
         overdue:
@@ -31,9 +31,9 @@ const badgeVariants = cva(
 );
 
 const BADGE_DOT_CLASS: Partial<Record<NonNullable<BadgeProps["variant"]>, string>> = {
-  destructive: "bg-rose-600 dark:bg-rose-400",
-  warning: "bg-amber-600 dark:bg-amber-400",
-  success: "bg-emerald-600 dark:bg-emerald-400",
+  destructive: "bg-rose-600",
+  warning: "bg-amber-600",
+  success: "bg-emerald-600",
   muted: "bg-[var(--muted-foreground)]",
 };
 

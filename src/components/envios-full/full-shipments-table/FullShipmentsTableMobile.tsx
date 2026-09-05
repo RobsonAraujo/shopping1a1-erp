@@ -75,7 +75,7 @@ export function FullShipmentsTableMobile({
                     ) : null}
                   </div>
                   {shipment.nonComplianceCost > 0 ? (
-                    <p className="mt-0.5 text-[11px] text-amber-700 dark:text-amber-400">
+                    <p className="mt-0.5 text-[11px] text-amber-700">
                       Inclui {formatFinancialMoney(shipment.nonComplianceCost)}{" "}
                       de inconformidade
                     </p>

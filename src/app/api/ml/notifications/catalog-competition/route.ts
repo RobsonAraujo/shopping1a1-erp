@@ -22,7 +22,16 @@ import { isEncryptionKeyConfigured } from "@/lib/infra/app-secret-crypto";
  *
  * ML API transient errors: respond 200 so ML does not retry aggressively; DB errors
  * use 5xx so the notification can be retried.
+ *
+ * No signature/HMAC on this endpoint — ML's notification API doesn't provide one
+ * (the documented mitigation is "always re-fetch the resource with your own
+ * token," which this handler already does for every field it persists). Item ids
+ * and seller ids are effectively public, so a forged-but-well-formed POST for a
+ * real org is possible; `DEBOUNCE_MS` below bounds the damage (repeated POSTs for
+ * the same item within the window skip the outbound ML call entirely) without
+ * needing an ML-side signing scheme that doesn't exist.
  */
+const DEBOUNCE_MS = 30_000;
 function extractItemId(resource: unknown): string | null {
   if (typeof resource !== "string") return null;
   const direct = resource.match(/\/items\/([^/?#]+)/i);
@@ -226,6 +235,26 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const latest = await prisma.catalogCompetitionSnapshot.findFirst({
+    where: { mlItemId: itemId, organizationId },
+    select: { status: true, snapshotAt: true },
+    orderBy: { snapshotAt: "desc" },
+  });
+
+  if (!isDebugSimulation && latest && Date.now() - latest.snapshotAt.getTime() < DEBOUNCE_MS) {
+    webhookLog("debounced", {
+      itemId,
+      mlUserId,
+      lastSnapshotAt: latest.snapshotAt.toISOString(),
+    });
+    return NextResponse.json({
+      ok: true,
+      itemId,
+      mlUserId,
+      debounced: true,
+    });
+  }
+
   let token: string | null = null;
   if (!isDebugSimulation) {
     const storedCredentials = await prisma.mlSellerCredentials.findUnique({
@@ -294,12 +323,6 @@ export async function POST(request: NextRequest) {
   const sellerPrice = extractSellerPrice(pricePayload, itemDetails);
 
   try {
-    const latest = await prisma.catalogCompetitionSnapshot.findFirst({
-      where: { mlItemId: itemId, organizationId },
-      select: { status: true, snapshotAt: true },
-      orderBy: { snapshotAt: "desc" },
-    });
-
     const previousStatus = latest?.status ?? null;
     if (previousStatus === status) {
       webhookLog("unchanged status", {

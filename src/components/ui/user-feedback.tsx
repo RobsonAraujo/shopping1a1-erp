@@ -12,22 +12,22 @@ const TONE_STYLES: Record<
   { wrap: string; icon: string; title: string; body: string }
 > = {
   error: {
-    wrap: "border-rose-200/90 bg-rose-50/90 text-rose-950 dark:border-rose-900/60 dark:bg-rose-950/35 dark:text-rose-50",
-    icon: "bg-rose-100 text-rose-700 dark:bg-rose-900/70 dark:text-rose-200",
-    title: "text-rose-950 dark:text-rose-50",
-    body: "text-rose-800/90 dark:text-rose-100/80",
+    wrap: "border-rose-200/90 bg-rose-50/90 text-rose-950",
+    icon: "bg-rose-100 text-rose-700",
+    title: "text-rose-950",
+    body: "text-rose-800/90",
   },
   warning: {
-    wrap: "border-amber-200/90 bg-amber-50/90 text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-50",
-    icon: "bg-amber-100 text-amber-800 dark:bg-amber-900/70 dark:text-amber-200",
-    title: "text-amber-950 dark:text-amber-50",
-    body: "text-amber-900/85 dark:text-amber-100/80",
+    wrap: "border-amber-200/90 bg-amber-50/90 text-amber-950",
+    icon: "bg-amber-100 text-amber-800",
+    title: "text-amber-950",
+    body: "text-amber-900/85",
   },
   success: {
-    wrap: "border-emerald-200/90 bg-emerald-50/90 text-emerald-950 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-50",
-    icon: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/70 dark:text-emerald-200",
-    title: "text-emerald-950 dark:text-emerald-50",
-    body: "text-emerald-900/85 dark:text-emerald-100/80",
+    wrap: "border-emerald-200/90 bg-emerald-50/90 text-emerald-950",
+    icon: "bg-emerald-100 text-emerald-800",
+    title: "text-emerald-950",
+    body: "text-emerald-900/85",
   },
   info: {
     wrap: "border-[var(--border)] bg-[var(--muted)]/50 text-[var(--foreground)]",

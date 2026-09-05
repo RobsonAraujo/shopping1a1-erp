@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/db/db";
-import { loadListingImageUrlsBySku } from "@/lib/products/product-data";
+import { loadUnassignedProducts } from "@/lib/fornecedores/fornecedores-data";
 import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 import { requireOrganization } from "@/lib/api/api-auth";
 
@@ -20,18 +19,7 @@ export async function GET() {
   const { organizationId } = auth.ctx;
 
   try {
-    const rows = await prisma.product.findMany({
-      where: { organizationId, supplierId: null },
-      orderBy: { sku: "asc" },
-      select: { mlItemId: true, sku: true },
-    });
-    const skus = rows.map((p) => p.sku).filter((s): s is string => s !== null);
-    const imageUrlsBySku = await loadListingImageUrlsBySku(organizationId, skus);
-    const products = rows.map((p) => ({
-      mlItemId: p.mlItemId,
-      sku: p.sku,
-      imageUrl: p.sku ? (imageUrlsBySku.get(p.sku) ?? null) : null,
-    }));
+    const products = await loadUnassignedProducts(organizationId);
     return NextResponse.json({ products });
   } catch (e) {
     logServerError("api/products/unassigned GET", e);

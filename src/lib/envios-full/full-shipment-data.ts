@@ -219,24 +219,6 @@ export async function importFullCollectChargesFromBilling(
   );
 
   const { start, end } = activityMonthBounds(year, month);
-  const replaced = await prisma.fullShipment.deleteMany({
-    where: {
-      organizationId,
-      source: "ml_billing",
-      shippedAt: { gte: start, lte: end },
-    },
-  });
-
-  if (shipments.length === 0) {
-    return {
-      imported: 0,
-      skipped: 0,
-      replaced: replaced.count,
-      foundInBilling: 0,
-      probe,
-      shipments: [],
-    };
-  }
 
   const rowsData = shipments.map((shipment) => {
     const normalized = normalizeImportedShipmentInput({
@@ -273,20 +255,37 @@ export async function importFullCollectChargesFromBilling(
     };
   });
 
+  // Delete-then-recreate roda inteiro numa transação: se qualquer chunk
+  // falhar (timeout, erro de conexão) no meio do loop, o rollback preserva os
+  // envios do mês anterior em vez de deixar a organização com o mês
+  // parcialmente (ou totalmente) sem dados — esses registros alimentam DRE e
+  // Lucratividade a jusante.
   const CREATE_CHUNK = 100;
-  const created: FullShipmentRecord[] = [];
-  for (let i = 0; i < rowsData.length; i += CREATE_CHUNK) {
-    const chunk = rowsData.slice(i, i + CREATE_CHUNK);
-    const rows = await prisma.fullShipment.createManyAndReturn({
-      data: chunk,
+  const { replacedCount, created } = await prisma.$transaction(async (tx) => {
+    const replaced = await tx.fullShipment.deleteMany({
+      where: {
+        organizationId,
+        source: "ml_billing",
+        shippedAt: { gte: start, lte: end },
+      },
     });
-    created.push(...rows.map(toRecord));
-  }
+
+    const created: FullShipmentRecord[] = [];
+    for (let i = 0; i < rowsData.length; i += CREATE_CHUNK) {
+      const chunk = rowsData.slice(i, i + CREATE_CHUNK);
+      const rows = await tx.fullShipment.createManyAndReturn({
+        data: chunk,
+      });
+      created.push(...rows.map(toRecord));
+    }
+
+    return { replacedCount: replaced.count, created };
+  }, { timeout: 60_000 });
 
   return {
     imported: created.length,
     skipped: 0,
-    replaced: replaced.count,
+    replaced: replacedCount,
     foundInBilling: shipments.length,
     probe,
     shipments: created,

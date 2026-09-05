@@ -57,8 +57,8 @@ export function valueToneClass(value: number | null | undefined): string {
   if (value === null || value === undefined) {
     return "text-[var(--muted-foreground)]";
   }
-  if (value > 0) return "text-emerald-800 dark:text-emerald-300";
-  if (value < 0) return "text-rose-800 dark:text-rose-300";
+  if (value > 0) return "text-emerald-800";
+  if (value < 0) return "text-rose-800";
   return "text-[var(--muted-foreground)]";
 }
 
@@ -74,16 +74,16 @@ export const STATUS_PILL_CLASS: Record<
   { wrap: string; dot: string }
 > = {
   danger: {
-    wrap: "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300",
-    dot: "bg-rose-600 dark:bg-rose-400",
+    wrap: "bg-rose-50 text-rose-700",
+    dot: "bg-rose-600",
   },
   warning: {
-    wrap: "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
-    dot: "bg-amber-600 dark:bg-amber-400",
+    wrap: "bg-amber-50 text-amber-700",
+    dot: "bg-amber-600",
   },
   ok: {
-    wrap: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
-    dot: "bg-emerald-600 dark:bg-emerald-400",
+    wrap: "bg-emerald-50 text-emerald-700",
+    dot: "bg-emerald-600",
   },
   neutral: {
     wrap: "bg-[var(--muted)] text-[var(--muted-foreground)]",

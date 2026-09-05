@@ -25,8 +25,8 @@ const CURVE_LABEL: Record<ParetoCurve, string> = {
 };
 
 const CURVE_BADGE_CLASS: Record<ParetoCurve, string> = {
-  A: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
-  B: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
+  A: "bg-emerald-100 text-emerald-800",
+  B: "bg-amber-100 text-amber-800",
   C: "bg-[var(--muted)] text-[var(--muted-foreground)]",
 };
 
