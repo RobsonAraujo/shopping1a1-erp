@@ -21,10 +21,34 @@ import type {
   OperationsBoardCard,
   OperationsBoardsData,
 } from "@/lib/compras/replenishment-cycle-data";
+import { summarizeOperationsCounts } from "@/lib/compras/replenishment-cycle";
 import { filterByItemListSearch } from "@/lib/item-list-search";
 import { useDndSensors } from "@/hooks/use-dnd-sensors";
 import type { OperationCycleKind, ReplenishmentStatus } from "@/generated/prisma/client";
 import { cn } from "@/lib/utils";
+
+/** Move o card localmente pra coluna alvo antes da resposta do servidor —
+ * sem isso, o card fica "preso" na coluna antiga (desabilitado) até o PATCH
+ * voltar, que hoje ainda refaz o sweep pesado do Mercado Livre. */
+function applyOptimisticStatus(
+  boards: OperationsBoardsData,
+  cycleId: string,
+  status: ReplenishmentStatus,
+): OperationsBoardsData {
+  const updateList = (cards: OperationsBoardCard[]) =>
+    cards.map((c) => (c.cycleId === cycleId ? { ...c, status } : c));
+  const purchaseCards = updateList(boards.purchase.cards);
+  const fullCards = updateList(boards.full.cards);
+  const summary = summarizeOperationsCounts([
+    ...purchaseCards.map((c) => ({ kind: c.kind, status: c.status })),
+    ...fullCards.map((c) => ({ kind: c.kind, status: c.status })),
+  ]);
+  return {
+    purchase: { cards: purchaseCards, summary: summary.purchase },
+    full: { cards: fullCards, summary: summary.full },
+    summary,
+  };
+}
 
 type OperationsKanbanProps = {
   initialData: OperationsBoardsData;
@@ -99,23 +123,27 @@ export function OperationsKanban({ initialData, kind }: OperationsKanbanProps) {
   }, []);
 
   const patchCycle = useCallback(
-    async (
-      cycleId: string,
-      body: { advance?: boolean; status?: OperationsBoardCard["status"] },
-    ) => {
+    async (cycleId: string, status: ReplenishmentStatus) => {
+      // Otimista: move o card na hora, antes da resposta — sem isso ele
+      // fica "preso" na coluna antiga (desabilitado) até o PATCH voltar,
+      // que hoje ainda refaz o sweep pesado do Mercado Livre. Reverte se a
+      // chamada falhar.
+      const previousData = data;
+      setData((prev) => applyOptimisticStatus(prev, cycleId, status));
       setBusyId(cycleId);
       setError(null);
       try {
         const res = await fetch(`/api/replenishment-cycles/${cycleId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
+          body: JSON.stringify({ status }),
         });
         const json = (await res.json()) as OperationsBoardsData & {
           error?: string;
         };
         if (!res.ok) {
           setError(json.error ?? "Não foi possível atualizar o card.");
+          setData(previousData);
           return;
         }
         setData({
@@ -125,11 +153,12 @@ export function OperationsKanban({ initialData, kind }: OperationsKanbanProps) {
         });
       } catch {
         setError("Falha de rede ao atualizar card.");
+        setData(previousData);
       } finally {
         setBusyId(null);
       }
     },
-    [],
+    [data],
   );
 
   const activeDragCard = activeDragCycleId
@@ -147,7 +176,7 @@ export function OperationsKanban({ initialData, kind }: OperationsKanbanProps) {
     ) as ReplenishmentStatus;
     const card = activeCards.find((c) => c.cycleId === cycleId);
     if (!card || card.status === targetStatus) return;
-    void patchCycle(cycleId, { status: targetStatus });
+    void patchCycle(cycleId, targetStatus);
   }
 
   const config = KIND_CONFIG[kind];
