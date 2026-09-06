@@ -23,7 +23,7 @@ async function ComprasDataSection({
     null;
   let loadError: string | null = null;
   try {
-    const boards = await loadOperationsBoards(token, userId, organizationId);
+    const boards = await loadOperationsBoards(token, userId, organizationId, "purchase");
     cards = boards.purchase.cards;
   } catch (e) {
     loadError = publicPageLoadMessage(

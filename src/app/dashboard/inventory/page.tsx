@@ -8,8 +8,8 @@ import { UserFeedback } from "@/components/ui/user-feedback";
 import {
   enrichItemsWithFulfillmentStock,
   fetchOperationalListings,
-  fetchUnitsSoldForItemsInWindowBatched,
 } from "@/lib/mercadolibre/api";
+import { fetchUnitsSoldForItemsInWindowCached } from "@/lib/mercadolibre/sales-window-cache";
 import { isFulfillmentListing } from "@/lib/mercadolibre/fulfillment-stock";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
@@ -58,38 +58,43 @@ async function InventoryDataSection({
       (item) => !isKitItem(item),
     );
 
-    const fulfillmentStockByItem = await enrichItemsWithFulfillmentStock(
-      token,
-      items,
-    );
     const allIds = items.map((item) => item.id);
-    const salesByItem = await fetchUnitsSoldForItemsInWindowBatched(
-      token,
-      userId,
-      allIds,
-      stockPlanning.salesAverageWindowDays,
-      stockPlanning.salesWindowDateField,
-    );
-    const ids = items.map((i) => i.id);
+
+    // As 3 buscas abaixo são independentes entre si (todas só precisam de
+    // `items`/`allIds`) — paralelizadas em vez de sequenciais.
+    const [fulfillmentStockByItem, salesByItem, warehouseStocks] =
+      await Promise.all([
+        enrichItemsWithFulfillmentStock(token, items),
+        fetchUnitsSoldForItemsInWindowCached(
+          organizationId,
+          token,
+          userId,
+          allIds,
+          stockPlanning.salesAverageWindowDays,
+          stockPlanning.salesWindowDateField,
+        ),
+        prisma.warehouseStock
+          .findMany({
+            where: { organizationId, mlItemId: { in: allIds } },
+            select: {
+              mlItemId: true,
+              quantity: true,
+              purchaseLeadTimeDays: true,
+            },
+          })
+          .catch(() => null),
+      ]);
 
     let warehouseById: Record<string, number> = {};
     let leadTimeById: Record<string, number | null> = {};
-    try {
-      const stocks = await prisma.warehouseStock.findMany({
-        where: { organizationId, mlItemId: { in: ids } },
-        select: {
-          mlItemId: true,
-          quantity: true,
-          purchaseLeadTimeDays: true,
-        },
-      });
+    if (warehouseStocks) {
       warehouseById = Object.fromEntries(
-        stocks.map((s) => [s.mlItemId, s.quantity]),
+        warehouseStocks.map((s) => [s.mlItemId, s.quantity]),
       );
       leadTimeById = Object.fromEntries(
-        stocks.map((s) => [s.mlItemId, s.purchaseLeadTimeDays]),
+        warehouseStocks.map((s) => [s.mlItemId, s.purchaseLeadTimeDays]),
       );
-    } catch {
+    } else {
       warehouseLoadFailed = true;
     }
 

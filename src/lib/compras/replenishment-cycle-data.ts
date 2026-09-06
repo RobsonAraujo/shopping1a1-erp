@@ -31,8 +31,8 @@ import {
   fetchItemById,
   fetchItemsByIdsBatched,
   fetchOperationalListingIds,
-  fetchUnitsSoldForItemsInWindowBatched,
 } from "@/lib/mercadolibre/api";
+import { fetchUnitsSoldForItemsInWindowCached } from "@/lib/mercadolibre/sales-window-cache";
 import { mapWithConcurrency } from "@/lib/mercadolibre/concurrency";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { getItemSku, getSkuSupplier, isKitItem } from "@/lib/mercadolibre/item-sku";
@@ -529,24 +529,32 @@ export async function syncOperationCyclesForItems(
     { quantity: number; purchaseLeadTimeDays: number | null }
   >,
   settings?: OperationalPlanningSettings,
+  /** Sem valor = sincroniza os dois tipos (comportamento antigo). Passar um
+   * tipo evita o loop de sync do outro board quando a página que chamou só
+   * usa um dos dois (Compras só lê `purchase`, Operações Full só lê `full`). */
+  kind?: OperationCycleKind,
 ): Promise<void> {
   return withReplenishmentSyncLock(async () => {
     if (items.length === 0) return;
     await ensureListingsForItems(organizationId, items);
-    await syncPurchaseCyclesForItems(
-      organizationId,
-      items,
-      salesByItem,
-      warehouseById,
-      settings,
-    );
-    await syncFullCyclesForItems(
-      organizationId,
-      items,
-      salesByItem,
-      warehouseById,
-      settings,
-    );
+    if (kind === undefined || kind === "purchase") {
+      await syncPurchaseCyclesForItems(
+        organizationId,
+        items,
+        salesByItem,
+        warehouseById,
+        settings,
+      );
+    }
+    if (kind === undefined || kind === "full") {
+      await syncFullCyclesForItems(
+        organizationId,
+        items,
+        salesByItem,
+        warehouseById,
+        settings,
+      );
+    }
   });
 }
 
@@ -679,6 +687,10 @@ export async function loadOperationsBoards(
   token: string,
   userId: number,
   organizationId: string,
+  /** Sem valor = computa os dois boards (compra + full), como antes. Compras
+   * só usa `purchase`; Operações Full só usa `full` — passar o `kind` certo
+   * evita sincronizar/consultar o board que a página não vai exibir. */
+  kind?: OperationCycleKind,
 ): Promise<OperationsBoardsData> {
   const operationalSettings = await loadOperationalSettings(organizationId);
   const stockPlanning = toStockPlanningValues(operationalSettings);
@@ -689,7 +701,8 @@ export async function loadOperationsBoards(
 
   const [rawItems, salesByItem, warehouseStocks, supplierNames] = await Promise.all([
     fetchItemsByIdsBatched(token, listingIds),
-    fetchUnitsSoldForItemsInWindowBatched(
+    fetchUnitsSoldForItemsInWindowCached(
+      organizationId,
       token,
       userId,
       listingIds,
@@ -718,16 +731,21 @@ export async function loadOperationsBoards(
     ]),
   );
 
-  await syncOperationCyclesForItems(organizationId, items, salesByItem, warehouseById, {
-    stockPlanning,
-    purchaseAnalysis: purchaseAnalysisValues,
-  });
+  await syncOperationCyclesForItems(
+    organizationId,
+    items,
+    salesByItem,
+    warehouseById,
+    { stockPlanning, purchaseAnalysis: purchaseAnalysisValues },
+    kind,
+  );
 
   const activeCycles = await prisma.replenishmentCycle.findMany({
     where: {
       organizationId,
       mlItemId: { in: listingIds },
       status: { not: "completed" },
+      ...(kind ? { kind } : {}),
     },
     orderBy: { updatedAt: "desc" },
     select: {

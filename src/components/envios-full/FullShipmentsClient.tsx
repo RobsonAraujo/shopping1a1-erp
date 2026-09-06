@@ -285,6 +285,22 @@ export function FullShipmentsClient({
     await loadShipmentsForPeriod(viewYear, viewMonth, requestId);
   }
 
+  /** Aplica a resposta de create/update na lista local, sem refazer o GET do
+   * período inteiro — `shippedAt` sempre chega como meio-dia UTC (ver
+   * `handleSave`), então o ano/mês UTC bate com o critério do período
+   * exibido. Se a edição mudou a data pra fora do mês em vista, o envio sai
+   * da lista local em vez de ficar exibido no período errado. */
+  function applyShipmentUpsert(shipment: FullShipmentRecord) {
+    const shippedDate = new Date(shipment.shippedAt);
+    const belongsToView =
+      shippedDate.getUTCFullYear() === viewYear &&
+      shippedDate.getUTCMonth() + 1 === viewMonth;
+    setShipments((prev) => {
+      const withoutExisting = prev.filter((s) => s.id !== shipment.id);
+      return belongsToView ? [...withoutExisting, shipment] : withoutExisting;
+    });
+  }
+
   async function handleSave() {
     const totalCost = Number(form.totalCost);
     const totalUnits = Number(form.totalUnits);
@@ -325,14 +341,14 @@ export function FullShipmentsClient({
         shipment?: FullShipmentRecord;
         error?: string;
       };
-      if (!res.ok) {
+      if (!res.ok || !data.shipment) {
         setError(
           data.error ?? (await readApiError(res, "full_shipment_save_failed")),
         );
         return;
       }
 
-      await reloadShipments();
+      applyShipmentUpsert(data.shipment);
       closeModal();
     } catch {
       setError("Falha de rede. Tente de novo.");
@@ -360,7 +376,7 @@ export function FullShipmentsClient({
         window.alert(data.error ?? "Não foi possível excluir.");
         return;
       }
-      await reloadShipments();
+      setShipments((prev) => prev.filter((s) => s.id !== shipment.id));
     } catch {
       window.alert("Falha de rede. Tente de novo.");
     }

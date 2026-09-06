@@ -23,7 +23,7 @@ async function OperacoesFullDataSection({
   let boards: Awaited<ReturnType<typeof loadOperationsBoards>> | null = null;
 
   try {
-    boards = await loadOperationsBoards(token, userId, organizationId);
+    boards = await loadOperationsBoards(token, userId, organizationId, "full");
   } catch (e) {
     loadError = publicPageLoadMessage(
       "dashboard/operacoes-full",

@@ -47,8 +47,6 @@ import {
 } from "@/components/shared/ItemListSearch";
 import { filterByItemListSearch } from "@/lib/item-list-search";
 import { useTableSort } from "@/hooks/use-table-sort";
-import { downloadStockReportExcel } from "@/lib/inventory/inventory-stock-report-excel";
-import { downloadStockReportPdf } from "@/lib/inventory/inventory-stock-report-pdf";
 import {
   aggregateStockReportBySku,
   buildDefaultStockReportHeader,
@@ -1299,9 +1297,14 @@ export function InventoryStockReportDialog({
             type="button"
             variant="outline"
             disabled={report.rows.length === 0}
-            onClick={() =>
-              downloadStockReportExcel(header, report, referenceDate)
-            }
+            onClick={() => {
+              // xlsx só é baixado quando o usuário realmente exporta —
+              // evita o pacote no bundle inicial de Estoque.
+              void import("@/lib/inventory/inventory-stock-report-excel").then(
+                ({ downloadStockReportExcel }) =>
+                  downloadStockReportExcel(header, report, referenceDate),
+              );
+            }}
           >
             <FileSpreadsheet className="size-4" />
             Baixar Excel
@@ -1309,9 +1312,13 @@ export function InventoryStockReportDialog({
           <Button
             type="button"
             disabled={report.rows.length === 0}
-            onClick={() =>
-              downloadStockReportPdf(header, report, referenceDate)
-            }
+            onClick={() => {
+              // jspdf/jspdf-autotable idem — só baixado sob demanda.
+              void import("@/lib/inventory/inventory-stock-report-pdf").then(
+                ({ downloadStockReportPdf }) =>
+                  downloadStockReportPdf(header, report, referenceDate),
+              );
+            }}
           >
             <FileDown className="size-4" />
             Baixar PDF

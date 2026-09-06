@@ -47,7 +47,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       const nextStatus = await advanceReplenishmentCycle(organizationId, cycleId, {
         accessToken: token,
       });
-      const boards = await loadOperationsBoards(token, userId, organizationId);
+      const boards = await loadOperationsBoards(
+        token,
+        userId,
+        organizationId,
+        cycle.kind,
+      );
       return NextResponse.json({ ok: true, nextStatus, ...boards });
     }
 
@@ -75,7 +80,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         accessToken: token,
       },
     );
-    const boards = await loadOperationsBoards(token, userId, organizationId);
+    const boards = await loadOperationsBoards(
+      token,
+      userId,
+      organizationId,
+      cycle.kind,
+    );
     return NextResponse.json({ ok: true, ...boards });
   } catch (e) {
     logServerError("api/replenishment-cycles/[id] PATCH", e);

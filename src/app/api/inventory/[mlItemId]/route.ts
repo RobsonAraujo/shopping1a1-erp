@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { fetchItemById } from "@/lib/mercadolibre/api";
+import {
+  fetchItemById,
+  enrichItemsWithFulfillmentStock,
+} from "@/lib/mercadolibre/api";
+import { fetchUnitsSoldForItemsInWindowCached } from "@/lib/mercadolibre/sales-window-cache";
+import { isFulfillmentListing } from "@/lib/mercadolibre/fulfillment-stock";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
 import { upsertListingFromItem } from "@/lib/mercadolibre/listing-sync";
 import type { ItemBody } from "@/lib/mercadolibre/types";
@@ -19,6 +24,67 @@ type RouteContext = { params: Promise<{ mlItemId: string }> };
 
 function itemOwnedByUser(item: ItemBody, userId: number): boolean {
   return item.seller_id === userId;
+}
+
+function stockUnits(value: number | null | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  return Math.max(0, Math.floor(value));
+}
+
+/**
+ * Recalcula os campos derivados da linha (mesma fórmula de
+ * `src/app/dashboard/inventory/page.tsx`) — devolvidos na resposta pra o
+ * client atualizar a linha editada localmente em vez de dar `router.refresh()`
+ * (que refaria o sweep de catálogo inteiro por 1 edição). Custo extra aqui é
+ * só 1-2 chamadas ML para ESTE item, não para o catálogo inteiro.
+ */
+async function computeUpdatedRowFields(
+  token: string,
+  userId: number,
+  item: ItemBody,
+  warehouseQuantity: number,
+  purchaseLeadTimeDays: number | null,
+  organizationId: string,
+) {
+  const operationalSettings = await loadOperationalSettings(organizationId);
+  const stockPlanning = toStockPlanningValues(operationalSettings);
+
+  const [fulfillmentByItem, soldByItem] = await Promise.all([
+    enrichItemsWithFulfillmentStock(token, [item]),
+    fetchUnitsSoldForItemsInWindowCached(
+      organizationId,
+      token,
+      userId,
+      [item.id],
+      stockPlanning.salesAverageWindowDays,
+      stockPlanning.salesWindowDateField,
+    ),
+  ]);
+
+  const mlStock = mlAvailableStockUnits(item);
+  const fulfillment = fulfillmentByItem.get(item.id);
+  const isFulfillment = isFulfillmentListing(item);
+  const mlProcessTransfer = stockUnits(fulfillment?.inTransfer);
+  const mlProcessInternal = stockUnits(fulfillment?.internalProcess);
+  const mlStockOnTheWay = isFulfillment ? stockUnits(fulfillment?.inProcess) : 0;
+  const sold = soldByItem[item.id] ?? 0;
+
+  const plan = computeStockPlanningDisplay(
+    mlStock + warehouseQuantity + mlStockOnTheWay,
+    sold,
+    stockPlanning.salesAverageWindowDays,
+    stockPlanning,
+    purchaseLeadTimeDays ?? 0,
+  );
+
+  return {
+    mlStock,
+    isFulfillment,
+    mlProcessTransfer,
+    mlProcessInternal,
+    mlStockOnTheWay,
+    needsPurchaseAttention: plan.needsPurchaseAttention,
+  };
 }
 
 export async function GET(_request: NextRequest, context: RouteContext) {
@@ -145,28 +211,29 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       },
     );
 
+    const updatedRowFields = await computeUpdatedRowFields(
+      token,
+      userId,
+      item,
+      warehouseStock.quantity,
+      warehouseStock.purchaseLeadTimeDays,
+      organizationId,
+    );
+
     if (quantity !== undefined && warehouseStock.quantity > previousQty) {
-      const purchaseLead =
-        warehouseStock.purchaseLeadTimeDays ?? 0;
-      const stockPlanning = toStockPlanningValues(
-        await loadOperationalSettings(organizationId),
-      );
-      const purchasePlan = computeStockPlanningDisplay(
-        mlAvailableStockUnits(item) + warehouseStock.quantity,
-        0,
-        stockPlanning.salesAverageWindowDays,
-        stockPlanning,
-        purchaseLead,
-      );
       await syncPurchaseCycleFromWarehouse(
         organizationId,
         mlItemId,
         warehouseStock.quantity,
-        { needsPurchaseAttention: purchasePlan.needsPurchaseAttention },
+        { needsPurchaseAttention: updatedRowFields.needsPurchaseAttention },
       );
     }
 
-    return NextResponse.json({ listing, warehouseStock });
+    // `row` traz os campos derivados (estoque ML, Full, "precisa comprar")
+    // já recalculados pra este item específico — o client usa isso pra
+    // atualizar a linha editada localmente, sem precisar de
+    // `router.refresh()` (que refaria o sweep do catálogo inteiro).
+    return NextResponse.json({ listing, warehouseStock, row: updatedRowFields });
   } catch (e) {
     logServerError("api/inventory/[mlItemId] PATCH", e);
     return NextResponse.json(apiErrorPayload(e, "inventory_patch_failed"), {

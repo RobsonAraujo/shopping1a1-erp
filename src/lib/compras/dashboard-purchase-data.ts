@@ -3,8 +3,8 @@ import {
   fetchCategoriesByIds,
   fetchOperationalListingIds,
   fetchItemsByIdsBatched,
-  fetchUnitsSoldForItemsInWindowBatched,
 } from "@/lib/mercadolibre/api";
+import { fetchUnitsSoldForItemsInWindowCached } from "@/lib/mercadolibre/sales-window-cache";
 import { formatCategoryPath } from "@/lib/mercadolibre/category-labels";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
 import { getItemSku, getSkuSupplier, isKitItem } from "@/lib/mercadolibre/item-sku";
@@ -203,6 +203,10 @@ export async function loadDashboardPurchaseData(
   token: string,
   userId: number,
   organizationId: string,
+  /** Restringe o pipeline a este subconjunto (ex.: itens de 1 fornecedor,
+   * já resolvidos por `resolveMlItemIdsForSupplier`) — sem isso, computa o
+   * catálogo operacional inteiro (comportamento de sempre). */
+  restrictToIds?: string[],
 ) {
   const operationalSettings = await loadOperationalSettings(organizationId);
   const stockPlanning = toStockPlanningValues(operationalSettings);
@@ -213,11 +217,14 @@ export async function loadDashboardPurchaseData(
   const windowDays = stockPlanning.salesAverageWindowDays;
   const dateField = stockPlanning.salesWindowDateField;
 
-  const allIds = await fetchOperationalListingIds(token, userId, organizationId);
+  const allIds =
+    restrictToIds ??
+    (await fetchOperationalListingIds(token, userId, organizationId));
   const [rawItems, salesByItem, warehouseStocks, replenishmentCycles, latestSnapshotById, supplierNames] =
     await Promise.all([
       fetchItemsByIdsBatched(token, allIds),
-      fetchUnitsSoldForItemsInWindowBatched(
+      fetchUnitsSoldForItemsInWindowCached(
+        organizationId,
         token,
         userId,
         allIds,

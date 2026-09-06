@@ -233,6 +233,17 @@ export function KitsModal({ open, onClose }: KitsModalProps) {
     setFormItems((prev) => prev.filter((_, i) => i !== index));
   }
 
+  function upsertKitLocally(kit: KitRow) {
+    setKits((prev) =>
+      prev.some((k) => k.mlItemId === kit.mlItemId)
+        ? prev.map((k) => (k.mlItemId === kit.mlItemId ? kit : k))
+        : [kit, ...prev],
+    );
+    // Um anúncio-kit recém-registrado nunca é mais um "candidato" — remove
+    // localmente em vez de refazer o sweep de catálogo do ML só por isso.
+    setCandidates((prev) => prev.filter((c) => c.mlItemId !== kit.mlItemId));
+  }
+
   async function saveKit() {
     setError(null);
     const items = formItems
@@ -268,8 +279,9 @@ export function KitsModal({ open, onClose }: KitsModalProps) {
         },
       );
       if (!res.ok) throw new Error(await readApiError(res, "Falha ao salvar kit."));
+      const { kit } = (await res.json()) as { kit: KitRow };
       resetForm();
-      await Promise.all([loadKits(), loadCandidates()]);
+      upsertKitLocally(kit);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Falha ao salvar kit.");
     } finally {
@@ -286,9 +298,14 @@ export function KitsModal({ open, onClose }: KitsModalProps) {
         method: "DELETE",
       });
       if (!res.ok) throw new Error(await readApiError(res, "Falha ao excluir kit."));
+      const deletedMlItemId = pendingDelete.mlItemId;
       setPendingDelete(null);
-      if (editingMlItemId === pendingDelete.mlItemId) resetForm();
-      await Promise.all([loadKits(), loadCandidates()]);
+      if (editingMlItemId === deletedMlItemId) resetForm();
+      setKits((prev) => prev.filter((k) => k.mlItemId !== deletedMlItemId));
+      // O item excluído pode voltar a ser um "candidato" — isso exige
+      // reconferir no ML se ele ainda é um anúncio-kit ativo, então aqui o
+      // refetch é genuinamente necessário (não dá pra decidir localmente).
+      await loadCandidates();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Falha ao excluir kit.");
     } finally {

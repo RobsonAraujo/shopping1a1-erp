@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/db";
 import type { Product } from "@/generated/prisma/client";
+import { getSkuSupplier } from "@/lib/mercadolibre/item-sku";
 
 export type ProductResolution = {
   product: Product | null;
@@ -84,6 +85,43 @@ export async function loadSupplierNamesByMlItemId(
     if (product.supplier) result.set(product.mlItemId, product.supplier.name);
   }
   return result;
+}
+
+/**
+ * Filtra `mlItemIds` para só os que pertencem a `supplier` — mesma regra de
+ * resolução usada linha a linha em `loadDashboardPurchaseData` (fornecedor
+ * cadastrado, com fallback pro prefixo do SKU), mas ANTES do sweep pesado de
+ * ML (multiget, vendas por item, categorias). Usa `Listing.skuSnapshot`
+ * (cache local, sem chamada ao ML) pro fallback — é só pra decidir quais
+ * `mlItemId`s entram no pipeline caro; o valor calculado em cima deles
+ * continua vindo do item ao vivo. Usado pela página de detalhe de um
+ * fornecedor em Compras, que antes computava o catálogo inteiro e descartava
+ * quase tudo.
+ */
+export async function resolveMlItemIdsForSupplier(
+  organizationId: string,
+  mlItemIds: string[],
+  supplier: string,
+): Promise<string[]> {
+  const uniqueIds = [...new Set(mlItemIds.filter(Boolean))];
+  if (uniqueIds.length === 0) return [];
+
+  const [supplierNames, listings] = await Promise.all([
+    loadSupplierNamesByMlItemId(organizationId, uniqueIds),
+    prisma.listing.findMany({
+      where: { organizationId, mlItemId: { in: uniqueIds } },
+      select: { mlItemId: true, skuSnapshot: true },
+    }),
+  ]);
+  const skuSnapshotByItemId = new Map(
+    listings.map((l) => [l.mlItemId, l.skuSnapshot]),
+  );
+
+  return uniqueIds.filter((id) => {
+    const resolvedSupplier =
+      supplierNames.get(id) ?? getSkuSupplier(skuSnapshotByItemId.get(id));
+    return resolvedSupplier === supplier;
+  });
 }
 
 /** Conveniência: carrega os mapas e devolve uma função de resolução por linha. */

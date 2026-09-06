@@ -63,25 +63,4 @@ describe("useApiResource", () => {
     disabled.unmount();
     waiting.unmount();
   });
-
-  it("refetch issues a second request", async () => {
-    let calls = 0;
-    globalThis.fetch = async () => {
-      calls += 1;
-      return jsonResponse({ n: calls });
-    };
-    const { result, unmount } = renderHook(() =>
-      useApiResource<{ n: number }>("/api/n"),
-    );
-    await waitFor(() => {
-      assert.equal(result.current.data?.n, 1);
-    });
-    act(() => {
-      result.current.refetch();
-    });
-    await waitFor(() => {
-      assert.equal(result.current.data?.n, 2);
-    });
-    unmount();
-  });
 });

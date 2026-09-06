@@ -35,6 +35,13 @@ export type DreCostSection =
   | "nonOperationalOut"
   | "nonOperationalIn";
 
+/** POST/PATCH em `/api/dre/cost-items` já devolvem o item completo, e DELETE
+ * só precisa do id (soft-delete, sem mais dados a propagar) — o client
+ * aplica isso na lista local em vez de recarregar o ano do DRE inteiro. */
+export type DreCostItemChange =
+  | { type: "created" | "updated"; item: DreCostItemView }
+  | { type: "deleted"; id: string };
+
 type DreCostItemsModalProps = {
   open: boolean;
   section: DreCostSection;
@@ -42,7 +49,7 @@ type DreCostItemsModalProps = {
   description: string;
   costItems: DreCostItemView[];
   onClose: () => void;
-  onChanged: () => void;
+  onChanged: (change: DreCostItemChange) => void;
   onError?: (message: string) => void;
 };
 
@@ -84,9 +91,10 @@ export function DreCostItemsModal({
         onError?.(message);
         return;
       }
+      const { item } = (await res.json()) as { item: DreCostItemView };
       setNewName("");
       setNewRecurring(true);
-      onChanged();
+      onChanged({ type: "created", item });
     } catch {
       const message = "Falha de rede ao adicionar item.";
       setError(message);
@@ -113,8 +121,9 @@ export function DreCostItemsModal({
         onError?.(message);
         return;
       }
+      const { item } = (await res.json()) as { item: DreCostItemView };
       setEditingId(null);
-      onChanged();
+      onChanged({ type: "updated", item });
     } catch {
       const message = "Falha de rede ao atualizar item.";
       setError(message);
@@ -141,7 +150,7 @@ export function DreCostItemsModal({
         return;
       }
       if (editingId === item.id) setEditingId(null);
-      onChanged();
+      onChanged({ type: "deleted", id: item.id });
     } catch {
       const message = "Falha de rede ao remover item.";
       setError(message);

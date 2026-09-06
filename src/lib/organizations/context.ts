@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { getValidAccessToken, readSession } from "@/lib/mercadolibre/session";
 import { prisma } from "@/lib/db/db";
@@ -13,8 +14,12 @@ export type OrganizationContext =
  * Variante de `requireOrganization()` (src/lib/api-auth.ts) para Server
  * Components — não devolve NextResponse, só o resultado, pra quem chama
  * decidir o que renderizar (ex.: `dashboard/layout.tsx`).
+ *
+ * Envolvida em `React.cache()` porque roda 2-3x por request (layout + page,
+ * às vezes + requireOrganization() numa API route chamada da mesma página) —
+ * dedup automático dentro do mesmo request em Server Components.
  */
-export async function getOrganizationContext(): Promise<OrganizationContext> {
+export const getOrganizationContext = cache(async (): Promise<OrganizationContext> => {
   const cookieStore = await cookies();
   const token = await getValidAccessToken(cookieStore);
   const { userId } = readSession(cookieStore);
@@ -31,4 +36,4 @@ export async function getOrganizationContext(): Promise<OrganizationContext> {
   }
 
   return { status: "active", organization: link.organization, mlUserId: userId };
-}
+});

@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HelpCircle } from "lucide-react";
 import {
@@ -73,11 +72,19 @@ function leadTimeToForm(days: number | null): {
 }
 
 export function InventoryStockTable({
-  rows,
+  rows: initialRows,
   productsBySku,
   supplierNames = {},
 }: InventoryStockTableProps) {
-  const router = useRouter();
+  const [rows, setRows] = useState(initialRows);
+  /** Aplica os campos recalculados que a própria resposta do PATCH devolve
+   * na linha editada, em vez de `router.refresh()` (que refaria o sweep do
+   * catálogo inteiro no Mercado Livre por causa de 1 linha). */
+  function applyRowPatch(mlItemId: string, patch: Partial<InventoryRow>) {
+    setRows((prev) =>
+      prev.map((row) => (row.mlItemId === mlItemId ? { ...row, ...patch } : row)),
+    );
+  }
   const [searchQuery, setSearchQuery] = useState("");
   const [showPaused, setShowPaused] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -176,9 +183,9 @@ export function InventoryStockTable({
           <WarehouseEditModal
             row={editing}
             onClose={() => setEditId(null)}
-            onSaved={() => {
+            onSaved={(patch) => {
               setEditId(null);
-              router.refresh();
+              applyRowPatch(editing.mlItemId, patch);
             }}
           />
         ) : null}
@@ -188,15 +195,36 @@ export function InventoryStockTable({
             key={settingsRow.mlItemId}
             row={settingsRow}
             onClose={() => setSettingsId(null)}
-            onSaved={() => {
+            onSaved={(patch) => {
               setSettingsId(null);
-              router.refresh();
+              applyRowPatch(settingsRow.mlItemId, patch);
             }}
           />
         ) : null}
       </div>
     </TooltipProvider>
   );
+}
+
+type InventoryPatchResponse = {
+  warehouseStock: { quantity: number; purchaseLeadTimeDays: number | null };
+  row: Pick<
+    InventoryRow,
+    | "mlStock"
+    | "isFulfillment"
+    | "mlProcessTransfer"
+    | "mlProcessInternal"
+    | "mlStockOnTheWay"
+    | "needsPurchaseAttention"
+  >;
+};
+
+function toRowPatch(data: InventoryPatchResponse): Partial<InventoryRow> {
+  return {
+    warehouseStock: data.warehouseStock.quantity,
+    leadTimeDays: data.warehouseStock.purchaseLeadTimeDays,
+    ...data.row,
+  };
 }
 
 function WarehouseEditModal({
@@ -206,7 +234,7 @@ function WarehouseEditModal({
 }: {
   row: InventoryRow;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (patch: Partial<InventoryRow>) => void;
 }) {
   const [value, setValue] = useState(String(row.warehouseStock));
   const [saving, setSaving] = useState(false);
@@ -229,12 +257,14 @@ function WarehouseEditModal({
           body: JSON.stringify({ quantity: n }),
         },
       );
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) {
-        setError(data.error ?? "Não foi possível salvar.");
+      const data = (await res.json().catch(() => ({}))) as
+        | InventoryPatchResponse
+        | { error: string };
+      if (!res.ok || "error" in data) {
+        setError(("error" in data ? data.error : null) ?? "Não foi possível salvar.");
         return;
       }
-      onSaved();
+      onSaved(toRowPatch(data));
     } catch {
       setError("Falha de rede. Tente de novo.");
     } finally {
@@ -318,7 +348,7 @@ function LeadTimeSettingsModal({
 }: {
   row: InventoryRow;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (patch: Partial<InventoryRow>) => void;
 }) {
   const initial = leadTimeToForm(row.leadTimeDays);
   const [value, setValue] = useState(initial.value);
@@ -366,12 +396,14 @@ function LeadTimeSettingsModal({
           }),
         },
       );
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) {
-        setError(data.error ?? "Não foi possível salvar.");
+      const data = (await res.json().catch(() => ({}))) as
+        | InventoryPatchResponse
+        | { error: string };
+      if (!res.ok || "error" in data) {
+        setError(("error" in data ? data.error : null) ?? "Não foi possível salvar.");
         return;
       }
-      onSaved();
+      onSaved(toRowPatch(data));
     } catch {
       setError("Falha de rede. Tente de novo.");
     } finally {

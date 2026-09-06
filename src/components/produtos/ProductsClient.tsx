@@ -200,7 +200,7 @@ function ProductFormModal({
   title: string;
   taxRegime: TaxRegime;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (product: ProductView) => void;
   onLevelingSuggested?: (suggestion: {
     sku: string;
     previousValues: DreProductCostLevelingFormValues;
@@ -260,22 +260,21 @@ function ProductFormModal({
         );
         return;
       }
-      if (isEdit) {
-        const json = (await res.json()) as {
-          levelingSuggestion?: {
-            previousValues: DreProductCostLevelingFormValues;
-            productCreatedAt: string;
-          } | null;
-        };
-        if (json.levelingSuggestion) {
-          onLevelingSuggested?.({
-            sku: form.sku,
-            previousValues: json.levelingSuggestion.previousValues,
-            productCreatedAt: json.levelingSuggestion.productCreatedAt,
-          });
-        }
+      const json = (await res.json()) as {
+        product: ProductView;
+        levelingSuggestion?: {
+          previousValues: DreProductCostLevelingFormValues;
+          productCreatedAt: string;
+        } | null;
+      };
+      if (isEdit && json.levelingSuggestion) {
+        onLevelingSuggested?.({
+          sku: form.sku,
+          previousValues: json.levelingSuggestion.previousValues,
+          productCreatedAt: json.levelingSuggestion.productCreatedAt,
+        });
       }
-      onSaved();
+      onSaved(json.product);
       onClose();
     } catch {
       setError("Falha de rede. Tente novamente.");
@@ -578,6 +577,21 @@ export function ProductsClient() {
     }
   }
 
+  /** Insere/atualiza 1 produto localmente a partir da resposta da própria
+   * mutation (POST/PATCH já devolvem o `ProductView` completo) — evita
+   * refazer `GET /api/products`, que recalcula imposto/imagem/tax de
+   * TODOS os produtos por causa de 1 alteração. */
+  function upsertProductLocally(product: ProductView) {
+    setData((prev) => {
+      if (!prev) return prev;
+      const exists = prev.products.some((p) => p.mlItemId === product.mlItemId);
+      const products = exists
+        ? prev.products.map((p) => (p.mlItemId === product.mlItemId ? product : p))
+        : [...prev.products, product];
+      return { ...prev, products };
+    });
+  }
+
   async function deleteProduct(mlItemId: string) {
     const product = sortedProducts.find((p) => p.mlItemId === mlItemId);
     if (!confirm(`Remover cadastro de ${product?.sku ?? mlItemId}?`)) return;
@@ -589,7 +603,11 @@ export function ProductsClient() {
         setError(await readApiError(res, "product_delete_failed"));
         return;
       }
-      await load();
+      setData((prev) =>
+        prev
+          ? { ...prev, products: prev.products.filter((p) => p.mlItemId !== mlItemId) }
+          : prev,
+      );
     } catch {
       setError("Falha de rede ao remover produto.");
     }
@@ -765,7 +783,7 @@ export function ProductsClient() {
           }
           taxRegime={data?.taxRegime ?? "LUCRO_REAL"}
           onClose={() => setModal(null)}
-          onSaved={() => void load()}
+          onSaved={upsertProductLocally}
           onLevelingSuggested={setLevelingSuggestion}
         />
       ) : null}

@@ -108,7 +108,9 @@ export function OperationsKanban({ initialData, kind }: OperationsKanbanProps) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/replenishment-cycles", { method: "POST" });
+      const res = await fetch(`/api/replenishment-cycles?kind=${kind}`, {
+        method: "POST",
+      });
       const json = (await res.json()) as OperationsBoardsData & { error?: string };
       if (!res.ok) {
         setError((json as { error?: string }).error ?? "Falha ao sincronizar.");
@@ -120,7 +122,7 @@ export function OperationsKanban({ initialData, kind }: OperationsKanbanProps) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [kind]);
 
   const patchCycle = useCallback(
     async (cycleId: string, status: ReplenishmentStatus) => {

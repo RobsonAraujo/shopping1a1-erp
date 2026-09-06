@@ -98,7 +98,9 @@ export function SupplierPurchaseKanban({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/replenishment-cycles", { method: "POST" });
+      const res = await fetch("/api/replenishment-cycles?kind=purchase", {
+        method: "POST",
+      });
       const json = (await res.json()) as OperationsBoardsData & { error?: string };
       if (!res.ok) {
         setError(json.error ?? "Falha ao sincronizar.");

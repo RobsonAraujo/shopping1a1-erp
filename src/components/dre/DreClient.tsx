@@ -16,7 +16,10 @@ import {
   SquarePen,
   Upload,
 } from "lucide-react";
-import { DreCostItemsModal } from "@/components/dre/DreFixedCostsModal";
+import {
+  DreCostItemsModal,
+  type DreCostItemChange,
+} from "@/components/dre/DreFixedCostsModal";
 import { DreOverview } from "@/components/dre/DreOverview";
 import { DreProductCostLevelingModal } from "@/components/dre/DreProductCostLevelingModal";
 import { DreSyncOverlay } from "@/components/dre/DreSyncOverlay";
@@ -228,19 +231,29 @@ export function DreClient({
 
   const toggleDisplaySetting = useCallback(
     (key: keyof DreVisibilitySettings) => {
-      setDisplaySettings((prev) => {
-        const next = { ...prev, [key]: !prev[key] };
-        void fetch("/api/dre/display-settings", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ [key]: next[key] }),
-        }).catch(() => {
-          // Puramente visual — falha de rede aqui não precisa de banner de erro.
-        });
-        return next;
-      });
+      const previous = displaySettings;
+      const next = { ...previous, [key]: !previous[key] };
+      setDisplaySettings(next);
+      void (async () => {
+        try {
+          const res = await fetch("/api/dre/display-settings", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ [key]: next[key] }),
+          });
+          if (!res.ok) throw new Error("dre_display_settings_update_failed");
+          // Sincroniza com o valor persistido — evita ficar num estado
+          // otimista que o servidor nunca gravou (ex.: sessão expirada).
+          setDisplaySettings((await res.json()) as DreVisibilitySettings);
+        } catch {
+          setDisplaySettings(previous);
+          setError(
+            "Não foi possível salvar essa preferência de exibição. Tente novamente.",
+          );
+        }
+      })();
     },
-    [],
+    [displaySettings],
   );
 
   useEffect(() => {
@@ -263,6 +276,34 @@ export function DreClient({
         if (serverKeys.includes(lineKey)) nextKeys.add(lineKey);
         else nextKeys.delete(lineKey);
         return { ...prev, [month]: [...nextKeys] };
+      });
+    },
+    [],
+  );
+
+  /** Aplica create/update/delete de um item de custo na lista local
+   * correspondente à seção — evita `loadYear(year)` (recomputa os 12 meses
+   * do DRE) por causa de renomear/cadastrar/remover 1 item de custo. */
+  const applyCostItemChange = useCallback(
+    (
+      key:
+        | "costItems"
+        | "operationalCostItems"
+        | "investmentCostItems"
+        | "nonOperationalOutItems"
+        | "nonOperationalInItems",
+      change: DreCostItemChange,
+    ) => {
+      setData((prev) => {
+        if (!prev) return prev;
+        const list = prev[key];
+        const nextList =
+          change.type === "deleted"
+            ? list.filter((i) => i.id !== change.id)
+            : list.some((i) => i.id === change.item.id)
+              ? list.map((i) => (i.id === change.item.id ? change.item : i))
+              : [...list, change.item];
+        return { ...prev, [key]: nextList };
       });
     },
     [],
@@ -827,7 +868,7 @@ export function DreClient({
           description="1) Cadastre o nome do item aqui. 2) Depois, na tabela do DRE, dê dois cliques na célula do mês para informar o valor."
           costItems={data?.costItems ?? []}
           onClose={() => setActiveModal(null)}
-          onChanged={() => void loadYear(year)}
+          onChanged={(change) => applyCostItemChange("costItems", change)}
           onError={setError}
         />
         <DreCostItemsModal
@@ -837,7 +878,7 @@ export function DreClient({
           description="1) Cadastre o nome do item aqui (além das linhas do ML). 2) Depois, na tabela do DRE, dê dois cliques na célula do mês para informar o valor."
           costItems={data?.operationalCostItems ?? []}
           onClose={() => setActiveModal(null)}
-          onChanged={() => void loadYear(year)}
+          onChanged={(change) => applyCostItemChange("operationalCostItems", change)}
           onError={setError}
         />
         <DreCostItemsModal
@@ -847,7 +888,7 @@ export function DreClient({
           description="1) Cadastre o nome do item aqui (ex.: marketing institucional, CAPEX). 2) Depois, na tabela do DRE, dê dois cliques na célula do mês para informar o valor. Esses itens entram após o Lucro Operacional Antes dos Investimentos."
           costItems={data?.investmentCostItems ?? []}
           onClose={() => setActiveModal(null)}
-          onChanged={() => void loadYear(year)}
+          onChanged={(change) => applyCostItemChange("investmentCostItems", change)}
           onError={setError}
         />
         <DreCostItemsModal
@@ -857,7 +898,7 @@ export function DreClient({
           description="1) Cadastre o nome do item aqui (ex.: multa, prejuízo com processo). 2) Depois, na tabela do DRE, dê dois cliques na célula do mês para informar o valor. Esses itens entram após o Lucro Operacional."
           costItems={data?.nonOperationalOutItems ?? []}
           onClose={() => setActiveModal(null)}
-          onChanged={() => void loadYear(year)}
+          onChanged={(change) => applyCostItemChange("nonOperationalOutItems", change)}
           onError={setError}
         />
         <DreCostItemsModal
@@ -867,7 +908,7 @@ export function DreClient({
           description="1) Cadastre o nome do item aqui (ex.: venda de imobilizado, reembolso). 2) Depois, na tabela do DRE, dê dois cliques na célula do mês para informar o valor. Esses itens somam ao Resultado Líquido."
           costItems={data?.nonOperationalInItems ?? []}
           onClose={() => setActiveModal(null)}
-          onChanged={() => void loadYear(year)}
+          onChanged={(change) => applyCostItemChange("nonOperationalInItems", change)}
           onError={setError}
         />
         <DreProductCostLevelingModal

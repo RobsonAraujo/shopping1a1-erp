@@ -67,15 +67,71 @@ export async function upsertListingFromItem(
   });
 }
 
-/** Mesma coisa em lote, com concorrência limitada (chunks de 25). */
+type ListingSnapshot = Pick<
+  Listing,
+  "titleSnapshot" | "skuSnapshot" | "imageUrlSnapshot" | "catalogListing" | "activeOnMl" | "mlStatus"
+>;
+
+/**
+ * Mesma regra de "o que muda" que `upsertListingFromItem.update` grava —
+ * usada só pra decidir se vale a pena escrever, não escreve nada aqui.
+ */
+function listingSnapshotChanged(existing: ListingSnapshot | undefined, item: ItemBody): boolean {
+  if (!existing) return true;
+
+  const activeOnMl = item.status === "active" || item.status === "paused";
+  const sku = getItemSku(item);
+  const imageUrl = bestItemImageUrl(item) ?? null;
+
+  return (
+    existing.titleSnapshot !== item.title ||
+    // sku/imageUrl nulos não sobrescrevem o valor gravado (mesma regra do
+    // upsert em si) — não conta como mudança.
+    (sku !== null && existing.skuSnapshot !== sku) ||
+    (imageUrl !== null && existing.imageUrlSnapshot !== imageUrl) ||
+    existing.catalogListing !== (item.catalog_listing ?? null) ||
+    existing.activeOnMl !== activeOnMl ||
+    existing.mlStatus !== item.status
+  );
+}
+
+/**
+ * Mesma coisa em lote, com concorrência limitada (chunks de 25) — mas só
+ * escreve os itens cujo snapshot local realmente mudou desde o último sync.
+ * Sem isso, todo carregamento de Compras/Operações Full fazia N upserts
+ * incondicionais (1 write por item do catálogo operacional), mesmo quando
+ * nada tinha mudado desde a última visita.
+ */
 export async function upsertListingsFromItems(
   organizationId: string,
   items: ItemBody[],
   client: ListingWriteClient = prisma,
 ): Promise<void> {
+  if (items.length === 0) return;
+
+  const existingListings = await client.listing.findMany({
+    where: { organizationId, mlItemId: { in: items.map((item) => item.id) } },
+    select: {
+      mlItemId: true,
+      titleSnapshot: true,
+      skuSnapshot: true,
+      imageUrlSnapshot: true,
+      catalogListing: true,
+      activeOnMl: true,
+      mlStatus: true,
+    },
+  });
+  const existingByItemId = new Map(
+    existingListings.map((listing) => [listing.mlItemId, listing]),
+  );
+
+  const itemsToSync = items.filter((item) =>
+    listingSnapshotChanged(existingByItemId.get(item.id), item),
+  );
+
   const chunkSize = 25;
-  for (let i = 0; i < items.length; i += chunkSize) {
-    const chunk = items.slice(i, i + chunkSize);
+  for (let i = 0; i < itemsToSync.length; i += chunkSize) {
+    const chunk = itemsToSync.slice(i, i + chunkSize);
     await Promise.all(
       chunk.map((item) => upsertListingFromItem(organizationId, item, client)),
     );

@@ -23,14 +23,12 @@ import { cn } from "@/lib/utils";
 
 async function PmaAlertSection({
   token,
-  userId,
   organizationId,
 }: {
   token: string;
-  userId: number;
   organizationId: string;
 }) {
-  const rows = await loadPmaAlerts(token, userId, organizationId).catch(() => []);
+  const rows = await loadPmaAlerts(token, organizationId).catch(() => []);
   return <DashboardPmaAlertPanel rows={rows} />;
 }
 
@@ -253,7 +251,6 @@ export default async function DashboardPage() {
           <Suspense fallback={<PmaAlertSkeleton />}>
             <PmaAlertSection
               token={token}
-              userId={userId}
               organizationId={orgContext.organization.id}
             />
           </Suspense>

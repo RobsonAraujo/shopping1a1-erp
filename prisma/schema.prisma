@@ -96,7 +96,7 @@ model OrganizationMlSeller {
 }
 
 /// Anúncio sincronizado do Mercado Livre (chave = ml_item_id, ex. MLB…).
-/// `WarehouseStock`/`ReplenishmentCycle`/`StockAttentionAcknowledgement` só
+/// `WarehouseStock`/`ReplenishmentCycle`/`SalesWindowSnapshot` só
 /// usam `mlItemId` como chave solta (sem FK) — nunca leem campo desta
 /// tabela, então não há motivo pra exigir que a linha exista aqui primeiro.
 /// Só `CatalogCompetitionSnapshot` mantém FK real: catalog report lê
@@ -142,11 +142,6 @@ enum CatalogCompetitionSource {
   missed_feed
   manual_poll
   cron
-}
-
-enum StockAttentionKind {
-  full
-  purchase
 }
 
 enum OperationCycleKind {
@@ -273,6 +268,29 @@ model WarehouseStock {
 
   @@index([organizationId])
   @@map("warehouse_stock")
+}
+
+/// Cache de "unidades vendidas por item numa janela de N dias" — TTL curto
+/// (ver SALES_WINDOW_CACHE_TTL_MS em sales-window-cache.ts), não um snapshot
+/// mensal fechado como TaxReportMonthSnapshot/SimplesRevenueMonthSnapshot. A
+/// janela é rolante (sempre termina "agora"), por isso cacheia por item +
+/// tamanho da janela + campo de data em vez de por mês. Evita repetir a
+/// mesma varredura de vendas por item no Mercado Livre entre Estoque,
+/// Compras e Operações Full quando essas telas são abertas na mesma sessão
+/// — a maior fonte de chamadas externas do app.
+model SalesWindowSnapshot {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  mlItemId       String   @map("ml_item_id")
+  windowDays     Int      @map("window_days")
+  /// "date_closed" | "date_created" (SalesWindowDateField).
+  dateField      String   @map("date_field")
+  unitsSold      Int      @map("units_sold")
+  computedAt     DateTime @map("computed_at")
+
+  @@unique([organizationId, mlItemId, windowDays, dateField])
+  @@index([organizationId])
+  @@map("sales_window_snapshots")
 }
 
 /// Faixas de custo Flex por distância (tabela pré-existente, capturada aqui para alinhar com o schema).
@@ -524,24 +542,6 @@ model TaxpayerVerificationCache {
 
   @@index([expiresAt])
   @@map("taxpayer_verification_cache")
-}
-
-/// Avisos de estoque que já receberam ação operacional (ex.: compra feita).
-model StockAttentionAcknowledgement {
-  id                   String             @id @default(cuid())
-  organizationId       String             @map("organization_id")
-  mlItemId             String             @map("ml_item_id")
-  kind                 StockAttentionKind
-  mlAvailableQuantity  Int                @map("ml_available_quantity")
-  warehouseQuantity    Int                @map("warehouse_quantity")
-  purchaseLeadTimeDays Int?               @map("purchase_lead_time_days")
-  acknowledgedAt       DateTime           @default(now()) @map("acknowledged_at")
-  updatedAt            DateTime           @updatedAt @map("updated_at")
-
-  @@unique([mlItemId, kind])
-  @@index([kind])
-  @@index([organizationId])
-  @@map("stock_attention_acknowledgements")
 }
 
 /// Tokens OAuth do vendedor ML (até 1 linha por `ml_user_id`) para chamadas server-side (ex.: webhook).

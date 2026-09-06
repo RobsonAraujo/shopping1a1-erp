@@ -2,16 +2,18 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 import { ArrowLeft } from "lucide-react";
 import {
   filterRowsBySupplier,
   loadDashboardPurchaseData,
-  type PurchaseAnalysisItemRow,
 } from "@/lib/compras/dashboard-purchase-data";
-import type { PurchaseAnalysisSettings } from "@/lib/compras/purchase-analysis";
 import { decodeSupplierParam, supplierPathSegment } from "@/lib/compras/purchase-analysis";
+import { fetchOperationalListingIds } from "@/lib/mercadolibre/api";
+import { resolveMlItemIdsForSupplier } from "@/lib/products/product-resolver";
 import { Breadcrumbs } from "@/components/shared/Breadcrumbs";
 import { SupplierPurchaseAnalysisView } from "@/components/compras/SupplierPurchaseAnalysisView";
+import { SupplierPurchaseAnalysisSkeleton } from "@/components/compras/SupplierPurchaseAnalysisSkeleton";
 import { UserFeedback } from "@/components/ui/user-feedback";
 import { readSession } from "@/lib/mercadolibre/session";
 import { getOrganizationContext } from "@/lib/organizations/context";
@@ -29,6 +31,82 @@ export async function generateMetadata({
   return { title: `${supplier} · Compras` };
 }
 
+async function SupplierPurchaseDataSection({
+  token,
+  userId,
+  organizationId,
+  supplier,
+  supplierParam,
+}: {
+  token: string;
+  userId: number;
+  organizationId: string;
+  supplier: string;
+  supplierParam: string;
+}) {
+  let loadError: string | null = null;
+  let supplierMissing = false;
+  let supplierRows: ReturnType<typeof filterRowsBySupplier> = [];
+  let salesAverageWindowDays: number | undefined;
+
+  try {
+    // Resolve só os `mlItemId`s deste fornecedor ANTES do sweep pesado de
+    // ML (multiget, vendas por item, categorias) — sem isso, essa página
+    // computava a análise do catálogo inteiro só pra descartar quase tudo.
+    const allIds = await fetchOperationalListingIds(token, userId, organizationId);
+    const supplierIds = await resolveMlItemIdsForSupplier(
+      organizationId,
+      allIds,
+      supplier,
+    );
+
+    if (supplierIds.length === 0) {
+      supplierMissing = true;
+    } else {
+      const data = await loadDashboardPurchaseData(
+        token,
+        userId,
+        organizationId,
+        supplierIds,
+      );
+      supplierRows = filterRowsBySupplier(data.rows, supplierParam);
+      salesAverageWindowDays =
+        data.purchaseAnalysisSettings.stockPlanning?.salesAverageWindowDays;
+    }
+  } catch (e) {
+    loadError = publicPageLoadMessage(
+      "dashboard/compras/[supplier]",
+      e,
+      "Não foi possível carregar a análise deste fornecedor. Tente de novo em instantes.",
+    );
+  }
+
+  if (supplierMissing) {
+    notFound();
+  }
+
+  if (loadError) {
+    return (
+      <UserFeedback title="Não foi possível carregar a análise">
+        {loadError}
+      </UserFeedback>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      <p className="max-w-3xl text-[15px] leading-relaxed text-[var(--muted-foreground)]">
+        Todos os anúncios ativos deste fornecedor. Projeções usam vendas dos
+        últimos {salesAverageWindowDays} dias.
+      </p>
+      <SupplierPurchaseAnalysisView
+        rows={supplierRows}
+        supplierParam={supplierParam}
+      />
+    </div>
+  );
+}
+
 export default async function SupplierPurchasePage({ params }: PageProps) {
   const { supplier: supplierParam } = await params;
   const supplier = decodeSupplierParam(supplierParam);
@@ -43,46 +121,6 @@ export default async function SupplierPurchasePage({ params }: PageProps) {
   const orgContext = await getOrganizationContext();
   if (orgContext.status !== "active") {
     return null;
-  }
-
-  let loadError: string | null = null;
-  let supplierRows: PurchaseAnalysisItemRow[] = [];
-  let purchaseAnalysisSettings: PurchaseAnalysisSettings | null = null;
-  let supplierMissing = false;
-  try {
-    const data = await loadDashboardPurchaseData(
-      token,
-      userId,
-      orgContext.organization.id,
-    );
-    supplierRows = filterRowsBySupplier(data.rows, supplierParam);
-    purchaseAnalysisSettings = data.purchaseAnalysisSettings;
-
-    if (supplierRows.length === 0) {
-      const hasAnySupplier = data.rows.some((r) => r.supplier === supplier);
-      if (!hasAnySupplier) {
-        supplierMissing = true;
-      }
-    }
-  } catch (e) {
-    loadError = publicPageLoadMessage(
-      "dashboard/compras/[supplier]",
-      e,
-      "Não foi possível carregar a análise deste fornecedor. Tente de novo em instantes.",
-    );
-  }
-
-  if (supplierMissing) {
-    notFound();
-  }
-
-  if (loadError || !purchaseAnalysisSettings) {
-    return (
-      <UserFeedback title="Não foi possível carregar a análise">
-        {loadError ??
-          "Não foi possível carregar a análise deste fornecedor. Tente de novo em instantes."}
-      </UserFeedback>
-    );
   }
 
   return (
@@ -105,18 +143,17 @@ export default async function SupplierPurchasePage({ params }: PageProps) {
         <h1 className="text-3xl font-bold tracking-tight text-[var(--primary)]">
           Análise de compra — {supplier}
         </h1>
-        <p className="mt-2 max-w-3xl text-[15px] leading-relaxed text-[var(--muted-foreground)]">
-          Todos os anúncios ativos deste fornecedor. Projeções usam vendas dos
-          últimos{" "}
-          {purchaseAnalysisSettings.stockPlanning?.salesAverageWindowDays}{" "}
-          dias.
-        </p>
       </div>
 
-      <SupplierPurchaseAnalysisView
-        rows={supplierRows}
-        supplierParam={supplierPathSegment(supplier)}
-      />
+      <Suspense fallback={<SupplierPurchaseAnalysisSkeleton />}>
+        <SupplierPurchaseDataSection
+          token={token}
+          userId={userId}
+          organizationId={orgContext.organization.id}
+          supplier={supplier}
+          supplierParam={supplierPathSegment(supplier)}
+        />
+      </Suspense>
     </div>
   );
 }

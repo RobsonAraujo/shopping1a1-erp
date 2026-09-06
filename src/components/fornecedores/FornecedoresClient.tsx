@@ -106,7 +106,6 @@ export function FornecedoresClient({
   initialAssignedProducts: AssignedProduct[];
 }) {
   const [suppliers, setSuppliers] = useState<SupplierRow[]>(initialSuppliers);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [modal, setModal] = useState<
@@ -125,25 +124,12 @@ export function FornecedoresClient({
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const sensors = useDndSensors();
 
-  // Recarrega só a lista de fornecedores após criar/editar/desativar um —
-  // produtos vinculados/sem vínculo mudam por drag-and-drop (estado local
-  // otimista, não por refetch).
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/suppliers");
-      if (!res.ok) {
-        setError(await readApiError(res, "suppliers_load_failed"));
-        return;
-      }
-      const json = (await res.json()) as { suppliers: SupplierRow[] };
-      setSuppliers(json.suppliers);
-    } catch {
-      setError("Falha de rede ao carregar fornecedores.");
-    } finally {
-      setLoading(false);
-    }
+  const upsertSupplierLocally = useCallback((supplier: SupplierRow) => {
+    setSuppliers((prev) =>
+      prev.some((s) => s.id === supplier.id)
+        ? prev.map((s) => (s.id === supplier.id ? supplier : s))
+        : [...prev, supplier],
+    );
   }, []);
 
   const assignedBySupplierId = useMemo(() => {
@@ -297,8 +283,9 @@ export function FornecedoresClient({
         );
         return;
       }
+      const { supplier } = (await res.json()) as { supplier: SupplierRow };
       setModal(null);
-      await load();
+      upsertSupplierLocally(supplier);
     } catch {
       setFormError("Falha de rede. Tente novamente.");
     } finally {
@@ -318,8 +305,11 @@ export function FornecedoresClient({
         setError(await readApiError(res, "supplier_delete_failed"));
         return;
       }
+      const deactivatedId = pendingDeactivate.id;
       setPendingDeactivate(null);
-      await load();
+      setSuppliers((prev) =>
+        prev.map((s) => (s.id === deactivatedId ? { ...s, active: false } : s)),
+      );
     } catch {
       setError("Falha de rede ao desativar fornecedor.");
     } finally {
@@ -415,13 +405,7 @@ export function FornecedoresClient({
               </tr>
             </thead>
             <tbody className="bg-[var(--card)]">
-              {loading ? (
-                <tr>
-                  <td colSpan={4} className="px-4 py-10 text-center text-[var(--muted-foreground)]">
-                    Carregando…
-                  </td>
-                </tr>
-              ) : filteredSuppliers.length === 0 ? (
+              {filteredSuppliers.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="px-4 py-10 text-center text-[var(--muted-foreground)]">
                     {sortedSuppliers.length === 0

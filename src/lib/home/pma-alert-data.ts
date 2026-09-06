@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db/db";
-import { fetchOperationalListings } from "@/lib/mercadolibre/api";
+import { fetchItemsByIdsBatched } from "@/lib/mercadolibre/api";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { fetchItemSalePrice } from "@/lib/mercadolibre/item-sale-price";
 import type { ItemBody } from "@/lib/mercadolibre/types";
@@ -77,7 +77,6 @@ export async function buildPmaAlertRows(
 
 export async function loadPmaAlerts(
   accessToken: string,
-  userId: number,
   organizationId: string,
 ): Promise<PmaAlertRow[]> {
   const productsWithPma = await prisma.product.findMany({
@@ -95,7 +94,10 @@ export async function loadPmaAlerts(
     });
   }
 
-  const items = await fetchOperationalListings(accessToken, userId, organizationId);
+  // Só busca os itens com PMA cadastrado — sem isso, varria o catálogo
+  // operacional inteiro (mesmo custo de Estoque/Compras) só pra descartar
+  // quase tudo que não tem PMA.
+  const items = await fetchItemsByIdsBatched(accessToken, [...pmaByMlItemId.keys()]);
 
   return buildPmaAlertRows(accessToken, pmaByMlItemId, items);
 }

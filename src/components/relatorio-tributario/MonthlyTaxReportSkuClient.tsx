@@ -22,7 +22,6 @@ import {
   skuImpostoOperacionalPercentual,
   skuImpostoOperacionalTotal,
 } from "@/lib/tax-report/imposto-operacional";
-import { downloadSkuSalesExcel } from "@/lib/tax-report/export-sku-sales-excel";
 import { findSkuInReport, canonicalSkuFromReport } from "@/lib/tax-report/find-sku-in-report";
 import { calcularSkuVendasPorUf } from "@/lib/tax-report/sku-vendas-por-uf";
 import type { SkuAggregation, TaxReportPayload } from "@/lib/tax-report/types";
@@ -288,17 +287,22 @@ export function MonthlyTaxReportSkuClient({
                 variant="outline"
                 size="sm"
                 disabled={filteredTransactions.length === 0}
-                onClick={() =>
-                  downloadSkuSalesExcel(filteredTransactions, {
-                    sku: canonicalSku,
-                    year: period ? null : year,
-                    month: period ? null : month,
-                    periodLabel: period
-                      ? `${period.from}_a_${period.to}`
-                      : undefined,
-                    filterUf: filterUf.trim() || undefined,
-                  })
-                }
+                onClick={() => {
+                  // xlsx só é baixado quando o usuário realmente exporta —
+                  // evita o pacote no bundle inicial desta página.
+                  void import("@/lib/tax-report/export-sku-sales-excel").then(
+                    ({ downloadSkuSalesExcel }) =>
+                      downloadSkuSalesExcel(filteredTransactions, {
+                        sku: canonicalSku,
+                        year: period ? null : year,
+                        month: period ? null : month,
+                        periodLabel: period
+                          ? `${period.from}_a_${period.to}`
+                          : undefined,
+                        filterUf: filterUf.trim() || undefined,
+                      }),
+                  );
+                }}
               >
                 <Download className="size-4" />
                 Baixar Excel
