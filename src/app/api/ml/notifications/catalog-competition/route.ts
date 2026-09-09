@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { prisma } from "@/lib/db/db";
 import {
   type CompetitionStatus,
@@ -118,13 +119,44 @@ type NotificationPayload = Record<string, unknown> & {
   debugBypassCredentials?: boolean;
 };
 
+// `looseObject` (não `object`) de propósito — passa adiante qualquer campo
+// extra que o ML mandar sem modelar aqui; só valida o formato dos campos
+// que o handler efetivamente lê, pra não quebrar em runtime com um cast
+// não validado (ex.: corpo `null`/primitivo, `user_id` de tipo inesperado).
+const notificationPayloadSchema = z.looseObject({
+  topic: z.string().optional(),
+  resource: z.string().optional(),
+  sent: z.string().optional(),
+  received: z.string().optional(),
+  user_id: z.union([z.string(), z.number()]).optional(),
+  userId: z.union([z.string(), z.number()]).optional(),
+  application_user_id: z.union([z.string(), z.number()]).optional(),
+  debugPriceToWin: z.record(z.string(), z.unknown()).optional(),
+  debugBypassCredentials: z.boolean().optional(),
+});
+
 export async function POST(request: NextRequest) {
-  let payload: NotificationPayload;
+  let rawBody: unknown;
   try {
-    payload = (await request.json()) as NotificationPayload;
+    rawBody = await request.json();
   } catch {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
+
+  const parsedPayload = notificationPayloadSchema.safeParse(rawBody);
+  if (!parsedPayload.success) {
+    // 200 (não 400) igual a todo outro "não dá pra processar" deste handler
+    // — evita retry agressivo do lado do ML (ver comentário no topo do
+    // arquivo). Formato de payload errado é só mais um caso de "pula".
+    webhookWarn("invalid payload shape", {
+      issues: parsedPayload.error.issues.map((i) => i.path.join(".")),
+    });
+    return NextResponse.json(
+      { ok: true, skipped: "invalid_payload_shape" },
+      { status: 200 },
+    );
+  }
+  const payload = parsedPayload.data as NotificationPayload;
 
   const topic = payload.topic ?? "";
   const debugPriceToWin =

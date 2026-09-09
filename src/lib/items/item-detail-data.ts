@@ -85,7 +85,7 @@ export async function loadItemDetailContext(input: {
       dateField,
     ),
     prisma.warehouseStock.findUnique({
-      where: { mlItemId: itemId },
+      where: { mlItemId: itemId, organizationId },
       select: {
         quantity: true,
         purchaseLeadTimeDays: true,

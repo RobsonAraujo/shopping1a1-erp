@@ -1,8 +1,10 @@
+import type { SortDirection as SortDir } from "@/components/ui/sortable-th";
 import type { MarginBasis } from "@/lib/pricing/financial-margin";
 import type { FinancialEvaluationRow } from "@/lib/lucratividade/financial-evaluation-data";
 
+export type { SortDir };
+
 export type SortKey = "product" | "price" | "margin" | "afterAds";
-export type SortDir = "asc" | "desc";
 
 export type FinancialEvaluationTableProps = {
   sortedItems: FinancialEvaluationRow[];

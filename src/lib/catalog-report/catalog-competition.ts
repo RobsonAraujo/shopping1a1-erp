@@ -1,4 +1,5 @@
 import { reportsConfig } from "@/config/reports";
+import { formatMoneyBRL } from "@/lib/format-money";
 import { getZonedParts } from "@/lib/report-timezone";
 import { prisma } from "@/lib/db/db";
 import { Prisma } from "@/generated/prisma/client";
@@ -281,12 +282,12 @@ export function buildTimeline(
   return { intervals, totals };
 }
 
+// Contrato diferente de propósito: `null` vira `null` aqui (não "—") — os
+// dois call sites usam isso pra decidir se mostram o campo ou omitem, não
+// só pra exibir um traço. Ver formatMoneyBRLOrDash pro caso comum.
 export function formatCatalogMoney(value: number | null): string | null {
   if (value === null) return null;
-  return value.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
+  return formatMoneyBRL(value);
 }
 
 export function catalogStatusLabel(status: CompetitionStatus): string {

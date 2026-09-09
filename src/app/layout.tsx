@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { siteUrl } from "@/lib/infra/site-url";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -21,6 +22,9 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
+  // Sem isso, o Next resolve URLs relativas de metadata (ex.: a imagem Open
+  // Graph em page.tsx) contra localhost, quebrando o preview de link em produção.
+  metadataBase: new URL(siteUrl()),
   title: {
     default: "ERP 1a1 — Mercado Livre",
     template: "%s · ERP 1a1",

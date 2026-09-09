@@ -1,4 +1,5 @@
 import { reportsConfig } from "@/config/reports";
+import { formatMoneyBRL } from "@/lib/format-money";
 import { roundMoney } from "@/lib/pricing/financial-margin";
 import { getZonedParts, zonedLocalToUtc } from "@/lib/report-timezone";
 import {
@@ -339,14 +340,7 @@ export function buildDefaultStockReportHeader(
   };
 }
 
-const currencyFormatter = new Intl.NumberFormat("pt-BR", {
-  style: "currency",
-  currency: "BRL",
-});
-
-export function formatStockReportCurrency(value: number): string {
-  return currencyFormatter.format(value);
-}
+export const formatStockReportCurrency = formatMoneyBRL;
 
 export function formatStockReportUnits(value: number): string {
   return new Intl.NumberFormat("pt-BR").format(value);

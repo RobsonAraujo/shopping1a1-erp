@@ -1,8 +1,8 @@
 import * as XLSX from "xlsx";
+import { formatMoneyBRLOrDash } from "@/lib/format-money";
 import {
   buildStockReportFilename,
   defaultStockReportReferenceDate,
-  formatStockReportCurrency,
   formatStockReportUnits,
   type StockReportBuildResult,
   type StockReportHeader,
@@ -58,7 +58,4 @@ export function downloadStockReportExcel(
   );
 }
 
-export function formatStockReportPdfCellCurrency(value: number | null): string {
-  if (value == null) return "—";
-  return formatStockReportCurrency(value);
-}
+export const formatStockReportPdfCellCurrency = formatMoneyBRLOrDash;

@@ -34,6 +34,7 @@ import { filterByItemListSearch } from "@/lib/item-list-search";
 import { readApiError } from "@/lib/api/api-client-error";
 import { useDndSensors } from "@/hooks/use-dnd-sensors";
 import { useDropHighlight } from "@/hooks/use-drop-highlight";
+import { useIsMobile } from "@/hooks/use-is-mobile";
 import type {
   AssignedProduct,
   SupplierRow,
@@ -123,6 +124,7 @@ export function FornecedoresClient({
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const sensors = useDndSensors();
+  const isMobile = useIsMobile();
 
   const upsertSupplierLocally = useCallback((supplier: SupplierRow) => {
     setSuppliers((prev) =>
@@ -387,120 +389,220 @@ export function FornecedoresClient({
 
       {error ? <UserFeedback>{error}</UserFeedback> : null}
 
-      <Card className="overflow-hidden p-0 shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[32rem] text-sm">
-            <thead className="border-b border-[var(--border)] bg-[var(--muted)]/80 text-left text-xs text-[var(--muted-foreground)]">
-              <tr>
-                <th className="px-4 py-3 font-semibold uppercase tracking-wide">Nome</th>
-                <th className="px-4 py-3 text-right font-semibold uppercase tracking-wide">
-                  Produtos
-                </th>
-                <th className="px-4 py-3 text-center font-semibold uppercase tracking-wide">
-                  Status
-                </th>
-                <th className="px-4 py-3 text-right font-semibold uppercase tracking-wide">
-                  Ações
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-[var(--card)]">
-              {filteredSuppliers.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="px-4 py-10 text-center text-[var(--muted-foreground)]">
-                    {sortedSuppliers.length === 0
-                      ? "Nenhum fornecedor cadastrado."
-                      : itemListSearchEmptyMessage(searchQuery, "fornecedor")}
-                  </td>
-                </tr>
-              ) : (
-                filteredSuppliers.map((supplier) => {
-                  const isExpanded = expandedIds.has(supplier.id);
-                  const supplierProducts = assignedBySupplierId.get(supplier.id) ?? [];
-                  return (
-                    <Fragment key={supplier.id}>
-                      <DroppableSupplierRow supplier={supplier}>
-                        <td className="px-4 py-3 font-medium text-[var(--foreground)]">
-                          <button
-                            type="button"
-                            onClick={() => toggleExpanded(supplier.id)}
-                            className="flex cursor-pointer items-center gap-1.5 hover:underline"
-                          >
-                            {isExpanded ? (
-                              <ChevronDown className="size-3.5 shrink-0 text-[var(--muted-foreground)]" aria-hidden />
-                            ) : (
-                              <ChevronRight className="size-3.5 shrink-0 text-[var(--muted-foreground)]" aria-hidden />
-                            )}
-                            {supplier.name}
-                          </button>
-                        </td>
-                        <td className="px-4 py-3 text-right tabular-nums text-[var(--muted-foreground)]">
-                          {supplier.productCount}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <Badge variant={supplier.active ? "secondary" : "warning"}>
-                            {supplier.active ? "Ativo" : "Inativo"}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex justify-end gap-1">
-                            <Button
-                              type="button"
-                              size="icon-sm"
-                              variant="ghost"
-                              aria-label={`Editar ${supplier.name}`}
-                              onClick={() =>
-                                setModal({
-                                  mode: "edit",
-                                  id: supplier.id,
-                                  form: { name: supplier.name, active: supplier.active },
-                                })
-                              }
+      {isMobile ? (
+        <div className="space-y-2">
+          {filteredSuppliers.length === 0 ? (
+            <Card className="px-4 py-10 text-center text-sm text-[var(--muted-foreground)]">
+              {sortedSuppliers.length === 0
+                ? "Nenhum fornecedor cadastrado."
+                : itemListSearchEmptyMessage(searchQuery, "fornecedor")}
+            </Card>
+          ) : (
+            filteredSuppliers.map((supplier) => {
+              const isExpanded = expandedIds.has(supplier.id);
+              const supplierProducts = assignedBySupplierId.get(supplier.id) ?? [];
+              return (
+                <Card key={supplier.id} className="p-3 shadow-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleExpanded(supplier.id)}
+                      className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 text-left"
+                    >
+                      {isExpanded ? (
+                        <ChevronDown className="size-3.5 shrink-0 text-[var(--muted-foreground)]" aria-hidden />
+                      ) : (
+                        <ChevronRight className="size-3.5 shrink-0 text-[var(--muted-foreground)]" aria-hidden />
+                      )}
+                      <span className="truncate font-medium text-[var(--foreground)]">
+                        {supplier.name}
+                      </span>
+                    </button>
+                    <Badge
+                      variant={supplier.active ? "secondary" : "warning"}
+                      className="shrink-0"
+                    >
+                      {supplier.active ? "Ativo" : "Inativo"}
+                    </Badge>
+                  </div>
+
+                  <p className="mt-1 pl-5 text-xs text-[var(--muted-foreground)]">
+                    {supplier.productCount} produto
+                    {supplier.productCount === 1 ? "" : "s"}
+                  </p>
+
+                  {isExpanded ? (
+                    <div className="mt-2 border-t border-[var(--border)] pt-2 pl-5">
+                      {supplierProducts.length === 0 ? (
+                        <p className="text-xs text-[var(--muted-foreground)]">
+                          Nenhum produto vinculado ainda.
+                        </p>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {supplierProducts.map((product) => (
+                            <span
+                              key={product.mlItemId}
+                              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--muted)]/40 px-2.5 py-1 text-xs"
                             >
-                              <Pencil className="size-4" aria-hidden />
-                            </Button>
-                            {supplier.active ? (
+                              <ProductChipLabel product={product} />
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+
+                  <div className="mt-3 flex gap-2 border-t border-[var(--border)] pt-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 gap-1.5"
+                      onClick={() =>
+                        setModal({
+                          mode: "edit",
+                          id: supplier.id,
+                          form: { name: supplier.name, active: supplier.active },
+                        })
+                      }
+                    >
+                      <Pencil className="size-3.5" aria-hidden />
+                      Editar
+                    </Button>
+                    {supplier.active ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 gap-1.5"
+                        onClick={() => setPendingDeactivate(supplier)}
+                      >
+                        <Trash2 className="size-3.5 text-rose-600" aria-hidden />
+                        Desativar
+                      </Button>
+                    ) : null}
+                  </div>
+                </Card>
+              );
+            })
+          )}
+        </div>
+      ) : (
+        <Card className="overflow-hidden p-0 shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[32rem] text-sm">
+              <thead className="border-b border-[var(--border)] bg-[var(--muted)]/80 text-left text-xs text-[var(--muted-foreground)]">
+                <tr>
+                  <th className="px-4 py-3 font-semibold uppercase tracking-wide">Nome</th>
+                  <th className="px-4 py-3 text-right font-semibold uppercase tracking-wide">
+                    Produtos
+                  </th>
+                  <th className="px-4 py-3 text-center font-semibold uppercase tracking-wide">
+                    Status
+                  </th>
+                  <th className="px-4 py-3 text-right font-semibold uppercase tracking-wide">
+                    Ações
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-[var(--card)]">
+                {filteredSuppliers.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-10 text-center text-[var(--muted-foreground)]">
+                      {sortedSuppliers.length === 0
+                        ? "Nenhum fornecedor cadastrado."
+                        : itemListSearchEmptyMessage(searchQuery, "fornecedor")}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredSuppliers.map((supplier) => {
+                    const isExpanded = expandedIds.has(supplier.id);
+                    const supplierProducts = assignedBySupplierId.get(supplier.id) ?? [];
+                    return (
+                      <Fragment key={supplier.id}>
+                        <DroppableSupplierRow supplier={supplier}>
+                          <td className="px-4 py-3 font-medium text-[var(--foreground)]">
+                            <button
+                              type="button"
+                              onClick={() => toggleExpanded(supplier.id)}
+                              className="flex cursor-pointer items-center gap-1.5 hover:underline"
+                            >
+                              {isExpanded ? (
+                                <ChevronDown className="size-3.5 shrink-0 text-[var(--muted-foreground)]" aria-hidden />
+                              ) : (
+                                <ChevronRight className="size-3.5 shrink-0 text-[var(--muted-foreground)]" aria-hidden />
+                              )}
+                              {supplier.name}
+                            </button>
+                          </td>
+                          <td className="px-4 py-3 text-right tabular-nums text-[var(--muted-foreground)]">
+                            {supplier.productCount}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <Badge variant={supplier.active ? "secondary" : "warning"}>
+                              {supplier.active ? "Ativo" : "Inativo"}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex justify-end gap-1">
                               <Button
                                 type="button"
                                 size="icon-sm"
                                 variant="ghost"
-                                aria-label={`Desativar ${supplier.name}`}
-                                onClick={() => setPendingDeactivate(supplier)}
+                                aria-label={`Editar ${supplier.name}`}
+                                onClick={() =>
+                                  setModal({
+                                    mode: "edit",
+                                    id: supplier.id,
+                                    form: { name: supplier.name, active: supplier.active },
+                                  })
+                                }
                               >
-                                <Trash2 className="size-4 text-rose-600" aria-hidden />
+                                <Pencil className="size-4" aria-hidden />
                               </Button>
-                            ) : null}
-                          </div>
-                        </td>
-                      </DroppableSupplierRow>
-                      {isExpanded ? (
-                        <tr className="border-b border-[var(--border)] bg-[var(--muted)]/20 last:border-0">
-                          <td colSpan={4} className="px-4 py-3">
-                            {supplierProducts.length === 0 ? (
-                              <p className="text-xs text-[var(--muted-foreground)]">
-                                Nenhum produto vinculado ainda — arraste um produto da caixa
-                                acima.
-                              </p>
-                            ) : (
-                              <div className="flex flex-wrap gap-2">
-                                {supplierProducts.map((product) => (
-                                  <DraggableChip key={product.mlItemId} id={product.mlItemId}>
-                                    <ProductChipLabel product={product} />
-                                  </DraggableChip>
-                                ))}
-                              </div>
-                            )}
+                              {supplier.active ? (
+                                <Button
+                                  type="button"
+                                  size="icon-sm"
+                                  variant="ghost"
+                                  aria-label={`Desativar ${supplier.name}`}
+                                  onClick={() => setPendingDeactivate(supplier)}
+                                >
+                                  <Trash2 className="size-4 text-rose-600" aria-hidden />
+                                </Button>
+                              ) : null}
+                            </div>
                           </td>
-                        </tr>
-                      ) : null}
-                    </Fragment>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+                        </DroppableSupplierRow>
+                        {isExpanded ? (
+                          <tr className="border-b border-[var(--border)] bg-[var(--muted)]/20 last:border-0">
+                            <td colSpan={4} className="px-4 py-3">
+                              {supplierProducts.length === 0 ? (
+                                <p className="text-xs text-[var(--muted-foreground)]">
+                                  Nenhum produto vinculado ainda — arraste um produto da caixa
+                                  acima.
+                                </p>
+                              ) : (
+                                <div className="flex flex-wrap gap-2">
+                                  {supplierProducts.map((product) => (
+                                    <DraggableChip key={product.mlItemId} id={product.mlItemId}>
+                                      <ProductChipLabel product={product} />
+                                    </DraggableChip>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       {modal ? (
         <Sheet open onOpenChange={(next) => !next && setModal(null)}>

@@ -576,7 +576,7 @@ export async function syncPurchaseCycleFromWarehouse(
   if (!active) return;
 
   const warehouse = await prisma.warehouseStock.findUnique({
-    where: { mlItemId },
+    where: { mlItemId, organizationId },
     select: { purchaseLeadTimeDays: true },
   });
 

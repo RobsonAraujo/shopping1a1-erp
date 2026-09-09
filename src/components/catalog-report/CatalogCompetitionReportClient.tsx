@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { SortableTh } from "@/components/ui/sortable-th";
 import { useTableSort } from "@/hooks/use-table-sort";
+import { CatalogCompetitionReportSkeleton } from "@/components/catalog-report/CatalogCompetitionReportSkeleton";
 
 type ReportItem = {
   mlItemId: string;
@@ -253,9 +254,7 @@ export function CatalogCompetitionReportClient() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <p className="text-sm text-[var(--muted-foreground)]">
-              Carregando...
-            </p>
+            <CatalogCompetitionReportSkeleton />
           ) : !data || data.items.length === 0 ? (
             <p className="text-sm text-[var(--muted-foreground)]">
               Sem dados de catálogo ainda. Clique em &quot;Coletar snapshot

@@ -1,4 +1,7 @@
+import type { SortDirection as SortDir } from "@/components/ui/sortable-th";
 import type { RevenuePotentialRow } from "@/lib/insights/types";
+
+export type { SortDir };
 
 export type SortKey =
   | "product"
@@ -7,7 +10,6 @@ export type SortKey =
   | "potential"
   | "current"
   | "gap";
-export type SortDir = "asc" | "desc";
 
 export type EffectiveRow = RevenuePotentialRow & {
   effectiveDailyAvg: number;

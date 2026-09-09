@@ -1,12 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { Card } from "@/components/ui/card";
 import { ItemListSearch, itemListSearchEmptyMessage } from "@/components/shared/ItemListSearch";
 import { SortableTh } from "@/components/ui/sortable-th";
+import { useIsMobile } from "@/hooks/use-is-mobile";
 import { useTableSort } from "@/hooks/use-table-sort";
 import { filterByItemListSearch } from "@/lib/item-list-search";
 import { formatFinancialMoney, formatFinancialPercent } from "@/lib/pricing/financial-margin";
 import { valueToneClass } from "@/lib/ui/tone";
+import { cn } from "@/lib/utils";
 import type { SimulacaoComparacao, SimulacaoSkuComparacao } from "@/lib/simples-nacional/types";
 
 type SortKey = "receitaTotal" | "lucroRealPercent" | "diferencaPercent";
@@ -15,12 +18,32 @@ function getSortValue(row: SimulacaoSkuComparacao, key: SortKey): number {
   return row[key];
 }
 
+function SkuStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: string;
+}) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
+        {label}
+      </p>
+      <p className={cn("mt-0.5 text-sm font-medium tabular-nums", tone)}>{value}</p>
+    </div>
+  );
+}
+
 export function SimplesSimuladorSkuTable({
   comparacao,
 }: {
   comparacao: SimulacaoComparacao;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
+  const isMobile = useIsMobile();
 
   const filtered = filterByItemListSearch(comparacao.porSku, searchQuery, (row) => ({
     sku: row.sku,
@@ -44,6 +67,40 @@ export function SimplesSimuladorSkuTable({
         entityPlural="SKUs"
         className="mb-3"
       />
+      {isMobile ? (
+        <div className="space-y-2">
+          {sortedRows.length === 0 ? (
+            <Card className="px-4 py-8 text-center text-sm text-[var(--muted-foreground)]">
+              {itemListSearchEmptyMessage(searchQuery, "SKU")}
+            </Card>
+          ) : (
+            sortedRows.map((row) => (
+              <Card key={row.mlItemId ?? row.sku} className="p-3 shadow-sm">
+                <p className="font-medium">{row.sku}</p>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <SkuStat
+                    label="Faturamento"
+                    value={formatFinancialMoney(row.receitaTotal)}
+                  />
+                  <SkuStat
+                    label="% Simples (atual)"
+                    value={formatFinancialPercent(comparacao.simplesAliquotaEfetivaPercent)}
+                  />
+                  <SkuStat
+                    label="% Lucro Real (simulado)"
+                    value={formatFinancialPercent(row.lucroRealPercent)}
+                  />
+                  <SkuStat
+                    label="Diferença"
+                    value={`${row.diferencaPercent > 0 ? "+" : ""}${formatFinancialPercent(row.diferencaPercent)}`}
+                    tone={valueToneClass(-row.diferencaPercent)}
+                  />
+                </div>
+              </Card>
+            ))
+          )}
+        </div>
+      ) : (
       <div className="overflow-x-auto">
         <table className="w-full min-w-[36rem] text-sm">
           <thead>
@@ -105,6 +162,7 @@ export function SimplesSimuladorSkuTable({
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }

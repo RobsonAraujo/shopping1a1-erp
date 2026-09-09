@@ -10,6 +10,7 @@ import { itemListSearchEmptyMessage } from "@/components/shared/ItemListSearch";
 import { SortableTh } from "@/components/ui/sortable-th";
 import { formatFinancialMoney, formatFinancialPercent } from "@/lib/pricing/financial-margin";
 import type { ProductsTableProps } from "@/components/produtos/products-table/types";
+import { ProductsTableSkeletonRows } from "@/components/produtos/products-table/ProductsTableSkeleton";
 
 export function ProductsTableDesktop({
   loading,
@@ -78,8 +79,8 @@ export function ProductsTableDesktop({
           <tbody className="bg-[var(--card)]">
             {loading ? (
               <tr>
-                <td colSpan={columnCount} className="px-4 py-10 text-center text-[var(--muted-foreground)]">
-                  Carregando…
+                <td colSpan={columnCount} className="p-0">
+                  <ProductsTableSkeletonRows />
                 </td>
               </tr>
             ) : filteredProducts.length === 0 ? (

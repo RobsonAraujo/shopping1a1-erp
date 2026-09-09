@@ -9,6 +9,7 @@ import { ProductThumbnail } from "@/components/produtos/ProductThumbnail";
 import { itemListSearchEmptyMessage } from "@/components/shared/ItemListSearch";
 import { formatFinancialMoney, formatFinancialPercent } from "@/lib/pricing/financial-margin";
 import type { ProductsTableProps } from "@/components/produtos/products-table/types";
+import { ProductsTableSkeletonRows } from "@/components/produtos/products-table/ProductsTableSkeleton";
 
 function FlagBadge({ label, active }: { label: string; active: boolean }) {
   if (!active) return null;
@@ -32,8 +33,8 @@ export function ProductsTableMobile({
 }: ProductsTableProps) {
   if (loading) {
     return (
-      <Card className="px-4 py-10 text-center text-sm text-[var(--muted-foreground)]">
-        Carregando…
+      <Card className="p-0">
+        <ProductsTableSkeletonRows />
       </Card>
     );
   }

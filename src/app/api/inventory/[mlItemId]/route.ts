@@ -86,7 +86,11 @@ export async function GET(_request: NextRequest, context: RouteContext) {
         const listingRow = await upsertListingFromItem(organizationId, item, tx);
 
         const stockRow = await tx.warehouseStock.upsert({
-          where: { mlItemId },
+          // `organizationId` no `where` é defensivo — `mlItemId` já é
+          // globalmente único (é a PK), mas isso evita depender só da
+          // checagem de posse acima pra nunca ler/escrever a linha de
+          // outra organização.
+          where: { mlItemId, organizationId },
           create: { organizationId, mlItemId, quantity: 0 },
           update: {},
         });
@@ -142,7 +146,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     const existingStock = await prisma.warehouseStock.findUnique({
-      where: { mlItemId },
+      where: { mlItemId, organizationId },
       select: { quantity: true },
     });
     const previousQty = existingStock?.quantity ?? 0;
@@ -152,11 +156,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         const listingRow = await upsertListingFromItem(organizationId, item, tx);
 
         const existing = await tx.warehouseStock.findUnique({
-          where: { mlItemId },
+          where: { mlItemId, organizationId },
         });
 
         const stockRow = await tx.warehouseStock.upsert({
-          where: { mlItemId },
+          where: { mlItemId, organizationId },
           create: {
             organizationId,
             mlItemId,

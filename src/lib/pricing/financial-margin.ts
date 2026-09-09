@@ -1,3 +1,5 @@
+import { formatMoneyBRLOrDash } from "@/lib/format-money";
+
 export type FinancialMarginLineKey =
   | "mlFee"
   | "mlFeeRebate"
@@ -64,13 +66,7 @@ export function formatFinancialPercent(value: number | null): string {
   return `${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
 }
 
-export function formatFinancialMoney(value: number | null): string {
-  if (value === null) return "—";
-  return value.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
-}
+export const formatFinancialMoney = formatMoneyBRLOrDash;
 
 export function computeFinancialMargin(
   input: FinancialMarginInput,

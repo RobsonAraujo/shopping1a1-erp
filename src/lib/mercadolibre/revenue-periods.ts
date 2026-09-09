@@ -1,4 +1,5 @@
 import { reportsConfig } from "@/config/reports";
+import { formatMoneyBRL } from "@/lib/format-money";
 
 export type CalendarDateRange = {
   from: Date;
@@ -227,12 +228,7 @@ export function getCalendarMonthLabels(
   };
 }
 
-export function formatRevenueBRL(value: number): string {
-  return value.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
-}
+export const formatRevenueBRL = formatMoneyBRL;
 
 export const REVENUE_TOOLTIP_HINT =
   "Faturamento bruto (preço × quantidade em pedidos pagos, via Mercado Livre). Não desconta taxas ML.";
