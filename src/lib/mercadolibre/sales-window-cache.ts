@@ -4,6 +4,7 @@ import {
   type SalesWindowDateField,
 } from "@/lib/mercadolibre/api";
 import { mapWithConcurrency } from "@/lib/mercadolibre/concurrency";
+import { logServerError } from "@/lib/infra/server-public-error";
 
 /**
  * TTL curto de propósito — a janela de vendas é rolante (sempre termina
@@ -64,8 +65,10 @@ export async function fetchUnitsSoldForItemsInWindowCached(
   );
   Object.assign(result, fresh);
 
+  // Gravação do cache é só pra próxima leitura — não faz sentido a resposta
+  // atual (já computada em `result`) esperar essa escrita terminar.
   const computedAt = new Date();
-  await mapWithConcurrency(Object.entries(fresh), WRITE_CONCURRENCY, ([mlItemId, unitsSold]) =>
+  void mapWithConcurrency(Object.entries(fresh), WRITE_CONCURRENCY, ([mlItemId, unitsSold]) =>
     prisma.salesWindowSnapshot.upsert({
       where: {
         organizationId_mlItemId_windowDays_dateField: {
@@ -78,7 +81,9 @@ export async function fetchUnitsSoldForItemsInWindowCached(
       create: { organizationId, mlItemId, windowDays, dateField, unitsSold, computedAt },
       update: { unitsSold, computedAt },
     }),
-  );
+  ).catch((e: unknown) => {
+    logServerError("sales-window-cache write", e);
+  });
 
   return result;
 }

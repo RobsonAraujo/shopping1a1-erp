@@ -15,6 +15,7 @@ export type InventoryRow = {
   mlProcessInternal: number;
   leadTimeDays: number | null;
   needsPurchaseAttention: boolean;
+  fulfillmentPending: boolean;
 };
 
 export type SupplierGroup = {

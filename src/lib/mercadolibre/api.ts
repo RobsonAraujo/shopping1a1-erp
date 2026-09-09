@@ -1056,51 +1056,64 @@ export async function fetchFulfillmentStock(
 
 const FULFILLMENT_STOCK_CONCURRENCY = 8;
 
-/** Estoque Full em processamento por anúncio (transfer + internal_process). */
+/**
+ * Estoque Full em processamento por anúncio (transfer + internal_process).
+ *
+ * `onItem`, se passado, é chamado assim que CADA item resolve (não só
+ * quando o lote inteiro termina) — permite ao chamador transmitir os
+ * resultados aos poucos (ex.: SSE) em vez de esperar o item mais lento do
+ * lote. A concorrência aqui é por item (não por inventoryId cru): um item
+ * só emite depois que TODOS os inventoryIds dele resolverem, preservando a
+ * mesma agregação de sempre; um `Map` de promises dedup inventoryIds
+ * compartilhados entre itens, sem refazer a mesma chamada.
+ */
 export async function enrichItemsWithFulfillmentStock(
   accessToken: string,
   items: ItemBody[],
+  onItem?: (itemId: string, stock: ItemFulfillmentStock) => void,
 ): Promise<Map<string, ItemFulfillmentStock>> {
   const result = new Map<string, ItemFulfillmentStock>();
-  const itemInventoryIds = new Map<string, string[]>();
+  const itemsWithInventory: { itemId: string; inventoryIds: string[] }[] = [];
 
   for (const item of items) {
     if (!isFulfillmentListing(item)) continue;
     const inventoryIds = collectInventoryIdsFromItem(item);
     if (inventoryIds.length === 0) continue;
-    itemInventoryIds.set(item.id, inventoryIds);
+    itemsWithInventory.push({ itemId: item.id, inventoryIds });
   }
 
-  const uniqueInventoryIds = [
-    ...new Set([...itemInventoryIds.values()].flat()),
-  ];
-  if (uniqueInventoryIds.length === 0) return result;
+  if (itemsWithInventory.length === 0) return result;
 
-  const snapshots = await mapWithConcurrency(
-    uniqueInventoryIds,
+  const snapshotByInventoryId = new Map<
+    string,
+    Promise<FulfillmentStockSnapshot | null>
+  >();
+  function getSnapshot(
+    inventoryId: string,
+  ): Promise<FulfillmentStockSnapshot | null> {
+    let pending = snapshotByInventoryId.get(inventoryId);
+    if (!pending) {
+      pending = fetchFulfillmentStock(accessToken, inventoryId);
+      snapshotByInventoryId.set(inventoryId, pending);
+    }
+    return pending;
+  }
+
+  await mapWithConcurrency(
+    itemsWithInventory,
     FULFILLMENT_STOCK_CONCURRENCY,
-    async (inventoryId) => {
-      const snapshot = await fetchFulfillmentStock(accessToken, inventoryId);
-      return { inventoryId, snapshot };
+    async ({ itemId, inventoryIds }) => {
+      const snapshots = (
+        await Promise.all(inventoryIds.map(getSnapshot))
+      ).filter((snap): snap is FulfillmentStockSnapshot => snap != null);
+      const stock =
+        snapshots.length > 0
+          ? aggregateFulfillmentSnapshots(snapshots)
+          : emptyFulfillmentStock();
+      result.set(itemId, stock);
+      onItem?.(itemId, stock);
     },
   );
-
-  const snapshotByInventoryId = new Map<string, FulfillmentStockSnapshot>();
-  for (const { inventoryId, snapshot } of snapshots) {
-    if (snapshot) snapshotByInventoryId.set(inventoryId, snapshot);
-  }
-
-  for (const [itemId, inventoryIds] of itemInventoryIds) {
-    const itemSnapshots = inventoryIds
-      .map((id) => snapshotByInventoryId.get(id))
-      .filter((snap): snap is FulfillmentStockSnapshot => snap != null);
-    result.set(
-      itemId,
-      itemSnapshots.length > 0
-        ? aggregateFulfillmentSnapshots(itemSnapshots)
-        : emptyFulfillmentStock(),
-    );
-  }
 
   return result;
 }

@@ -5,10 +5,7 @@ import { InventoryStockTable, type InventoryRow } from "@/components/inventory/I
 import { InventoryStockTableSkeleton } from "@/components/inventory/InventoryStockTableSkeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { UserFeedback } from "@/components/ui/user-feedback";
-import {
-  enrichItemsWithFulfillmentStock,
-  fetchOperationalListings,
-} from "@/lib/mercadolibre/api";
+import { fetchOperationalListings } from "@/lib/mercadolibre/api";
 import { fetchUnitsSoldForItemsInWindowCached } from "@/lib/mercadolibre/sales-window-cache";
 import { isFulfillmentListing } from "@/lib/mercadolibre/fulfillment-stock";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
@@ -27,11 +24,6 @@ import { prisma } from "@/lib/db/db";
 import { readSession } from "@/lib/mercadolibre/session";
 import { getOrganizationContext } from "@/lib/organizations/context";
 import { publicPageLoadMessage } from "@/lib/infra/server-public-error";
-
-function stockUnits(value: number | null | undefined): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
-  return Math.max(0, Math.floor(value));
-}
 
 async function InventoryDataSection({
   token,
@@ -60,30 +52,33 @@ async function InventoryDataSection({
 
     const allIds = items.map((item) => item.id);
 
-    // As 3 buscas abaixo são independentes entre si (todas só precisam de
-    // `items`/`allIds`) — paralelizadas em vez de sequenciais.
-    const [fulfillmentStockByItem, salesByItem, warehouseStocks] =
-      await Promise.all([
-        enrichItemsWithFulfillmentStock(token, items),
-        fetchUnitsSoldForItemsInWindowCached(
-          organizationId,
-          token,
-          userId,
-          allIds,
-          stockPlanning.salesAverageWindowDays,
-          stockPlanning.salesWindowDateField,
-        ),
-        prisma.warehouseStock
-          .findMany({
-            where: { organizationId, mlItemId: { in: allIds } },
-            select: {
-              mlItemId: true,
-              quantity: true,
-              purchaseLeadTimeDays: true,
-            },
-          })
-          .catch(() => null),
-      ]);
+    // As 2 buscas abaixo são independentes entre si — paralelizadas em vez
+    // de sequenciais. O estoque Full em processamento
+    // (`enrichItemsWithFulfillmentStock`, 1 chamada ML por item Full) NÃO
+    // entra aqui de propósito: é a parte mais lenta do carregamento, então
+    // fica pra depois — o client busca isso via streaming
+    // (`/api/inventory/fulfillment-stream`) assim que a tabela já estiver
+    // na tela, preenchendo "A caminho"/"Total"/"Comprar" aos poucos.
+    const [salesByItem, warehouseStocks] = await Promise.all([
+      fetchUnitsSoldForItemsInWindowCached(
+        organizationId,
+        token,
+        userId,
+        allIds,
+        stockPlanning.salesAverageWindowDays,
+        stockPlanning.salesWindowDateField,
+      ),
+      prisma.warehouseStock
+        .findMany({
+          where: { organizationId, mlItemId: { in: allIds } },
+          select: {
+            mlItemId: true,
+            quantity: true,
+            purchaseLeadTimeDays: true,
+          },
+        })
+        .catch(() => null),
+    ]);
 
     let warehouseById: Record<string, number> = {};
     let leadTimeById: Record<string, number | null> = {};
@@ -102,17 +97,30 @@ async function InventoryDataSection({
       ...(() => {
         const mlStock = mlAvailableStockUnits(item);
         const warehouseStock = warehouseById[item.id] ?? 0;
-        const fulfillment = fulfillmentStockByItem.get(item.id);
         const isFulfillment = isFulfillmentListing(item);
-        const mlProcessTransfer = stockUnits(fulfillment?.inTransfer);
-        const mlProcessInternal = stockUnits(fulfillment?.internalProcess);
-        const mlStockOnTheWay = isFulfillment
-          ? stockUnits(fulfillment?.inProcess)
-          : 0;
         const purchaseLeadTimeDays = leadTimeById[item.id] ?? 0;
         const sold = salesByItem[item.id] ?? 0;
+
+        // Itens Full: "a caminho"/"total"/"comprar" dependem do estoque Full
+        // em processamento, que ainda não foi buscado (ver comentário acima)
+        // — ficam com valor provisório até o streaming client-side resolver.
+        // Itens sem Full: não têm esse dado pra esperar, resolvem na hora.
+        if (isFulfillment) {
+          return {
+            mlStock,
+            warehouseStock,
+            isFulfillment,
+            mlStockOnTheWay: 0,
+            mlProcessTransfer: 0,
+            mlProcessInternal: 0,
+            leadTimeDays: leadTimeById[item.id] ?? null,
+            needsPurchaseAttention: false,
+            fulfillmentPending: true,
+          };
+        }
+
         const plan = computeStockPlanningDisplay(
-          mlStock + warehouseStock + mlStockOnTheWay,
+          mlStock + warehouseStock,
           sold,
           stockPlanning.salesAverageWindowDays,
           stockPlanning,
@@ -122,11 +130,12 @@ async function InventoryDataSection({
           mlStock,
           warehouseStock,
           isFulfillment,
-          mlStockOnTheWay,
-          mlProcessTransfer,
-          mlProcessInternal,
+          mlStockOnTheWay: 0,
+          mlProcessTransfer: 0,
+          mlProcessInternal: 0,
           leadTimeDays: leadTimeById[item.id] ?? null,
           needsPurchaseAttention: plan.needsPurchaseAttention,
+          fulfillmentPending: false,
         };
       })(),
       mlItemId: item.id,
@@ -137,23 +146,31 @@ async function InventoryDataSection({
       catalogListing: item.catalog_listing === true,
     }));
 
-    // Anúncios encerrados (`closed`) só aparecem se ainda houver estoque registrado.
+    // Anúncios encerrados (`closed`) só aparecem se ainda houver estoque
+    // registrado. Com o Full pendente, `mlStockOnTheWay` ainda é 0
+    // provisório — não dá pra decidir com certeza ainda, então mantém
+    // visível (evita a linha sumir e depois reaparecer quando o streaming
+    // resolver o valor real).
     rows = rows.filter((row) => {
       if (row.mlStatus !== "closed") return true;
+      if (row.fulfillmentPending) return true;
       return row.mlStock + row.warehouseStock + row.mlStockOnTheWay > 0;
     });
 
     total = items.length;
     statusCounts = countListingsByStatus(items);
 
-    productsBySku = await loadStockReportProductsForListings(
-      organizationId,
-      rows.map((row) => ({ mlItemId: row.mlItemId, sku: row.sku })),
-    );
-    const supplierNamesMap = await loadSupplierNamesByMlItemId(
-      organizationId,
-      rows.map((row) => row.mlItemId),
-    );
+    const [productsResult, supplierNamesMap] = await Promise.all([
+      loadStockReportProductsForListings(
+        organizationId,
+        rows.map((row) => ({ mlItemId: row.mlItemId, sku: row.sku })),
+      ),
+      loadSupplierNamesByMlItemId(
+        organizationId,
+        rows.map((row) => row.mlItemId),
+      ),
+    ]);
+    productsBySku = productsResult;
     supplierNames = Object.fromEntries(supplierNamesMap);
   } catch (e) {
     const msg = publicPageLoadMessage(

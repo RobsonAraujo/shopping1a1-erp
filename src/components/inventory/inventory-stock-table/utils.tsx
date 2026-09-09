@@ -113,3 +113,23 @@ export function formatOnTheWayCell(row: InventoryRow): {
     ),
   };
 }
+
+/**
+ * Placeholder borrado (não um "carregando…") pra células que dependem do
+ * estoque Full em processamento, enquanto o streaming
+ * (`/api/inventory/fulfillment-stream`) ainda não resolveu aquela linha.
+ * Some sozinho quando `applyRowPatch` atualiza a linha com o valor real.
+ */
+export function BlurredValue({ srLabel }: { srLabel: string }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span
+        aria-hidden="true"
+        className="select-none text-[var(--foreground)]/70 blur-[3px]"
+      >
+        88
+      </span>
+      <span className="sr-only">{srLabel}</span>
+    </span>
+  );
+}

@@ -34,6 +34,7 @@ import type {
   SupplierGroup,
 } from "@/components/inventory/inventory-stock-table/types";
 import {
+  BlurredValue,
   formatLeadTimeDisplay,
   formatOnTheWayCell,
   onTheWayUnits,
@@ -208,7 +209,15 @@ function DataRow({
               >
                 {row.sku ?? "Sem SKU"}
               </span>
-              {row.needsPurchaseAttention ? (
+              {row.fulfillmentPending ? (
+                <Badge
+                  variant="warning"
+                  className="h-5 px-1.5 text-[10px] blur-[3px] select-none"
+                  aria-hidden="true"
+                >
+                  Comprar
+                </Badge>
+              ) : row.needsPurchaseAttention ? (
                 <Badge variant="warning" className="h-5 px-1.5 text-[10px]">
                   Comprar
                 </Badge>
@@ -236,7 +245,9 @@ function DataRow({
           onTheWayCell.muted && "text-[var(--muted-foreground)]",
         )}
       >
-        {onTheWayCell.showTooltip ? (
+        {row.fulfillmentPending ? (
+          <BlurredValue srLabel="Estoque Full a caminho ainda carregando" />
+        ) : onTheWayCell.showTooltip ? (
           <Tooltip>
             <TooltipTrigger asChild>
               <span className="cursor-help underline decoration-dotted decoration-[var(--muted-foreground)]/50 underline-offset-2">
@@ -251,7 +262,13 @@ function DataRow({
           onTheWayCell.display
         )}
       </div>
-      <div className="px-4 py-3.5 tabular-nums font-medium">{total}</div>
+      <div className="px-4 py-3.5 tabular-nums font-medium">
+        {row.fulfillmentPending ? (
+          <BlurredValue srLabel="Total em estoque ainda carregando" />
+        ) : (
+          total
+        )}
+      </div>
       <div className="px-4 py-3.5 tabular-nums text-[var(--muted-foreground)]">
         {formatLeadTimeDisplay(row.leadTimeDays)}
       </div>

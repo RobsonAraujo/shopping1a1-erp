@@ -19,6 +19,7 @@ import type {
   SupplierGroup,
 } from "@/components/inventory/inventory-stock-table/types";
 import {
+  BlurredValue,
   formatLeadTimeDisplay,
   onTheWayUnits,
   stockUnits,
@@ -51,11 +52,13 @@ function StatBlock({
   value,
   muted,
   emphasis,
+  pending,
 }: {
   label: string;
   value: string;
   muted?: boolean;
   emphasis?: boolean;
+  pending?: boolean;
 }) {
   return (
     <div>
@@ -69,7 +72,11 @@ function StatBlock({
           muted && "text-[var(--muted-foreground)]",
         )}
       >
-        {value}
+        {pending ? (
+          <BlurredValue srLabel={`${label} ainda carregando`} />
+        ) : (
+          value
+        )}
       </p>
     </div>
   );
@@ -145,7 +152,15 @@ function ProductCard({
               >
                 {row.sku ?? "Sem SKU"}
               </span>
-              {row.needsPurchaseAttention ? (
+              {row.fulfillmentPending ? (
+                <Badge
+                  variant="warning"
+                  className="h-5 shrink-0 px-1.5 text-[10px] blur-[3px] select-none"
+                  aria-hidden="true"
+                >
+                  Comprar
+                </Badge>
+              ) : row.needsPurchaseAttention ? (
                 <Badge variant="warning" className="h-5 shrink-0 px-1.5 text-[10px]">
                   Comprar
                 </Badge>
@@ -172,8 +187,14 @@ function ProductCard({
             label="A caminho"
             value={row.isFulfillment ? String(onTheWayUnits(row)) : "—"}
             muted={!row.isFulfillment}
+            pending={row.fulfillmentPending}
           />
-          <StatBlock label="Total" value={String(total)} emphasis />
+          <StatBlock
+            label="Total"
+            value={String(total)}
+            emphasis
+            pending={row.fulfillmentPending}
+          />
           <StatBlock
             label="Prazo compra"
             value={formatLeadTimeDisplay(row.leadTimeDays)}

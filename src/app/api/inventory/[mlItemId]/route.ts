@@ -5,13 +5,11 @@ import {
   enrichItemsWithFulfillmentStock,
 } from "@/lib/mercadolibre/api";
 import { fetchUnitsSoldForItemsInWindowCached } from "@/lib/mercadolibre/sales-window-cache";
-import { isFulfillmentListing } from "@/lib/mercadolibre/fulfillment-stock";
-import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
+import { computeFulfillmentDerivedFields } from "@/lib/inventory/fulfillment-row-fields";
 import { upsertListingFromItem } from "@/lib/mercadolibre/listing-sync";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import { prisma } from "@/lib/db/db";
 import { syncPurchaseCycleFromWarehouse } from "@/lib/compras/replenishment-cycle-data";
-import { computeStockPlanningDisplay } from "@/lib/compras/stock-planning";
 import {
   loadOperationalSettings,
   toStockPlanningValues,
@@ -24,11 +22,6 @@ type RouteContext = { params: Promise<{ mlItemId: string }> };
 
 function itemOwnedByUser(item: ItemBody, userId: number): boolean {
   return item.seller_id === userId;
-}
-
-function stockUnits(value: number | null | undefined): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
-  return Math.max(0, Math.floor(value));
 }
 
 /**
@@ -61,30 +54,14 @@ async function computeUpdatedRowFields(
     ),
   ]);
 
-  const mlStock = mlAvailableStockUnits(item);
-  const fulfillment = fulfillmentByItem.get(item.id);
-  const isFulfillment = isFulfillmentListing(item);
-  const mlProcessTransfer = stockUnits(fulfillment?.inTransfer);
-  const mlProcessInternal = stockUnits(fulfillment?.internalProcess);
-  const mlStockOnTheWay = isFulfillment ? stockUnits(fulfillment?.inProcess) : 0;
-  const sold = soldByItem[item.id] ?? 0;
-
-  const plan = computeStockPlanningDisplay(
-    mlStock + warehouseQuantity + mlStockOnTheWay,
-    sold,
-    stockPlanning.salesAverageWindowDays,
+  return computeFulfillmentDerivedFields(
+    item,
+    fulfillmentByItem.get(item.id),
+    warehouseQuantity,
+    purchaseLeadTimeDays,
+    soldByItem[item.id] ?? 0,
     stockPlanning,
-    purchaseLeadTimeDays ?? 0,
   );
-
-  return {
-    mlStock,
-    isFulfillment,
-    mlProcessTransfer,
-    mlProcessInternal,
-    mlStockOnTheWay,
-    needsPurchaseAttention: plan.needsPurchaseAttention,
-  };
 }
 
 export async function GET(_request: NextRequest, context: RouteContext) {

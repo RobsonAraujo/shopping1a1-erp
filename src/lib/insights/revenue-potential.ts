@@ -43,10 +43,11 @@ export async function loadRevenuePotentialData(
   const now = new Date();
   const lookbackStart = new Date(now.getTime() - LOOKBACK_DAYS * MS_PER_DAY);
 
-  const allIds = await fetchOperationalListingIds(token, userId, organizationId);
-
-  const [rawItems, dailyByItem] = await Promise.all([
-    fetchItemsByIdsBatched(token, allIds),
+  // `dailyByItem` varre TODOS os pedidos pagos da janela — não depende dos
+  // ids do catálogo, então roda em paralelo com `fetchOperationalListingIds`
+  // em vez de esperar por ele (só o multiget de itens precisa dos ids).
+  const [allIds, dailyByItem] = await Promise.all([
+    fetchOperationalListingIds(token, userId, organizationId),
     fetchDailyUnitsSoldByItemInDateRange(
       token,
       userId,
@@ -55,18 +56,21 @@ export async function loadRevenuePotentialData(
       dateField,
     ),
   ]);
+  const rawItems = await fetchItemsByIdsBatched(token, allIds);
   const items = rawItems.filter((item) => !isKitItem(item));
 
   const todayKey = dayKey(now);
 
-  const productsByMlItemId = await loadStockReportProductsByMlItemId(
-    organizationId,
-    items.map((item) => item.id),
-  );
-  const supplierNames = await loadSupplierNamesByMlItemId(
-    organizationId,
-    items.map((item) => item.id),
-  );
+  const [productsByMlItemId, supplierNames] = await Promise.all([
+    loadStockReportProductsByMlItemId(
+      organizationId,
+      items.map((item) => item.id),
+    ),
+    loadSupplierNamesByMlItemId(
+      organizationId,
+      items.map((item) => item.id),
+    ),
+  ]);
 
   const rows: RevenuePotentialRow[] = items.map((item) => {
     const sku = getItemSku(item);

@@ -1346,19 +1346,28 @@ export function InventoryStockReportLauncher({
   productsBySku,
 }: InventoryStockReportLauncherProps) {
   const [open, setOpen] = useState(false);
+  // Enquanto o estoque Full ainda está chegando via streaming, os campos
+  // "a caminho"/"total" das linhas pendentes ainda são provisórios (0) —
+  // bloqueia o relatório pra não exportar esse valor errado.
+  const hasPendingFulfillment = rows.some((row) => row.fulfillmentPending);
 
   return (
     <>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button type="button" onClick={() => setOpen(true)}>
+          <Button
+            type="button"
+            onClick={() => setOpen(true)}
+            disabled={hasPendingFulfillment}
+          >
             <FileDown className="size-4" />
             Gerar Relatório
           </Button>
         </TooltipTrigger>
         <TooltipContent side="bottom" className="max-w-xs">
-          Monta o saldo em estoque por SKU na data escolhida e exporta em PDF ou
-          Excel.
+          {hasPendingFulfillment
+            ? "Aguardando o estoque Full terminar de carregar para gerar o relatório com os números corretos."
+            : "Monta o saldo em estoque por SKU na data escolhida e exporta em PDF ou Excel."}
         </TooltipContent>
       </Tooltip>
       {open ? (

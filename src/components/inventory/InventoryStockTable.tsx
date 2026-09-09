@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HelpCircle } from "lucide-react";
 import {
   ShowPausedListingsSwitch,
@@ -33,6 +33,7 @@ import { InventoryStockTableGrid } from "@/components/inventory/inventory-stock-
 import type { InventorySortKey } from "@/components/inventory/inventory-stock-table/types";
 import { getInventorySortValue } from "@/components/inventory/inventory-stock-table/utils";
 import { useTableSort } from "@/hooks/use-table-sort";
+import { useSSEStream } from "@/hooks/use-sse-stream";
 
 const MAX_LEAD_DAYS = 365;
 
@@ -51,7 +52,22 @@ export type InventoryRow = {
   mlProcessInternal: number;
   leadTimeDays: number | null;
   needsPurchaseAttention: boolean;
+  /** `true` enquanto "a caminho"/"total"/"comprar" ainda não vieram do
+   * streaming de estoque Full (`/api/inventory/fulfillment-stream`) — só
+   * itens Full começam assim; os demais já chegam resolvidos. */
+  fulfillmentPending: boolean;
 };
+
+type FulfillmentStreamEvent =
+  | ({ type: "row"; mlItemId: string } & Pick<
+      InventoryRow,
+      | "mlProcessTransfer"
+      | "mlProcessInternal"
+      | "mlStockOnTheWay"
+      | "needsPurchaseAttention"
+    >)
+  | { type: "complete" }
+  | { type: "error"; message: string };
 
 type InventoryStockTableProps = {
   rows: InventoryRow[];
@@ -79,12 +95,43 @@ export function InventoryStockTable({
   const [rows, setRows] = useState(initialRows);
   /** Aplica os campos recalculados que a própria resposta do PATCH devolve
    * na linha editada, em vez de `router.refresh()` (que refaria o sweep do
-   * catálogo inteiro no Mercado Livre por causa de 1 linha). */
-  function applyRowPatch(mlItemId: string, patch: Partial<InventoryRow>) {
-    setRows((prev) =>
-      prev.map((row) => (row.mlItemId === mlItemId ? { ...row, ...patch } : row)),
-    );
-  }
+   * catálogo inteiro no Mercado Livre por causa de 1 linha). Também usada
+   * pra aplicar os eventos do streaming de estoque Full (ver abaixo). */
+  const applyRowPatch = useCallback(
+    (mlItemId: string, patch: Partial<InventoryRow>) => {
+      setRows((prev) =>
+        prev.map((row) => (row.mlItemId === mlItemId ? { ...row, ...patch } : row)),
+      );
+    },
+    [],
+  );
+
+  const fulfillmentStream = useSSEStream<FulfillmentStreamEvent>(
+    useCallback(
+      (event) => {
+        if (event.type !== "row") return;
+        const { mlItemId, ...patch } = event;
+        applyRowPatch(mlItemId, { ...patch, fulfillmentPending: false });
+      },
+      [applyRowPatch],
+    ),
+  );
+
+  useEffect(() => {
+    const pendingIds = initialRows
+      .filter((row) => row.fulfillmentPending)
+      .map((row) => row.mlItemId);
+    if (pendingIds.length === 0) return;
+    void fulfillmentStream.start("/api/inventory/fulfillment-stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mlItemIds: pendingIds }),
+    });
+    // Dispara 1x ao montar, com o conjunto inicial de itens Full pendentes
+    // — não precisa re-rodar quando `rows` muda por outra interação.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialRows]);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [showPaused, setShowPaused] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
