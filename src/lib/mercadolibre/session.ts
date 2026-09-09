@@ -88,6 +88,17 @@ export function refreshSessionPath(nextPath: string): string {
   return `/api/auth/mercadolibre/refresh?next=${encodeURIComponent(next)}`;
 }
 
+/** Shared by every public marketing page to drive the OAuth CTA button state. */
+export function getMarketingCtaState(store: MlCookieReader) {
+  const session = getSessionAccessState(store);
+  return {
+    isLoggedIn: session.isLoggedIn,
+    dashboardHref: session.needsRefresh
+      ? refreshSessionPath("/dashboard")
+      : "/dashboard",
+  };
+}
+
 /**
  * ML often omits `refresh_token` on later OAuth exchanges. Reuse the refresh token
  * from the existing session cookie so DB upsert and cookies stay consistent.

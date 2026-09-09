@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import { Award, ExternalLink } from "lucide-react";
 import { DashboardHomeShortcuts } from "@/components/home/DashboardHomeShortcuts";
+import { DashboardOnboardingChecklist } from "@/components/home/DashboardOnboardingChecklist";
 import { DashboardOperationsSummary } from "@/components/home/DashboardOperationsSummary";
 import { DashboardPmaAlertPanel } from "@/components/home/DashboardPmaAlertPanel";
 import { DashboardSummaryClient } from "@/components/home/DashboardSummaryClient";
@@ -17,6 +18,7 @@ import {
   type SellerReputationBadge,
 } from "@/lib/mercadolibre/seller-reputation";
 import { loadOperationsSummaryFromDb } from "@/lib/compras/replenishment-cycle-data";
+import { getOnboardingChecklistState } from "@/lib/onboarding/onboarding-checklist";
 import { loadPmaAlerts } from "@/lib/home/pma-alert-data";
 import { publicPageLoadMessage } from "@/lib/infra/server-public-error";
 import { cn } from "@/lib/utils";
@@ -187,6 +189,10 @@ export default async function DashboardPage() {
   > | null = null;
   let loadError: string | null = null;
 
+  const onboardingState = await getOnboardingChecklistState(
+    orgContext.organization.id,
+  ).catch(() => null);
+
   try {
     operationsSummary = await loadOperationsSummaryFromDb(orgContext.organization.id);
   } catch (e) {
@@ -234,6 +240,10 @@ export default async function DashboardPage() {
           </Suspense>
         </div>
       </header>
+
+      {onboardingState ? (
+        <DashboardOnboardingChecklist state={onboardingState} />
+      ) : null}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
         <div className="min-w-0 space-y-8">

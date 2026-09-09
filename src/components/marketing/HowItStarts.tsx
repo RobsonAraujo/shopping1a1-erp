@@ -26,7 +26,10 @@ export function MarketingHowItStarts({
   dashboardHref: string;
 }) {
   return (
-    <section className="bg-[var(--background)] px-4 py-16 sm:px-6 sm:py-20">
+    <section
+      id="como-comeca"
+      className="scroll-mt-20 bg-[var(--background)] px-4 py-16 sm:px-6 sm:py-20"
+    >
       <div className="mx-auto max-w-3xl">
         <p className="text-center text-sm font-semibold uppercase tracking-wide text-[var(--primary)]">
           Começar

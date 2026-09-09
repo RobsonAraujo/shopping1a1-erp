@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HelpCircle } from "lucide-react";
+import { toast } from "sonner";
 import {
   ShowPausedListingsSwitch,
   countPausedListings,
@@ -312,6 +313,7 @@ function WarehouseEditModal({
         return;
       }
       onSaved(toRowPatch(data));
+      toast.success("Estoque do galpão atualizado.");
     } catch {
       setError("Falha de rede. Tente de novo.");
     } finally {
@@ -451,6 +453,7 @@ function LeadTimeSettingsModal({
         return;
       }
       onSaved(toRowPatch(data));
+      toast.success("Prazo de reposição atualizado.");
     } catch {
       setError("Falha de rede. Tente de novo.");
     } finally {

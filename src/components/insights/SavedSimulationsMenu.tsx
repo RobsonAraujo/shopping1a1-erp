@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Check, ChevronDown, Save, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -295,6 +296,7 @@ export function SavedSimulationsMenu({
       if (activeSimulation?.id === id) onActiveSimulationChange(null);
       setDeleteTarget(null);
       void loadList();
+      toast.success("Simulação excluída.");
     } catch {
       setListError("Falha de rede ao excluir a simulação.");
     } finally {

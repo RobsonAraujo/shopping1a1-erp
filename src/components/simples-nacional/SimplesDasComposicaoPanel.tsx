@@ -143,7 +143,7 @@ export function SimplesDasComposicaoPanel({
       <div className="mt-4 flex flex-col items-center gap-5 sm:flex-row sm:items-center">
         <DasDonut segments={segments} total={valorDasMes} monthLabel={monthLabel} />
 
-        <ul className="w-full flex-1 space-y-2">
+        <ul className="w-full min-w-0 flex-1 space-y-2">
           {segments.map((seg) => (
             <li key={seg.key} className="flex items-center justify-between gap-3 text-sm">
               <span className="flex min-w-0 items-center gap-2">

@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { LogOut } from "lucide-react";
+import { Toaster } from "sonner";
 import { DashboardNav } from "@/components/shared/DashboardNav";
 import { MobileDashboardMenu } from "@/components/shared/MobileDashboardMenu";
 import { Button } from "@/components/ui/button";
@@ -90,6 +91,7 @@ export default async function DashboardLayout({
           </p>
         )}
       </main>
+      <Toaster position="top-right" richColors closeButton />
     </div>
   );
 }

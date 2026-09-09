@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Eraser, Pencil, Plus, Square } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { FormInput } from "@/components/ui/form-input";
@@ -115,6 +116,7 @@ export function TaxFixedCostsModal({
       setNewAmount(null);
       setNewRecurring(true);
       onChanged();
+      toast.success("Gasto fixo adicionado.");
     } catch {
       const message = "Falha de rede ao adicionar gasto fixo.";
       setError(message);
@@ -158,6 +160,7 @@ export function TaxFixedCostsModal({
       }
       setEditingId(null);
       onChanged();
+      toast.success("Gasto fixo atualizado.");
     } catch {
       const message = "Falha de rede ao salvar alterações.";
       setError(message);
@@ -193,6 +196,7 @@ export function TaxFixedCostsModal({
         return;
       }
       onChanged();
+      toast.success("Valor do mês removido.");
     } catch {
       const message = "Falha de rede ao remover valor do mês.";
       setError(message);
@@ -218,6 +222,7 @@ export function TaxFixedCostsModal({
         return;
       }
       onChanged();
+      toast.success("Gasto fixo encerrado.");
     } catch {
       const message = "Falha de rede ao encerrar gasto fixo.";
       setError(message);

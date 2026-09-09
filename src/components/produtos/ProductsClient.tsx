@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Boxes, Plus, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 import { KitsModal } from "@/components/produtos/KitsModal";
 import { ItemListSearch } from "@/components/shared/ItemListSearch";
 import Link from "next/link";
@@ -276,6 +277,7 @@ function ProductFormModal({
       }
       onSaved(json.product);
       onClose();
+      toast.success(isEdit ? "Produto atualizado." : "Produto cadastrado.");
     } catch {
       setError("Falha de rede. Tente novamente.");
     } finally {
@@ -314,14 +316,13 @@ function ProductFormModal({
               ) : null}
             </div>
             {isEdit ? (
-              <div className="space-y-1 sm:col-span-2">
-                <label className="block text-sm font-medium">SKU</label>
-                <input
+              <div className="space-y-1.5 sm:col-span-2">
+                <FormInput
+                  label="SKU"
                   value={form.sku}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, sku: e.target.value }))
                   }
-                  className="h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-base sm:h-10 sm:text-sm"
                 />
                 <p className="text-xs text-[var(--muted-foreground)]">
                   Só exibição/filtro — pode ficar desatualizado em relação ao
@@ -329,16 +330,14 @@ function ProductFormModal({
                 </p>
               </div>
             ) : null}
-            <div className="space-y-1 sm:col-span-2">
-              <label className="block text-sm font-medium">NCM</label>
-              <input
-                value={form.ncm}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, ncm: e.target.value }))
-                }
-                className="h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-base sm:h-10 sm:text-sm"
-              />
-            </div>
+            <FormInput
+              label="NCM"
+              value={form.ncm}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, ncm: e.target.value }))
+              }
+              className="sm:col-span-2"
+            />
             <FormSelect
               label="Fornecedor"
               value={form.supplierId ?? ""}
@@ -608,6 +607,7 @@ export function ProductsClient() {
           ? { ...prev, products: prev.products.filter((p) => p.mlItemId !== mlItemId) }
           : prev,
       );
+      toast.success("Produto removido.");
     } catch {
       setError("Falha de rede ao remover produto.");
     }

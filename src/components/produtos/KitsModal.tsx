@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useApiResource } from "@/hooks/use-api-resource";
 import { ImageOff, Pencil, Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { FormInput } from "@/components/ui/form-input";
@@ -282,6 +283,7 @@ export function KitsModal({ open, onClose }: KitsModalProps) {
       const { kit } = (await res.json()) as { kit: KitRow };
       resetForm();
       upsertKitLocally(kit);
+      toast.success(isEditing ? "Kit atualizado." : "Kit criado.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Falha ao salvar kit.");
     } finally {
@@ -306,6 +308,7 @@ export function KitsModal({ open, onClose }: KitsModalProps) {
       // reconferir no ML se ele ainda é um anúncio-kit ativo, então aqui o
       // refetch é genuinamente necessário (não dá pra decidir localmente).
       await loadCandidates();
+      toast.success("Kit excluído.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Falha ao excluir kit.");
     } finally {

@@ -1,17 +1,33 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import {
-  getSessionAccessState,
-  refreshSessionPath,
-} from "@/lib/mercadolibre/session";
+import { getMarketingCtaState } from "@/lib/mercadolibre/session";
+import { siteUrl } from "@/lib/infra/site-url";
 import { MarketingLanding } from "@/components/marketing/Landing";
+import { faqStructuredData } from "@/components/marketing/Faq";
+
+const title = "Painel para vendedores Mercado Livre — margem, imposto e DRE";
+const description =
+  "Lucratividade (margem e pós ADS), apuração de lucro real, catálogo, DRE com sync da fatura, Full e compras. Teste grátis com sua conta do Mercado Livre.";
 
 export const metadata: Metadata = {
-  title: "Painel para vendedores Mercado Livre — margem, imposto e DRE",
-  description:
-    "Lucratividade (margem e pós ADS), apuração de lucro real, catálogo, DRE com sync da fatura, Full e compras. Teste grátis com sua conta do Mercado Livre.",
+  title,
+  description,
+  alternates: {
+    canonical: siteUrl(),
+  },
   openGraph: {
+    type: "website",
+    url: siteUrl(),
+    siteName: "ERP 1a1",
+    locale: "pt_BR",
+    title: "ERP 1a1 — lucratividade e lucro real no Mercado Livre",
+    description:
+      "Veja se cada anúncio sobra depois da tarifa ML e do imposto. Apuração pensada para lucro real. Teste grátis, sem cartão.",
+    images: ["/logo-bg-blue.png"],
+  },
+  twitter: {
+    card: "summary_large_image",
     title: "ERP 1a1 — lucratividade e lucro real no Mercado Livre",
     description:
       "Veja se cada anúncio sobra depois da tarifa ML e do imposto. Apuração pensada para lucro real. Teste grátis, sem cartão.",
@@ -38,16 +54,19 @@ export default async function Home({ searchParams }: PageProps) {
   }
 
   const cookieStore = await cookies();
-  const session = getSessionAccessState(cookieStore);
-  const dashboardHref = session.needsRefresh
-    ? refreshSessionPath("/dashboard")
-    : "/dashboard";
+  const { isLoggedIn, dashboardHref } = getMarketingCtaState(cookieStore);
 
   return (
-    <MarketingLanding
-      isLoggedIn={session.isLoggedIn}
-      dashboardHref={dashboardHref}
-      error={sp.error}
-    />
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqStructuredData()) }}
+      />
+      <MarketingLanding
+        isLoggedIn={isLoggedIn}
+        dashboardHref={dashboardHref}
+        error={sp.error}
+      />
+    </>
   );
 }

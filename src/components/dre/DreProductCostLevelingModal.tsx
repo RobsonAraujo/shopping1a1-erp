@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   Check,
   ChevronsUpDown,
@@ -418,6 +419,7 @@ export function DreProductCostLevelingModal({
       });
       resetForm();
       await loadItems(sku);
+      toast.success("Nivelamento de custo salvo.");
     } catch {
       onError("Falha de rede ao salvar nivelamento.");
     } finally {
@@ -445,6 +447,7 @@ export function DreProductCostLevelingModal({
       if (editingId === pendingDelete.id) resetForm();
       setPendingDelete(null);
       await loadItems(form.sku);
+      toast.success("Nivelamento de custo removido.");
     } catch {
       onError("Falha de rede ao excluir nivelamento.");
     } finally {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   CalendarRange,
   ChevronDown,
@@ -428,6 +429,7 @@ export function DreClient({
               [selectedMonth]: [],
             }));
           }
+          toast.success("Conciliação aplicada ao DRE.");
         }
       } finally {
         setReconciliationBusy(false);
@@ -459,6 +461,7 @@ export function DreClient({
               [selectedMonth]: [],
             }));
           }
+          toast.success("Conciliação descartada.");
         }
       } finally {
         setReconciliationBusy(false);

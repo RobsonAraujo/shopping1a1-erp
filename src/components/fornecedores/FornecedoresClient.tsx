@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useMemo, useState } from "react";
 import Image from "next/image";
+import { toast } from "sonner";
 import { ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { DndContext, DragOverlay, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
@@ -288,6 +289,7 @@ export function FornecedoresClient({
       const { supplier } = (await res.json()) as { supplier: SupplierRow };
       setModal(null);
       upsertSupplierLocally(supplier);
+      toast.success(isEdit ? "Fornecedor atualizado." : "Fornecedor cadastrado.");
     } catch {
       setFormError("Falha de rede. Tente novamente.");
     } finally {
@@ -312,6 +314,7 @@ export function FornecedoresClient({
       setSuppliers((prev) =>
         prev.map((s) => (s.id === deactivatedId ? { ...s, active: false } : s)),
       );
+      toast.success("Fornecedor desativado.");
     } catch {
       setError("Falha de rede ao desativar fornecedor.");
     } finally {

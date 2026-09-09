@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -95,6 +96,7 @@ export function DreCostItemsModal({
       setNewName("");
       setNewRecurring(true);
       onChanged({ type: "created", item });
+      toast.success("Item de custo adicionado.");
     } catch {
       const message = "Falha de rede ao adicionar item.";
       setError(message);
@@ -124,6 +126,7 @@ export function DreCostItemsModal({
       const { item } = (await res.json()) as { item: DreCostItemView };
       setEditingId(null);
       onChanged({ type: "updated", item });
+      toast.success("Item de custo atualizado.");
     } catch {
       const message = "Falha de rede ao atualizar item.";
       setError(message);
@@ -151,6 +154,7 @@ export function DreCostItemsModal({
       }
       if (editingId === item.id) setEditingId(null);
       onChanged({ type: "deleted", id: item.id });
+      toast.success("Item de custo removido.");
     } catch {
       const message = "Falha de rede ao remover item.";
       setError(message);

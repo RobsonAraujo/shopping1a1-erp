@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ExternalLink, Upload } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { FormSelect } from "@/components/ui/form-select";
 import {
@@ -156,6 +157,7 @@ export function DreReconciliationModal({
         onApplied(json.year, [...selectedKeys], month);
         reset();
         onClose();
+        toast.success("Conciliação aplicada.");
       }
     } catch {
       onError("Falha de rede ao aplicar a conciliação.");

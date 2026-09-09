@@ -1,4 +1,4 @@
-import Image from "next/image";
+import Link from "next/link";
 import { Layers, Lock, ShieldCheck, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { UserFeedback } from "@/components/ui/user-feedback";
@@ -8,6 +8,7 @@ import { DemoHeroSnapshot } from "@/components/marketing/DemoHeroSnapshot";
 import { DemoLucratividade } from "@/components/marketing/DemoLucratividade";
 import { DemoTributario } from "@/components/marketing/DemoTributario";
 import { MarketingFaq } from "@/components/marketing/Faq";
+import { MarketingFooter, MarketingHeader } from "@/components/marketing/MarketingChrome";
 import { MarketingHowItStarts } from "@/components/marketing/HowItStarts";
 import { MarketingMoreInPanel } from "@/components/marketing/MoreInPanel";
 import { OAuthCta } from "@/components/marketing/OauthCta";
@@ -29,29 +30,7 @@ export function MarketingLanding({
 }) {
   return (
     <div className="marketing-landing flex min-h-full flex-1 flex-col">
-      <header className="sticky top-0 z-40 border-b border-white/10 bg-[#152456]/95 pt-[env(safe-area-inset-top)] backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          <a href="#topo" className="flex items-center gap-2">
-            <Image
-              src="/logo-bg-blue.png"
-              alt=""
-              width={36}
-              height={36}
-              className="h-9 w-9 rounded-lg object-cover shadow-sm"
-              priority
-            />
-            <span className="font-semibold tracking-tight text-white">
-              ERP 1a1
-            </span>
-          </a>
-          <OAuthCta
-            isLoggedIn={isLoggedIn}
-            dashboardHref={dashboardHref}
-            size="sm"
-            onDark
-          />
-        </div>
-      </header>
+      <MarketingHeader isLoggedIn={isLoggedIn} dashboardHref={dashboardHref} />
 
       <main id="topo">
         <section className="relative overflow-hidden bg-gradient-to-br from-[#0a1130] via-[#141f52] to-[#1b2d6f] px-4 py-16 text-white sm:px-6 sm:py-24">
@@ -156,7 +135,14 @@ export function MarketingLanding({
               <p className="mt-3 text-[15px] leading-relaxed text-[var(--muted-foreground)]">
                 As mesmas colunas do painel: produto, tipo, preço, margem e pós
                 ADS. Verde quando sobra, vermelho quando o anúncio come a
-                operação — inclusive depois do Product Ads.
+                operação — inclusive depois do Product Ads.{" "}
+                <Link
+                  href="/margem-de-contribuicao-mercado-livre"
+                  className="text-[var(--primary)] underline underline-offset-2"
+                >
+                  Saiba mais sobre margem de contribuição
+                </Link>
+                .
               </p>
             </div>
             <DemoLucratividade />
@@ -175,14 +161,28 @@ export function MarketingLanding({
               <p className="mt-3 text-[15px] leading-relaxed text-[var(--muted-foreground)]">
                 A visão Por SKU do relatório: vendas, unidades, receita, imposto
                 operacional médio e % operacional — o peso fiscal de cada
-                produto no lucro real.
+                produto no lucro real.{" "}
+                <Link
+                  href="/lucro-real-mercado-livre"
+                  className="text-[var(--primary)] underline underline-offset-2"
+                >
+                  Veja a apuração completa de Lucro Real
+                </Link>
+                .
               </p>
               <p className="mt-2 text-sm text-[var(--muted-foreground)]">
                 Apoio à apuração: não substitui contador nem emite nota fiscal.
                 Empresas do Simples Nacional configuram o regime e a alíquota
                 efetiva do DAS em Configurações — a margem e a precificação já
                 usam esse número; a apuração por SKU acima é específica do
-                Lucro Real.
+                Lucro Real.{" "}
+                <Link
+                  href="/simples-nacional-mercado-livre"
+                  className="text-[var(--primary)] underline underline-offset-2"
+                >
+                  Veja como funciona no Simples Nacional
+                </Link>
+                .
               </p>
             </div>
             <DemoTributario />
@@ -202,7 +202,14 @@ export function MarketingLanding({
                 Demonstrativo do mês: receita, custos e resultado numa leitura
                 vertical. Tarifa, CMV e ADS vêm da fatura do Mercado Livre —
                 sem exportar planilha para bater o número que já apareceu na
-                lucratividade e no tributário.
+                lucratividade e no tributário.{" "}
+                <Link
+                  href="/dre-mercado-livre"
+                  className="text-[var(--primary)] underline underline-offset-2"
+                >
+                  Saiba mais sobre o DRE
+                </Link>
+                .
               </p>
             </div>
             <DemoDre />
@@ -266,9 +273,7 @@ export function MarketingLanding({
         </section>
       </main>
 
-      <footer className="border-t border-[var(--border)] bg-[var(--card)] px-4 py-6 text-center text-xs text-[var(--muted-foreground)]">
-        ERP 1a1 · painel para vendedores Mercado Livre
-      </footer>
+      <MarketingFooter />
     </div>
   );
 }

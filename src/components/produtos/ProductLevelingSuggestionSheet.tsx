@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { addDays } from "date-fns";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -137,6 +138,7 @@ export function ProductLevelingSuggestionSheet({
         return;
       }
       onClose();
+      toast.success("Nivelamento de custo salvo.");
     } catch {
       setError("Falha de rede ao salvar nivelamento.");
     } finally {
