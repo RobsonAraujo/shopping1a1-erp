@@ -56,6 +56,7 @@ import {
 } from "@/lib/pricing/wholesale-pricing";
 import { WholesaleReductionSettingsCard } from "@/components/lucratividade/WholesaleReductionSettingsCard";
 import { FinancialEvaluationTable } from "@/components/lucratividade/financial-evaluation-table";
+import { FinancialEvaluationTableSkeleton } from "@/components/lucratividade/FinancialEvaluationTableSkeleton";
 import type {
   SortDir,
   SortKey,
@@ -775,11 +776,7 @@ export function FinancialEvaluationClient() {
 
           {error ? <UserFeedback className="mb-3">{error}</UserFeedback> : null}
 
-          {loading && !data ? (
-            <p className="text-sm text-[var(--muted-foreground)]">
-              Carregando margens…
-            </p>
-          ) : null}
+          {loading && !data ? <FinancialEvaluationTableSkeleton /> : null}
 
           {loading && data && data.length > 0 ? (
             <p className="mb-3 flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
