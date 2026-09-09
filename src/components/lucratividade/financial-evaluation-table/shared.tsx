@@ -12,6 +12,7 @@ import {
 } from "@/lib/pricing/financial-margin";
 import type { FinancialEvaluationRow } from "@/lib/lucratividade/financial-evaluation-data";
 import { cn } from "@/lib/utils";
+import { BlurredValue } from "@/components/shared/BlurredValue";
 import type { SortDir, SortKey } from "@/components/lucratividade/financial-evaluation-table/types";
 
 export const currentSectionClass = "bg-[var(--muted)]/10";
@@ -160,12 +161,29 @@ export function StackedMarginCell({
   value,
   sublabel,
   unavailable,
+  pending,
 }: {
   percent: number | null;
   value: number | null;
   sublabel?: string | null;
   unavailable?: boolean;
+  /** Linha ainda esperando o preço/taxa/frete/margem via streaming (SSE) —
+   * mostra um placeholder borrado em vez do valor (que ainda seria 0/null). */
+  pending?: boolean;
 }) {
+  if (pending) {
+    return (
+      <div className="text-right">
+        <div className="font-semibold">
+          <BlurredValue srLabel="Margem ainda carregando" />
+        </div>
+        <div className="mt-0.5 text-xs">
+          <BlurredValue srLabel="Valor da margem ainda carregando" />
+        </div>
+      </div>
+    );
+  }
+
   if (unavailable) {
     return <span className="text-[var(--muted-foreground)]">—</span>;
   }

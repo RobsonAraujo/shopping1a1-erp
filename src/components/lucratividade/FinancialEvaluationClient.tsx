@@ -358,13 +358,22 @@ export function FinancialEvaluationClient() {
             const event = JSON.parse(line.slice(6)) as StreamEvent;
 
             if (event.type === "row") {
-              collected.push(event.row);
+              // Só entra em `collected` (o retorno final de `loadData`) a
+              // versão resolvida — a pré-visualização rápida (`pending`)
+              // chega primeiro só pra preencher a tabela na hora, o valor
+              // final de cada item substitui ela quando chega.
+              if (!event.row.pending) collected.push(event.row);
               setData((prev) => {
                 if (!prev) return [event.row];
-                const withoutDupe = prev.filter(
-                  (r) => r.mlItemId !== event.row.mlItemId,
-                );
-                return [...withoutDupe, event.row];
+                // Troca no lugar quando o item já existe (preview → final),
+                // em vez de tirar e reempurrar no fim — sem isso, cada linha
+                // "pularia" pro final da lista assim que resolvesse.
+                const exists = prev.some((r) => r.mlItemId === event.row.mlItemId);
+                return exists
+                  ? prev.map((r) =>
+                      r.mlItemId === event.row.mlItemId ? event.row : r,
+                    )
+                  : [...prev, event.row];
               });
             } else if (event.type === "complete") {
               setWholesaleReductions(event.wholesaleReductions);
@@ -775,7 +784,9 @@ export function FinancialEvaluationClient() {
           {loading && data && data.length > 0 ? (
             <p className="mb-3 flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
               <RefreshCw className="size-3.5 animate-spin" aria-hidden />
-              Carregando mais anúncios… ({data.length} carregados)
+              {data.some((row) => row.pending)
+                ? `Calculando preço, taxa e margem… (${data.filter((row) => !row.pending).length}/${data.length})`
+                : `Carregando mais anúncios… (${data.length} carregados)`}
             </p>
           ) : null}
 

@@ -23,6 +23,7 @@ import {
   tableHeadPad,
 } from "@/components/lucratividade/financial-evaluation-table/shared";
 import type { FinancialEvaluationTableProps } from "@/components/lucratividade/financial-evaluation-table/types";
+import { BlurredValue } from "@/components/shared/BlurredValue";
 
 export function FinancialEvaluationTableDesktop({
   sortedItems,
@@ -183,7 +184,8 @@ export function FinancialEvaluationTableDesktop({
                             Sem alíquota
                           </Badge>
                         ) : null}
-                        {row.pmaPrice !== null &&
+                        {!row.pending &&
+                        row.pmaPrice !== null &&
                         row.salePrice < row.pmaPrice ? (
                           <Badge
                             variant="destructive"
@@ -201,15 +203,25 @@ export function FinancialEvaluationTableDesktop({
                 </td>
                 <td className={tableCellPad}>{row.listingTypeLabel ?? "—"}</td>
                 <td className={cn(tableCellPad, "text-right")}>
-                  <div>{formatFinancialMoney(row.salePrice)}</div>
-                  {row.hasPromotion && row.regularPrice != null ? (
-                    <div className="text-xs text-[var(--muted-foreground)] line-through">
-                      {formatFinancialMoney(row.regularPrice)}
-                    </div>
-                  ) : null}
+                  {row.pending ? (
+                    <BlurredValue srLabel="Preço ainda carregando" />
+                  ) : (
+                    <>
+                      <div>{formatFinancialMoney(row.salePrice)}</div>
+                      {row.hasPromotion && row.regularPrice != null ? (
+                        <div className="text-xs text-[var(--muted-foreground)] line-through">
+                          {formatFinancialMoney(row.regularPrice)}
+                        </div>
+                      ) : null}
+                    </>
+                  )}
                 </td>
                 <td className={cn(currentSectionClass, tableCellPad)}>
-                  <StackedMarginCell percent={marginPercent} value={marginValue} />
+                  <StackedMarginCell
+                    percent={marginPercent}
+                    value={marginValue}
+                    pending={row.pending}
+                  />
                 </td>
                 <td className={cn(currentSectionClass, tableCellPad)}>
                   <StackedMarginCell
@@ -217,6 +229,7 @@ export function FinancialEvaluationTableDesktop({
                     value={afterAdsValue}
                     sublabel={tacosSublabel}
                     unavailable={!row.adsMetricsAvailable}
+                    pending={row.pending}
                   />
                 </td>
                 <td

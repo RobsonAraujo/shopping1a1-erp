@@ -34,12 +34,12 @@ import type {
   SupplierGroup,
 } from "@/components/inventory/inventory-stock-table/types";
 import {
-  BlurredValue,
   formatLeadTimeDisplay,
   formatOnTheWayCell,
   onTheWayUnits,
   stockUnits,
 } from "@/components/inventory/inventory-stock-table/utils";
+import { BlurredValue } from "@/components/shared/BlurredValue";
 
 /**
  * Grid CSS em vez de `<table>` — necessário pra virtualizar (`position:

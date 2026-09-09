@@ -18,6 +18,7 @@ import {
   StackedMarginCell,
 } from "@/components/lucratividade/financial-evaluation-table/shared";
 import type { FinancialEvaluationTableProps } from "@/components/lucratividade/financial-evaluation-table/types";
+import { BlurredValue } from "@/components/shared/BlurredValue";
 
 export function FinancialEvaluationTableMobile({
   sortedItems,
@@ -91,7 +92,9 @@ export function FinancialEvaluationTableMobile({
                         Sem alíquota
                       </Badge>
                     ) : null}
-                    {row.pmaPrice !== null && row.salePrice < row.pmaPrice ? (
+                    {!row.pending &&
+                    row.pmaPrice !== null &&
+                    row.salePrice < row.pmaPrice ? (
                       <Badge
                         variant="destructive"
                         className="mt-1"
@@ -102,14 +105,20 @@ export function FinancialEvaluationTableMobile({
                     ) : null}
                   </div>
                   <div className="shrink-0 text-right">
-                    <div className="text-sm font-medium">
-                      {formatFinancialMoney(row.salePrice)}
-                    </div>
-                    {row.hasPromotion && row.regularPrice != null ? (
-                      <div className="text-xs text-[var(--muted-foreground)] line-through">
-                        {formatFinancialMoney(row.regularPrice)}
-                      </div>
-                    ) : null}
+                    {row.pending ? (
+                      <BlurredValue srLabel="Preço ainda carregando" />
+                    ) : (
+                      <>
+                        <div className="text-sm font-medium">
+                          {formatFinancialMoney(row.salePrice)}
+                        </div>
+                        {row.hasPromotion && row.regularPrice != null ? (
+                          <div className="text-xs text-[var(--muted-foreground)] line-through">
+                            {formatFinancialMoney(row.regularPrice)}
+                          </div>
+                        ) : null}
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -122,6 +131,7 @@ export function FinancialEvaluationTableMobile({
                       <StackedMarginCell
                         percent={marginPercent}
                         value={marginValue}
+                        pending={row.pending}
                       />
                     </div>
                   </div>
@@ -135,6 +145,7 @@ export function FinancialEvaluationTableMobile({
                         value={afterAdsValue}
                         sublabel={tacosSublabel}
                         unavailable={!row.adsMetricsAvailable}
+                        pending={row.pending}
                       />
                     </div>
                   </div>

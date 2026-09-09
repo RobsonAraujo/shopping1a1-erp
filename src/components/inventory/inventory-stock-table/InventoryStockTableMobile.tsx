@@ -19,11 +19,11 @@ import type {
   SupplierGroup,
 } from "@/components/inventory/inventory-stock-table/types";
 import {
-  BlurredValue,
   formatLeadTimeDisplay,
   onTheWayUnits,
   stockUnits,
 } from "@/components/inventory/inventory-stock-table/utils";
+import { BlurredValue } from "@/components/shared/BlurredValue";
 
 const GROUP_HEADER_HEIGHT = 32;
 const CARD_HEIGHT = 220;

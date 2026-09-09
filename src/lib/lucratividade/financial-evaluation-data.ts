@@ -95,6 +95,11 @@ export type FinancialEvaluationRow = {
   kitComponents?: KitComponent[] | null;
   /** Preço Mínimo Anunciável cadastrado para o SKU (null se não cadastrado). */
   pmaPrice: number | null;
+  /** `true` enquanto salePrice/mlFeeAmount/shippingCost/mlFeeRebate/breakdown
+   * (e a margem pós ADS, que depende de breakdown) ainda não vieram do
+   * streaming — só usado no modo `stream=1` de `loadFinancialEvaluationRows`.
+   * Ausente/`false` em qualquer outro caminho (linha já resolvida). */
+  pending?: boolean;
 };
 
 async function mapWithConcurrency<T, R>(
@@ -243,6 +248,125 @@ function applyAdsToRow(
     adsStatus: adMetrics.status,
     adsMetricsAvailable: true,
     warnings,
+  };
+}
+
+type FastRowFields = Omit<
+  FinancialEvaluationRow,
+  | "acosPercent"
+  | "tacosPercent"
+  | "adsCost"
+  | "adsUnitsSold"
+  | "adsCostPerUnit"
+  | "adsPeriodDays"
+  | "marginAfterAdsPercent"
+  | "marginAfterAdsValue"
+  | "hasActiveAds"
+  | "adsStatus"
+  | "adsMetricsAvailable"
+>;
+
+/**
+ * Só a parte síncrona de `buildRowForItem` (sem chamada ao ML) — usada pra
+ * emitir uma pré-visualização imediata de cada linha no modo streaming
+ * (`loadFinancialEvaluationRows({ onRow })`), antes de preço/taxa ML/
+ * frete/rebate/margem resolverem (dependem de `fetchItemSalePrice` e afins).
+ * Mantida separada de propósito — `buildRowForItem` fica intocada, pra não
+ * arriscar a lógica financeira já validada.
+ */
+function buildFastRowPreview(
+  item: ItemBody,
+  pricing: ResolvedProductPricing | null,
+  taxBySku: Map<string, number>,
+  taxByMlItemId: Map<string, number>,
+  kitContext:
+    | {
+        pricingBySku: Map<string, ResolvedProductPricing>;
+        kitsByMlItemId: Map<string, KitComponent[]>;
+      }
+    | undefined,
+  pmaBySku: Map<string, number> | undefined,
+  effectiveSku: string | null | undefined,
+): FastRowFields {
+  const warnings: string[] = [];
+
+  const sku = effectiveSku ?? getItemSku(item);
+  let productCost = pricing?.pricingCost ?? null;
+  let extraCosts = pricing?.extraCosts ?? null;
+  let taxRatePercent =
+    taxByMlItemId.get(item.id) ??
+    (sku ? (taxBySku.get(normalizeProductSku(sku)) ?? null) : null);
+  let isKitComposition = false;
+  let kitComponents: KitComponent[] | null = null;
+
+  if (!sku && isKitItem(item) && kitContext) {
+    const components = kitContext.kitsByMlItemId.get(item.id);
+    if (components && components.length > 0) {
+      const resolved = resolveKitPricing(
+        components,
+        kitContext.pricingBySku,
+        taxBySku,
+      );
+      productCost = resolved.productCost;
+      extraCosts = resolved.extraCosts;
+      taxRatePercent = resolved.taxRatePercent;
+      isKitComposition = true;
+      kitComponents = components;
+      if (resolved.missingSkus.length > 0) {
+        warnings.push(
+          `Kit com componente(s) sem cadastro em Meus produtos: ${resolved.missingSkus.join(", ")}.`,
+        );
+      }
+    }
+  }
+
+  if (isKitComposition) {
+    // avisos de composição do kit já foram adicionados acima (componentes faltando, se houver)
+  } else if (!sku && isKitItem(item)) {
+    warnings.push(
+      "Anúncio kit sem SKU — cadastre a composição em Meus produtos > Kits sem SKU.",
+    );
+  } else if (!sku) {
+    warnings.push(
+      "Anúncio sem SKU — cadastre o produto em Meus produtos com o mesmo SKU do ML.",
+    );
+  } else if (!pricing) {
+    warnings.push(
+      `SKU ${sku} sem cadastro completo em Meus produtos — preencha o custo de precificação.`,
+    );
+  } else if (taxRatePercent === null) {
+    warnings.push(
+      `SKU ${sku} sem dados no relatório tributário — recalcule em Relatório tributário para obter o imposto.`,
+    );
+  }
+
+  return {
+    mlItemId: item.id,
+    title: item.title,
+    sku,
+    imageUrl: bestItemImageUrl(item) ?? null,
+    permalink: buyerFacingItemPermalink(item.permalink, item.id),
+    status: item.status,
+    salePrice: item.price,
+    regularPrice: null,
+    hasPromotion: false,
+    listingTypeId: item.listing_type_id ?? null,
+    listingTypeLabel: listingTypeLabelFromId(item.listing_type_id),
+    productCost,
+    extraCosts,
+    taxRatePercent,
+    mlFeeAmount: null,
+    mlFeeRebate: null,
+    mlFeeRebateOrderId: null,
+    shippingCost: null,
+    breakdown: null,
+    errors: [],
+    warnings,
+    isKit: isKitItem(item),
+    isKitComposition,
+    kitComponents,
+    pmaPrice: sku ? (pmaBySku?.get(normalizeProductSku(sku)) ?? null) : null,
+    pending: true,
   };
 }
 
@@ -955,6 +1079,36 @@ export async function loadFinancialEvaluationRows(
   for (const product of productsWithPma) {
     if (product.pmaPrice == null || !product.sku) continue;
     pmaBySku.set(normalizeProductSku(product.sku), Number(product.pmaPrice));
+  }
+
+  // Modo streaming: emite uma pré-visualização de TODAS as linhas na hora
+  // (título/imagem/custo/PMA já disponíveis, sem chamada ao ML) — antes do
+  // preço/taxa/frete/rebate/margem, que só resolvem no loop lento abaixo.
+  // O client desborra cada linha individualmente quando o `onRow` final
+  // (com `pending` ausente) daquele item chegar.
+  if (options?.onRow) {
+    for (const item of operationalItems) {
+      const sku = effectiveSkuByItemId.get(item.id) ?? null;
+      const pricing =
+        pricingByMlItemId.get(item.id) ??
+        (sku ? (pricingBySku.get(normalizeProductSku(sku)) ?? null) : null);
+      const preview = buildFastRowPreview(
+        item,
+        pricing,
+        taxBySku,
+        taxByMlItemId,
+        { pricingBySku, kitsByMlItemId },
+        pmaBySku,
+        sku,
+      );
+      const withAds = applyAdsToRow(preview, adsLoad.map.get(item.id), adsLoad.available);
+      if (!adsLoad.available) {
+        withAds.warnings.push(
+          "Métricas de Product Ads indisponíveis; margem pós ADS não calculada.",
+        );
+      }
+      options.onRow(withAds);
+    }
   }
 
   const baseRows = await mapWithConcurrency(
