@@ -6,6 +6,7 @@ import { useDraggable } from "@dnd-kit/core";
 import { ExternalLink, ImageOff } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { BlurredValue } from "@/components/shared/BlurredValue";
 import { MetricWithHint } from "@/components/shared/MetricWithHint";
 import { supplierPathSegment } from "@/lib/compras/purchase-analysis";
 import type { OperationsBoardCard } from "@/lib/compras/replenishment-cycle-data";
@@ -53,32 +54,40 @@ function OperationsCardHeader({ card }: { card: OperationsBoardCard }) {
         ) : null}
       </div>
 
-      {card.kind === "purchase" && card.purchaseStartsOn ? (
-        <MetricWithHint
-          content={card.purchaseStartsOnTooltip}
-          className="mt-1.5 text-[11px] text-[var(--muted-foreground)]"
-        >
-          Comprar em {card.purchaseStartsOn}
-        </MetricWithHint>
-      ) : null}
-      {card.kind === "full" && card.searchStartsOn ? (
-        // Data pra COMEÇAR a agendar/buscar o envio ao Full (esgotamento
-        // previsto do estoque ML menos o lead time) — não é "quando fica
-        // Full". Nome bate com a coluna "Agendado" do board; o tooltip
-        // (ícone de ajuda) explica a conta pro usuário.
-        <MetricWithHint
-          content={card.searchStartsOnTooltip}
-          className="mt-1.5 text-[11px] text-[var(--muted-foreground)]"
-        >
-          Agendar em {card.searchStartsOn}
-        </MetricWithHint>
-      ) : null}
+      {card.salesPending ? (
+        <p className="mt-1.5 text-[11px] text-[var(--muted-foreground)]">
+          <BlurredValue srLabel="Calculando urgência e prazo" />
+        </p>
+      ) : (
+        <>
+          {card.kind === "purchase" && card.purchaseStartsOn ? (
+            <MetricWithHint
+              content={card.purchaseStartsOnTooltip}
+              className="mt-1.5 text-[11px] text-[var(--muted-foreground)]"
+            >
+              Comprar em {card.purchaseStartsOn}
+            </MetricWithHint>
+          ) : null}
+          {card.kind === "full" && card.searchStartsOn ? (
+            // Data pra COMEÇAR a agendar/buscar o envio ao Full (esgotamento
+            // previsto do estoque ML menos o lead time) — não é "quando fica
+            // Full". Nome bate com a coluna "Agendado" do board; o tooltip
+            // (ícone de ajuda) explica a conta pro usuário.
+            <MetricWithHint
+              content={card.searchStartsOnTooltip}
+              className="mt-1.5 text-[11px] text-[var(--muted-foreground)]"
+            >
+              Agendar em {card.searchStartsOn}
+            </MetricWithHint>
+          ) : null}
 
-      {urgent ? (
-        <Badge variant="warning" className="mt-2 h-5 px-1.5 text-[10px]">
-          Urgente
-        </Badge>
-      ) : null}
+          {urgent ? (
+            <Badge variant="warning" className="mt-2 h-5 px-1.5 text-[10px]">
+              Urgente
+            </Badge>
+          ) : null}
+        </>
+      )}
     </div>
   );
 }

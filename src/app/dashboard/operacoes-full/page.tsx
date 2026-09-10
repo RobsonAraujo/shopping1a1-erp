@@ -5,25 +5,23 @@ import { Kanban } from "lucide-react";
 import { OperationsKanban } from "@/components/operacoes-full/OperationsKanban";
 import { OperationsKanbanSkeleton } from "@/components/operacoes-full/OperationsKanbanSkeleton";
 import { UserFeedback } from "@/components/ui/user-feedback";
-import { loadOperationsBoards } from "@/lib/compras/replenishment-cycle-data";
+import { loadOperationsBoardsFast, type loadOperationsBoards } from "@/lib/compras/replenishment-cycle-data";
 import { readSession } from "@/lib/mercadolibre/session";
 import { getOrganizationContext } from "@/lib/organizations/context";
 import { publicPageLoadMessage } from "@/lib/infra/server-public-error";
 
 async function OperacoesFullDataSection({
   token,
-  userId,
   organizationId,
 }: {
   token: string;
-  userId: number;
   organizationId: string;
 }) {
   let loadError: string | null = null;
   let boards: Awaited<ReturnType<typeof loadOperationsBoards>> | null = null;
 
   try {
-    boards = await loadOperationsBoards(token, userId, organizationId, "full");
+    boards = await loadOperationsBoardsFast(organizationId, token, "full");
   } catch (e) {
     loadError = publicPageLoadMessage(
       "dashboard/operacoes-full",
@@ -81,7 +79,6 @@ export default async function OperacoesFullPage() {
       <Suspense fallback={<OperationsKanbanSkeleton />}>
         <OperacoesFullDataSection
           token={token}
-          userId={userId}
           organizationId={orgContext.organization.id}
         />
       </Suspense>

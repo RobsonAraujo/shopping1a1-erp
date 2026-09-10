@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { DndContext, DragOverlay, type DragEndEvent } from "@dnd-kit/core";
 import {
@@ -20,10 +20,16 @@ import { UserFeedback } from "@/components/ui/user-feedback";
 import type {
   OperationsBoardCard,
   OperationsBoardsData,
+  OperationsCardSalesPatch,
 } from "@/lib/compras/replenishment-cycle-data";
-import { summarizeOperationsCounts } from "@/lib/compras/replenishment-cycle";
+import {
+  mergeOperationsBoardCards,
+  patchOperationsBoardCardsSales,
+  summarizeOperationsCounts,
+} from "@/lib/compras/replenishment-cycle";
 import { filterByItemListSearch } from "@/lib/item-list-search";
 import { useDndSensors } from "@/hooks/use-dnd-sensors";
+import { useSSEStream } from "@/hooks/use-sse-stream";
 import type { OperationCycleKind, ReplenishmentStatus } from "@/generated/prisma/client";
 import { cn } from "@/lib/utils";
 
@@ -49,6 +55,32 @@ function applyOptimisticStatus(
     summary,
   };
 }
+
+/** Substitui só os cards do board `kind` (o outro lado do `OperationsBoardsData`
+ * nunca é tocado por este componente — cada página só sincroniza o `kind`
+ * que exibe) e recomputa os dois resumos a partir daí. */
+function withKindCards(
+  boards: OperationsBoardsData,
+  kind: OperationCycleKind,
+  cards: OperationsBoardCard[],
+): OperationsBoardsData {
+  const purchaseCards = kind === "purchase" ? cards : boards.purchase.cards;
+  const fullCards = kind === "full" ? cards : boards.full.cards;
+  const summary = summarizeOperationsCounts([
+    ...purchaseCards.map((c) => ({ kind: c.kind, status: c.status })),
+    ...fullCards.map((c) => ({ kind: c.kind, status: c.status })),
+  ]);
+  return {
+    purchase: { cards: purchaseCards, summary: summary.purchase },
+    full: { cards: fullCards, summary: summary.full },
+    summary,
+  };
+}
+
+type ResyncStreamEvent =
+  | ({ type: "card-patch"; mlItemId: string } & OperationsCardSalesPatch)
+  | { type: "done"; cards: OperationsBoardCard[] }
+  | { type: "error"; message: string };
 
 type OperationsKanbanProps = {
   initialData: OperationsBoardsData;
@@ -116,7 +148,15 @@ export function OperationsKanban({ initialData, kind }: OperationsKanbanProps) {
         setError((json as { error?: string }).error ?? "Falha ao sincronizar.");
         return;
       }
-      setData(json as OperationsBoardsData);
+      const incomingCards = kind === "purchase" ? json.purchase.cards : json.full.cards;
+      setData((prev) => {
+        const currentCards = kind === "purchase" ? prev.purchase.cards : prev.full.cards;
+        return withKindCards(
+          prev,
+          kind,
+          mergeOperationsBoardCards(currentCards, incomingCards),
+        );
+      });
     } catch {
       setError("Falha de rede ao sincronizar.");
     } finally {
@@ -148,10 +188,19 @@ export function OperationsKanban({ initialData, kind }: OperationsKanbanProps) {
           setData(previousData);
           return;
         }
-        setData({
-          purchase: json.purchase,
-          full: json.full,
-          summary: json.summary,
+        // Merge (não replace): a resposta do PATCH é `loadOperationsBoards`
+        // completo (mesmo `kind`) — se um resync em streaming também
+        // estiver em voo, o card recém-confirmado aqui (updatedAt mais
+        // novo) não pode ser revertido por um snapshot do stream que
+        // começou antes deste PATCH terminar.
+        const incomingCards = kind === "purchase" ? json.purchase.cards : json.full.cards;
+        setData((prev) => {
+          const currentCards = kind === "purchase" ? prev.purchase.cards : prev.full.cards;
+          return withKindCards(
+            prev,
+            kind,
+            mergeOperationsBoardCards(currentCards, incomingCards),
+          );
         });
       } catch {
         setError("Falha de rede ao atualizar card.");
@@ -160,8 +209,57 @@ export function OperationsKanban({ initialData, kind }: OperationsKanbanProps) {
         setBusyId(null);
       }
     },
-    [data],
+    [data, kind],
   );
+
+  // Resync em background: o board já pintou com o que estava no banco
+  // (fast path do server component) — este stream busca a venda de
+  // verdade no Mercado Livre e vai destravando os campos borrados
+  // (`salesPending`) card a card, sem travar a tela. Também pode fazer
+  // cards novos aparecerem/desaparecerem no evento final (`done`).
+  const resyncStream = useSSEStream<ResyncStreamEvent>(
+    useCallback(
+      (event) => {
+        if (event.type === "card-patch") {
+          const { mlItemId, ...patch } = event;
+          setData((prev) => {
+            const currentCards = kind === "purchase" ? prev.purchase.cards : prev.full.cards;
+            return withKindCards(
+              prev,
+              kind,
+              patchOperationsBoardCardsSales(currentCards, mlItemId, patch),
+            );
+          });
+        } else if (event.type === "done") {
+          setData((prev) => {
+            const currentCards = kind === "purchase" ? prev.purchase.cards : prev.full.cards;
+            return withKindCards(
+              prev,
+              kind,
+              mergeOperationsBoardCards(currentCards, event.cards),
+            );
+          });
+        } else if (event.type === "error") {
+          setError(event.message);
+        }
+      },
+      [kind],
+    ),
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void resyncStream.start("/api/replenishment-cycles/resync-stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind }),
+      signal: controller.signal,
+    });
+    return () => controller.abort();
+    // Dispara 1x ao montar (e de novo se `kind` mudar, o que não acontece
+    // hoje — cada página monta um `OperationsKanban` com `kind` fixo).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kind]);
 
   const activeDragCard = activeDragCycleId
     ? activeCards.find((card) => card.cycleId === activeDragCycleId)

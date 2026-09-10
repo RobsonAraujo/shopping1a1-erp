@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { DndContext, DragOverlay, type DragEndEvent } from "@dnd-kit/core";
@@ -34,13 +34,22 @@ import {
   resolveMoveActionForSupplier,
   type MoveAction,
 } from "@/lib/compras/supplier-board";
-import { PURCHASE_STATUS_LABELS } from "@/lib/compras/replenishment-cycle";
+import {
+  PURCHASE_STATUS_LABELS,
+  mergeOperationsBoardCards,
+  patchOperationsBoardCardsSales,
+} from "@/lib/compras/replenishment-cycle";
 import { supplierPathSegment } from "@/lib/compras/purchase-analysis";
-import type { OperationsBoardCard, OperationsBoardsData } from "@/lib/compras/replenishment-cycle-data";
+import type {
+  OperationsBoardCard,
+  OperationsBoardsData,
+  OperationsCardSalesPatch,
+} from "@/lib/compras/replenishment-cycle-data";
 import { filterByItemListSearch } from "@/lib/item-list-search";
 import { readApiError } from "@/lib/api/api-client-error";
 import { useApiResource } from "@/hooks/use-api-resource";
 import { useDndSensors } from "@/hooks/use-dnd-sensors";
+import { useSSEStream } from "@/hooks/use-sse-stream";
 import type { SupplierRow } from "@/components/fornecedores/FornecedoresClient";
 import type { ReplenishmentStatus } from "@/generated/prisma/client";
 import { cn } from "@/lib/utils";
@@ -49,6 +58,11 @@ type PendingBackwardMove = MoveAction & {
   supplier: string;
   targetStatus: ReplenishmentStatus;
 };
+
+type ResyncStreamEvent =
+  | ({ type: "card-patch"; mlItemId: string } & OperationsCardSalesPatch)
+  | { type: "done"; cards: OperationsBoardCard[] }
+  | { type: "error"; message: string };
 
 export function SupplierPurchaseKanban({
   initialCards,
@@ -106,12 +120,43 @@ export function SupplierPurchaseKanban({
         setError(json.error ?? "Falha ao sincronizar.");
         return;
       }
-      setCards(json.purchase.cards);
+      setCards((prev) => mergeOperationsBoardCards(prev, json.purchase.cards));
     } catch {
       setError("Falha de rede ao sincronizar.");
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  // Resync em background: o board já pintou com o que estava no banco
+  // (fast path do server component) — este stream busca a venda de
+  // verdade no Mercado Livre e vai destravando os campos borrados
+  // (`salesPending`) card a card, sem travar a tela. Também pode fazer
+  // cards novos aparecerem/desaparecerem no evento final (`done`).
+  const resyncStream = useSSEStream<ResyncStreamEvent>(
+    useCallback((event) => {
+      if (event.type === "card-patch") {
+        const { mlItemId, ...patch } = event;
+        setCards((prev) => patchOperationsBoardCardsSales(prev, mlItemId, patch));
+      } else if (event.type === "done") {
+        setCards((prev) => mergeOperationsBoardCards(prev, event.cards));
+      } else if (event.type === "error") {
+        setError(event.message);
+      }
+    }, []),
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void resyncStream.start("/api/replenishment-cycles/resync-stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "purchase" }),
+      signal: controller.signal,
+    });
+    return () => controller.abort();
+    // Dispara 1x ao montar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function planMove(supplier: string, targetStatus: ReplenishmentStatus): PendingBackwardMove {

@@ -2,6 +2,10 @@ import type {
   OperationCycleKind,
   ReplenishmentStatus,
 } from "@/generated/prisma/client";
+import type {
+  OperationsBoardCard,
+  OperationsCardSalesPatch,
+} from "@/lib/compras/replenishment-cycle-data";
 
 export type ReplenishmentSnapshot = {
   mlQty: number;
@@ -348,4 +352,47 @@ export function summarizeOperationsCounts(
     full,
     totalActive: purchase.totalActive + full.totalActive,
   };
+}
+
+/**
+ * Mescla uma resposta "board inteiro" do servidor (drag-PATCH, botão
+ * "Sincronizar" ou o evento `done` do streaming de resync) com o estado
+ * local — sem isso, qualquer uma dessas respostas faz um replace bruto e
+ * pode reverter uma edição local mais recente que ainda não chegou no
+ * snapshot do servidor (ex.: um drag que acabou de confirmar, mas o resync
+ * em streaming começou antes dele e só termina depois). `incoming` é a
+ * fonte da verdade — inclusive pra remover um card que sumiu de lá (só
+ * acontece por auto-complete real: o sync automático nunca marca
+ * `completed` num card que o usuário moveu manualmente). Um card local só
+ * "vence" o recebido se seu `updatedAt` for estritamente mais novo.
+ */
+export function mergeOperationsBoardCards(
+  current: OperationsBoardCard[],
+  incoming: OperationsBoardCard[],
+): OperationsBoardCard[] {
+  const currentById = new Map(current.map((card) => [card.cycleId, card]));
+  return incoming.map((card) => {
+    const local = currentById.get(card.cycleId);
+    if (
+      local &&
+      new Date(local.updatedAt).getTime() > new Date(card.updatedAt).getTime()
+    ) {
+      return local;
+    }
+    return card;
+  });
+}
+
+/** Aplica um patch de campos derivados de venda num card por `mlItemId` —
+ * nunca toca `status`/`updatedAt`, então não compete com
+ * `mergeOperationsBoardCards`. Sem efeito se nenhum card local tiver esse
+ * `mlItemId` (pode já ter sido removido, ou pertencer ao outro board). */
+export function patchOperationsBoardCardsSales(
+  cards: OperationsBoardCard[],
+  mlItemId: string,
+  patch: OperationsCardSalesPatch,
+): OperationsBoardCard[] {
+  return cards.map((card) =>
+    card.mlItemId === mlItemId ? { ...card, ...patch } : card,
+  );
 }

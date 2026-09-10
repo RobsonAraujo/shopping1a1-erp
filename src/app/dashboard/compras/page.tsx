@@ -5,25 +5,23 @@ import { ShoppingCart } from "lucide-react";
 import { ComprasPageClient } from "@/components/compras/ComprasPageClient";
 import { ComprasPageSkeleton } from "@/components/compras/ComprasPageSkeleton";
 import { UserFeedback } from "@/components/ui/user-feedback";
-import { loadOperationsBoards } from "@/lib/compras/replenishment-cycle-data";
+import { loadOperationsBoardsFast, type loadOperationsBoards } from "@/lib/compras/replenishment-cycle-data";
 import { readSession } from "@/lib/mercadolibre/session";
 import { getOrganizationContext } from "@/lib/organizations/context";
 import { publicPageLoadMessage } from "@/lib/infra/server-public-error";
 
 async function ComprasDataSection({
   token,
-  userId,
   organizationId,
 }: {
   token: string;
-  userId: number;
   organizationId: string;
 }) {
   let cards: Awaited<ReturnType<typeof loadOperationsBoards>>["purchase"]["cards"] | null =
     null;
   let loadError: string | null = null;
   try {
-    const boards = await loadOperationsBoards(token, userId, organizationId, "purchase");
+    const boards = await loadOperationsBoardsFast(organizationId, token, "purchase");
     cards = boards.purchase.cards;
   } catch (e) {
     loadError = publicPageLoadMessage(
@@ -81,7 +79,6 @@ export default async function ComprasPage() {
       <Suspense fallback={<ComprasPageSkeleton />}>
         <ComprasDataSection
           token={token}
-          userId={userId}
           organizationId={orgContext.organization.id}
         />
       </Suspense>

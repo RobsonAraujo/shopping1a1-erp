@@ -851,6 +851,11 @@ export async function fetchUnitsSoldForItemsInWindow(
   itemIds: string[],
   windowDays: number,
   dateField: SalesWindowDateField = "date_closed",
+  /** Chamado assim que CADA item resolve (não só quando o lote inteiro
+   * termina) — permite ao chamador transmitir os resultados aos poucos
+   * (ex.: SSE) em vez de esperar o item mais lento do lote. Mesmo padrão de
+   * `enrichItemsWithFulfillmentStock`. */
+  onItem?: (itemId: string, unitsSold: number) => void,
 ): Promise<Record<string, number>> {
   const unique = [...new Set(itemIds.filter(Boolean))];
   if (unique.length === 0 || windowDays <= 0) return {};
@@ -871,6 +876,7 @@ export async function fetchUnitsSoldForItemsInWindow(
         toStr,
         dateField,
       );
+      onItem?.(itemId, n);
       return [itemId, n] as const;
     }),
   );
@@ -975,6 +981,7 @@ export async function fetchUnitsSoldForItemsInWindowBatched(
   windowDays: number,
   dateField: SalesWindowDateField = "date_closed",
   chunkSize = 12,
+  onItem?: (itemId: string, unitsSold: number) => void,
 ): Promise<Record<string, number>> {
   const unique = [...new Set(itemIds.filter(Boolean))];
   const out: Record<string, number> = {};
@@ -986,6 +993,7 @@ export async function fetchUnitsSoldForItemsInWindowBatched(
       chunk,
       windowDays,
       dateField,
+      onItem,
     );
     Object.assign(out, part);
   }

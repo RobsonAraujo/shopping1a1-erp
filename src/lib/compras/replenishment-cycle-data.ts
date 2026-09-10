@@ -32,7 +32,10 @@ import {
   fetchItemsByIdsBatched,
   fetchOperationalListingIds,
 } from "@/lib/mercadolibre/api";
-import { fetchUnitsSoldForItemsInWindowCached } from "@/lib/mercadolibre/sales-window-cache";
+import {
+  fetchUnitsSoldForItemsInWindowCached,
+  readCachedUnitsSoldForItemsInWindow,
+} from "@/lib/mercadolibre/sales-window-cache";
 import { mapWithConcurrency } from "@/lib/mercadolibre/concurrency";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { getItemSku, getSkuSupplier, isKitItem } from "@/lib/mercadolibre/item-sku";
@@ -59,14 +62,28 @@ async function ensureListingsForItems(
   await upsertListingsFromItems(organizationId, items);
 }
 
-let replenishmentSyncTail: Promise<void> = Promise.resolve();
+/** Chave = organizationId (+kind quando informado) — sync de orgs/kinds
+ * diferentes não precisa esperar um no outro; só dois syncs do MESMO board
+ * da MESMA org (duas abas, dois usuários) precisam serializar pra não
+ * criar ciclo duplicado (não há unique constraint pra isso no schema). */
+const replenishmentSyncTails = new Map<string, Promise<void>>();
 
-function withReplenishmentSyncLock<T>(fn: () => Promise<T>): Promise<T> {
-  const run = replenishmentSyncTail.then(fn);
-  replenishmentSyncTail = run.then(
+function withReplenishmentSyncLock<T>(
+  key: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const tail = replenishmentSyncTails.get(key) ?? Promise.resolve();
+  const run = tail.then(fn);
+  const settled = run.then(
     () => undefined,
     () => undefined,
   );
+  replenishmentSyncTails.set(key, settled);
+  void settled.then(() => {
+    if (replenishmentSyncTails.get(key) === settled) {
+      replenishmentSyncTails.delete(key);
+    }
+  });
   return run;
 }
 
@@ -95,6 +112,18 @@ export type OperationsBoardCard = {
   notes: string | null;
   warehouseQtyAtOrder: number | null;
   mlQtyAtCollection: number | null;
+  /** ISO de `ReplenishmentCycle.updatedAt` — o client usa isso pra decidir
+   * qual versão de um card é mais recente ao mesclar respostas concorrentes
+   * (drag otimista confirmado vs. um resync em streaming que partiu antes
+   * do drag terminar). */
+  updatedAt: string;
+  /** `true` quando os campos derivados de venda acima (`purchaseIsOverdue`,
+   * `searchIsOverdue`, `purchaseStartsOn`, `searchStartsOn`, tooltips)
+   * ainda não têm um valor de venda real por trás — nascem neutros (ver
+   * `computeStockPlanningDisplay` com `unitsSoldInWindow <= 0`) até o
+   * streaming trazer o valor de verdade e destravar a UI (`BlurredValue`).
+   */
+  salesPending: boolean;
 };
 
 export type SingleBoardData = {
@@ -534,7 +563,8 @@ export async function syncOperationCyclesForItems(
    * usa um dos dois (Compras só lê `purchase`, Operações Full só lê `full`). */
   kind?: OperationCycleKind,
 ): Promise<void> {
-  return withReplenishmentSyncLock(async () => {
+  const lockKey = `${organizationId}:${kind ?? "purchase+full"}`;
+  return withReplenishmentSyncLock(lockKey, async () => {
     if (items.length === 0) return;
     await ensureListingsForItems(organizationId, items);
     if (kind === undefined || kind === "purchase") {
@@ -606,20 +636,24 @@ export async function syncPurchaseCycleFromWarehouse(
   });
 }
 
+type CycleForCard = {
+  id: string;
+  mlItemId: string;
+  kind: OperationCycleKind;
+  status: ReplenishmentStatus;
+  suggestedQty: number | null;
+  notes: string | null;
+  warehouseQtyAtOrder: number | null;
+  mlQtyAtCollection: number | null;
+  updatedAt: Date;
+};
+
 function buildCardFromCycle(
-  cycle: {
-    id: string;
-    mlItemId: string;
-    kind: OperationCycleKind;
-    status: ReplenishmentStatus;
-    suggestedQty: number | null;
-    notes: string | null;
-    warehouseQtyAtOrder: number | null;
-    mlQtyAtCollection: number | null;
-  },
+  cycle: CycleForCard,
   ctx: ItemPlanningContext,
   item: ItemBody,
   supplierNames: Map<string, string>,
+  salesPending: boolean,
 ): OperationsBoardCard {
   const sku = getItemSku(item);
   return {
@@ -644,7 +678,63 @@ function buildCardFromCycle(
     notes: cycle.notes,
     warehouseQtyAtOrder: cycle.warehouseQtyAtOrder,
     mlQtyAtCollection: cycle.mlQtyAtCollection,
+    updatedAt: cycle.updatedAt.toISOString(),
+    salesPending,
   };
+}
+
+/** Reusado pelo caminho completo (`loadOperationsBoards`), pelo fast path
+ * (`loadOperationsBoardsFast`) e pela fase final do streaming
+ * (`streamOperationsBoardResync`) — só muda o que cada um passa em
+ * `salesByItem`/`salesPendingIds`. */
+function buildBoardCardsFromCycles(
+  cycles: CycleForCard[],
+  itemById: Map<string, ItemBody>,
+  warehouseById: Record<
+    string,
+    { quantity: number; purchaseLeadTimeDays: number | null }
+  >,
+  salesByItem: Record<string, number>,
+  supplierNames: Map<string, string>,
+  stockPlanning: StockPlanningValues,
+  purchaseAnalysisValues: PurchaseAnalysisValues,
+  salesPendingIds?: Set<string>,
+): { purchaseCards: OperationsBoardCard[]; fullCards: OperationsBoardCard[] } {
+  const purchaseCards: OperationsBoardCard[] = [];
+  const fullCards: OperationsBoardCard[] = [];
+
+  for (const cycle of cycles) {
+    const item = itemById.get(cycle.mlItemId);
+    if (!item) continue;
+
+    const warehouse = warehouseById[cycle.mlItemId];
+    const warehouseStock = warehouse?.quantity ?? 0;
+    const purchaseLead = warehouse?.purchaseLeadTimeDays ?? 0;
+    const sold = salesByItem[cycle.mlItemId] ?? 0;
+    const ctx = buildItemPlanningContext(
+      item,
+      warehouseStock,
+      purchaseLead,
+      sold,
+      stockPlanning,
+      purchaseAnalysisValues,
+    );
+    const card = buildCardFromCycle(
+      cycle,
+      ctx,
+      item,
+      supplierNames,
+      salesPendingIds?.has(cycle.mlItemId) ?? false,
+    );
+
+    if (cycle.kind === "purchase") {
+      purchaseCards.push(card);
+    } else {
+      fullCards.push(card);
+    }
+  }
+
+  return { purchaseCards, fullCards };
 }
 
 async function resolveCycleSnapshot(
@@ -757,37 +847,20 @@ export async function loadOperationsBoards(
       notes: true,
       warehouseQtyAtOrder: true,
       mlQtyAtCollection: true,
+      updatedAt: true,
     },
   });
 
   const itemById = new Map(items.map((item) => [item.id, item]));
-  const purchaseCards: OperationsBoardCard[] = [];
-  const fullCards: OperationsBoardCard[] = [];
-
-  for (const cycle of activeCycles) {
-    const item = itemById.get(cycle.mlItemId);
-    if (!item) continue;
-
-    const warehouse = warehouseById[cycle.mlItemId];
-    const warehouseStock = warehouse?.quantity ?? 0;
-    const purchaseLead = warehouse?.purchaseLeadTimeDays ?? 0;
-    const sold = salesByItem[cycle.mlItemId] ?? 0;
-    const ctx = buildItemPlanningContext(
-      item,
-      warehouseStock,
-      purchaseLead,
-      sold,
-      stockPlanning,
-      purchaseAnalysisValues,
-    );
-    const card = buildCardFromCycle(cycle, ctx, item, supplierNames);
-
-    if (cycle.kind === "purchase") {
-      purchaseCards.push(card);
-    } else {
-      fullCards.push(card);
-    }
-  }
+  const { purchaseCards, fullCards } = buildBoardCardsFromCycles(
+    activeCycles,
+    itemById,
+    warehouseById,
+    salesByItem,
+    supplierNames,
+    stockPlanning,
+    purchaseAnalysisValues,
+  );
 
   const summary = summarizeOperationsCounts(
     activeCycles.map((cycle) => ({ kind: cycle.kind, status: cycle.status })),
@@ -809,6 +882,235 @@ export async function loadOperationsBoards(
       ),
     },
     summary,
+  };
+}
+
+function emptyOperationsBoardsData(): OperationsBoardsData {
+  return {
+    purchase: { cards: [], summary: summarizeBoardCounts("purchase", []) },
+    full: { cards: [], summary: summarizeBoardCounts("full", []) },
+    summary: summarizeOperationsCounts([]),
+  };
+}
+
+/**
+ * Render rápido inicial dos kanbans (Compras/Operações Full) — sem
+ * `fetchOperationalListingIds` (varredura ao vivo do catálogo ML inteiro) e
+ * sem `syncOperationCyclesForItems`. Lê os ciclos já persistidos (a coluna
+ * do kanban é 100% derivada de `ReplenishmentCycle.status`, nunca de venda)
+ * e só os itens que JÁ têm ciclo ativo — tipicamente bem menor que o
+ * catálogo inteiro. Vendas vêm só do cache (`readCachedUnitsSoldForItemsInWindow`,
+ * sem busca ao vivo); cache-miss vira `salesPending: true` no card, pra UI
+ * borrar até `streamOperationsBoardResync` completar o resto em background.
+ */
+export async function loadOperationsBoardsFast(
+  organizationId: string,
+  token: string,
+  kind: OperationCycleKind,
+): Promise<OperationsBoardsData> {
+  const activeCycles = await prisma.replenishmentCycle.findMany({
+    where: { organizationId, kind, status: { not: "completed" } },
+    orderBy: { updatedAt: "desc" },
+    select: {
+      id: true,
+      mlItemId: true,
+      kind: true,
+      status: true,
+      suggestedQty: true,
+      notes: true,
+      warehouseQtyAtOrder: true,
+      mlQtyAtCollection: true,
+      updatedAt: true,
+    },
+  });
+
+  if (activeCycles.length === 0) return emptyOperationsBoardsData();
+
+  const mlItemIds = [...new Set(activeCycles.map((c) => c.mlItemId))];
+
+  const operationalSettings = await loadOperationalSettings(organizationId);
+  const stockPlanning = toStockPlanningValues(operationalSettings);
+  const purchaseAnalysisValues = toPurchaseAnalysisValues(operationalSettings);
+  const windowDays = stockPlanning.salesAverageWindowDays;
+  const dateField = stockPlanning.salesWindowDateField;
+
+  const [rawItems, warehouseStocks, supplierNames, cachedSales] = await Promise.all([
+    fetchItemsByIdsBatched(token, mlItemIds),
+    prisma.warehouseStock.findMany({
+      where: { organizationId, mlItemId: { in: mlItemIds } },
+      select: { mlItemId: true, quantity: true, purchaseLeadTimeDays: true },
+    }),
+    loadSupplierNamesByMlItemId(organizationId, mlItemIds),
+    readCachedUnitsSoldForItemsInWindow(organizationId, mlItemIds, windowDays, dateField),
+  ]);
+  const items = rawItems.filter((item) => !isKitItem(item));
+
+  const warehouseById = Object.fromEntries(
+    warehouseStocks.map((row) => [
+      row.mlItemId,
+      { quantity: row.quantity, purchaseLeadTimeDays: row.purchaseLeadTimeDays },
+    ]),
+  );
+
+  const salesPendingIds = new Set(mlItemIds.filter((id) => !(id in cachedSales)));
+
+  const itemById = new Map(items.map((item) => [item.id, item]));
+  const { purchaseCards, fullCards } = buildBoardCardsFromCycles(
+    activeCycles,
+    itemById,
+    warehouseById,
+    cachedSales,
+    supplierNames,
+    stockPlanning,
+    purchaseAnalysisValues,
+    salesPendingIds,
+  );
+
+  const summary = summarizeOperationsCounts(
+    activeCycles.map((cycle) => ({ kind: cycle.kind, status: cycle.status })),
+  );
+
+  return {
+    purchase: {
+      cards: purchaseCards,
+      summary: summarizeBoardCounts("purchase", purchaseCards.map((c) => c.status)),
+    },
+    full: {
+      cards: fullCards,
+      summary: summarizeBoardCounts("full", fullCards.map((c) => c.status)),
+    },
+    summary,
+  };
+}
+
+export type OperationsCardSalesPatch = Pick<
+  OperationsBoardCard,
+  | "purchaseIsOverdue"
+  | "searchIsOverdue"
+  | "purchaseStartsOn"
+  | "searchStartsOn"
+  | "purchaseStartsOnTooltip"
+  | "searchStartsOnTooltip"
+> & { salesPending: false };
+
+/**
+ * Contraparte em background de `loadOperationsBoardsFast` — o pipeline
+ * completo de sempre (`fetchOperationalListingIds` + varredura de vendas +
+ * `syncOperationCyclesForItems`), só que reporta cada venda resolvida via
+ * `onCardPatch` conforme chega (em vez de fazer o caller esperar tudo),
+ * pra rota de streaming poder emitir um evento SSE por item. Itens/estoque/
+ * fornecedor são aguardados ANTES de disparar a busca de vendas (o
+ * callback precisa de `itemById`/`warehouseById` prontos) — essas 3 buscas
+ * já são baratas (bateladas), o custo dominante é `fetchOperationalListingIds`,
+ * que já é serial em ambos os casos.
+ */
+export async function streamOperationsBoardResync(
+  token: string,
+  userId: number,
+  organizationId: string,
+  kind: OperationCycleKind,
+  onCardPatch: (mlItemId: string, patch: OperationsCardSalesPatch) => void,
+): Promise<SingleBoardData> {
+  const operationalSettings = await loadOperationalSettings(organizationId);
+  const stockPlanning = toStockPlanningValues(operationalSettings);
+  const purchaseAnalysisValues = toPurchaseAnalysisValues(operationalSettings);
+  const windowDays = stockPlanning.salesAverageWindowDays;
+  const dateField = stockPlanning.salesWindowDateField;
+  const listingIds = await fetchOperationalListingIds(token, userId, organizationId);
+
+  const [rawItems, warehouseStocks, supplierNames] = await Promise.all([
+    fetchItemsByIdsBatched(token, listingIds),
+    prisma.warehouseStock.findMany({
+      where: { organizationId, mlItemId: { in: listingIds } },
+      select: { mlItemId: true, quantity: true, purchaseLeadTimeDays: true },
+    }),
+    loadSupplierNamesByMlItemId(organizationId, listingIds),
+  ]);
+  const items = rawItems.filter((item) => !isKitItem(item));
+  const itemById = new Map(items.map((item) => [item.id, item]));
+
+  const warehouseById = Object.fromEntries(
+    warehouseStocks.map((row) => [
+      row.mlItemId,
+      { quantity: row.quantity, purchaseLeadTimeDays: row.purchaseLeadTimeDays },
+    ]),
+  );
+
+  const salesByItem = await fetchUnitsSoldForItemsInWindowCached(
+    organizationId,
+    token,
+    userId,
+    listingIds,
+    windowDays,
+    dateField,
+    (mlItemId, unitsSold) => {
+      const item = itemById.get(mlItemId);
+      if (!item) return;
+      const warehouse = warehouseById[mlItemId];
+      const ctx = buildItemPlanningContext(
+        item,
+        warehouse?.quantity ?? 0,
+        warehouse?.purchaseLeadTimeDays ?? 0,
+        unitsSold,
+        stockPlanning,
+        purchaseAnalysisValues,
+      );
+      onCardPatch(mlItemId, {
+        purchaseIsOverdue: ctx.purchasePlan.purchaseIsOverdue,
+        searchIsOverdue: ctx.fullPlan.searchIsOverdue,
+        purchaseStartsOn: ctx.purchasePlan.purchaseStartsOn,
+        searchStartsOn: ctx.fullPlan.searchStartsOn,
+        purchaseStartsOnTooltip: ctx.purchasePlan.tooltips.purchase,
+        searchStartsOnTooltip: ctx.fullPlan.tooltips.search,
+        salesPending: false,
+      });
+    },
+  );
+
+  await syncOperationCyclesForItems(
+    organizationId,
+    items,
+    salesByItem,
+    warehouseById,
+    { stockPlanning, purchaseAnalysis: purchaseAnalysisValues },
+    kind,
+  );
+
+  const activeCycles = await prisma.replenishmentCycle.findMany({
+    where: {
+      organizationId,
+      mlItemId: { in: listingIds },
+      status: { not: "completed" },
+      kind,
+    },
+    orderBy: { updatedAt: "desc" },
+    select: {
+      id: true,
+      mlItemId: true,
+      kind: true,
+      status: true,
+      suggestedQty: true,
+      notes: true,
+      warehouseQtyAtOrder: true,
+      mlQtyAtCollection: true,
+      updatedAt: true,
+    },
+  });
+
+  const { purchaseCards, fullCards } = buildBoardCardsFromCycles(
+    activeCycles,
+    itemById,
+    warehouseById,
+    salesByItem,
+    supplierNames,
+    stockPlanning,
+    purchaseAnalysisValues,
+  );
+
+  const cards = kind === "purchase" ? purchaseCards : fullCards;
+  return {
+    cards,
+    summary: summarizeBoardCounts(kind, cards.map((c) => c.status)),
   };
 }
 

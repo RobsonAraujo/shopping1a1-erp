@@ -6,6 +6,7 @@ import { useDraggable } from "@dnd-kit/core";
 import { ImageOff, SearchCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { BlurredValue } from "@/components/shared/BlurredValue";
 import { PURCHASE_STATUS_LABELS } from "@/lib/compras/replenishment-cycle";
 import type { SupplierBoardCard } from "@/lib/compras/supplier-board";
 import { supplierPathSegment } from "@/lib/compras/purchase-analysis";
@@ -77,7 +78,9 @@ function SupplierCardHeader({ card }: { card: SupplierBoardCard }) {
             Comprar {card.suggestedQtyTotal} un. no total
           </span>
         ) : null}
-        {card.hasOverdue ? (
+        {card.salesPending ? (
+          <BlurredValue srLabel="Calculando urgência" />
+        ) : card.hasOverdue ? (
           <Badge variant="warning" className="h-5 px-1.5 text-[10px]">
             Urgente
           </Badge>

@@ -18,17 +18,13 @@ const SALES_WINDOW_CACHE_TTL_MS = 20 * 60 * 1000;
 const WRITE_CONCURRENCY = 10;
 
 /**
- * Mesmo contrato de `fetchUnitsSoldForItemsInWindowBatched`, mas com um
- * cache em banco (TTL curto) na frente — evita repetir a mesma varredura
- * ML "unidades vendidas por item" entre Estoque, Compras e Operações Full
- * quando essas telas são abertas na mesma sessão. Itens fora do cache (ou
- * com snapshot expirado) são buscados ao vivo e o resultado é gravado pra
- * a próxima leitura.
+ * Só a leitura do cache (`SalesWindowSnapshot`), sem buscar ao vivo o que
+ * faltar — usada pelo render rápido inicial dos kanbans (Compras/Operações
+ * Full), que não pode esperar a varredura ML pra pintar a tela. Itens fora
+ * do retorno simplesmente não estavam em cache (ou o snapshot expirou).
  */
-export async function fetchUnitsSoldForItemsInWindowCached(
+export async function readCachedUnitsSoldForItemsInWindow(
   organizationId: string,
-  accessToken: string,
-  sellerId: number,
   itemIds: string[],
   windowDays: number,
   dateField: SalesWindowDateField,
@@ -52,6 +48,38 @@ export async function fetchUnitsSoldForItemsInWindowCached(
   for (const row of cached) {
     result[row.mlItemId] = row.unitsSold;
   }
+  return result;
+}
+
+/**
+ * Mesmo contrato de `fetchUnitsSoldForItemsInWindowBatched`, mas com um
+ * cache em banco (TTL curto) na frente — evita repetir a mesma varredura
+ * ML "unidades vendidas por item" entre Estoque, Compras e Operações Full
+ * quando essas telas são abertas na mesma sessão. Itens fora do cache (ou
+ * com snapshot expirado) são buscados ao vivo e o resultado é gravado pra
+ * a próxima leitura.
+ */
+export async function fetchUnitsSoldForItemsInWindowCached(
+  organizationId: string,
+  accessToken: string,
+  sellerId: number,
+  itemIds: string[],
+  windowDays: number,
+  dateField: SalesWindowDateField,
+  /** Chamado só pros itens que precisaram de busca ao vivo (cache miss) —
+   * quem já veio do cache não dispara, o chamador já tinha esse valor
+   * disponível antes desta chamada começar. */
+  onItem?: (itemId: string, unitsSold: number) => void,
+): Promise<Record<string, number>> {
+  const uniqueIds = [...new Set(itemIds.filter(Boolean))];
+  if (uniqueIds.length === 0 || windowDays <= 0) return {};
+
+  const result = await readCachedUnitsSoldForItemsInWindow(
+    organizationId,
+    uniqueIds,
+    windowDays,
+    dateField,
+  );
 
   const missingIds = uniqueIds.filter((id) => !(id in result));
   if (missingIds.length === 0) return result;
@@ -62,6 +90,8 @@ export async function fetchUnitsSoldForItemsInWindowCached(
     missingIds,
     windowDays,
     dateField,
+    undefined,
+    onItem,
   );
   Object.assign(result, fresh);
 

@@ -37,6 +37,11 @@ export type SupplierBoardCard = {
    * (evita ruído visual no caso comum de todos no mesmo estágio). */
   breakdown: SupplierStatusBreakdownEntry[];
   hasOverdue: boolean;
+  /** Algum ciclo do grupo ainda não tem venda real por trás de
+   * `purchaseIsOverdue`/etc. (ver `OperationsBoardCard.salesPending`) — a UI
+   * usa isso pra borrar o badge "Urgente" do card de fornecedor até o
+   * streaming resolver todos os itens do grupo. */
+  salesPending: boolean;
   suggestedQtyTotal: number;
   topItems: SupplierBoardTopItem[];
   overflowCount: number;
@@ -103,6 +108,7 @@ export function buildSupplierBoardCards(
       totalActive: group.length,
       breakdown,
       hasOverdue: group.some((card) => card.purchaseIsOverdue),
+      salesPending: group.some((card) => card.salesPending),
       suggestedQtyTotal: group.reduce((sum, card) => sum + (card.suggestedQty ?? 0), 0),
       topItems,
       overflowCount: Math.max(0, group.length - MAX_TOP_ITEMS),

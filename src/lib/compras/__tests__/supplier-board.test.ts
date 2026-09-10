@@ -30,6 +30,8 @@ function boardCard(overrides: Partial<OperationsBoardCard> = {}): OperationsBoar
     notes: null,
     warehouseQtyAtOrder: null,
     mlQtyAtCollection: null,
+    updatedAt: "2024-01-01T00:00:00.000Z",
+    salesPending: false,
     ...overrides,
   };
 }
