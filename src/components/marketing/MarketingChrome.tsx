@@ -42,6 +42,12 @@ export function MarketingHeader({
               {link.label}
             </Link>
           ))}
+          <Link
+            href="/precos"
+            className="text-sm font-semibold text-white transition-colors hover:text-cyan-200"
+          >
+            Preços
+          </Link>
         </nav>
         <div className="flex shrink-0 items-center gap-1">
           <MarketingMobileNav />
@@ -66,6 +72,7 @@ function FooterComingSoon() {
 }
 
 const FOOTER_PRODUCT_LINKS = [
+  { href: "/precos", label: "Preços" },
   { href: "/#como-comeca", label: "Como funciona" },
   { href: "/#faq", label: "Perguntas frequentes" },
 ] as const;

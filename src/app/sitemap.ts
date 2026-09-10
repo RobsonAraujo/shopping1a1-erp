@@ -11,6 +11,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 1,
     },
     {
+      url: `${base}/precos`,
+      changeFrequency: "monthly",
+      priority: 0.9,
+    },
+    {
       url: `${base}/dre-mercado-livre`,
       changeFrequency: "monthly",
       priority: 0.8,

@@ -37,6 +37,13 @@ export function MarketingMobileNav() {
               {link.label}
             </Link>
           ))}
+          <Link
+            href="/precos"
+            onClick={() => setOpen(false)}
+            className="rounded-md px-3 py-2 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--muted)]"
+          >
+            Preços
+          </Link>
         </nav>
       </PopoverContent>
     </Popover>
