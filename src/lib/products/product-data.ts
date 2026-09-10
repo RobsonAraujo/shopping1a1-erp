@@ -61,6 +61,11 @@ export type ProductView = ProductRecordForPricing & {
   imageUrl: string | null;
   supplierId: string | null;
   supplierName: string | null;
+  /** `false` = inativado pelo usuário — some das telas operacionais, mas
+   * continua contando para relatórios históricos. */
+  active: boolean;
+  /** `true` = veio do import em massa e ainda não teve custo real preenchido. */
+  needsCostReview: boolean;
 };
 
 export function buildProductView(
@@ -101,6 +106,8 @@ export function buildProductView(
     imageUrl,
     supplierId: supplier?.id ?? null,
     supplierName: supplier?.name ?? null,
+    active: product.active,
+    needsCostReview: product.needsCostReview,
   };
 }
 
@@ -289,6 +296,10 @@ export async function loadProductsMapBySku(
   const products = await prisma.product.findMany({
     where: {
       organizationId,
+      // Produto "pendente de custo" (import em massa, unitCostNf=0 ainda não
+      // revisado) não deve contaminar DRE/Lucratividade — tratado como se
+      // não tivesse Product cadastrado, igual a um mlItemId nunca importado.
+      needsCostReview: false,
       OR: [
         ...(normalized.length > 0 ? [{ sku: { in: normalized } }] : []),
         ...(uniqueMlItemIds.length > 0
@@ -341,6 +352,7 @@ export async function loadStockReportProductsForListings(
   const maps = await loadProductResolverMaps(
     organizationId,
     lines.map((l) => ({ itemId: l.mlItemId })),
+    { excludeInactive: true },
   );
 
   const result: Record<string, StockReportProductInfo> = {};
@@ -492,6 +504,9 @@ export function productPatchToPrismaData(
   const data: Prisma.ProductUpdateInput = {
     unitCostNf: input.unitCostNf,
     extraCosts: input.extraCosts,
+    // Qualquer save pelo formulário de edição completo conta como "revisado"
+    // — limpa a flag de import em massa automaticamente, sem endpoint extra.
+    needsCostReview: false,
   };
   if (input.ncm !== undefined) data.ncm = input.ncm?.trim() || null;
   if (input.purchaseIcmsPercent !== undefined) {

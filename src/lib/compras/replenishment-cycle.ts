@@ -95,6 +95,19 @@ export function isActiveReplenishmentStatus(
   return status !== "completed";
 }
 
+/** `true` quando o ciclo já passou da etapa em que "começar agora" ainda faz
+ * sentido — full: já coletado; purchase: já comprado. A badge "Urgente"
+ * some nesse ponto mesmo que a projeção de estoque ainda acuse atraso,
+ * porque essa projeção (`stock-planning.ts`) não olha o status do ciclo. */
+export function isOverdueBadgeSuppressed(
+  kind: OperationCycleKind,
+  status: ReplenishmentStatus,
+): boolean {
+  if (kind === "full") return status === "collected";
+  if (kind === "purchase") return status === "ordered";
+  return false;
+}
+
 /** Índice do status dentro das colunas do board de compra (`PURCHASE_BOARD_COLUMNS`),
  * ou -1 se não for uma coluna visível desse board (ex.: `completed`, `scheduled`). */
 export function purchaseStatusOrderIndex(status: ReplenishmentStatus): number {

@@ -28,6 +28,8 @@ function sampleView(overrides: Partial<ProductView> = {}): ProductView {
     imageUrl: null,
     supplierId: null,
     supplierName: null,
+    active: true,
+    needsCostReview: false,
     ...overrides,
   };
 }

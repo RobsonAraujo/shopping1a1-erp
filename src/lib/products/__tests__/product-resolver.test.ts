@@ -23,6 +23,8 @@ function sampleProduct(overrides: Partial<Product> = {}): Product {
     isImported: false,
     pmaPrice: null,
     supplierId: null,
+    active: true,
+    needsCostReview: false,
     createdAt: new Date("2026-01-01"),
     updatedAt: new Date("2026-01-01"),
     ...overrides,

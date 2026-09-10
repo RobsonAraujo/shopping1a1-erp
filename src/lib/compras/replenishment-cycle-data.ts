@@ -17,6 +17,7 @@ import {
 import {
   buildStatusTransition,
   isActiveReplenishmentStatus,
+  isOverdueBadgeSuppressed,
   nextStatusForKind,
   shouldAutoCompleteFullCycle,
   shouldAutoCompletePurchaseCycle,
@@ -39,7 +40,10 @@ import {
 import { mapWithConcurrency } from "@/lib/mercadolibre/concurrency";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { getItemSku, getSkuSupplier, isKitItem } from "@/lib/mercadolibre/item-sku";
-import { loadSupplierNamesByMlItemId } from "@/lib/products/product-resolver";
+import {
+  loadInactiveProductMlItemIds,
+  loadSupplierNamesByMlItemId,
+} from "@/lib/products/product-resolver";
 import {
   upsertListingFromItem,
   upsertListingsFromItems,
@@ -668,8 +672,12 @@ function buildCardFromCycle(
     mlStock: mlAvailableStockUnits(item),
     warehouseStock: ctx.warehouseStock,
     suggestedQty: cycle.suggestedQty,
-    purchaseIsOverdue: ctx.purchasePlan.purchaseIsOverdue,
-    searchIsOverdue: ctx.fullPlan.searchIsOverdue,
+    purchaseIsOverdue: isOverdueBadgeSuppressed(cycle.kind, cycle.status)
+      ? false
+      : ctx.purchasePlan.purchaseIsOverdue,
+    searchIsOverdue: isOverdueBadgeSuppressed(cycle.kind, cycle.status)
+      ? false
+      : ctx.fullPlan.searchIsOverdue,
     purchaseStartsOn: ctx.purchasePlan.purchaseStartsOn,
     searchStartsOn: ctx.fullPlan.searchStartsOn,
     purchaseStartsOnTooltip: ctx.purchasePlan.tooltips.purchase,
@@ -789,27 +797,34 @@ export async function loadOperationsBoards(
   const dateField = stockPlanning.salesWindowDateField;
   const listingIds = await fetchOperationalListingIds(token, userId, organizationId);
 
-  const [rawItems, salesByItem, warehouseStocks, supplierNames] = await Promise.all([
-    fetchItemsByIdsBatched(token, listingIds),
-    fetchUnitsSoldForItemsInWindowCached(
-      organizationId,
-      token,
-      userId,
-      listingIds,
-      windowDays,
-      dateField,
-    ),
-    prisma.warehouseStock.findMany({
-      where: { organizationId, mlItemId: { in: listingIds } },
-      select: {
-        mlItemId: true,
-        quantity: true,
-        purchaseLeadTimeDays: true,
-      },
-    }),
-    loadSupplierNamesByMlItemId(organizationId, listingIds),
-  ]);
-  const items = rawItems.filter((item) => !isKitItem(item));
+  const [rawItems, salesByItem, warehouseStocks, supplierNames, inactiveIds] =
+    await Promise.all([
+      fetchItemsByIdsBatched(token, listingIds),
+      fetchUnitsSoldForItemsInWindowCached(
+        organizationId,
+        token,
+        userId,
+        listingIds,
+        windowDays,
+        dateField,
+      ),
+      prisma.warehouseStock.findMany({
+        where: { organizationId, mlItemId: { in: listingIds } },
+        select: {
+          mlItemId: true,
+          quantity: true,
+          purchaseLeadTimeDays: true,
+        },
+      }),
+      loadSupplierNamesByMlItemId(organizationId, listingIds),
+      loadInactiveProductMlItemIds(organizationId, listingIds),
+    ]);
+  // Produto inativado pelo usuário some do board (sem tocar o
+  // ReplenishmentCycle já existente — reativar o produto traz o card de
+  // volta sozinho no próximo load).
+  const items = rawItems.filter(
+    (item) => !isKitItem(item) && !inactiveIds.has(item.id),
+  );
 
   const warehouseById = Object.fromEntries(
     warehouseStocks.map((row) => [
@@ -934,16 +949,20 @@ export async function loadOperationsBoardsFast(
   const windowDays = stockPlanning.salesAverageWindowDays;
   const dateField = stockPlanning.salesWindowDateField;
 
-  const [rawItems, warehouseStocks, supplierNames, cachedSales] = await Promise.all([
-    fetchItemsByIdsBatched(token, mlItemIds),
-    prisma.warehouseStock.findMany({
-      where: { organizationId, mlItemId: { in: mlItemIds } },
-      select: { mlItemId: true, quantity: true, purchaseLeadTimeDays: true },
-    }),
-    loadSupplierNamesByMlItemId(organizationId, mlItemIds),
-    readCachedUnitsSoldForItemsInWindow(organizationId, mlItemIds, windowDays, dateField),
-  ]);
-  const items = rawItems.filter((item) => !isKitItem(item));
+  const [rawItems, warehouseStocks, supplierNames, cachedSales, inactiveIds] =
+    await Promise.all([
+      fetchItemsByIdsBatched(token, mlItemIds),
+      prisma.warehouseStock.findMany({
+        where: { organizationId, mlItemId: { in: mlItemIds } },
+        select: { mlItemId: true, quantity: true, purchaseLeadTimeDays: true },
+      }),
+      loadSupplierNamesByMlItemId(organizationId, mlItemIds),
+      readCachedUnitsSoldForItemsInWindow(organizationId, mlItemIds, windowDays, dateField),
+      loadInactiveProductMlItemIds(organizationId, mlItemIds),
+    ]);
+  const items = rawItems.filter(
+    (item) => !isKitItem(item) && !inactiveIds.has(item.id),
+  );
 
   const warehouseById = Object.fromEntries(
     warehouseStocks.map((row) => [
@@ -1018,15 +1037,18 @@ export async function streamOperationsBoardResync(
   const dateField = stockPlanning.salesWindowDateField;
   const listingIds = await fetchOperationalListingIds(token, userId, organizationId);
 
-  const [rawItems, warehouseStocks, supplierNames] = await Promise.all([
+  const [rawItems, warehouseStocks, supplierNames, inactiveIds] = await Promise.all([
     fetchItemsByIdsBatched(token, listingIds),
     prisma.warehouseStock.findMany({
       where: { organizationId, mlItemId: { in: listingIds } },
       select: { mlItemId: true, quantity: true, purchaseLeadTimeDays: true },
     }),
     loadSupplierNamesByMlItemId(organizationId, listingIds),
+    loadInactiveProductMlItemIds(organizationId, listingIds),
   ]);
-  const items = rawItems.filter((item) => !isKitItem(item));
+  const items = rawItems.filter(
+    (item) => !isKitItem(item) && !inactiveIds.has(item.id),
+  );
   const itemById = new Map(items.map((item) => [item.id, item]));
 
   const warehouseById = Object.fromEntries(
@@ -1034,6 +1056,24 @@ export async function streamOperationsBoardResync(
       row.mlItemId,
       { quantity: row.quantity, purchaseLeadTimeDays: row.purchaseLeadTimeDays },
     ]),
+  );
+
+  // Snapshot leve do status atual (pré-sync) só para a badge "Urgente" do
+  // patch em streaming não reaparecer num card já além da etapa de ação
+  // (ex.: "Coletado"/"Comprado") — o card final, montado depois do sync em
+  // `buildCardFromCycle`, já recalcula isso com o status mais fresco.
+  const cycleStatusById = new Map(
+    (
+      await prisma.replenishmentCycle.findMany({
+        where: {
+          organizationId,
+          mlItemId: { in: listingIds },
+          kind,
+          status: { not: "completed" },
+        },
+        select: { mlItemId: true, status: true },
+      })
+    ).map((c) => [c.mlItemId, c.status]),
   );
 
   const salesByItem = await fetchUnitsSoldForItemsInWindowCached(
@@ -1055,9 +1095,11 @@ export async function streamOperationsBoardResync(
         stockPlanning,
         purchaseAnalysisValues,
       );
+      const status = cycleStatusById.get(mlItemId);
+      const suppressOverdue = status ? isOverdueBadgeSuppressed(kind, status) : false;
       onCardPatch(mlItemId, {
-        purchaseIsOverdue: ctx.purchasePlan.purchaseIsOverdue,
-        searchIsOverdue: ctx.fullPlan.searchIsOverdue,
+        purchaseIsOverdue: suppressOverdue ? false : ctx.purchasePlan.purchaseIsOverdue,
+        searchIsOverdue: suppressOverdue ? false : ctx.fullPlan.searchIsOverdue,
         purchaseStartsOn: ctx.purchasePlan.purchaseStartsOn,
         searchStartsOn: ctx.fullPlan.searchStartsOn,
         purchaseStartsOnTooltip: ctx.purchasePlan.tooltips.purchase,

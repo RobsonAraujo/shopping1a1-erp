@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Power, PowerOff, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import { SortableTh } from "@/components/ui/sortable-th";
 import { formatFinancialMoney, formatFinancialPercent } from "@/lib/pricing/financial-margin";
 import type { ProductsTableProps } from "@/components/produtos/products-table/types";
 import { ProductsTableSkeletonRows } from "@/components/produtos/products-table/ProductsTableSkeleton";
+import { cn } from "@/lib/utils";
 
 export function ProductsTableDesktop({
   loading,
@@ -24,6 +25,7 @@ export function ProductsTableDesktop({
   showFiscalFlags = true,
   onEdit,
   onDelete,
+  onToggleActive,
 }: ProductsTableProps) {
   const columnCount = showFiscalFlags ? 8 : 5;
   return (
@@ -95,7 +97,10 @@ export function ProductsTableDesktop({
               filteredProducts.map((product) => (
                 <tr
                   key={product.mlItemId}
-                  className="border-t border-[var(--border)] transition-colors hover:bg-[var(--muted)]/25"
+                  className={cn(
+                    "border-t border-[var(--border)] transition-colors hover:bg-[var(--muted)]/25",
+                    product.needsCostReview && "bg-amber-50/40",
+                  )}
                 >
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2.5">
@@ -104,7 +109,23 @@ export function ProductsTableDesktop({
                         alt={product.sku ?? product.mlItemId}
                         size={40}
                       />
-                      <span className="font-medium">{product.sku ?? "—"}</span>
+                      <div className="min-w-0">
+                        <span className="font-medium">{product.sku ?? "—"}</span>
+                        {!product.active || product.needsCostReview ? (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {!product.active ? (
+                              <Badge variant="muted" dot className="text-[10px]">
+                                Inativo
+                              </Badge>
+                            ) : null}
+                            {product.needsCostReview ? (
+                              <Badge variant="warning" dot className="text-[10px]">
+                                Custo pendente
+                              </Badge>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-[var(--muted-foreground)]">
@@ -167,6 +188,23 @@ export function ProductsTableDesktop({
                         onClick={() => onEdit(product)}
                       >
                         <Pencil className="size-4" aria-hidden />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={
+                          product.active
+                            ? `Desativar ${product.sku ?? product.mlItemId}`
+                            : `Ativar ${product.sku ?? product.mlItemId}`
+                        }
+                        onClick={() => onToggleActive(product.mlItemId, !product.active)}
+                      >
+                        {product.active ? (
+                          <Power className="size-4" aria-hidden />
+                        ) : (
+                          <PowerOff className="size-4" aria-hidden />
+                        )}
                       </Button>
                       <Button
                         type="button"

@@ -16,4 +16,5 @@ export type ProductsTableProps = {
   showFiscalFlags?: boolean;
   onEdit: (product: ProductView) => void;
   onDelete: (mlItemId: string) => void;
+  onToggleActive: (mlItemId: string, nextActive: boolean) => void;
 };

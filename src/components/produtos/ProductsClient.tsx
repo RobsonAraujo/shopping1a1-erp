@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Boxes, Plus, RefreshCw } from "lucide-react";
+import { Boxes, Download, Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { KitsModal } from "@/components/produtos/KitsModal";
+import { ImportAllProductsModal } from "@/components/produtos/ImportAllProductsModal";
 import { ItemListSearch } from "@/components/shared/ItemListSearch";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,16 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { ProductsTable } from "@/components/produtos/products-table";
 import { ProductLevelingSuggestionSheet } from "@/components/produtos/ProductLevelingSuggestionSheet";
 import type { DreProductCostLevelingFormValues } from "@/components/dre/DreProductCostLevelingFields";
@@ -308,28 +319,33 @@ function ProductFormModal({
                   setForm((f) => ({ ...f, mlItemId: e.target.value.trim() }))
                 }
               />
-              {!isEdit ? (
+              {!isEdit && !form.sku ? (
                 <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                  O SKU e o custo são vinculados a este anúncio específico —
-                  buscamos o SKU atual dele automaticamente ao salvar.
+                  O custo é vinculado a este anúncio específico — buscamos o
+                  SKU atual dele automaticamente ao salvar.
                 </p>
               ) : null}
             </div>
-            {isEdit ? (
-              <div className="space-y-1.5 sm:col-span-2">
-                <FormInput
-                  label="SKU"
-                  value={form.sku}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, sku: e.target.value }))
-                  }
-                />
-                <p className="text-xs text-[var(--muted-foreground)]">
-                  Só exibição/filtro — pode ficar desatualizado em relação ao
-                  anúncio, não afeta relatórios.
-                </p>
-              </div>
-            ) : null}
+            <div className="space-y-1.5 sm:col-span-2">
+              <FormInput
+                label="SKU"
+                value={form.sku}
+                disabled={!isEdit}
+                placeholder={
+                  !isEdit && !form.sku
+                    ? "Será buscado automaticamente ao salvar"
+                    : undefined
+                }
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, sku: e.target.value }))
+                }
+              />
+              <p className="text-xs text-[var(--muted-foreground)]">
+                {isEdit
+                  ? "Só exibição/filtro — pode ficar desatualizado em relação ao anúncio, não afeta relatórios."
+                  : "Capturado automaticamente do anúncio selecionado — não é editável na criação."}
+              </p>
+            </div>
             <FormInput
               label="NCM"
               value={form.ncm}
@@ -477,7 +493,10 @@ export function ProductsClient() {
   >(null);
   const [importing, setImporting] = useState(false);
   const [kitsModalOpen, setKitsModalOpen] = useState(false);
+  const [importAllOpen, setImportAllOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [showInactive, setShowInactive] = useState(false);
+  const [pendingDeactivate, setPendingDeactivate] = useState<ProductView | null>(null);
   const [levelingSuggestion, setLevelingSuggestion] = useState<{
     sku: string;
     previousValues: DreProductCostLevelingFormValues;
@@ -506,14 +525,20 @@ export function ProductsClient() {
     void load();
   }, [load]);
 
+  const inactiveCount = useMemo(
+    () => (data?.products ?? []).filter((p) => !p.active).length,
+    [data?.products],
+  );
+
   const sortedProducts = useMemo(() => {
     const list = data?.products ?? [];
-    return [...list].sort((a, b) =>
+    const base = showInactive ? list : list.filter((p) => p.active);
+    return [...base].sort((a, b) =>
       (a.sku ?? a.mlItemId).localeCompare(b.sku ?? b.mlItemId, "pt-BR", {
         sensitivity: "base",
       }),
     );
-  }, [data?.products]);
+  }, [data?.products, showInactive]);
 
   const searchedProducts = useMemo(
     () =>
@@ -589,6 +614,49 @@ export function ProductsClient() {
         : [...prev.products, product];
       return { ...prev, products };
     });
+  }
+
+  async function setProductActive(mlItemId: string, active: boolean) {
+    try {
+      const res = await fetch(`/api/products/${encodeURIComponent(mlItemId)}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active }),
+      });
+      if (!res.ok) {
+        setError(await readApiError(res, "product_status_update_failed"));
+        return;
+      }
+      const { product } = (await res.json()) as { product: { mlItemId: string; active: boolean } };
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              products: prev.products.map((p) =>
+                p.mlItemId === mlItemId ? { ...p, active: product.active } : p,
+              ),
+            }
+          : prev,
+      );
+      toast.success(active ? "Produto ativado." : "Produto desativado.");
+    } catch {
+      setError("Falha de rede ao atualizar o status do produto.");
+    }
+  }
+
+  function onToggleActive(mlItemId: string, nextActive: boolean) {
+    if (!nextActive) {
+      const product = sortedProducts.find((p) => p.mlItemId === mlItemId);
+      setPendingDeactivate(product ?? null);
+      return;
+    }
+    void setProductActive(mlItemId, true);
+  }
+
+  async function confirmDeactivate() {
+    if (!pendingDeactivate) return;
+    await setProductActive(pendingDeactivate.mlItemId, false);
+    setPendingDeactivate(null);
   }
 
   async function deleteProduct(mlItemId: string) {
@@ -717,6 +785,16 @@ export function ProductsClient() {
             variant="outline"
             size="sm"
             className="gap-2"
+            onClick={() => setImportAllOpen(true)}
+          >
+            <Download className="size-4" aria-hidden />
+            Importar todos
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-2"
             onClick={() => setKitsModalOpen(true)}
           >
             <Boxes className="size-4" aria-hidden />
@@ -736,15 +814,33 @@ export function ProductsClient() {
 
       <KitsModal open={kitsModalOpen} onClose={() => setKitsModalOpen(false)} />
 
-      <ItemListSearch
-        value={searchQuery}
-        onChange={setSearchQuery}
-        filteredCount={filteredProducts.length}
-        totalCount={sortedProducts.length}
-        placeholder="Buscar por SKU ou NCM…"
-        entitySingular="produto"
-        entityPlural="produtos"
+      <ImportAllProductsModal
+        open={importAllOpen}
+        onClose={() => setImportAllOpen(false)}
+        onImported={() => void load()}
       />
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <ItemListSearch
+          value={searchQuery}
+          onChange={setSearchQuery}
+          filteredCount={filteredProducts.length}
+          totalCount={sortedProducts.length}
+          placeholder="Buscar por SKU ou NCM…"
+          entitySingular="produto"
+          entityPlural="produtos"
+        />
+        {inactiveCount > 0 ? (
+          <label htmlFor="show-inactive-products" className="flex shrink-0 items-center gap-2 text-sm text-[var(--muted-foreground)]">
+            <Switch
+              id="show-inactive-products"
+              checked={showInactive}
+              onCheckedChange={setShowInactive}
+            />
+            {showInactive ? "Mostrando inativos" : `${inactiveCount} inativo${inactiveCount === 1 ? "" : "s"} oculto${inactiveCount === 1 ? "" : "s"}`}
+          </label>
+        ) : null}
+      </div>
 
       {error ? <UserFeedback>{error}</UserFeedback> : null}
 
@@ -771,6 +867,7 @@ export function ProductsClient() {
           setModal({ mode: "edit", form: formFromProduct(product) })
         }
         onDelete={(mlItemId) => void deleteProduct(mlItemId)}
+        onToggleActive={onToggleActive}
       />
 
       {modal ? (
@@ -796,6 +893,28 @@ export function ProductsClient() {
           onClose={() => setLevelingSuggestion(null)}
         />
       ) : null}
+
+      <AlertDialog
+        open={pendingDeactivate != null}
+        onOpenChange={(next) => !next && setPendingDeactivate(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Desativar produto?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDeactivate
+                ? `"${pendingDeactivate.sku ?? pendingDeactivate.mlItemId}" some das telas operacionais (Compras, Operações Full, Estoque e Relatório de Estoque, Alertas de PMA, quadro de Fornecedores). Continua aparecendo em Meus Produtos e nos relatórios (DRE, Lucratividade, Relatório Tributário).`
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => void confirmDeactivate()}>
+              Desativar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

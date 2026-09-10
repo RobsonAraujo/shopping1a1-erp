@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Power, PowerOff, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -10,6 +10,7 @@ import { itemListSearchEmptyMessage } from "@/components/shared/ItemListSearch";
 import { formatFinancialMoney, formatFinancialPercent } from "@/lib/pricing/financial-margin";
 import type { ProductsTableProps } from "@/components/produtos/products-table/types";
 import { ProductsTableSkeletonRows } from "@/components/produtos/products-table/ProductsTableSkeleton";
+import { cn } from "@/lib/utils";
 
 function FlagBadge({ label, active }: { label: string; active: boolean }) {
   if (!active) return null;
@@ -30,6 +31,7 @@ export function ProductsTableMobile({
   showFiscalFlags = true,
   onEdit,
   onDelete,
+  onToggleActive,
 }: ProductsTableProps) {
   if (loading) {
     return (
@@ -53,7 +55,12 @@ export function ProductsTableMobile({
     <ul className="space-y-3">
       {filteredProducts.map((product) => (
         <li key={product.mlItemId}>
-          <Card className="p-4 shadow-sm">
+          <Card
+            className={cn(
+              "p-4 shadow-sm",
+              product.needsCostReview && "bg-amber-50/40",
+            )}
+          >
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 items-start gap-2.5">
                 <ProductThumbnail
@@ -68,6 +75,20 @@ export function ProductsTableMobile({
                   <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
                     NCM {product.ncm ?? "—"}
                   </p>
+                  {!product.active || product.needsCostReview ? (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {!product.active ? (
+                        <Badge variant="muted" dot className="text-[10px]">
+                          Inativo
+                        </Badge>
+                      ) : null}
+                      {product.needsCostReview ? (
+                        <Badge variant="warning" dot className="text-[10px]">
+                          Custo pendente
+                        </Badge>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               </div>
               <div className="flex shrink-0 gap-1">
@@ -79,6 +100,23 @@ export function ProductsTableMobile({
                   onClick={() => onEdit(product)}
                 >
                   <Pencil className="size-4" aria-hidden />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon-sm"
+                  aria-label={
+                    product.active
+                      ? `Desativar ${product.sku ?? product.mlItemId}`
+                      : `Ativar ${product.sku ?? product.mlItemId}`
+                  }
+                  onClick={() => onToggleActive(product.mlItemId, !product.active)}
+                >
+                  {product.active ? (
+                    <Power className="size-4" aria-hidden />
+                  ) : (
+                    <PowerOff className="size-4" aria-hidden />
+                  )}
                 </Button>
                 <Button
                   type="button"

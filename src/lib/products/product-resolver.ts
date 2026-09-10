@@ -36,10 +36,16 @@ export function resolveProductForLine(
  * Carrega em lote tudo que `resolveProductForLine` precisa para um conjunto
  * de linhas de uma organização — uma chamada por relatório/mês, não uma por
  * linha (evita N+1 ao processar centenas de vendas).
+ *
+ * `excludeInactive`: por padrão inclui produto inativo (histórico de
+ * DRE/Relatório Tributário não pode "perder" um produto que foi desativado
+ * depois de vender). Só telas operacionais que precisam mesmo excluir
+ * produto inativo (ex.: Relatório de Estoque) passam `true`.
  */
 export async function loadProductResolverMaps(
   organizationId: string,
   lines: OrderLineRef[],
+  options?: { excludeInactive?: boolean },
 ): Promise<ProductResolverMaps> {
   const itemIds = [
     ...new Set(lines.map((l) => l.itemId).filter((v): v is string => Boolean(v))),
@@ -48,7 +54,11 @@ export async function loadProductResolverMaps(
   const products =
     itemIds.length > 0
       ? await prisma.product.findMany({
-          where: { organizationId, mlItemId: { in: itemIds } },
+          where: {
+            organizationId,
+            mlItemId: { in: itemIds },
+            ...(options?.excludeInactive ? { active: true } : {}),
+          },
         })
       : [];
 
@@ -85,6 +95,27 @@ export async function loadSupplierNamesByMlItemId(
     if (product.supplier) result.set(product.mlItemId, product.supplier.name);
   }
   return result;
+}
+
+/**
+ * Subconjunto de `mlItemIds` que tem `Product.active = false` — usado para
+ * remover produto inativado das telas operacionais (Kanban de Compras,
+ * Operações Full, Inventory) ANTES de montar cards/linhas, sem tocar
+ * `ReplenishmentCycle`/histórico. Query dedicada e leve (só `mlItemId`),
+ * mesmo estilo de `loadSupplierNamesByMlItemId`.
+ */
+export async function loadInactiveProductMlItemIds(
+  organizationId: string,
+  mlItemIds: string[],
+): Promise<Set<string>> {
+  const uniqueIds = [...new Set(mlItemIds.filter(Boolean))];
+  if (uniqueIds.length === 0) return new Set();
+
+  const rows = await prisma.product.findMany({
+    where: { organizationId, mlItemId: { in: uniqueIds }, active: false },
+    select: { mlItemId: true },
+  });
+  return new Set(rows.map((r) => r.mlItemId));
 }
 
 /**

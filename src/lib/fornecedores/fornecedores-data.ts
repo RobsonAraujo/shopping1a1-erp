@@ -42,7 +42,7 @@ export async function loadUnassignedProducts(
   organizationId: string,
 ): Promise<UnassignedProduct[]> {
   const rows = await prisma.product.findMany({
-    where: { organizationId, supplierId: null },
+    where: { organizationId, supplierId: null, active: true },
     orderBy: { sku: "asc" },
     select: { mlItemId: true, sku: true },
   });
@@ -62,7 +62,7 @@ export async function loadAssignedProducts(
   organizationId: string,
 ): Promise<AssignedProduct[]> {
   const rows = await prisma.product.findMany({
-    where: { organizationId, supplierId: { not: null } },
+    where: { organizationId, supplierId: { not: null }, active: true },
     orderBy: { sku: "asc" },
     select: { mlItemId: true, sku: true, supplierId: true },
   });

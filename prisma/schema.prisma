@@ -333,6 +333,18 @@ model Product {
   isImported          Boolean  @default(false) @map("is_imported")
   pmaPrice            Decimal? @map("pma_price") @db.Decimal(18, 2)
   supplierId          String?  @map("supplier_id")
+  /// Produto inativado pelo usuário (anúncio pausado/excluído no ML, mas
+  /// mantido aqui para preservar histórico de relatórios). Telas
+  /// operacionais (Kanban, Inventory, Alertas, Fornecedores) excluem
+  /// produto inativo; relatórios históricos (DRE, Lucratividade,
+  /// Relatório Tributário) continuam considerando normalmente.
+  active              Boolean  @default(true) @map("active")
+  /// `true` quando o produto veio do import em massa e ainda não teve o
+  /// custo real preenchido (nasce com unitCostNf=0). Enquanto `true`, é
+  /// tratado como "sem Product" nos cálculos de custo de DRE/Lucratividade/
+  /// Relatório Tributário. Limpo automaticamente no primeiro PATCH salvo
+  /// pelo formulário de edição.
+  needsCostReview     Boolean  @default(false) @map("needs_cost_review")
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
@@ -342,6 +354,7 @@ model Product {
 
   @@index([organizationId])
   @@index([organizationId, supplierId])
+  @@index([organizationId, active])
   @@map("products")
 }
 

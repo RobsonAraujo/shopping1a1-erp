@@ -18,7 +18,10 @@ import {
   toStockPlanningValues,
 } from "@/lib/configuracoes/operational-settings";
 import { loadStockReportProductsForListings } from "@/lib/products/product-data";
-import { loadSupplierNamesByMlItemId } from "@/lib/products/product-resolver";
+import {
+  loadInactiveProductMlItemIds,
+  loadSupplierNamesByMlItemId,
+} from "@/lib/products/product-resolver";
 import type { StockReportProductInfo } from "@/lib/inventory/inventory-stock-report";
 import { prisma } from "@/lib/db/db";
 import { readSession } from "@/lib/mercadolibre/session";
@@ -44,11 +47,18 @@ async function InventoryDataSection({
   try {
     const operationalSettings = await loadOperationalSettings(organizationId);
     const stockPlanning = toStockPlanningValues(operationalSettings);
-    const items = (
+    const rawItems = (
       await fetchOperationalListings(token, userId, organizationId)
     ).filter(
       (item) => !isKitItem(item),
     );
+    // Produto inativado pelo usuário some do Estoque (linha e Relatório de
+    // Estoque), sem afetar o cadastro nem relatórios históricos.
+    const inactiveIds = await loadInactiveProductMlItemIds(
+      organizationId,
+      rawItems.map((item) => item.id),
+    );
+    const items = rawItems.filter((item) => !inactiveIds.has(item.id));
 
     const allIds = items.map((item) => item.id);
 

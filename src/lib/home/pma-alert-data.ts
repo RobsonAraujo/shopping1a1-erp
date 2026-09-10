@@ -80,7 +80,7 @@ export async function loadPmaAlerts(
   organizationId: string,
 ): Promise<PmaAlertRow[]> {
   const productsWithPma = await prisma.product.findMany({
-    where: { organizationId, pmaPrice: { not: null } },
+    where: { organizationId, pmaPrice: { not: null }, active: true },
     select: { mlItemId: true, sku: true, pmaPrice: true },
   });
   if (productsWithPma.length === 0) return [];
