@@ -3,11 +3,6 @@
  * FORNECEDOR — o usuário compra tudo de um fornecedor de uma vez, não
  * produto a produto. Lógica pura, sem I/O, pra ser testável isolada.
  */
-import type { ReplenishmentStatus } from "@/generated/prisma/client";
-import {
-  PURCHASE_BOARD_COLUMNS,
-  purchaseStatusOrderIndex,
-} from "@/lib/compras/replenishment-cycle";
 import type { OperationsBoardCard } from "@/lib/compras/replenishment-cycle-data";
 
 export type SupplierBoardTopItem = {
@@ -21,21 +16,24 @@ export type SupplierBoardTopItem = {
   imageUrl: string | null;
 };
 
-export type SupplierStatusBreakdownEntry = {
-  status: ReplenishmentStatus;
+export type SupplierColumnBreakdownEntry = {
+  columnId: string;
+  columnLabel: string;
   count: number;
 };
 
 export type SupplierBoardCard = {
   supplier: string;
-  /** Coluna do card = status menos avançado ("elo mais fraco") entre os
-   * ciclos ativos do fornecedor — nunca esconde um produto que ainda
-   * precisa de ação atrás de outros já adiantados. */
-  status: ReplenishmentStatus;
+  /** Coluna do card = a menos avançada ("elo mais fraco") entre os ciclos
+   * ativos do fornecedor — nunca esconde um produto que ainda precisa de
+   * ação atrás de outros já adiantados. */
+  columnId: string;
+  columnLabel: string;
+  columnPosition: number;
   totalActive: number;
-  /** Só populado quando há mais de um status entre os ciclos do grupo
+  /** Só populado quando há mais de uma coluna entre os ciclos do grupo
    * (evita ruído visual no caso comum de todos no mesmo estágio). */
-  breakdown: SupplierStatusBreakdownEntry[];
+  breakdown: SupplierColumnBreakdownEntry[];
   hasOverdue: boolean;
   /** Algum ciclo do grupo ainda não tem venda real por trás de
    * `purchaseIsOverdue`/etc. (ver `OperationsBoardCard.salesPending`) — a UI
@@ -77,21 +75,32 @@ export function buildSupplierBoardCards(
 
   const result: SupplierBoardCard[] = [];
   for (const [supplier, group] of bySupplier) {
-    const weakestStatus = group.reduce((weakest, card) =>
-      purchaseStatusOrderIndex(card.status) < purchaseStatusOrderIndex(weakest.status)
-        ? card
-        : weakest,
-    ).status;
+    const weakest = group.reduce((weakest, card) =>
+      card.columnPosition < weakest.columnPosition ? card : weakest,
+    );
 
-    const countByStatus = new Map<ReplenishmentStatus, number>();
+    const countByColumn = new Map<string, { label: string; position: number; count: number }>();
     for (const card of group) {
-      countByStatus.set(card.status, (countByStatus.get(card.status) ?? 0) + 1);
+      const entry = countByColumn.get(card.columnId);
+      if (entry) {
+        entry.count += 1;
+      } else {
+        countByColumn.set(card.columnId, {
+          label: card.columnLabel,
+          position: card.columnPosition,
+          count: 1,
+        });
+      }
     }
-    const breakdown: SupplierStatusBreakdownEntry[] =
-      countByStatus.size > 1
-        ? PURCHASE_BOARD_COLUMNS.filter((status) => countByStatus.has(status)).map(
-            (status) => ({ status, count: countByStatus.get(status)! }),
-          )
+    const breakdown: SupplierColumnBreakdownEntry[] =
+      countByColumn.size > 1
+        ? [...countByColumn.entries()]
+            .sort((a, b) => a[1].position - b[1].position)
+            .map(([columnId, entry]) => ({
+              columnId,
+              columnLabel: entry.label,
+              count: entry.count,
+            }))
         : [];
 
     const sortedForTopItems = [...group].sort(compareTopItems);
@@ -104,7 +113,9 @@ export function buildSupplierBoardCards(
 
     result.push({
       supplier,
-      status: weakestStatus,
+      columnId: weakest.columnId,
+      columnLabel: weakest.columnLabel,
+      columnPosition: weakest.columnPosition,
       totalActive: group.length,
       breakdown,
       hasOverdue: group.some((card) => card.purchaseIsOverdue),
@@ -134,7 +145,7 @@ export type MoveAction = {
 
 /**
  * Decide quais ciclos de um fornecedor devem transicionar ao mover o card
- * pra `targetStatus`:
+ * pra `targetPosition` (posição da coluna alvo no board):
  * - **forward** (existe ao menos 1 ciclo atrás do alvo): avança só esses —
  *   quem já está no alvo ou além fica intocado (não regride ninguém). Cobre
  *   também o caso misto (alguns atrás, algum outro já além do alvo).
@@ -143,32 +154,17 @@ export type MoveAction = {
  * - **noop**: todos os ciclos já estão exatamente no alvo.
  */
 export function resolveMoveActionForSupplier(
-  cyclesInGroup: { cycleId: string; status: ReplenishmentStatus }[],
-  targetStatus: ReplenishmentStatus,
+  cyclesInGroup: { cycleId: string; columnPosition: number }[],
+  targetPosition: number,
 ): MoveAction {
-  const targetIndex = purchaseStatusOrderIndex(targetStatus);
-  if (targetIndex === -1) return { cycleIdsToTransition: [], direction: "noop" };
-
-  const behind = cyclesInGroup.filter(
-    (c) => purchaseStatusOrderIndex(c.status) < targetIndex,
-  );
+  const behind = cyclesInGroup.filter((c) => c.columnPosition < targetPosition);
   if (behind.length > 0) {
     return { cycleIdsToTransition: behind.map((c) => c.cycleId), direction: "forward" };
   }
 
-  const notAtTarget = cyclesInGroup.filter((c) => c.status !== targetStatus);
+  const notAtTarget = cyclesInGroup.filter((c) => c.columnPosition !== targetPosition);
   if (notAtTarget.length === 0) {
     return { cycleIdsToTransition: [], direction: "noop" };
   }
   return { cycleIdsToTransition: notAtTarget.map((c) => c.cycleId), direction: "backward" };
-}
-
-/** Próxima coluna visível do board de compra após `status`, ou `null` se já
- * for a última (`ordered`) — "Concluído" nunca é um destino manual aqui. */
-export function nextPurchaseBoardColumn(
-  status: ReplenishmentStatus,
-): ReplenishmentStatus | null {
-  const index = purchaseStatusOrderIndex(status);
-  if (index === -1 || index >= PURCHASE_BOARD_COLUMNS.length - 1) return null;
-  return PURCHASE_BOARD_COLUMNS[index + 1];
 }

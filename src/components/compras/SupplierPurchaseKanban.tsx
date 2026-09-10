@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { DndContext, DragOverlay, type DragEndEvent } from "@dnd-kit/core";
+import { arrayMove } from "@dnd-kit/sortable";
 import {
   ItemListSearch,
   itemListSearchEmptyMessage,
@@ -23,6 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   SupplierPurchaseKanbanBoard,
+  COLUMN_DRAG_ID_PREFIX,
   COLUMN_DROP_ID_PREFIX,
 } from "@/components/compras/SupplierPurchaseKanbanBoard";
 import {
@@ -35,7 +37,7 @@ import {
   type MoveAction,
 } from "@/lib/compras/supplier-board";
 import {
-  PURCHASE_STATUS_LABELS,
+  finalStatusForKind,
   mergeOperationsBoardCards,
   patchOperationsBoardCardsSales,
 } from "@/lib/compras/replenishment-cycle";
@@ -50,13 +52,14 @@ import { readApiError } from "@/lib/api/api-client-error";
 import { useApiResource } from "@/hooks/use-api-resource";
 import { useDndSensors } from "@/hooks/use-dnd-sensors";
 import { useSSEStream } from "@/hooks/use-sse-stream";
+import { useKanbanColumns, type KanbanColumnRow } from "@/hooks/use-kanban-columns";
 import type { SupplierRow } from "@/components/fornecedores/FornecedoresClient";
-import type { ReplenishmentStatus } from "@/generated/prisma/client";
 import { cn } from "@/lib/utils";
 
 type PendingBackwardMove = MoveAction & {
   supplier: string;
-  targetStatus: ReplenishmentStatus;
+  targetColumn: KanbanColumnRow;
+  isFinalColumn: boolean;
 };
 
 type ResyncStreamEvent =
@@ -75,10 +78,18 @@ export function SupplierPurchaseKanban({
   const [busySupplier, setBusySupplier] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeDragSupplier, setActiveDragSupplier] = useState<string | null>(null);
+  const [activeDragColumnId, setActiveDragColumnId] = useState<string | null>(null);
   const [pendingBackwardMove, setPendingBackwardMove] =
     useState<PendingBackwardMove | null>(null);
   const sensors = useDndSensors();
   const router = useRouter();
+  const {
+    columns,
+    rename: renameColumn,
+    addColumn,
+    removeColumn,
+    reorder: reorderColumns,
+  } = useKanbanColumns("purchase");
 
   // Lista leve (só o cadastro de fornecedores, sem sweep do catálogo ML) —
   // acesso rápido a um fornecedor mesmo quando ele não tem nenhum produto
@@ -106,6 +117,9 @@ export function SupplierPurchaseKanban({
 
   const activeDragCard = activeDragSupplier
     ? supplierCards.find((c) => c.supplier === activeDragSupplier)
+    : undefined;
+  const activeDragColumn = activeDragColumnId
+    ? columns.find((c) => c.id === activeDragColumnId)
     : undefined;
 
   const refresh = useCallback(async () => {
@@ -159,24 +173,33 @@ export function SupplierPurchaseKanban({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function planMove(supplier: string, targetStatus: ReplenishmentStatus): PendingBackwardMove {
+  function planMove(supplier: string, targetColumn: KanbanColumnRow): PendingBackwardMove {
     const cyclesInGroup = cards
       .filter((c) => c.kind === "purchase" && c.supplier === supplier)
-      .map((c) => ({ cycleId: c.cycleId, status: c.status }));
+      .map((c) => ({ cycleId: c.cycleId, columnPosition: c.columnPosition }));
+    const sorted = [...columns].sort((a, b) => a.position - b.position);
+    const isFinalColumn = targetColumn.id === sorted[sorted.length - 1]?.id;
     return {
-      ...resolveMoveActionForSupplier(cyclesInGroup, targetStatus),
+      ...resolveMoveActionForSupplier(cyclesInGroup, targetColumn.position),
       supplier,
-      targetStatus,
+      targetColumn,
+      isFinalColumn,
     };
   }
 
-  async function executeMove(action: MoveAction & { supplier: string; targetStatus: ReplenishmentStatus }) {
+  async function executeMove(action: PendingBackwardMove) {
     if (action.cycleIdsToTransition.length === 0) return;
     const previousCards = cards;
     setCards((prev) =>
       prev.map((c) =>
         action.cycleIdsToTransition.includes(c.cycleId)
-          ? { ...c, status: action.targetStatus }
+          ? {
+              ...c,
+              columnId: action.targetColumn.id,
+              columnLabel: action.targetColumn.label,
+              columnPosition: action.targetColumn.position,
+              status: action.isFinalColumn ? finalStatusForKind(c.kind) : "attention",
+            }
           : c,
       ),
     );
@@ -188,7 +211,7 @@ export function SupplierPurchaseKanban({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           cycleIds: action.cycleIdsToTransition,
-          status: action.targetStatus,
+          columnId: action.targetColumn.id,
         }),
       });
       if (!res.ok) {
@@ -212,24 +235,61 @@ export function SupplierPurchaseKanban({
     void executeMove(action);
   }
 
+  function handleDragStart(id: string) {
+    if (id.startsWith(SUPPLIER_DRAG_ID_PREFIX)) {
+      setActiveDragSupplier(id.replace(SUPPLIER_DRAG_ID_PREFIX, ""));
+    } else if (id.startsWith(COLUMN_DRAG_ID_PREFIX)) {
+      setActiveDragColumnId(id.replace(COLUMN_DRAG_ID_PREFIX, ""));
+    }
+  }
+
   function handleDragEnd(event: DragEndEvent) {
     setActiveDragSupplier(null);
-    const supplier = String(event.active.id).replace(SUPPLIER_DRAG_ID_PREFIX, "");
+    setActiveDragColumnId(null);
+    const activeId = String(event.active.id);
     const overId = event.over?.id ? String(event.over.id) : null;
     if (!overId) return;
-    const targetStatus = overId.replace(COLUMN_DROP_ID_PREFIX, "") as ReplenishmentStatus;
-    handleMoveDecision(planMove(supplier, targetStatus));
+
+    if (activeId.startsWith(COLUMN_DRAG_ID_PREFIX)) {
+      if (!overId.startsWith(COLUMN_DRAG_ID_PREFIX)) return;
+      const draggedId = activeId.replace(COLUMN_DRAG_ID_PREFIX, "");
+      const targetId = overId.replace(COLUMN_DRAG_ID_PREFIX, "");
+      if (draggedId === targetId) return;
+      const sorted = [...columns].sort((a, b) => a.position - b.position);
+      const locked = sorted.filter((c) => c.isLocked);
+      const middle = sorted.filter((c) => !c.isLocked);
+      const fromIndex = middle.findIndex((c) => c.id === draggedId);
+      const toIndex = middle.findIndex((c) => c.id === targetId);
+      if (fromIndex === -1 || toIndex === -1) return;
+      const reordered = arrayMove(middle, fromIndex, toIndex);
+      const first = locked.find((c) => c.position === 0);
+      const last = locked.find((c) => c.position === sorted.length - 1);
+      const fullOrder = [
+        ...(first ? [first.id] : []),
+        ...reordered.map((c) => c.id),
+        ...(last ? [last.id] : []),
+      ];
+      void reorderColumns(fullOrder);
+      return;
+    }
+
+    const supplier = activeId.replace(SUPPLIER_DRAG_ID_PREFIX, "");
+    const targetColumnId = overId.replace(COLUMN_DROP_ID_PREFIX, "");
+    const targetColumn = columns.find((c) => c.id === targetColumnId);
+    if (!targetColumn) return;
+    handleMoveDecision(planMove(supplier, targetColumn));
   }
 
   return (
     <DndContext
       sensors={sensors}
       autoScroll={false}
-      onDragStart={(event) =>
-        setActiveDragSupplier(String(event.active.id).replace(SUPPLIER_DRAG_ID_PREFIX, ""))
-      }
+      onDragStart={(event) => handleDragStart(String(event.active.id))}
       onDragEnd={handleDragEnd}
-      onDragCancel={() => setActiveDragSupplier(null)}
+      onDragCancel={() => {
+        setActiveDragSupplier(null);
+        setActiveDragColumnId(null);
+      }}
     >
       <div className="space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -283,12 +343,22 @@ export function SupplierPurchaseKanban({
           <SupplierPurchaseKanbanBoard
             cards={filteredSupplierCards}
             busySupplier={busySupplier}
+            columns={columns}
+            onRenameColumn={renameColumn}
+            onAddColumn={addColumn}
+            onDeleteColumn={removeColumn}
           />
         )}
       </div>
 
       <DragOverlay>
-        {activeDragCard ? <SupplierCardBody card={activeDragCard} className="w-[85vw] sm:w-72" /> : null}
+        {activeDragCard ? (
+          <SupplierCardBody card={activeDragCard} className="w-[85vw] sm:w-72" />
+        ) : activeDragColumn ? (
+          <div className="w-56 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-sm font-semibold shadow-md">
+            {activeDragColumn.label}
+          </div>
+        ) : null}
       </DragOverlay>
 
       <AlertDialog
@@ -300,7 +370,7 @@ export function SupplierPurchaseKanban({
             <AlertDialogTitle>Voltar fornecedor para uma etapa anterior?</AlertDialogTitle>
             <AlertDialogDescription>
               {pendingBackwardMove
-                ? `Isso volta ${pendingBackwardMove.cycleIdsToTransition.length} produto(s) de "${pendingBackwardMove.supplier}" para "${PURCHASE_STATUS_LABELS[pendingBackwardMove.targetStatus]}".`
+                ? `Isso volta ${pendingBackwardMove.cycleIdsToTransition.length} produto(s) de "${pendingBackwardMove.supplier}" para "${pendingBackwardMove.targetColumn.label}".`
                 : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>

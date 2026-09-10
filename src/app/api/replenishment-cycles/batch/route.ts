@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import type { OperationCycleKind, ReplenishmentStatus } from "@/generated/prisma/client";
+import type { OperationCycleKind } from "@/generated/prisma/client";
 import { transitionReplenishmentCyclesBatch } from "@/lib/compras/replenishment-cycle-data";
-import { isValidStatusForKind } from "@/lib/compras/replenishment-cycle";
 import { requireOrganization } from "@/lib/api/api-auth";
 import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 import { parseJsonBody } from "@/lib/api/api-validation";
@@ -10,7 +9,7 @@ import { prisma } from "@/lib/db/db";
 
 const bodySchema = z.object({
   cycleIds: z.array(z.string().trim().min(1)).min(1).max(50),
-  status: z.string(),
+  columnId: z.string().trim().min(1),
 });
 
 /**
@@ -29,17 +28,7 @@ export async function PATCH(request: NextRequest) {
 
   const parsedBody = await parseJsonBody(request, bodySchema);
   if (!parsedBody.ok) return parsedBody.response;
-  const { cycleIds, status } = parsedBody.data;
-
-  if (status === "completed") {
-    return NextResponse.json(
-      {
-        error:
-          "Conclusão de ciclo é automática (sincronização de estoque), não pode ser definida manualmente em lote",
-      },
-      { status: 400 },
-    );
-  }
+  const { cycleIds, columnId } = parsedBody.data;
 
   try {
     const cycles = await prisma.replenishmentCycle.findMany({
@@ -56,16 +45,20 @@ export async function PATCH(request: NextRequest) {
         { status: 400 },
       );
     }
-    if (!isValidStatusForKind(kind, status as ReplenishmentStatus)) {
+
+    const column = await prisma.kanbanColumn.findFirst({
+      where: { id: columnId, organizationId, kind },
+    });
+    if (!column) {
       return NextResponse.json(
-        { error: "Status inválido para esse tipo de ciclo" },
+        { error: "Coluna inválida para esse tipo de ciclo" },
         { status: 400 },
       );
     }
 
     const updated = await transitionReplenishmentCyclesBatch(
       organizationId,
-      cycles.map((c) => ({ cycleId: c.id, nextStatus: status as ReplenishmentStatus })),
+      cycles.map((c) => ({ cycleId: c.id, columnId })),
     );
     return NextResponse.json({ ok: true, updated });
   } catch (e) {

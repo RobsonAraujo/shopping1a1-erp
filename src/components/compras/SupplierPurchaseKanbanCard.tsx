@@ -7,7 +7,6 @@ import { ImageOff, SearchCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { BlurredValue } from "@/components/shared/BlurredValue";
-import { PURCHASE_STATUS_LABELS } from "@/lib/compras/replenishment-cycle";
 import type { SupplierBoardCard } from "@/lib/compras/supplier-board";
 import { supplierPathSegment } from "@/lib/compras/purchase-analysis";
 import { cn } from "@/lib/utils";
@@ -29,8 +28,8 @@ function SupplierCardHeader({ card }: { card: SupplierBoardCard }) {
       {card.breakdown.length > 0 ? (
         <div className="mt-1.5 flex flex-wrap gap-1">
           {card.breakdown.map((entry) => (
-            <Badge key={entry.status} variant="secondary" className="h-5 px-1.5 text-[10px]">
-              {entry.count} {PURCHASE_STATUS_LABELS[entry.status]}
+            <Badge key={entry.columnId} variant="secondary" className="h-5 px-1.5 text-[10px]">
+              {entry.count} {entry.columnLabel}
             </Badge>
           ))}
         </div>

@@ -19,31 +19,19 @@ export function DashboardOperationsSummary({
   const fullParts: string[] = [];
 
   const p = summary.purchase;
-  if (p.attention > 0) {
-    purchaseParts.push(countLabel(p.attention, "em entrada", "em entrada"));
+  if (p.inProgress > 0) {
+    purchaseParts.push(countLabel(p.inProgress, "em andamento", "em andamento"));
   }
-  if (p.analyzing + p.quoted > 0) {
-    purchaseParts.push(
-      countLabel(
-        p.analyzing + p.quoted,
-        "em andamento",
-        "em andamento",
-      ),
-    );
-  }
-  if (p.ordered > 0) {
-    purchaseParts.push(countLabel(p.ordered, "comprado", "comprados"));
+  if (p.final > 0) {
+    purchaseParts.push(countLabel(p.final, "comprado", "comprados"));
   }
 
   const f = summary.full;
-  if (f.attention > 0) {
-    fullParts.push(countLabel(f.attention, "Full em entrada", "Full em entrada"));
+  if (f.inProgress > 0) {
+    fullParts.push(countLabel(f.inProgress, "Full em andamento", "Full em andamento"));
   }
-  if (f.scheduled > 0) {
-    fullParts.push(countLabel(f.scheduled, "Full agendado", "Full agendados"));
-  }
-  if (f.collected > 0) {
-    fullParts.push(countLabel(f.collected, "Full coletado", "Full coletados"));
+  if (f.final > 0) {
+    fullParts.push(countLabel(f.final, "Full coletado", "Full coletados"));
   }
 
   const sections: string[] = [];
@@ -58,8 +46,6 @@ export function DashboardOperationsSummary({
     sections.length > 0
       ? sections.join(" · ")
       : "Nenhuma reposição ativa no momento.";
-
-  const urgentPurchase = p.attention;
 
   return (
     <section id="prioridades" className="scroll-mt-24">
@@ -76,16 +62,6 @@ export function DashboardOperationsSummary({
               <p className="mt-1 text-sm text-[var(--muted-foreground)]">
                 {summaryText}
               </p>
-              {urgentPurchase > 0 ? (
-                <p className="mt-1 text-sm font-medium text-amber-800">
-                  {countLabel(
-                    urgentPurchase,
-                    "anúncio precisa",
-                    "anúncios precisam",
-                  )}{" "}
-                  de ação imediata na compra.
-                </p>
-              ) : null}
             </div>
           </div>
           <div className="flex shrink-0 flex-col gap-2 sm:items-end">

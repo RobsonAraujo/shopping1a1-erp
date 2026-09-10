@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { DndContext, DragOverlay, type DragEndEvent } from "@dnd-kit/core";
+import { arrayMove } from "@dnd-kit/sortable";
 import {
   ItemListSearch,
   itemListSearchEmptyMessage,
 } from "@/components/shared/ItemListSearch";
 import {
+  COLUMN_DRAG_ID_PREFIX,
   OPERATIONS_COLUMN_DROP_ID_PREFIX,
   OperationsKanbanBoard,
 } from "@/components/operacoes-full/OperationsKanbanBoard";
@@ -23,6 +25,7 @@ import type {
   OperationsCardSalesPatch,
 } from "@/lib/compras/replenishment-cycle-data";
 import {
+  finalStatusForKind,
   mergeOperationsBoardCards,
   patchOperationsBoardCardsSales,
   summarizeOperationsCounts,
@@ -30,19 +33,34 @@ import {
 import { filterByItemListSearch } from "@/lib/item-list-search";
 import { useDndSensors } from "@/hooks/use-dnd-sensors";
 import { useSSEStream } from "@/hooks/use-sse-stream";
-import type { OperationCycleKind, ReplenishmentStatus } from "@/generated/prisma/client";
+import { useKanbanColumns, type KanbanColumnRow } from "@/hooks/use-kanban-columns";
+import type { OperationCycleKind } from "@/generated/prisma/client";
 import { cn } from "@/lib/utils";
 
 /** Move o card localmente pra coluna alvo antes da resposta do servidor —
  * sem isso, o card fica "preso" na coluna antiga (desabilitado) até o PATCH
- * voltar, que hoje ainda refaz o sweep pesado do Mercado Livre. */
-function applyOptimisticStatus(
+ * voltar, que hoje ainda refaz o sweep pesado do Mercado Livre. `status`
+ * também é recalculado aqui (mesma regra do servidor: só a última coluna
+ * travada do kind vira o status final, qualquer outra vira "attention") —
+ * sem isso os contadores/badge Urgente ficariam 1 round-trip atrasados. */
+function applyOptimisticColumn(
   boards: OperationsBoardsData,
   cycleId: string,
-  status: ReplenishmentStatus,
+  targetColumn: KanbanColumnRow,
+  isFinalColumn: boolean,
 ): OperationsBoardsData {
   const updateList = (cards: OperationsBoardCard[]) =>
-    cards.map((c) => (c.cycleId === cycleId ? { ...c, status } : c));
+    cards.map((c) =>
+      c.cycleId === cycleId
+        ? {
+            ...c,
+            columnId: targetColumn.id,
+            columnLabel: targetColumn.label,
+            columnPosition: targetColumn.position,
+            status: isFinalColumn ? finalStatusForKind(c.kind) : "attention",
+          }
+        : c,
+    );
   const purchaseCards = updateList(boards.purchase.cards);
   const fullCards = updateList(boards.full.cards);
   const summary = summarizeOperationsCounts([
@@ -122,7 +140,15 @@ export function OperationsKanban({ initialData, kind }: OperationsKanbanProps) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeDragCycleId, setActiveDragCycleId] = useState<string | null>(null);
+  const [activeDragColumnId, setActiveDragColumnId] = useState<string | null>(null);
   const sensors = useDndSensors();
+  const {
+    columns,
+    rename: renameColumn,
+    addColumn,
+    removeColumn,
+    reorder: reorderColumns,
+  } = useKanbanColumns(kind);
 
   const activeCards =
     kind === "purchase" ? data.purchase.cards : data.full.cards;
@@ -165,20 +191,20 @@ export function OperationsKanban({ initialData, kind }: OperationsKanbanProps) {
   }, [kind]);
 
   const patchCycle = useCallback(
-    async (cycleId: string, status: ReplenishmentStatus) => {
+    async (cycleId: string, targetColumn: KanbanColumnRow, isFinalColumn: boolean) => {
       // Otimista: move o card na hora, antes da resposta — sem isso ele
       // fica "preso" na coluna antiga (desabilitado) até o PATCH voltar,
       // que hoje ainda refaz o sweep pesado do Mercado Livre. Reverte se a
       // chamada falhar.
       const previousData = data;
-      setData((prev) => applyOptimisticStatus(prev, cycleId, status));
+      setData((prev) => applyOptimisticColumn(prev, cycleId, targetColumn, isFinalColumn));
       setBusyId(cycleId);
       setError(null);
       try {
         const res = await fetch(`/api/replenishment-cycles/${cycleId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status }),
+          body: JSON.stringify({ columnId: targetColumn.id }),
         });
         const json = (await res.json()) as OperationsBoardsData & {
           error?: string;
@@ -264,19 +290,58 @@ export function OperationsKanban({ initialData, kind }: OperationsKanbanProps) {
   const activeDragCard = activeDragCycleId
     ? activeCards.find((card) => card.cycleId === activeDragCycleId)
     : undefined;
+  const activeDragColumn = activeDragColumnId
+    ? columns.find((c) => c.id === activeDragColumnId)
+    : undefined;
+
+  function handleDragStart(id: string) {
+    if (id.startsWith(OPERATIONS_DRAG_ID_PREFIX)) {
+      setActiveDragCycleId(id.replace(OPERATIONS_DRAG_ID_PREFIX, ""));
+    } else if (id.startsWith(COLUMN_DRAG_ID_PREFIX)) {
+      setActiveDragColumnId(id.replace(COLUMN_DRAG_ID_PREFIX, ""));
+    }
+  }
 
   function handleDragEnd(event: DragEndEvent) {
     setActiveDragCycleId(null);
-    const cycleId = String(event.active.id).replace(OPERATIONS_DRAG_ID_PREFIX, "");
+    setActiveDragColumnId(null);
+    const activeId = String(event.active.id);
     const overId = event.over?.id ? String(event.over.id) : null;
     if (!overId) return;
-    const targetStatus = overId.replace(
-      OPERATIONS_COLUMN_DROP_ID_PREFIX,
-      "",
-    ) as ReplenishmentStatus;
+
+    if (activeId.startsWith(COLUMN_DRAG_ID_PREFIX)) {
+      // Reordenar colunas: só as do meio (não travadas) participam do
+      // SortableContext — a primeira e a última nunca mudam de posição.
+      if (!overId.startsWith(COLUMN_DRAG_ID_PREFIX)) return;
+      const draggedId = activeId.replace(COLUMN_DRAG_ID_PREFIX, "");
+      const targetId = overId.replace(COLUMN_DRAG_ID_PREFIX, "");
+      if (draggedId === targetId) return;
+      const sorted = [...columns].sort((a, b) => a.position - b.position);
+      const locked = sorted.filter((c) => c.isLocked);
+      const middle = sorted.filter((c) => !c.isLocked);
+      const fromIndex = middle.findIndex((c) => c.id === draggedId);
+      const toIndex = middle.findIndex((c) => c.id === targetId);
+      if (fromIndex === -1 || toIndex === -1) return;
+      const reordered = arrayMove(middle, fromIndex, toIndex);
+      const first = locked.find((c) => c.position === 0);
+      const last = locked.find((c) => c.position === sorted.length - 1);
+      const fullOrder = [
+        ...(first ? [first.id] : []),
+        ...reordered.map((c) => c.id),
+        ...(last ? [last.id] : []),
+      ];
+      void reorderColumns(fullOrder);
+      return;
+    }
+
+    const cycleId = activeId.replace(OPERATIONS_DRAG_ID_PREFIX, "");
+    const targetColumnId = overId.replace(OPERATIONS_COLUMN_DROP_ID_PREFIX, "");
     const card = activeCards.find((c) => c.cycleId === cycleId);
-    if (!card || card.status === targetStatus) return;
-    void patchCycle(cycleId, targetStatus);
+    const targetColumn = columns.find((c) => c.id === targetColumnId);
+    if (!card || !targetColumn || card.columnId === targetColumn.id) return;
+    const sorted = [...columns].sort((a, b) => a.position - b.position);
+    const isFinalColumn = targetColumn.id === sorted[sorted.length - 1]?.id;
+    void patchCycle(cycleId, targetColumn, isFinalColumn);
   }
 
   const config = KIND_CONFIG[kind];
@@ -285,11 +350,12 @@ export function OperationsKanban({ initialData, kind }: OperationsKanbanProps) {
     <DndContext
       sensors={sensors}
       autoScroll={false}
-      onDragStart={(event) =>
-        setActiveDragCycleId(String(event.active.id).replace(OPERATIONS_DRAG_ID_PREFIX, ""))
-      }
+      onDragStart={(event) => handleDragStart(String(event.active.id))}
       onDragEnd={handleDragEnd}
-      onDragCancel={() => setActiveDragCycleId(null)}
+      onDragCancel={() => {
+        setActiveDragCycleId(null);
+        setActiveDragColumnId(null);
+      }}
     >
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-2">
@@ -341,11 +407,19 @@ export function OperationsKanban({ initialData, kind }: OperationsKanbanProps) {
         kind={kind}
         cards={filteredActive}
         busyId={busyId}
+        columns={columns}
+        onRenameColumn={renameColumn}
+        onAddColumn={addColumn}
+        onDeleteColumn={removeColumn}
       />
     </div>
       <DragOverlay>
         {activeDragCard ? (
           <OperationsCardBody card={activeDragCard} className="w-[85vw] sm:w-72" />
+        ) : activeDragColumn ? (
+          <div className="w-56 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-sm font-semibold shadow-md">
+            {activeDragColumn.label}
+          </div>
         ) : null}
       </DragOverlay>
     </DndContext>

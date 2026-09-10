@@ -3,7 +3,15 @@
 import { Fragment, useCallback, useMemo, useState } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
-import { ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Pencil,
+  Plus,
+  Power,
+  PowerOff,
+  Trash2,
+} from "lucide-react";
 import { DndContext, DragOverlay, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -116,6 +124,7 @@ export function FornecedoresClient({
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [pendingDeactivate, setPendingDeactivate] = useState<SupplierRow | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<SupplierRow | null>(null);
   const [unassignedProducts, setUnassignedProducts] =
     useState<UnassignedProduct[]>(initialUnassignedProducts);
   const [assignedProducts, setAssignedProducts] =
@@ -297,26 +306,60 @@ export function FornecedoresClient({
     }
   }
 
-  async function confirmDeactivate() {
-    if (!pendingDeactivate) return;
+  async function setSupplierActive(id: string, active: boolean) {
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`/api/suppliers/${encodeURIComponent(pendingDeactivate.id)}`, {
+      const res = await fetch(`/api/suppliers/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active }),
+      });
+      if (!res.ok) {
+        setError(await readApiError(res, "supplier_update_failed"));
+        return;
+      }
+      setSuppliers((prev) => prev.map((s) => (s.id === id ? { ...s, active } : s)));
+      toast.success(active ? "Fornecedor ativado." : "Fornecedor desativado.");
+    } catch {
+      setError("Falha de rede ao atualizar o status do fornecedor.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function onToggleActive(supplier: SupplierRow, nextActive: boolean) {
+    if (!nextActive) {
+      setPendingDeactivate(supplier);
+      return;
+    }
+    void setSupplierActive(supplier.id, true);
+  }
+
+  async function confirmDeactivate() {
+    if (!pendingDeactivate) return;
+    await setSupplierActive(pendingDeactivate.id, false);
+    setPendingDeactivate(null);
+  }
+
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/suppliers/${encodeURIComponent(pendingDelete.id)}`, {
         method: "DELETE",
       });
       if (!res.ok) {
         setError(await readApiError(res, "supplier_delete_failed"));
         return;
       }
-      const deactivatedId = pendingDeactivate.id;
-      setPendingDeactivate(null);
-      setSuppliers((prev) =>
-        prev.map((s) => (s.id === deactivatedId ? { ...s, active: false } : s)),
-      );
-      toast.success("Fornecedor desativado.");
+      const deletedId = pendingDelete.id;
+      setPendingDelete(null);
+      setSuppliers((prev) => prev.filter((s) => s.id !== deletedId));
+      toast.success("Fornecedor excluído.");
     } catch {
-      setError("Falha de rede ao desativar fornecedor.");
+      setError("Falha de rede ao excluir fornecedor.");
     } finally {
       setSaving(false);
     }
@@ -472,18 +515,30 @@ export function FornecedoresClient({
                       <Pencil className="size-3.5" aria-hidden />
                       Editar
                     </Button>
-                    {supplier.active ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="flex-1 gap-1.5"
-                        onClick={() => setPendingDeactivate(supplier)}
-                      >
-                        <Trash2 className="size-3.5 text-rose-600" aria-hidden />
-                        Desativar
-                      </Button>
-                    ) : null}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 gap-1.5"
+                      onClick={() => onToggleActive(supplier, !supplier.active)}
+                    >
+                      {supplier.active ? (
+                        <Power className="size-3.5" aria-hidden />
+                      ) : (
+                        <PowerOff className="size-3.5" aria-hidden />
+                      )}
+                      {supplier.active ? "Desativar" : "Ativar"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 gap-1.5"
+                      onClick={() => setPendingDelete(supplier)}
+                    >
+                      <Trash2 className="size-3.5 text-rose-600" aria-hidden />
+                      Excluir
+                    </Button>
                   </div>
                 </Card>
               );
@@ -563,17 +618,32 @@ export function FornecedoresClient({
                               >
                                 <Pencil className="size-4" aria-hidden />
                               </Button>
-                              {supplier.active ? (
-                                <Button
-                                  type="button"
-                                  size="icon-sm"
-                                  variant="ghost"
-                                  aria-label={`Desativar ${supplier.name}`}
-                                  onClick={() => setPendingDeactivate(supplier)}
-                                >
-                                  <Trash2 className="size-4 text-rose-600" aria-hidden />
-                                </Button>
-                              ) : null}
+                              <Button
+                                type="button"
+                                size="icon-sm"
+                                variant="ghost"
+                                aria-label={
+                                  supplier.active
+                                    ? `Desativar ${supplier.name}`
+                                    : `Ativar ${supplier.name}`
+                                }
+                                onClick={() => onToggleActive(supplier, !supplier.active)}
+                              >
+                                {supplier.active ? (
+                                  <Power className="size-4" aria-hidden />
+                                ) : (
+                                  <PowerOff className="size-4" aria-hidden />
+                                )}
+                              </Button>
+                              <Button
+                                type="button"
+                                size="icon-sm"
+                                variant="ghost"
+                                aria-label={`Excluir ${supplier.name}`}
+                                onClick={() => setPendingDelete(supplier)}
+                              >
+                                <Trash2 className="size-4" aria-hidden />
+                              </Button>
                             </div>
                           </td>
                         </DroppableSupplierRow>
@@ -676,6 +746,32 @@ export function FornecedoresClient({
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={() => void confirmDeactivate()}>
               Desativar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={pendingDelete != null}
+        onOpenChange={(next) => !next && setPendingDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir fornecedor permanentemente?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDelete
+                ? `"${pendingDelete.name}" será excluído de vez.${
+                    pendingDelete.productCount > 0
+                      ? ` ${pendingDelete.productCount} produto${pendingDelete.productCount === 1 ? "" : "s"} vinculado${pendingDelete.productCount === 1 ? "" : "s"} ficará${pendingDelete.productCount === 1 ? "" : "ão"} sem fornecedor.`
+                      : ""
+                  } Essa ação não pode ser desfeita.`
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => void confirmDelete()}>
+              Excluir
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

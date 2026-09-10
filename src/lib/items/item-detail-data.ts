@@ -19,6 +19,7 @@ import {
   loadOperationalSettings,
   toStockPlanningValues,
 } from "@/lib/configuracoes/operational-settings";
+import { loadOrMaterializeKanbanColumns } from "@/lib/compras/kanban-columns-data";
 
 export type ItemCatalogContext = {
   catalogStatus: string | null;
@@ -31,6 +32,9 @@ export type ItemOpenCycleContext = {
   id: string;
   kind: OperationCycleKind;
   status: ReplenishmentStatus;
+  /** Label da coluna atual do Kanban (dinâmica por organização) — não dá
+   * mais pra derivar só do `status` (ver comentário no schema). */
+  columnLabel: string;
 };
 
 export type ItemDetailContext = {
@@ -109,7 +113,7 @@ export async function loadItemDetailContext(input: {
         status: { not: "completed" },
       },
       orderBy: { updatedAt: "desc" },
-      select: { id: true, kind: true, status: true },
+      select: { id: true, kind: true, status: true, columnId: true },
     }),
     loadFinancialEvaluationRows(accessToken, userId, organizationId, {
       itemIds: [itemId],
@@ -118,6 +122,17 @@ export async function loadItemDetailContext(input: {
       ? fetchCategoryById(accessToken, item.category_id).catch(() => null)
       : Promise.resolve(null),
   ]);
+
+  const openCycleColumnLabel = openCycle
+    ? await (async () => {
+        const columns = await loadOrMaterializeKanbanColumns(organizationId, openCycle.kind);
+        return (
+          columns.find((c) => c.id === openCycle.columnId)?.label ??
+          columns[0]?.label ??
+          "?"
+        );
+      })()
+    : null;
 
   const warehouseStock = warehouseRow?.quantity ?? 0;
   const leadTimeDays = warehouseRow?.purchaseLeadTimeDays ?? 0;
@@ -152,6 +167,7 @@ export async function loadItemDetailContext(input: {
           id: openCycle.id,
           kind: openCycle.kind,
           status: openCycle.status,
+          columnLabel: openCycleColumnLabel ?? "?",
         }
       : null,
     financial: financialRows[0] ?? null,

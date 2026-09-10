@@ -285,13 +285,20 @@ export function isValidStatusForKind(
   return boardColumnsForKind(kind).includes(status);
 }
 
+/** Status que marca a coluna final travada de cada kind — só esses 2 valores
+ * (mais `"attention"` e `"completed"`) são realmente atribuídos a um ciclo
+ * ativo desde que as colunas viraram livres por organização (ver comentário
+ * no schema, model `ReplenishmentCycle.status`). */
+export function finalStatusForKind(kind: OperationCycleKind): ReplenishmentStatus {
+  return kind === "purchase" ? "ordered" : "collected";
+}
+
 export type BoardSummaryCounts = {
-  attention: number;
-  analyzing: number;
-  quoted: number;
-  ordered: number;
-  scheduled: number;
-  collected: number;
+  /** Ainda não chegou na coluna final travada — em qualquer outra coluna do
+   * board (primeira ou alguma do meio, custom ou não). */
+  inProgress: number;
+  /** Já está na coluna final travada do kind ("Comprado"/"Coletado"). */
+  final: number;
   totalActive: number;
 };
 
@@ -302,15 +309,7 @@ export type OperationsSummaryCounts = {
 };
 
 function emptyBoardSummary(): BoardSummaryCounts {
-  return {
-    attention: 0,
-    analyzing: 0,
-    quoted: 0,
-    ordered: 0,
-    scheduled: 0,
-    collected: 0,
-    totalActive: 0,
-  };
+  return { inProgress: 0, final: 0, totalActive: 0 };
 }
 
 export function summarizeBoardCounts(
@@ -318,29 +317,15 @@ export function summarizeBoardCounts(
   statuses: ReplenishmentStatus[],
 ): BoardSummaryCounts {
   const counts = emptyBoardSummary();
+  const final = finalStatusForKind(kind);
 
   for (const status of statuses) {
     if (!isActiveReplenishmentStatus(status)) continue;
     counts.totalActive += 1;
-    switch (status) {
-      case "attention":
-        counts.attention += 1;
-        break;
-      case "analyzing":
-        counts.analyzing += 1;
-        break;
-      case "quoted":
-        counts.quoted += 1;
-        break;
-      case "ordered":
-        if (kind === "purchase") counts.ordered += 1;
-        break;
-      case "scheduled":
-        if (kind === "full") counts.scheduled += 1;
-        break;
-      case "collected":
-        if (kind === "full") counts.collected += 1;
-        break;
+    if (status === final) {
+      counts.final += 1;
+    } else {
+      counts.inProgress += 1;
     }
   }
 

@@ -1,35 +1,57 @@
 "use client";
 
-import {
-  PURCHASE_BOARD_COLUMNS,
-  PURCHASE_STATUS_LABELS,
-} from "@/lib/compras/replenishment-cycle";
+import { useState } from "react";
+import { ChevronLeft, ChevronRight, GripVertical, Plus, Trash2 } from "lucide-react";
+import { SortableContext, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { SupplierBoardCard } from "@/lib/compras/supplier-board";
 import { SupplierPurchaseKanbanCard } from "@/components/compras/SupplierPurchaseKanbanCard";
 import { useDropHighlight } from "@/hooks/use-drop-highlight";
-import type { ReplenishmentStatus } from "@/generated/prisma/client";
+import { useCollapsedKanbanColumns } from "@/hooks/use-collapsed-kanban-columns";
+import type { DeleteColumnResult, KanbanColumnRow } from "@/hooks/use-kanban-columns";
+import { Button } from "@/components/ui/button";
+import { FormSelect } from "@/components/ui/form-select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { UserFeedback } from "@/components/ui/user-feedback";
 import { cn } from "@/lib/utils";
 
 export const COLUMN_DROP_ID_PREFIX = "column:";
+export const COLUMN_DRAG_ID_PREFIX = "colhdr:";
 
 type SupplierPurchaseKanbanBoardProps = {
   cards: SupplierBoardCard[];
   busySupplier: string | null;
+  columns: KanbanColumnRow[];
+  onRenameColumn: (id: string, label: string) => void | Promise<void>;
+  onAddColumn: (label: string) => void | Promise<void>;
+  onDeleteColumn: (id: string, moveCardsToColumnId?: string) => Promise<DeleteColumnResult>;
 };
 
 function DroppableColumn({
-  status,
+  columnId,
+  collapsed,
   children,
 }: {
-  status: ReplenishmentStatus;
+  columnId: string;
+  collapsed: boolean;
   children: React.ReactNode;
 }) {
-  const { setNodeRef, className } = useDropHighlight(`${COLUMN_DROP_ID_PREFIX}${status}`);
+  const { setNodeRef, className } = useDropHighlight(`${COLUMN_DROP_ID_PREFIX}${columnId}`);
   return (
     <section
       ref={setNodeRef}
       className={cn(
-        "flex w-[85vw] shrink-0 snap-center flex-col rounded-xl border border-[var(--border)] bg-[var(--muted)]/15 sm:w-72 sm:snap-align-none",
+        "flex shrink-0 snap-center flex-col rounded-xl border border-[var(--border)] bg-[var(--muted)]/15 sm:snap-align-none",
+        collapsed ? "w-10 self-start sm:w-10" : "w-[85vw] sm:w-72",
         className,
       )}
     >
@@ -38,50 +60,308 @@ function DroppableColumn({
   );
 }
 
-export function SupplierPurchaseKanbanBoard({
-  cards,
-  busySupplier,
-}: SupplierPurchaseKanbanBoardProps) {
-  const cardsByStatus = new Map<ReplenishmentStatus, SupplierBoardCard[]>();
-  for (const status of PURCHASE_BOARD_COLUMNS) {
-    cardsByStatus.set(status, []);
-  }
-  for (const card of cards) {
-    cardsByStatus.get(card.status)?.push(card);
+function ColumnHeader({
+  column,
+  count,
+  onToggleCollapse,
+  onRename,
+  onRequestDelete,
+}: {
+  column: KanbanColumnRow;
+  count: number;
+  onToggleCollapse: () => void;
+  onRename: (label: string) => void;
+  onRequestDelete: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(column.label);
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: `${COLUMN_DRAG_ID_PREFIX}${column.id}`,
+    disabled: column.isLocked,
+  });
+
+  function commitRename() {
+    setEditing(false);
+    const trimmed = draft.trim();
+    if (trimmed && trimmed !== column.label) onRename(trimmed);
+    else setDraft(column.label);
   }
 
   return (
-    <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 sm:snap-none">
-      {PURCHASE_BOARD_COLUMNS.map((status) => {
-        const columnCards = cardsByStatus.get(status) ?? [];
-        return (
-          <DroppableColumn key={status} status={status}>
-            <header className="border-b border-[var(--border)] px-3 py-2.5">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold">{PURCHASE_STATUS_LABELS[status]}</h3>
-                <span className="rounded-full bg-[var(--muted)] px-2 py-0.5 text-xs tabular-nums">
-                  {columnCards.length}
-                </span>
-              </div>
-            </header>
-            <div className="flex flex-1 flex-col gap-2 p-2">
-              {columnCards.length === 0 ? (
-                <p className="px-1 py-6 text-center text-xs text-[var(--muted-foreground)]">
-                  Vazio
-                </p>
-              ) : (
-                columnCards.map((card) => (
-                  <SupplierPurchaseKanbanCard
-                    key={card.supplier}
-                    card={card}
-                    busy={busySupplier === card.supplier}
-                  />
-                ))
-              )}
-            </div>
-          </DroppableColumn>
-        );
-      })}
+    <header
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
+      className={cn(
+        "border-b border-[var(--border)] px-3 py-2.5",
+        isDragging && "opacity-40",
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1">
+          {!column.isLocked ? (
+            <button
+              type="button"
+              {...attributes}
+              {...listeners}
+              className="cursor-grab touch-none text-[var(--muted-foreground)] active:cursor-grabbing"
+              aria-label={`Arrastar coluna ${column.label}`}
+            >
+              <GripVertical className="size-3.5" aria-hidden />
+            </button>
+          ) : null}
+          {editing ? (
+            <input
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commitRename}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitRename();
+                if (e.key === "Escape") {
+                  setDraft(column.label);
+                  setEditing(false);
+                }
+              }}
+              className="min-w-0 rounded border border-[var(--border)] bg-[var(--background)] px-1.5 py-0.5 text-sm font-semibold"
+            />
+          ) : (
+            <h3
+              className="cursor-text truncate text-sm font-semibold"
+              onDoubleClick={() => setEditing(true)}
+              title="Duplo clique para renomear"
+            >
+              {column.label}
+            </h3>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span className="rounded-full bg-[var(--muted)] px-2 py-0.5 text-xs tabular-nums">
+            {count}
+          </span>
+          {!column.isLocked ? (
+            <button
+              type="button"
+              onClick={onRequestDelete}
+              aria-label={`Excluir coluna ${column.label}`}
+              className="cursor-pointer text-[var(--muted-foreground)] transition-colors hover:text-rose-600"
+            >
+              <Trash2 className="size-3.5" aria-hidden />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            aria-label={`Recolher coluna ${column.label}`}
+            className="cursor-pointer text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+          >
+            <ChevronLeft className="size-4" aria-hidden />
+          </button>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function AddColumnAffordance({ onAdd }: { onAdd: (label: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState("");
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex h-11 w-40 shrink-0 cursor-pointer items-center justify-center gap-1.5 self-start rounded-xl border border-dashed border-[var(--border)] text-sm text-[var(--muted-foreground)] transition-colors hover:border-[var(--foreground)] hover:text-[var(--foreground)]"
+      >
+        <Plus className="size-4" aria-hidden />
+        Adicionar coluna
+      </button>
+    );
+  }
+
+  function commit() {
+    const trimmed = value.trim();
+    if (trimmed) onAdd(trimmed);
+    setValue("");
+    setOpen(false);
+  }
+
+  return (
+    <div className="flex h-11 w-40 shrink-0 items-center gap-1 self-start rounded-xl border border-[var(--border)] bg-[var(--card)] px-2">
+      <input
+        autoFocus
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit();
+          if (e.key === "Escape") {
+            setValue("");
+            setOpen(false);
+          }
+        }}
+        onBlur={() => {
+          if (!value.trim()) setOpen(false);
+        }}
+        placeholder="Nome da coluna"
+        className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+      />
+      <Button type="button" size="icon-sm" variant="ghost" onClick={commit} aria-label="Confirmar nova coluna">
+        <Plus className="size-4" aria-hidden />
+      </Button>
     </div>
+  );
+}
+
+export function SupplierPurchaseKanbanBoard({
+  cards,
+  busySupplier,
+  columns,
+  onRenameColumn,
+  onAddColumn,
+  onDeleteColumn,
+}: SupplierPurchaseKanbanBoardProps) {
+  const { collapsed, toggle } = useCollapsedKanbanColumns("purchase");
+  const [pendingDelete, setPendingDelete] = useState<
+    { column: KanbanColumnRow; cardCount: number } | null
+  >(null);
+  const [deleteTarget, setDeleteTarget] = useState("");
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const sortedColumns = [...columns].sort((a, b) => a.position - b.position);
+  const middleColumnDragIds = sortedColumns
+    .filter((c) => !c.isLocked)
+    .map((c) => `${COLUMN_DRAG_ID_PREFIX}${c.id}`);
+
+  const cardsByColumnId = new Map<string, SupplierBoardCard[]>();
+  for (const column of sortedColumns) cardsByColumnId.set(column.id, []);
+  for (const card of cards) {
+    cardsByColumnId.get(card.columnId)?.push(card);
+  }
+
+  function requestDelete(column: KanbanColumnRow) {
+    setDeleteError(null);
+    setDeleteTarget("");
+    setPendingDelete({ column, cardCount: cardsByColumnId.get(column.id)?.length ?? 0 });
+  }
+
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    if (pendingDelete.cardCount > 0 && !deleteTarget) return;
+    const result = await onDeleteColumn(
+      pendingDelete.column.id,
+      pendingDelete.cardCount > 0 ? deleteTarget : undefined,
+    );
+    if (!result.ok) {
+      setDeleteError(result.error);
+      return;
+    }
+    setPendingDelete(null);
+  }
+
+  const otherColumnOptions = pendingDelete
+    ? sortedColumns
+        .filter((c) => c.id !== pendingDelete.column.id)
+        .map((c) => ({ value: c.id, label: c.label }))
+    : [];
+
+  return (
+    <>
+      <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 sm:snap-none">
+        <SortableContext items={middleColumnDragIds} strategy={horizontalListSortingStrategy}>
+          {sortedColumns.map((column) => {
+            const columnCards = cardsByColumnId.get(column.id) ?? [];
+            const isCollapsed = collapsed.has(column.id);
+            return (
+              <DroppableColumn key={column.id} columnId={column.id} collapsed={isCollapsed}>
+                {isCollapsed ? (
+                  <button
+                    type="button"
+                    onClick={() => toggle(column.id)}
+                    aria-label={`Expandir coluna ${column.label}`}
+                    className="flex h-64 cursor-pointer flex-col items-center justify-between gap-2 py-3 text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+                  >
+                    <ChevronRight className="size-4 shrink-0" aria-hidden />
+                    <span className="flex-1 text-sm font-semibold [writing-mode:vertical-rl]">
+                      {column.label}
+                    </span>
+                    <span className="rounded-full bg-[var(--muted)] px-1.5 py-0.5 text-xs tabular-nums">
+                      {columnCards.length}
+                    </span>
+                  </button>
+                ) : (
+                  <>
+                    <ColumnHeader
+                      column={column}
+                      count={columnCards.length}
+                      onToggleCollapse={() => toggle(column.id)}
+                      onRename={(label) => void onRenameColumn(column.id, label)}
+                      onRequestDelete={() => requestDelete(column)}
+                    />
+                    <div className="flex flex-1 flex-col gap-2 p-2">
+                      {columnCards.length === 0 ? (
+                        <p className="px-1 py-6 text-center text-xs text-[var(--muted-foreground)]">
+                          Vazio
+                        </p>
+                      ) : (
+                        columnCards.map((card) => (
+                          <SupplierPurchaseKanbanCard
+                            key={card.supplier}
+                            card={card}
+                            busy={busySupplier === card.supplier}
+                          />
+                        ))
+                      )}
+                    </div>
+                  </>
+                )}
+              </DroppableColumn>
+            );
+          })}
+        </SortableContext>
+        <AddColumnAffordance onAdd={(label) => void onAddColumn(label)} />
+      </div>
+
+      <AlertDialog
+        open={pendingDelete != null}
+        onOpenChange={(next) => !next && setPendingDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir coluna &quot;{pendingDelete?.column.label}&quot;?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDelete && pendingDelete.cardCount > 0
+                ? `Essa coluna tem ${pendingDelete.cardCount} card${pendingDelete.cardCount === 1 ? "" : "s"}. Escolha para qual coluna movê-los antes de excluir.`
+                : "Essa coluna está vazia — pode excluir sem afetar nenhum card."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {pendingDelete && pendingDelete.cardCount > 0 ? (
+            <FormSelect
+              label="Mover cards para"
+              value={deleteTarget}
+              onValueChange={setDeleteTarget}
+              options={otherColumnOptions}
+              placeholder="Selecione a coluna de destino"
+            />
+          ) : null}
+          {deleteError ? <UserFeedback>{deleteError}</UserFeedback> : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={Boolean(pendingDelete && pendingDelete.cardCount > 0 && !deleteTarget)}
+              onClick={(e) => {
+                e.preventDefault();
+                void confirmDelete();
+              }}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

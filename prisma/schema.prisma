@@ -196,6 +196,14 @@ model ReplenishmentCycle {
   mlItemId              String              @map("ml_item_id")
   kind                  OperationCycleKind
   status                ReplenishmentStatus
+  /// Coluna visual do board (Kanban estilo Trello, por organização) — fonte
+  /// da verdade de "em qual coluna o card está". `status` continua existindo
+  /// e dirigindo toda a automação (snapshot, auto-complete, badge Urgente),
+  /// mas só tem 3 valores realmente usados por ciclo ativo: "attention"
+  /// (qualquer coluna que não seja a última travada do kind), o status final
+  /// travado do kind ("ordered"/"collected", só ao entrar na última coluna),
+  /// e "completed". Nulo só antes da materialização lazy das colunas da org.
+  columnId              String?             @map("column_id")
   triggerMlQty          Int                 @map("trigger_ml_qty")
   triggerWarehouseQty   Int                 @map("trigger_warehouse_qty")
   triggerLeadTimeDays   Int?                @map("trigger_lead_time_days")
@@ -212,10 +220,34 @@ model ReplenishmentCycle {
   createdAt             DateTime            @default(now()) @map("created_at")
   updatedAt             DateTime            @updatedAt @map("updated_at")
 
+  column KanbanColumn? @relation(fields: [columnId], references: [id], onDelete: SetNull)
+
   @@index([mlItemId, kind, status])
   @@index([status])
   @@index([organizationId])
+  @@index([columnId])
   @@map("replenishment_cycles")
+}
+
+/// Coluna do Kanban (Compras ou Operações Full), estilo Trello — por
+/// organização. Só a primeira e a última coluna de cada `kind` são
+/// `isLocked: true` (não podem ser excluídas, só renomeadas); as do meio são
+/// livres. Materializada de forma lazy na primeira leitura de uma org+kind
+/// que ainda não tem nenhuma linha aqui (ver `kanban-columns-data.ts`).
+model KanbanColumn {
+  id             String             @id @default(cuid())
+  organizationId String             @map("organization_id")
+  kind           OperationCycleKind
+  label          String
+  position       Int
+  isLocked       Boolean            @default(false) @map("is_locked")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+
+  cycles ReplenishmentCycle[]
+
+  @@index([organizationId, kind])
+  @@map("kanban_columns")
 }
 
 model CatalogCompetitionSnapshot {

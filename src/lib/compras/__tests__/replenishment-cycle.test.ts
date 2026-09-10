@@ -263,10 +263,10 @@ describe("replenishment-cycle", () => {
       { kind: "full", status: "scheduled" },
       { kind: "purchase", status: "completed" },
     ]);
-    assert.equal(summary.purchase.attention, 1);
-    assert.equal(summary.purchase.ordered, 1);
-    assert.equal(summary.full.attention, 1);
-    assert.equal(summary.full.scheduled, 1);
+    assert.equal(summary.purchase.inProgress, 1);
+    assert.equal(summary.purchase.final, 1);
+    assert.equal(summary.full.inProgress, 2);
+    assert.equal(summary.full.final, 0);
     assert.equal(summary.totalActive, 4);
   });
 });

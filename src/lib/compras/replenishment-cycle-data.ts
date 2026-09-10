@@ -16,9 +16,9 @@ import {
 } from "@/lib/configuracoes/operational-settings";
 import {
   buildStatusTransition,
+  finalStatusForKind,
   isActiveReplenishmentStatus,
   isOverdueBadgeSuppressed,
-  nextStatusForKind,
   shouldAutoCompleteFullCycle,
   shouldAutoCompletePurchaseCycle,
   shouldCreateFullCycle,
@@ -28,6 +28,12 @@ import {
   type OperationsSummaryCounts,
   type ReplenishmentSnapshot,
 } from "@/lib/compras/replenishment-cycle";
+import {
+  firstColumn,
+  lastColumn,
+  loadOrMaterializeKanbanColumns,
+  type KanbanColumnRow,
+} from "@/lib/compras/kanban-columns-data";
 import {
   fetchItemById,
   fetchItemsByIdsBatched,
@@ -96,6 +102,15 @@ export type OperationsBoardCard = {
   mlItemId: string;
   kind: OperationCycleKind;
   status: ReplenishmentStatus;
+  /** Coluna do board (Kanban estilo Trello, por organização) — fonte da
+   * verdade de onde o card aparece; `status` continua dirigindo a automação
+   * (ver comentário no schema), mas não é mais 1:1 com a coluna visual. */
+  columnId: string;
+  columnLabel: string;
+  /** Posição da coluna na ordem do board — usada por `supplier-board.ts`
+   * pra decidir "fornecedor avançou ou regrediu" sem precisar conhecer o
+   * board inteiro de novo. */
+  columnPosition: number;
   title: string;
   sku: string | null;
   supplier: string;
@@ -351,6 +366,7 @@ async function createCycleForItem(
   ctx: ItemPlanningContext,
   snapshot: ReplenishmentSnapshot,
   initialStatus: ReplenishmentStatus,
+  columnId: string,
 ): Promise<void> {
   const mlItemId = ctx.item.id.trim();
   if (!mlItemId) return;
@@ -363,6 +379,7 @@ async function createCycleForItem(
         mlItemId,
         kind,
         status: initialStatus,
+        columnId,
         triggerMlQty: snapshot.mlQty,
         triggerWarehouseQty: snapshot.warehouseQty,
         triggerLeadTimeDays: snapshot.leadTimeDays,
@@ -456,11 +473,11 @@ export async function syncPurchaseCyclesForItems(
     );
   });
 
-  const cycleMap = await getLatestCyclesByItemAndKind(
-    organizationId,
-    items.map((item) => item.id),
-    "purchase",
-  );
+  const [cycleMap, columns] = await Promise.all([
+    getLatestCyclesByItemAndKind(organizationId, items.map((item) => item.id), "purchase"),
+    loadOrMaterializeKanbanColumns(organizationId, "purchase"),
+  ]);
+  const firstColumnId = firstColumn(columns)!.id;
 
   await mapWithConcurrency(contexts, SYNC_CONCURRENCY, async (ctx) => {
     const { active, latestCompleted } =
@@ -488,7 +505,7 @@ export async function syncPurchaseCyclesForItems(
 
     if (!shouldCreate || !ctx.item.id.trim()) return;
 
-    await createCycleForItem(organizationId, "purchase", ctx, snapshot, "attention");
+    await createCycleForItem(organizationId, "purchase", ctx, snapshot, "attention", firstColumnId);
   });
 }
 
@@ -519,11 +536,11 @@ export async function syncFullCyclesForItems(
     );
   });
 
-  const cycleMap = await getLatestCyclesByItemAndKind(
-    organizationId,
-    items.map((item) => item.id),
-    "full",
-  );
+  const [cycleMap, columns] = await Promise.all([
+    getLatestCyclesByItemAndKind(organizationId, items.map((item) => item.id), "full"),
+    loadOrMaterializeKanbanColumns(organizationId, "full"),
+  ]);
+  const firstColumnId = firstColumn(columns)!.id;
 
   await mapWithConcurrency(contexts, SYNC_CONCURRENCY, async (ctx) => {
     const { active, latestCompleted } =
@@ -549,7 +566,7 @@ export async function syncFullCyclesForItems(
 
     if (!shouldCreate || !ctx.item.id.trim()) return;
 
-    await createCycleForItem(organizationId, "full", ctx, snapshot, "attention");
+    await createCycleForItem(organizationId, "full", ctx, snapshot, "attention", firstColumnId);
   });
 }
 
@@ -645,6 +662,7 @@ type CycleForCard = {
   mlItemId: string;
   kind: OperationCycleKind;
   status: ReplenishmentStatus;
+  columnId: string | null;
   suggestedQty: number | null;
   notes: string | null;
   warehouseQtyAtOrder: number | null;
@@ -652,19 +670,39 @@ type CycleForCard = {
   updatedAt: Date;
 };
 
+/** Resolve a coluna de um ciclo pro card — cai na primeira coluna do kind
+ * (fallback defensivo) se `columnId` estiver nulo ou apontar pra uma coluna
+ * que não existe mais nesse mapa (não deveria acontecer em operação normal:
+ * `deleteKanbanColumn` sempre realoca os cards antes de excluir a coluna). */
+function resolveCardColumn(
+  cycle: Pick<CycleForCard, "kind" | "columnId">,
+  columnsByKind: Map<OperationCycleKind, KanbanColumnRow[]>,
+): KanbanColumnRow {
+  const columns = columnsByKind.get(cycle.kind) ?? [];
+  const found = cycle.columnId
+    ? columns.find((c) => c.id === cycle.columnId)
+    : undefined;
+  return found ?? columns[0] ?? { id: "", kind: cycle.kind, label: "?", position: 0, isLocked: true };
+}
+
 function buildCardFromCycle(
   cycle: CycleForCard,
   ctx: ItemPlanningContext,
   item: ItemBody,
   supplierNames: Map<string, string>,
   salesPending: boolean,
+  columnsByKind: Map<OperationCycleKind, KanbanColumnRow[]>,
 ): OperationsBoardCard {
   const sku = getItemSku(item);
+  const column = resolveCardColumn(cycle, columnsByKind);
   return {
     cycleId: cycle.id,
     mlItemId: cycle.mlItemId,
     kind: cycle.kind,
     status: cycle.status,
+    columnId: column.id,
+    columnLabel: column.label,
+    columnPosition: column.position,
     title: item.title,
     sku,
     supplier: supplierNames.get(item.id) ?? getSkuSupplier(sku),
@@ -706,6 +744,7 @@ function buildBoardCardsFromCycles(
   supplierNames: Map<string, string>,
   stockPlanning: StockPlanningValues,
   purchaseAnalysisValues: PurchaseAnalysisValues,
+  columnsByKind: Map<OperationCycleKind, KanbanColumnRow[]>,
   salesPendingIds?: Set<string>,
 ): { purchaseCards: OperationsBoardCard[]; fullCards: OperationsBoardCard[] } {
   const purchaseCards: OperationsBoardCard[] = [];
@@ -733,6 +772,7 @@ function buildBoardCardsFromCycles(
       item,
       supplierNames,
       salesPendingIds?.has(cycle.mlItemId) ?? false,
+      columnsByKind,
     );
 
     if (cycle.kind === "purchase") {
@@ -779,6 +819,22 @@ async function resolveCycleSnapshot(
     leadTimeDays:
       warehouse?.purchaseLeadTimeDays ?? cycle.triggerLeadTimeDays ?? 0,
   };
+}
+
+/** Materializa as colunas do(s) kind(s) pedido(s) — sem `kind`, materializa
+ * os dois (mesmo comportamento "board duplo" de `loadOperationsBoards` sem
+ * `kind`). Uma chamada por load do board, não por card. */
+async function loadColumnsByKind(
+  organizationId: string,
+  kind?: OperationCycleKind,
+): Promise<Map<OperationCycleKind, KanbanColumnRow[]>> {
+  const kinds: OperationCycleKind[] = kind ? [kind] : ["purchase", "full"];
+  const entries = await Promise.all(
+    kinds.map(
+      async (k) => [k, await loadOrMaterializeKanbanColumns(organizationId, k)] as const,
+    ),
+  );
+  return new Map(entries);
 }
 
 export async function loadOperationsBoards(
@@ -845,26 +901,30 @@ export async function loadOperationsBoards(
     kind,
   );
 
-  const activeCycles = await prisma.replenishmentCycle.findMany({
-    where: {
-      organizationId,
-      mlItemId: { in: listingIds },
-      status: { not: "completed" },
-      ...(kind ? { kind } : {}),
-    },
-    orderBy: { updatedAt: "desc" },
-    select: {
-      id: true,
-      mlItemId: true,
-      kind: true,
-      status: true,
-      suggestedQty: true,
-      notes: true,
-      warehouseQtyAtOrder: true,
-      mlQtyAtCollection: true,
-      updatedAt: true,
-    },
-  });
+  const [activeCycles, columnsByKind] = await Promise.all([
+    prisma.replenishmentCycle.findMany({
+      where: {
+        organizationId,
+        mlItemId: { in: listingIds },
+        status: { not: "completed" },
+        ...(kind ? { kind } : {}),
+      },
+      orderBy: { updatedAt: "desc" },
+      select: {
+        id: true,
+        mlItemId: true,
+        kind: true,
+        status: true,
+        columnId: true,
+        suggestedQty: true,
+        notes: true,
+        warehouseQtyAtOrder: true,
+        mlQtyAtCollection: true,
+        updatedAt: true,
+      },
+    }),
+    loadColumnsByKind(organizationId, kind),
+  ]);
 
   const itemById = new Map(items.map((item) => [item.id, item]));
   const { purchaseCards, fullCards } = buildBoardCardsFromCycles(
@@ -875,6 +935,7 @@ export async function loadOperationsBoards(
     supplierNames,
     stockPlanning,
     purchaseAnalysisValues,
+    columnsByKind,
   );
 
   const summary = summarizeOperationsCounts(
@@ -931,6 +992,7 @@ export async function loadOperationsBoardsFast(
       mlItemId: true,
       kind: true,
       status: true,
+      columnId: true,
       suggestedQty: true,
       notes: true,
       warehouseQtyAtOrder: true,
@@ -949,7 +1011,7 @@ export async function loadOperationsBoardsFast(
   const windowDays = stockPlanning.salesAverageWindowDays;
   const dateField = stockPlanning.salesWindowDateField;
 
-  const [rawItems, warehouseStocks, supplierNames, cachedSales, inactiveIds] =
+  const [rawItems, warehouseStocks, supplierNames, cachedSales, inactiveIds, columnsByKind] =
     await Promise.all([
       fetchItemsByIdsBatched(token, mlItemIds),
       prisma.warehouseStock.findMany({
@@ -959,6 +1021,7 @@ export async function loadOperationsBoardsFast(
       loadSupplierNamesByMlItemId(organizationId, mlItemIds),
       readCachedUnitsSoldForItemsInWindow(organizationId, mlItemIds, windowDays, dateField),
       loadInactiveProductMlItemIds(organizationId, mlItemIds),
+      loadColumnsByKind(organizationId, kind),
     ]);
   const items = rawItems.filter(
     (item) => !isKitItem(item) && !inactiveIds.has(item.id),
@@ -982,6 +1045,7 @@ export async function loadOperationsBoardsFast(
     supplierNames,
     stockPlanning,
     purchaseAnalysisValues,
+    columnsByKind,
     salesPendingIds,
   );
 
@@ -1118,26 +1182,30 @@ export async function streamOperationsBoardResync(
     kind,
   );
 
-  const activeCycles = await prisma.replenishmentCycle.findMany({
-    where: {
-      organizationId,
-      mlItemId: { in: listingIds },
-      status: { not: "completed" },
-      kind,
-    },
-    orderBy: { updatedAt: "desc" },
-    select: {
-      id: true,
-      mlItemId: true,
-      kind: true,
-      status: true,
-      suggestedQty: true,
-      notes: true,
-      warehouseQtyAtOrder: true,
-      mlQtyAtCollection: true,
-      updatedAt: true,
-    },
-  });
+  const [activeCycles, columnsByKind] = await Promise.all([
+    prisma.replenishmentCycle.findMany({
+      where: {
+        organizationId,
+        mlItemId: { in: listingIds },
+        status: { not: "completed" },
+        kind,
+      },
+      orderBy: { updatedAt: "desc" },
+      select: {
+        id: true,
+        mlItemId: true,
+        kind: true,
+        status: true,
+        columnId: true,
+        suggestedQty: true,
+        notes: true,
+        warehouseQtyAtOrder: true,
+        mlQtyAtCollection: true,
+        updatedAt: true,
+      },
+    }),
+    loadColumnsByKind(organizationId, kind),
+  ]);
 
   const { purchaseCards, fullCards } = buildBoardCardsFromCycles(
     activeCycles,
@@ -1147,6 +1215,7 @@ export async function streamOperationsBoardResync(
     supplierNames,
     stockPlanning,
     purchaseAnalysisValues,
+    columnsByKind,
   );
 
   const cards = kind === "purchase" ? purchaseCards : fullCards;
@@ -1166,10 +1235,17 @@ export async function loadOperationsSummaryFromDb(
   return summarizeOperationsCounts(cycles);
 }
 
+/**
+ * Move o ciclo pra `columnId` (drag-and-drop do card entre colunas do
+ * board). Resolve o `status` internamente a partir da coluna alvo: entrar na
+ * última coluna (travada) do kind dispara a mesma captura de snapshot de
+ * sempre (`buildStatusTransition`); qualquer outra coluna (primeira ou do
+ * meio, padrão ou custom) vira `"attention"` — ver comentário no schema.
+ */
 export async function transitionReplenishmentCycle(
   organizationId: string,
   cycleId: string,
-  nextStatus: ReplenishmentStatus,
+  columnId: string,
   options?: { notes?: string | null; accessToken?: string },
 ): Promise<void> {
   const cycle = await prisma.replenishmentCycle.findFirst({
@@ -1181,6 +1257,16 @@ export async function transitionReplenishmentCycle(
   if (!isActiveReplenishmentStatus(cycle.status)) {
     throw new Error("Cycle already completed");
   }
+
+  const columns = await loadOrMaterializeKanbanColumns(organizationId, cycle.kind);
+  const targetColumn = columns.find((c) => c.id === columnId);
+  if (!targetColumn) {
+    throw new Error("Column not found");
+  }
+  const nextStatus =
+    targetColumn.id === lastColumn(columns)?.id
+      ? finalStatusForKind(cycle.kind)
+      : "attention";
 
   const snapshot = await resolveCycleSnapshot(cycle, options?.accessToken);
 
@@ -1194,6 +1280,7 @@ export async function transitionReplenishmentCycle(
     where: { id: cycleId, organizationId },
     data: {
       ...patch,
+      columnId: targetColumn.id,
       ...(options?.notes !== undefined ? { notes: options.notes } : {}),
     },
   });
@@ -1202,6 +1289,7 @@ export async function transitionReplenishmentCycle(
 export type BatchTransitionResult = {
   cycleId: string;
   status: ReplenishmentStatus;
+  columnId: string | null;
   warehouseQtyAtOrder: number | null;
   mlQtyAtCollection: number | null;
 };
@@ -1211,15 +1299,16 @@ export type BatchTransitionResult = {
  * fornecedor em Compras — arrastar move todos os ciclos daquele fornecedor
  * de uma vez). Diferente de `transitionReplenishmentCycle`, nunca busca
  * estoque ao vivo no Mercado Livre — as transições entre as colunas do
- * board (attention/analyzing/quoted/ordered) só precisam do estoque do
- * galpão (sempre atualizado no banco), então o lote inteiro roda sem
- * nenhuma chamada de rede externa. Ciclos já completados ou não encontrados
- * são ignorados silenciosamente (podem ter sido concluídos por outra aba
- * entre o carregamento do board e o drag).
+ * board só precisam do estoque do galpão (sempre atualizado no banco), então
+ * o lote inteiro roda sem nenhuma chamada de rede externa. Ciclos já
+ * completados ou não encontrados são ignorados silenciosamente (podem ter
+ * sido concluídos por outra aba entre o carregamento do board e o drag).
+ * Assume que todos os ciclos do lote são do mesmo `kind` (validado pelo
+ * caller, `PATCH /api/replenishment-cycles/batch`).
  */
 export async function transitionReplenishmentCyclesBatch(
   organizationId: string,
-  updates: { cycleId: string; nextStatus: ReplenishmentStatus }[],
+  updates: { cycleId: string; columnId: string }[],
 ): Promise<BatchTransitionResult[]> {
   if (updates.length === 0) return [];
 
@@ -1227,7 +1316,12 @@ export async function transitionReplenishmentCyclesBatch(
   const cycles = await prisma.replenishmentCycle.findMany({
     where: { id: { in: cycleIds }, organizationId },
   });
+  if (cycles.length === 0) return [];
   const cycleById = new Map(cycles.map((c) => [c.id, c]));
+
+  const columns = await loadOrMaterializeKanbanColumns(organizationId, cycles[0].kind);
+  const columnById = new Map(columns.map((c) => [c.id, c]));
+  const finalColumnId = lastColumn(columns)?.id;
 
   const mlItemIds = [...new Set(cycles.map((c) => c.mlItemId))];
   const warehouseRows =
@@ -1239,15 +1333,22 @@ export async function transitionReplenishmentCyclesBatch(
       : [];
   const warehouseByItem = new Map(warehouseRows.map((w) => [w.mlItemId, w]));
 
-  const targetByCycleId = new Map(updates.map((u) => [u.cycleId, u.nextStatus]));
+  const targetByCycleId = new Map(updates.map((u) => [u.cycleId, u.columnId]));
 
   const writes = cycleIds
     .map((cycleId) => {
       const cycle = cycleById.get(cycleId);
-      const nextStatus = targetByCycleId.get(cycleId);
-      if (!cycle || !nextStatus || !isActiveReplenishmentStatus(cycle.status)) {
+      const targetColumnId = targetByCycleId.get(cycleId);
+      if (
+        !cycle ||
+        !targetColumnId ||
+        !columnById.has(targetColumnId) ||
+        !isActiveReplenishmentStatus(cycle.status)
+      ) {
         return null;
       }
+      const nextStatus =
+        targetColumnId === finalColumnId ? finalStatusForKind(cycle.kind) : "attention";
       const warehouse = warehouseByItem.get(cycle.mlItemId);
       const snapshot: ReplenishmentSnapshot = {
         mlQty: cycle.triggerMlQty,
@@ -1258,7 +1359,7 @@ export async function transitionReplenishmentCyclesBatch(
       const patch = buildStatusTransition(toCycleRecord(cycle), nextStatus, snapshot);
       return prisma.replenishmentCycle.update({
         where: { id: cycleId, organizationId },
-        data: patch,
+        data: { ...patch, columnId: targetColumnId },
       });
     })
     .filter((write): write is NonNullable<typeof write> => write !== null);
@@ -1270,28 +1371,8 @@ export async function transitionReplenishmentCyclesBatch(
   return updated.map((cycle) => ({
     cycleId: cycle.id,
     status: cycle.status,
+    columnId: cycle.columnId,
     warehouseQtyAtOrder: cycle.warehouseQtyAtOrder,
     mlQtyAtCollection: cycle.mlQtyAtCollection,
   }));
-}
-
-export async function advanceReplenishmentCycle(
-  organizationId: string,
-  cycleId: string,
-  options?: { accessToken?: string },
-): Promise<ReplenishmentStatus | null> {
-  const cycle = await prisma.replenishmentCycle.findFirst({
-    where: { id: cycleId, organizationId },
-  });
-  if (!cycle || !isActiveReplenishmentStatus(cycle.status)) {
-    throw new Error("Cycle not found or inactive");
-  }
-
-  const nextStatus = nextStatusForKind(cycle.kind, cycle.status);
-  if (!nextStatus) return null;
-
-  await transitionReplenishmentCycle(organizationId, cycleId, nextStatus, {
-    accessToken: options?.accessToken,
-  });
-  return nextStatus;
 }

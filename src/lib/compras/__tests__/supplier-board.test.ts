@@ -1,18 +1,27 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  buildSupplierBoardCards,
-  nextPurchaseBoardColumn,
-  resolveMoveActionForSupplier,
-} from "../supplier-board";
+import { buildSupplierBoardCards, resolveMoveActionForSupplier } from "../supplier-board";
 import type { OperationsBoardCard } from "../replenishment-cycle-data";
 
-function boardCard(overrides: Partial<OperationsBoardCard> = {}): OperationsBoardCard {
+const COLUMN_LABELS: Record<number, string> = {
+  0: "Entrada",
+  1: "Analisando",
+  2: "Em Cotação",
+  3: "Comprado",
+};
+
+function boardCard(
+  overrides: Partial<OperationsBoardCard> & { columnPosition?: number } = {},
+): OperationsBoardCard {
+  const columnPosition = overrides.columnPosition ?? 0;
   return {
     cycleId: "cycle-1",
     mlItemId: "MLB1",
     kind: "purchase",
     status: "attention",
+    columnId: `col-${columnPosition}`,
+    columnLabel: COLUMN_LABELS[columnPosition] ?? `Coluna ${columnPosition}`,
+    columnPosition,
     title: "Item",
     sku: "SKU-1",
     supplier: "MXT",
@@ -60,35 +69,35 @@ describe("buildSupplierBoardCards", () => {
     assert.equal(result[0].totalActive, 1);
   });
 
-  it("uses the weakest-link status (least advanced) as the card's column", () => {
+  it("uses the weakest-link column (least advanced) as the card's column", () => {
     const cards = [
-      boardCard({ cycleId: "c1", status: "ordered" }),
-      boardCard({ cycleId: "c2", status: "attention" }),
-      boardCard({ cycleId: "c3", status: "quoted" }),
+      boardCard({ cycleId: "c1", columnPosition: 3 }),
+      boardCard({ cycleId: "c2", columnPosition: 0 }),
+      boardCard({ cycleId: "c3", columnPosition: 2 }),
     ];
     const result = buildSupplierBoardCards(cards);
-    assert.equal(result[0].status, "attention");
+    assert.equal(result[0].columnPosition, 0);
   });
 
-  it("leaves breakdown empty when every cycle shares the same status", () => {
+  it("leaves breakdown empty when every cycle shares the same column", () => {
     const cards = [
-      boardCard({ cycleId: "c1", status: "analyzing" }),
-      boardCard({ cycleId: "c2", status: "analyzing" }),
+      boardCard({ cycleId: "c1", columnPosition: 1 }),
+      boardCard({ cycleId: "c2", columnPosition: 1 }),
     ];
     const result = buildSupplierBoardCards(cards);
     assert.deepEqual(result[0].breakdown, []);
   });
 
-  it("fills breakdown (ordered by column) when statuses are mixed", () => {
+  it("fills breakdown (ordered by column position) when columns are mixed", () => {
     const cards = [
-      boardCard({ cycleId: "c1", status: "quoted" }),
-      boardCard({ cycleId: "c2", status: "attention" }),
-      boardCard({ cycleId: "c3", status: "attention" }),
+      boardCard({ cycleId: "c1", columnPosition: 2 }),
+      boardCard({ cycleId: "c2", columnPosition: 0 }),
+      boardCard({ cycleId: "c3", columnPosition: 0 }),
     ];
     const result = buildSupplierBoardCards(cards);
     assert.deepEqual(result[0].breakdown, [
-      { status: "attention", count: 2 },
-      { status: "quoted", count: 1 },
+      { columnId: "col-0", columnLabel: "Entrada", count: 2 },
+      { columnId: "col-2", columnLabel: "Em Cotação", count: 1 },
     ]);
   });
 
@@ -145,10 +154,10 @@ describe("resolveMoveActionForSupplier", () => {
   it("advances only the cycles behind the target, leaving ones ahead untouched (forward)", () => {
     const result = resolveMoveActionForSupplier(
       [
-        { cycleId: "c1", status: "attention" },
-        { cycleId: "c2", status: "ordered" },
+        { cycleId: "c1", columnPosition: 0 },
+        { cycleId: "c2", columnPosition: 3 },
       ],
-      "quoted",
+      2,
     );
     assert.equal(result.direction, "forward");
     assert.deepEqual(result.cycleIdsToTransition, ["c1"]);
@@ -157,10 +166,10 @@ describe("resolveMoveActionForSupplier", () => {
   it("advances every cycle when all are behind the target", () => {
     const result = resolveMoveActionForSupplier(
       [
-        { cycleId: "c1", status: "attention" },
-        { cycleId: "c2", status: "analyzing" },
+        { cycleId: "c1", columnPosition: 0 },
+        { cycleId: "c2", columnPosition: 1 },
       ],
-      "ordered",
+      3,
     );
     assert.equal(result.direction, "forward");
     assert.deepEqual(result.cycleIdsToTransition.sort(), ["c1", "c2"]);
@@ -169,10 +178,10 @@ describe("resolveMoveActionForSupplier", () => {
   it("regresses every cycle not already at the target when none are behind it (backward)", () => {
     const result = resolveMoveActionForSupplier(
       [
-        { cycleId: "c1", status: "ordered" },
-        { cycleId: "c2", status: "quoted" },
+        { cycleId: "c1", columnPosition: 3 },
+        { cycleId: "c2", columnPosition: 2 },
       ],
-      "attention",
+      0,
     );
     assert.equal(result.direction, "backward");
     assert.deepEqual(result.cycleIdsToTransition.sort(), ["c1", "c2"]);
@@ -181,29 +190,12 @@ describe("resolveMoveActionForSupplier", () => {
   it("is a noop when every cycle is already exactly at the target", () => {
     const result = resolveMoveActionForSupplier(
       [
-        { cycleId: "c1", status: "quoted" },
-        { cycleId: "c2", status: "quoted" },
+        { cycleId: "c1", columnPosition: 2 },
+        { cycleId: "c2", columnPosition: 2 },
       ],
-      "quoted",
+      2,
     );
     assert.equal(result.direction, "noop");
     assert.deepEqual(result.cycleIdsToTransition, []);
-  });
-});
-
-describe("nextPurchaseBoardColumn", () => {
-  it("returns the next column in the purchase board", () => {
-    assert.equal(nextPurchaseBoardColumn("attention"), "analyzing");
-    assert.equal(nextPurchaseBoardColumn("analyzing"), "quoted");
-    assert.equal(nextPurchaseBoardColumn("quoted"), "ordered");
-  });
-
-  it("returns null after the last board column (never advances to completed)", () => {
-    assert.equal(nextPurchaseBoardColumn("ordered"), null);
-  });
-
-  it("returns null for a status outside the purchase board columns", () => {
-    assert.equal(nextPurchaseBoardColumn("scheduled"), null);
-    assert.equal(nextPurchaseBoardColumn("completed"), null);
   });
 });

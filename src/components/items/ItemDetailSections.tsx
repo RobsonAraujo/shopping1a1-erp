@@ -16,7 +16,6 @@ import {
 } from "@/lib/pricing/financial-margin";
 import type { ItemDetailContext } from "@/lib/items/item-detail-data";
 import type { ItemBody } from "@/lib/mercadolibre/types";
-import { statusLabelsForKind } from "@/lib/compras/replenishment-cycle";
 
 function formatDatePtBR(d: Date | string | null): string {
   if (!d) return "—";
@@ -344,7 +343,6 @@ export function ItemDetailOperationsSection({
   const cycle = context.openCycle;
   if (!cycle) return null;
 
-  const labels = statusLabelsForKind(cycle.kind);
   const kindLabel = cycle.kind === "purchase" ? "Compra" : "Full";
 
   return (
@@ -355,7 +353,7 @@ export function ItemDetailOperationsSection({
       <CardContent className="space-y-3">
         <p className="text-sm">
           Ciclo de <strong>{kindLabel}</strong> em andamento:{" "}
-          <span className="font-medium">{labels[cycle.status]}</span>
+          <span className="font-medium">{cycle.columnLabel}</span>
         </p>
         <Button variant="outline" size="sm" asChild>
           <Link

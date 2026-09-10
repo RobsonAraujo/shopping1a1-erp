@@ -62,8 +62,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 }
 
-/** Soft-delete: fornecedor referenciado por produtos não pode ser removido de
- * verdade sem derrubar o vínculo deles — só sai da lista/seletor ativo. */
+/** Exclusão permanente de verdade — `Product.supplierId` é `onDelete: SetNull`,
+ * então produtos vinculados não são apagados, só perdem o vínculo. Desativar
+ * (soft) é feito via `PATCH { active: false }`, não por aqui. */
 export async function DELETE(_request: NextRequest, context: RouteContext) {
   const auth = await requireOrganization();
   if (!auth.ok) {
@@ -73,10 +74,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
 
   try {
-    await prisma.supplier.update({
-      where: { id, organizationId },
-      data: { active: false },
-    });
+    await prisma.supplier.delete({ where: { id, organizationId } });
     return NextResponse.json({ ok: true });
   } catch (e) {
     logServerError("api/suppliers/[id] DELETE", e);
