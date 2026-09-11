@@ -4,39 +4,48 @@ import { Suspense } from "react";
 import { ShoppingCart } from "lucide-react";
 import { ComprasPageClient } from "@/components/compras/ComprasPageClient";
 import { ComprasPageSkeleton } from "@/components/compras/ComprasPageSkeleton";
+import { KanbanFullscreenSkeleton } from "@/components/kanban/KanbanFullscreenSkeleton";
 import { UserFeedback } from "@/components/ui/user-feedback";
-import { loadOperationsBoardsFast, type loadOperationsBoards } from "@/lib/compras/replenishment-cycle-data";
+import {
+  loadOperationsBoardsFast,
+  type OperationsBoardsData,
+} from "@/lib/compras/replenishment-cycle-data";
 import {
   loadOrMaterializeKanbanBoardSettings,
   loadOrMaterializeKanbanColumns,
+  type KanbanBoardSettingsRow,
+  type KanbanColumnRow,
 } from "@/lib/compras/kanban-columns-data";
 import { readSession } from "@/lib/mercadolibre/session";
 import { getOrganizationContext } from "@/lib/organizations/context";
 import { publicPageLoadMessage } from "@/lib/infra/server-public-error";
 
+const DEFAULT_SETTINGS: KanbanBoardSettingsRow = {
+  background: "",
+  isFullscreen: false,
+};
+
 async function ComprasDataSection({
-  token,
-  organizationId,
+  boardsPromise,
+  columnsPromise,
+  background,
+  isFullscreen,
 }: {
-  token: string;
-  organizationId: string;
+  boardsPromise: Promise<OperationsBoardsData>;
+  columnsPromise: Promise<KanbanColumnRow[]>;
+  background: string;
+  isFullscreen: boolean;
 }) {
-  let cards: Awaited<ReturnType<typeof loadOperationsBoards>>["purchase"]["cards"] | null =
-    null;
-  let columns: Awaited<ReturnType<typeof loadOrMaterializeKanbanColumns>> = [];
-  let background = "";
-  let isFullscreen = false;
+  let cards: OperationsBoardsData["purchase"]["cards"] | null = null;
+  let columns: KanbanColumnRow[] = [];
   let loadError: string | null = null;
   try {
-    const [boards, columnsResult, settings] = await Promise.all([
-      loadOperationsBoardsFast(organizationId, token, "purchase"),
-      loadOrMaterializeKanbanColumns(organizationId, "purchase"),
-      loadOrMaterializeKanbanBoardSettings(organizationId, "purchase"),
+    const [boards, columnsResult] = await Promise.all([
+      boardsPromise,
+      columnsPromise,
     ]);
     cards = boards.purchase.cards;
     columns = columnsResult;
-    background = settings.background;
-    isFullscreen = settings.isFullscreen;
   } catch (e) {
     loadError = publicPageLoadMessage(
       "dashboard/compras",
@@ -80,6 +89,42 @@ export default async function ComprasPage() {
     return null;
   }
 
+  const organizationId = orgContext.organization.id;
+  const boardsPromise = loadOperationsBoardsFast(organizationId, token, "purchase");
+  const columnsPromise = loadOrMaterializeKanbanColumns(organizationId, "purchase");
+  const settingsPromise = loadOrMaterializeKanbanBoardSettings(
+    organizationId,
+    "purchase",
+  );
+
+  let settings = DEFAULT_SETTINGS;
+  try {
+    settings = await settingsPromise;
+  } catch {
+    // Chrome cai no layout normal; o fetch pesado dos cards segue em paralelo.
+  }
+
+  const board = (
+    <Suspense
+      fallback={
+        settings.isFullscreen ? (
+          <KanbanFullscreenSkeleton title="Compras" background={settings.background} />
+        ) : (
+          <ComprasPageSkeleton />
+        )
+      }
+    >
+      <ComprasDataSection
+        boardsPromise={boardsPromise}
+        columnsPromise={columnsPromise}
+        background={settings.background}
+        isFullscreen={settings.isFullscreen}
+      />
+    </Suspense>
+  );
+
+  if (settings.isFullscreen) return board;
+
   return (
     <div className="space-y-8">
       <header className="flex items-start gap-4">
@@ -97,12 +142,7 @@ export default async function ComprasPage() {
         </div>
       </header>
 
-      <Suspense fallback={<ComprasPageSkeleton />}>
-        <ComprasDataSection
-          token={token}
-          organizationId={orgContext.organization.id}
-        />
-      </Suspense>
+      {board}
     </div>
   );
 }

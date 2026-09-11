@@ -4,35 +4,44 @@ import { cookies } from "next/headers";
 import { Kanban } from "lucide-react";
 import { OperationsKanban } from "@/components/operacoes-full/OperationsKanban";
 import { OperationsKanbanSkeleton } from "@/components/operacoes-full/OperationsKanbanSkeleton";
+import { KanbanFullscreenSkeleton } from "@/components/kanban/KanbanFullscreenSkeleton";
 import { UserFeedback } from "@/components/ui/user-feedback";
-import { loadOperationsBoardsFast, type loadOperationsBoards } from "@/lib/compras/replenishment-cycle-data";
+import {
+  loadOperationsBoardsFast,
+  type OperationsBoardsData,
+} from "@/lib/compras/replenishment-cycle-data";
 import {
   loadOrMaterializeKanbanBoardSettings,
   loadOrMaterializeKanbanColumns,
+  type KanbanBoardSettingsRow,
+  type KanbanColumnRow,
 } from "@/lib/compras/kanban-columns-data";
 import { readSession } from "@/lib/mercadolibre/session";
 import { getOrganizationContext } from "@/lib/organizations/context";
 import { publicPageLoadMessage } from "@/lib/infra/server-public-error";
 
+const DEFAULT_SETTINGS: KanbanBoardSettingsRow = {
+  background: "",
+  isFullscreen: false,
+};
+
 async function OperacoesFullDataSection({
-  token,
-  organizationId,
+  boardsPromise,
+  columnsPromise,
+  background,
+  isFullscreen,
 }: {
-  token: string;
-  organizationId: string;
+  boardsPromise: Promise<OperationsBoardsData>;
+  columnsPromise: Promise<KanbanColumnRow[]>;
+  background: string;
+  isFullscreen: boolean;
 }) {
   let loadError: string | null = null;
-  let boards: Awaited<ReturnType<typeof loadOperationsBoards>> | null = null;
-  let columns: Awaited<ReturnType<typeof loadOrMaterializeKanbanColumns>> = [];
-  let background = "";
-  let isFullscreen = false;
+  let boards: OperationsBoardsData | null = null;
+  let columns: KanbanColumnRow[] = [];
 
   try {
-    [boards, columns, { background, isFullscreen }] = await Promise.all([
-      loadOperationsBoardsFast(organizationId, token, "full"),
-      loadOrMaterializeKanbanColumns(organizationId, "full"),
-      loadOrMaterializeKanbanBoardSettings(organizationId, "full"),
-    ]);
+    [boards, columns] = await Promise.all([boardsPromise, columnsPromise]);
   } catch (e) {
     loadError = publicPageLoadMessage(
       "dashboard/operacoes-full",
@@ -78,6 +87,42 @@ export default async function OperacoesFullPage() {
     return null;
   }
 
+  const organizationId = orgContext.organization.id;
+  const boardsPromise = loadOperationsBoardsFast(organizationId, token, "full");
+  const columnsPromise = loadOrMaterializeKanbanColumns(organizationId, "full");
+  const settingsPromise = loadOrMaterializeKanbanBoardSettings(organizationId, "full");
+
+  let settings = DEFAULT_SETTINGS;
+  try {
+    settings = await settingsPromise;
+  } catch {
+    // Chrome cai no layout normal; o fetch pesado dos cards segue em paralelo.
+  }
+
+  const board = (
+    <Suspense
+      fallback={
+        settings.isFullscreen ? (
+          <KanbanFullscreenSkeleton
+            title="Operações Full"
+            background={settings.background}
+          />
+        ) : (
+          <OperationsKanbanSkeleton />
+        )
+      }
+    >
+      <OperacoesFullDataSection
+        boardsPromise={boardsPromise}
+        columnsPromise={columnsPromise}
+        background={settings.background}
+        isFullscreen={settings.isFullscreen}
+      />
+    </Suspense>
+  );
+
+  if (settings.isFullscreen) return board;
+
   return (
     <div className="space-y-6">
       <header className="flex items-start gap-4">
@@ -95,12 +140,7 @@ export default async function OperacoesFullPage() {
         </div>
       </header>
 
-      <Suspense fallback={<OperationsKanbanSkeleton />}>
-        <OperacoesFullDataSection
-          token={token}
-          organizationId={orgContext.organization.id}
-        />
-      </Suspense>
+      {board}
     </div>
   );
 }

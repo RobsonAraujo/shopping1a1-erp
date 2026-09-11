@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Home, Minimize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export function KanbanFullscreenFrame({
   active,
@@ -23,6 +24,7 @@ export function KanbanFullscreenFrame({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const [shouldAnimateEnter] = useState(!active);
 
   useEffect(() => {
     if (!active) return;
@@ -41,7 +43,12 @@ export function KanbanFullscreenFrame({
   if (!active) return <>{children}</>;
 
   return (
-    <div className="fixed inset-0 z-50 flex h-screen animate-in fade-in-0 flex-col bg-[var(--background)] pb-12 duration-200">
+    <div
+      className={cn(
+        "fixed inset-0 z-50 flex h-screen flex-col bg-[var(--background)] pb-12",
+        shouldAnimateEnter && "animate-in fade-in-0 duration-200",
+      )}
+    >
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
