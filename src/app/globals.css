@@ -155,4 +155,99 @@ a,
   .marketing-landing .marketing-hero-panel {
     animation: none;
   }
+
+  .marketing-nav-drawer,
+  .marketing-nav-overlay,
+  .marketing-nav-drawer[data-state="open"] .marketing-nav-item {
+    animation: none !important;
+  }
+}
+
+@keyframes marketing-nav-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes marketing-nav-overlay-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes marketing-nav-drawer-in {
+  from {
+    transform: translate3d(100%, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes marketing-nav-drawer-out {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(100%, 0, 0);
+  }
+}
+
+@keyframes marketing-nav-item-in {
+  from {
+    opacity: 0;
+    transform: translate3d(12px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.marketing-nav-overlay[data-state="open"] {
+  animation: marketing-nav-overlay-in 0.38s ease-out both;
+}
+
+.marketing-nav-overlay[data-state="closed"] {
+  animation: marketing-nav-overlay-out 0.28s ease-in both;
+}
+
+.marketing-nav-drawer[data-state="open"] {
+  animation: marketing-nav-drawer-in 0.42s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+.marketing-nav-drawer[data-state="closed"] {
+  animation: marketing-nav-drawer-out 0.32s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+.marketing-nav-drawer[data-state="open"] .marketing-nav-item {
+  animation: marketing-nav-item-in 0.4s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+.marketing-nav-drawer[data-state="open"] .marketing-nav-item:nth-child(1) {
+  animation-delay: 0.06s;
+}
+.marketing-nav-drawer[data-state="open"] .marketing-nav-item:nth-child(2) {
+  animation-delay: 0.1s;
+}
+.marketing-nav-drawer[data-state="open"] .marketing-nav-item:nth-child(3) {
+  animation-delay: 0.14s;
+}
+.marketing-nav-drawer[data-state="open"] .marketing-nav-item:nth-child(4) {
+  animation-delay: 0.18s;
+}
+.marketing-nav-drawer[data-state="open"] .marketing-nav-item:nth-child(5) {
+  animation-delay: 0.22s;
+}
+.marketing-nav-drawer[data-state="open"] .marketing-nav-item:nth-child(6) {
+  animation-delay: 0.26s;
+}
+.marketing-nav-drawer[data-state="open"] .marketing-nav-item:nth-child(7) {
+  animation-delay: 0.3s;
 }

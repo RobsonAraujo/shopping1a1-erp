@@ -39,7 +39,11 @@ export function MarketingHeader({
         )}
       >
         <div className="mx-auto flex h-20 max-w-6xl items-center gap-8 px-4 sm:px-6">
-          <a href={logoHref} className="flex shrink-0 items-center gap-2.5">
+          <a
+            href={logoHref}
+            className="flex shrink-0 items-center gap-2.5"
+            aria-label="ERP 1a1"
+          >
             <Image
               src="/logo-bg-blue.png"
               alt=""
@@ -73,16 +77,17 @@ export function MarketingHeader({
           </nav>
 
           <div className="ml-auto flex shrink-0 items-center gap-2">
-            <MarketingMobileNav onDark={!solid} />
             <OAuthCta
               isLoggedIn={isLoggedIn}
               dashboardHref={dashboardHref}
               size="sm"
-              compactOnMobile
               onDark={!solid}
-              className={
-                isLoggedIn ? "h-8 px-2.5 text-xs sm:h-10 sm:px-4 sm:text-sm" : "h-10 px-5 text-sm"
-              }
+              className="hidden h-10 px-5 text-sm lg:inline-flex"
+            />
+            <MarketingMobileNav
+              onDark={!solid}
+              isLoggedIn={isLoggedIn}
+              dashboardHref={dashboardHref}
             />
           </div>
         </div>
