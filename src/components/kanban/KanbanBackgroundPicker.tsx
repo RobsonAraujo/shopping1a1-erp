@@ -20,12 +20,18 @@ export function KanbanBackgroundPicker({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-2 max-sm:size-9 max-sm:px-0"
+          aria-label="Cor do fundo"
+        >
           <Palette className="size-4" aria-hidden />
-          Cor do fundo
+          <span className="hidden sm:inline">Cor do fundo</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-64 p-3">
+      <PopoverContent align="end" className="w-64 max-w-[calc(100vw-1.5rem)] p-3">
         <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
           Cor do quadro
         </p>

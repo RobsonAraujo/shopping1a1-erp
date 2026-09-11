@@ -52,12 +52,18 @@ export function KanbanAppearancePicker({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-2 max-sm:size-9 max-sm:px-0"
+          aria-label="Aparência das colunas"
+        >
           <Paintbrush className="size-4" aria-hidden />
-          Colunas
+          <span className="hidden sm:inline">Colunas</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-64 p-3">
+      <PopoverContent align="end" className="w-64 max-w-[calc(100vw-1.5rem)] p-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
           Estilo das colunas
         </p>

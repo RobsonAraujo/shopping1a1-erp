@@ -86,7 +86,7 @@ function DroppableColumn({
       ref={setNodeRef}
       className={cn(
         "flex shrink-0 snap-center flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[rgb(255_255_255_/_65%)] shadow-sm sm:snap-align-none",
-        collapsed ? "w-10 self-start sm:w-10" : "w-[85vw] sm:w-72",
+        collapsed ? "w-10 self-start sm:w-10" : "w-[calc(100vw-2.75rem)] sm:w-72",
         fullHeight && !collapsed && "h-full",
         className,
       )}
@@ -347,10 +347,10 @@ export function SupplierPurchaseKanbanBoard({
     <>
       <div
         className={cn(
-          "flex snap-x snap-mandatory gap-3 overflow-x-auto sm:snap-none",
+          "flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain sm:snap-none",
           fullHeight
-            ? "min-h-0 flex-1 px-3  pb-12 sm:px-4 kanban-scroll-x"
-            : "rounded-2xl p-3",
+            ? "min-h-0 flex-1 px-3 pb-3 sm:px-4 sm:pb-12 kanban-scroll-x"
+            : "rounded-2xl p-3 max-sm:-mx-4 max-sm:rounded-none max-sm:px-4",
         )}
         style={!fullHeight && background ? { background } : undefined}
       >

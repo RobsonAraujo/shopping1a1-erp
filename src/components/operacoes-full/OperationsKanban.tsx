@@ -392,10 +392,10 @@ export function OperationsKanban({
       background={background}
       onExit={exitFullscreen}
     >
-    <div className={cn("flex flex-col gap-5", isFullscreen && "h-full")}>
-      <div className={cn("flex flex-col gap-5", isFullscreen && "px-3 pt-3 sm:px-4")}>
+    <div className={cn("flex min-h-0 flex-col gap-3 sm:gap-5", isFullscreen && "h-full max-sm:overflow-hidden")}>
+      <div className={cn("flex shrink-0 flex-col gap-3 sm:gap-5", isFullscreen && "px-3 pt-3 sm:px-4")}>
         {!isFullscreen ? (
-          <>
+          <div className="hidden sm:block">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-base font-semibold text-[var(--foreground)]">
                 {config.label}
@@ -405,47 +405,50 @@ export function OperationsKanban({
               </span>
             </div>
 
-            <p className="max-w-3xl text-sm text-[var(--muted-foreground)]">
+            <p className="mt-1 max-w-3xl text-sm text-[var(--muted-foreground)]">
               {config.description}
             </p>
-          </>
+          </div>
         ) : null}
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
           <ItemListSearch
+            className="max-sm:w-full"
             value={searchQuery}
             onChange={setSearchQuery}
             filteredCount={filteredActive.length}
             totalCount={activeCards.length}
             placeholder="Buscar por SKU, título ou MLB…"
           />
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto sm:gap-2">
             <KanbanBackgroundPicker background={background} onChange={setBackground} />
             <KanbanAppearancePicker kind={kind} />
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="gap-2"
+              className="gap-2 max-sm:size-9 max-sm:px-0"
               disabled={loading}
               onClick={() => void refresh()}
+              aria-label="Sincronizar"
             >
               <RefreshCw
                 className={cn("size-4", loading && "animate-spin")}
                 aria-hidden
               />
-              Sincronizar
+              <span className="hidden sm:inline">Sincronizar</span>
             </Button>
             {!isFullscreen ? (
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                className="gap-2"
+                className="gap-2 max-sm:size-9 max-sm:px-0"
                 onClick={() => void setFullscreen(true)}
+                aria-label="Tela cheia"
               >
                 <Maximize2 className="size-4" aria-hidden />
-                Tela cheia
+                <span className="hidden sm:inline">Tela cheia</span>
               </Button>
             ) : null}
           </div>
@@ -476,7 +479,7 @@ export function OperationsKanban({
     </KanbanFullscreenFrame>
       <DragOverlay>
         {activeDragCard ? (
-          <OperationsCardBody card={activeDragCard} className="w-[85vw] sm:w-72" />
+          <OperationsCardBody card={activeDragCard} className="w-[calc(100vw-2.75rem)] sm:w-72" />
         ) : activeDragColumn ? (
           <div className="w-56 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-sm font-semibold shadow-md">
             {activeDragColumn.label}

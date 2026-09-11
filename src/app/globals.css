@@ -68,6 +68,8 @@ a,
 .kanban-scroll-x {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.4) transparent;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
 }
 .kanban-scroll-x::-webkit-scrollbar {
   height: 8px;

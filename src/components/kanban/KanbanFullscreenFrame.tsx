@@ -45,7 +45,7 @@ export function KanbanFullscreenFrame({
   return (
     <div
       className={cn(
-        "fixed inset-0 z-50 flex h-screen flex-col bg-[var(--background)] pb-12",
+        "fixed inset-0 z-50 flex h-dvh flex-col bg-[var(--background)] max-sm:pb-[env(safe-area-inset-bottom)] sm:h-screen sm:pb-12",
         shouldAnimateEnter && "animate-in fade-in-0 duration-200",
       )}
     >
@@ -55,7 +55,7 @@ export function KanbanFullscreenFrame({
         style={background ? { background } : undefined}
       />
       <div className="relative flex min-h-0 flex-1 flex-col">
-        <div className="flex shrink-0 items-center gap-3 border-b border-white/10 bg-black/15 px-4 py-3 text-white backdrop-blur-md sm:px-6">
+        <div className="flex shrink-0 items-center gap-2 border-b border-white/10 bg-black/15 px-3 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] text-white backdrop-blur-md sm:gap-3 sm:px-6 sm:py-3 sm:pt-3">
           <Button
             type="button"
             variant="ghost"
@@ -76,7 +76,7 @@ export function KanbanFullscreenFrame({
           >
             <Home className="size-4" aria-hidden />
           </Button>
-          <h2 className="min-w-0 truncate text-lg font-semibold">{title}</h2>
+          <h2 className="min-w-0 truncate text-base font-semibold sm:text-lg">{title}</h2>
           {count !== undefined ? (
             <span className="shrink-0 rounded-full bg-white/15 px-2 py-0.5 text-xs tabular-nums">
               {count}
@@ -86,15 +86,16 @@ export function KanbanFullscreenFrame({
             type="button"
             variant="ghost"
             size="sm"
-            className="ml-auto gap-2 text-white hover:bg-white/15 hover:text-white"
+            className="ml-auto gap-2 text-white hover:bg-white/15 hover:text-white max-sm:px-2"
             onClick={onExit}
+            aria-label="Sair da tela cheia"
           >
             <Minimize2 className="size-4" aria-hidden />
-            Sair da tela cheia
+            <span className="hidden sm:inline">Sair da tela cheia</span>
           </Button>
         </div>
 
-        <div className="min-h-full flex-1">{children}</div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden sm:min-h-full sm:overflow-visible">{children}</div>
       </div>
     </div>
   );

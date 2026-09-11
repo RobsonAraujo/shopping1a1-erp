@@ -124,16 +124,16 @@ export default async function OperacoesFullPage() {
   if (settings.isFullscreen) return board;
 
   return (
-    <div className="space-y-6">
-      <header className="flex items-start gap-4">
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-900 shadow-sm">
-          <Kanban className="size-6" aria-hidden />
+    <div className="space-y-4 sm:space-y-6">
+      <header className="flex items-start gap-3 sm:gap-4">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-900 shadow-sm sm:size-12">
+          <Kanban className="size-5 sm:size-6" aria-hidden />
         </span>
         <div className="min-w-0">
-          <h1 className="text-3xl font-bold tracking-tight text-[var(--primary)]">
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--primary)] sm:text-3xl">
             Operações Full
           </h1>
-          <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-[var(--muted-foreground)]">
+          <p className="mt-2 hidden max-w-2xl text-[15px] leading-relaxed text-[var(--muted-foreground)] sm:block">
             Acompanhe o fluxo de envio ao Full: agendamento e coleta. Use
             Avançar ou Mover para… em cada card.
           </p>
