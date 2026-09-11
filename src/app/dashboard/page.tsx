@@ -2,19 +2,15 @@ import type { Metadata } from "next";
 import { cache, Suspense } from "react";
 import { cookies } from "next/headers";
 import Link from "next/link";
-import { Award, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { DashboardOnboardingChecklist } from "@/components/home/DashboardOnboardingChecklist";
 import { DashboardOperationsSummary } from "@/components/home/DashboardOperationsSummary";
-import { DashboardSellerMetrics } from "@/components/home/DashboardSellerMetrics";
 import { DashboardSummaryClient } from "@/components/home/DashboardSummaryClient";
 import { UserFeedback } from "@/components/ui/user-feedback";
 import { fetchMe } from "@/lib/mercadolibre/api";
 import { readSession } from "@/lib/mercadolibre/session";
 import { getOrganizationContext } from "@/lib/organizations/context";
-import {
-  buildSellerReputationBadge,
-  type SellerReputationBadge,
-} from "@/lib/mercadolibre/seller-reputation";
+import { buildSellerReputationBadge } from "@/lib/mercadolibre/seller-reputation";
 import { loadOperationsSummaryFromDb } from "@/lib/compras/replenishment-cycle-data";
 import { getOnboardingChecklistState } from "@/lib/onboarding/onboarding-checklist";
 import { loadPmaAlerts } from "@/lib/home/pma-alert-data";
@@ -40,32 +36,35 @@ const loadSellerProfile = cache(async (token: string) =>
   fetchMe(token).catch(() => null),
 );
 
-const REPUTATION_BADGE_CLASS: Record<SellerReputationBadge["variant"], string> = {
-  success: "text-emerald-700",
-  warning: "text-amber-700",
-  destructive: "text-rose-700",
-};
+function sellerCaptionFacts(
+  me: Awaited<ReturnType<typeof loadSellerProfile>>,
+): string[] {
+  const badge = buildSellerReputationBadge(me?.seller_reputation);
+  const transactions = me?.seller_reputation?.transactions;
+  const completed = transactions?.completed ?? null;
+  const canceled = transactions?.canceled;
+  const positiveRatio = transactions?.ratings?.positive;
+  const total = (completed ?? 0) + (canceled ?? 0);
+  const satisfactionPercent =
+    positiveRatio != null ? Math.round(positiveRatio * 100) : null;
+  const cancelPercent =
+    canceled != null && total > 0 ? Math.round((canceled / total) * 100) : null;
 
-function ReputationMark({ badge }: { badge: SellerReputationBadge }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 text-sm font-medium",
-        REPUTATION_BADGE_CLASS[badge.variant],
-      )}
-    >
-      <Award className="size-3.5" aria-hidden />
-      {badge.label}
-    </span>
-  );
+  return [
+    badge?.label,
+    completed != null ? `${completed.toLocaleString("pt-BR")} vendas` : null,
+    satisfactionPercent != null ? `${satisfactionPercent}% satisfação` : null,
+    cancelPercent != null ? `${cancelPercent}% canceladas` : null,
+  ].filter((fact): fact is string => Boolean(fact));
 }
 
 async function SellerIdentity({ token }: { token: string }) {
   const me = await loadSellerProfile(token);
-  const badge = buildSellerReputationBadge(me?.seller_reputation);
   const nickname = me?.nickname?.trim() || null;
+  const permalink = me?.permalink;
+  const facts = sellerCaptionFacts(me);
 
-  if (!nickname && !badge && !me?.permalink) {
+  if (!nickname && facts.length === 0 && !permalink) {
     return null;
   }
 
@@ -76,53 +75,28 @@ async function SellerIdentity({ token }: { token: string }) {
           {nickname}
         </h1>
       ) : null}
-      {badge || me?.permalink ? (
-        <div
+      {facts.length > 0 || permalink ? (
+        <p
           className={cn(
-            "flex flex-wrap items-center gap-x-2 gap-y-1 text-[15px] text-[var(--muted-foreground)]",
+            "flex flex-wrap items-center gap-x-2 text-[15px] text-[var(--muted-foreground)]",
             nickname && "mt-1.5",
           )}
         >
-          {badge ? <ReputationMark badge={badge} /> : null}
-          {me?.permalink ? (
+          {facts.length > 0 ? <span>{facts.join(" · ")}</span> : null}
+          {permalink ? (
             <Link
-              href={me.permalink}
+              href={permalink}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center rounded-full p-1 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+              className="inline-flex items-center rounded-full p-1 hover:text-[var(--foreground)]"
               aria-label="Ver loja no Mercado Livre"
             >
               <ExternalLink className="size-3.5" aria-hidden />
             </Link>
           ) : null}
-        </div>
+        </p>
       ) : null}
     </div>
-  );
-}
-
-async function SellerStats({ token }: { token: string }) {
-  const me = await loadSellerProfile(token);
-  const transactions = me?.seller_reputation?.transactions;
-  const completed = transactions?.completed ?? null;
-  const canceled = transactions?.canceled;
-  const positiveRatio = transactions?.ratings?.positive;
-  const totalTransactions = (completed ?? 0) + (canceled ?? 0);
-  const cancelRatio =
-    canceled != null && totalTransactions > 0
-      ? canceled / totalTransactions
-      : null;
-
-  return (
-    <DashboardSellerMetrics
-      completed={completed}
-      satisfactionPercent={
-        positiveRatio != null ? Math.round(positiveRatio * 100) : null
-      }
-      cancelPercent={
-        cancelRatio != null ? Math.round(cancelRatio * 100) : null
-      }
-    />
   );
 }
 
@@ -169,12 +143,9 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-8 sm:space-y-10">
-      <header className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+      <header>
         <Suspense fallback={null}>
           <SellerIdentity token={token} />
-        </Suspense>
-        <Suspense fallback={null}>
-          <SellerStats token={token} />
         </Suspense>
       </header>
 
