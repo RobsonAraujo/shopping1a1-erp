@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, ImageOff } from "lucide-react";
 import { DashboardPmaAlertPanel } from "@/components/home/DashboardPmaAlertPanel";
@@ -26,10 +25,12 @@ function PromotionRow({ row }: { row: PromotionSummaryRow }) {
 
   return (
     <li>
-      <Link
-        href={`/dashboard/items/${row.mlItemId}`}
+      <a
+        href={row.permalink}
+        target="_blank"
+        rel="noopener noreferrer"
         className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-[var(--muted)]/40 sm:px-5"
-        title={row.title}
+        title={`${row.title} · abrir no Mercado Livre`}
       >
         <span className="relative size-11 shrink-0 overflow-hidden rounded-xl bg-[var(--muted)] sm:size-12">
           {row.imageUrl ? (
@@ -68,7 +69,7 @@ function PromotionRow({ row }: { row: PromotionSummaryRow }) {
         >
           {daysUntilLabel(row.daysUntilEnd)}
         </span>
-      </Link>
+      </a>
     </li>
   );
 }
@@ -87,8 +88,8 @@ function AllClear() {
           Tudo certo por aqui
         </p>
         <p className="mt-1 text-sm leading-relaxed text-[var(--muted-foreground)]">
-          Nenhum anúncio abaixo do PMA e nenhuma promoção vencendo nos próximos
-          dias.
+          Nenhum anúncio abaixo do PMA, nenhum catálogo perdendo e nenhuma
+          promoção vencendo nos próximos dias.
         </p>
       </div>
     </div>
@@ -123,8 +124,10 @@ function SectionClear({
 
 export function DashboardSummaryClient({
   pmaRows,
+  hasCatalogLosing = false,
 }: {
   pmaRows: PmaAlertRow[];
+  hasCatalogLosing?: boolean;
 }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -173,7 +176,7 @@ export function DashboardSummaryClient({
   }
 
   if (pmaEmpty && promoReadyEmpty) {
-    return <AllClear />;
+    return hasCatalogLosing ? null : <AllClear />;
   }
 
   return (

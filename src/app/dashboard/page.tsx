@@ -3,6 +3,7 @@ import { cache, Suspense } from "react";
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
+import { DashboardCatalogLosingPanel } from "@/components/home/DashboardCatalogLosingPanel";
 import { DashboardOnboardingChecklist } from "@/components/home/DashboardOnboardingChecklist";
 import { DashboardOperationsSummary } from "@/components/home/DashboardOperationsSummary";
 import { DashboardSummaryClient } from "@/components/home/DashboardSummaryClient";
@@ -13,6 +14,7 @@ import { getOrganizationContext } from "@/lib/organizations/context";
 import { buildSellerReputationBadge } from "@/lib/mercadolibre/seller-reputation";
 import { loadOperationsSummaryFromDb } from "@/lib/compras/replenishment-cycle-data";
 import { getOnboardingChecklistState } from "@/lib/onboarding/onboarding-checklist";
+import { loadCatalogLosingAlerts } from "@/lib/home/catalog-losing-data";
 import { loadPmaAlerts } from "@/lib/home/pma-alert-data";
 import { publicPageLoadMessage } from "@/lib/infra/server-public-error";
 import { cn } from "@/lib/utils";
@@ -20,12 +22,19 @@ import { cn } from "@/lib/utils";
 async function AttentionSection({
   token,
   organizationId,
+  hasCatalogLosing,
 }: {
   token: string;
   organizationId: string;
+  hasCatalogLosing: boolean;
 }) {
   const rows = await loadPmaAlerts(token, organizationId).catch(() => []);
-  return <DashboardSummaryClient pmaRows={rows} />;
+  return (
+    <DashboardSummaryClient
+      pmaRows={rows}
+      hasCatalogLosing={hasCatalogLosing}
+    />
+  );
 }
 
 function AttentionSkeleton() {
@@ -119,7 +128,7 @@ export default async function DashboardPage() {
 
   const organizationId = orgContext.organization.id;
 
-  const [onboardingState, operationsResult] = await Promise.all([
+  const [onboardingState, operationsResult, catalogLosing] = await Promise.all([
     getOnboardingChecklistState(organizationId).catch(() => null),
     loadOperationsSummaryFromDb(organizationId)
       .then((summary) => ({ summary, error: null as string | null }))
@@ -131,6 +140,7 @@ export default async function DashboardPage() {
           "Não foi possível carregar o início agora. Tente de novo em instantes.",
         ),
       })),
+    loadCatalogLosingAlerts(organizationId).catch(() => []),
   ]);
 
   if (operationsResult.error) {
@@ -157,8 +167,16 @@ export default async function DashboardPage() {
         <DashboardOperationsSummary summary={operationsResult.summary} />
       ) : null}
 
+      {catalogLosing.length > 0 ? (
+        <DashboardCatalogLosingPanel rows={catalogLosing} />
+      ) : null}
+
       <Suspense fallback={<AttentionSkeleton />}>
-        <AttentionSection token={token} organizationId={organizationId} />
+        <AttentionSection
+          token={token}
+          organizationId={organizationId}
+          hasCatalogLosing={catalogLosing.length > 0}
+        />
       </Suspense>
     </div>
   );
