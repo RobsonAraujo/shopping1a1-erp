@@ -139,6 +139,16 @@ a,
   }
 }
 
+.marketing-landing .marketing-hero {
+  padding-top: calc(8rem + env(safe-area-inset-top, 0px));
+}
+
+@media (min-width: 640px) {
+  .marketing-landing .marketing-hero {
+    padding-top: calc(10rem + env(safe-area-inset-top, 0px));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .marketing-landing .marketing-hero-glow,
   .marketing-landing .marketing-hero-live,

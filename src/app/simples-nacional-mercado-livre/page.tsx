@@ -41,7 +41,7 @@ export default async function SimplesNacionalPage() {
       />
 
       <main>
-        <section className="relative overflow-hidden bg-gradient-to-br from-[#0a1130] via-[#141f52] to-[#1b2d6f] px-4 py-16 text-white sm:px-6 sm:py-24">
+        <section className="marketing-hero relative overflow-hidden bg-gradient-to-br from-[#0a1130] via-[#141f52] to-[#1b2d6f] px-4 pb-16 text-white sm:px-6 sm:pb-24">
           <div className="relative mx-auto max-w-3xl text-center">
             <p className="text-sm font-semibold uppercase tracking-wide text-cyan-200">
               Tributário · Simples Nacional

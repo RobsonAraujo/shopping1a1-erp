@@ -34,7 +34,7 @@ export function MarketingLanding({
       <MarketingHeader isLoggedIn={isLoggedIn} dashboardHref={dashboardHref} />
 
       <main id="topo">
-        <section className="relative overflow-hidden bg-gradient-to-br from-[#0a1130] via-[#141f52] to-[#1b2d6f] px-4 py-16 text-white sm:px-6 sm:py-24">
+        <section className="marketing-hero relative overflow-hidden bg-gradient-to-br from-[#0a1130] via-[#141f52] to-[#1b2d6f] px-4 pb-16 text-white sm:px-6 sm:pb-24">
           <div
             className="marketing-hero-grid pointer-events-none absolute inset-0"
             aria-hidden

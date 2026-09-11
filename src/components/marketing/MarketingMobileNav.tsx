@@ -16,7 +16,7 @@ import {
 import { MARKETING_NAV_LINKS } from "@/components/marketing/marketing-nav-links";
 import { cn } from "@/lib/utils";
 
-export function MarketingMobileNav() {
+export function MarketingMobileNav({ onDark = false }: { onDark?: boolean }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
@@ -27,7 +27,12 @@ export function MarketingMobileNav() {
           type="button"
           variant="ghost"
           size="icon-sm"
-          className="size-10 text-[var(--foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)] lg:hidden"
+          className={cn(
+            "size-10 lg:hidden",
+            onDark
+              ? "text-white hover:bg-white/10 hover:text-white"
+              : "text-[var(--foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]",
+          )}
           aria-haspopup="dialog"
           aria-expanded={open}
           aria-label="Abrir menu"
