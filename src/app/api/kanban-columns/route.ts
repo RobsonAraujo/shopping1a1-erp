@@ -39,6 +39,7 @@ export async function GET(request: NextRequest) {
       columns,
       background: settings.background,
       isFullscreen: settings.isFullscreen,
+      appearance: settings.appearance,
     });
   } catch (e) {
     logServerError("api/kanban-columns GET", e);

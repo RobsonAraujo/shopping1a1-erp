@@ -1,8 +1,20 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { OperationCycleKind } from "@/generated/prisma/client";
 import { readApiError } from "@/lib/api/api-client-error";
+import {
+  isDefaultKanbanAppearance,
+  kanbanAppearanceStorageKey,
+  parseKanbanAppearance,
+  withKanbanColorMode,
+  withKanbanColumnColor,
+  withKanbanSolidColor,
+  withKanbanTheme,
+  type KanbanAppearance,
+  type KanbanColumnColorMode,
+  type KanbanColumnTheme,
+} from "@/lib/kanban/kanban-column-colors";
 
 export type KanbanColumnRow = {
   id: string;
@@ -21,21 +33,23 @@ export type KanbanBoardInitialData = {
   columns: KanbanColumnRow[];
   background: string;
   isFullscreen: boolean;
+  appearance: KanbanAppearance;
 };
 
 /**
- * Colunas + cor de fundo do Kanban (Compras ou Operações Full) — tudo
- * compartilhado pela organização e persistido no banco (igual a um board no
- * Trello). Semeado com `initial` (já carregado no servidor, ver `page.tsx`
- * de cada board) em vez de buscar num `useEffect` — sem isso a página nasce
- * com o estado "vazio"/padrão e só corrige depois de montar, um "piscar"
- * visível especialmente incômodo pra coluna colapsada (aparece expandida
- * por um instante e depois encolhe).
+ * Colunas + fundo + tela cheia + aparência das colunas do Kanban (Compras
+ * ou Operações Full) — tudo compartilhado pela organização e persistido no
+ * banco (igual a um board no Trello). Semeado com `initial` (já carregado
+ * no servidor, ver `page.tsx` de cada board) em vez de buscar num
+ * `useEffect` — sem isso a página nasce com o estado "vazio"/padrão e só
+ * corrige depois de montar, um "piscar" visível especialmente incômodo pra
+ * coluna colapsada (aparece expandida por um instante e depois encolhe).
  */
 export function useKanbanBoard(kind: OperationCycleKind, initial: KanbanBoardInitialData) {
   const [columns, setColumns] = useState<KanbanColumnRow[]>(initial.columns);
   const [background, setBackgroundState] = useState<string>(initial.background);
   const [isFullscreen, setIsFullscreenState] = useState<boolean>(initial.isFullscreen);
+  const [appearance, setAppearanceState] = useState<KanbanAppearance>(initial.appearance);
   const [error, setError] = useState<string | null>(null);
 
   const reloadColumns = useCallback(async () => {
@@ -214,10 +228,87 @@ export function useKanbanBoard(kind: OperationCycleKind, initial: KanbanBoardIni
     [isFullscreen, kind],
   );
 
+  const setAppearance = useCallback(
+    async (value: KanbanAppearance) => {
+      const previous = appearance;
+      setAppearanceState(value);
+      try {
+        const res = await fetch("/api/kanban-board-settings", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kind, appearance: value }),
+        });
+        if (!res.ok) {
+          setAppearanceState(previous);
+          setError(await readApiError(res, "kanban_board_settings_update_failed"));
+        }
+      } catch {
+        setAppearanceState(previous);
+        setError("Falha de rede ao mudar a aparência das colunas.");
+      }
+    },
+    [appearance, kind],
+  );
+
+  const setTheme = useCallback(
+    (theme: KanbanColumnTheme) => {
+      void setAppearance(withKanbanTheme(appearance, theme));
+    },
+    [appearance, setAppearance],
+  );
+
+  const setSolidColor = useCallback(
+    (solidColor: string) => {
+      void setAppearance(withKanbanSolidColor(appearance, solidColor));
+    },
+    [appearance, setAppearance],
+  );
+
+  const setColumnColor = useCallback(
+    (columnId: string, colorId: string) => {
+      void setAppearance(withKanbanColumnColor(appearance, columnId, colorId));
+    },
+    [appearance, setAppearance],
+  );
+
+  const setColorMode = useCallback(
+    (colorMode: KanbanColumnColorMode) => {
+      void setAppearance(withKanbanColorMode(appearance, colorMode));
+    },
+    [appearance, setAppearance],
+  );
+
+  useEffect(() => {
+    const key = kanbanAppearanceStorageKey(kind);
+    let raw: string | null = null;
+    try {
+      raw = localStorage.getItem(key);
+    } catch {
+      return;
+    }
+    if (!raw) return;
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // ignore quota / private mode
+    }
+    if (!isDefaultKanbanAppearance(initial.appearance)) return;
+    try {
+      const fromStorage = parseKanbanAppearance(JSON.parse(raw) as unknown);
+      if (isDefaultKanbanAppearance(fromStorage)) return;
+      void setAppearance(fromStorage);
+    } catch {
+      // JSON inválido — a chave já foi apagada.
+    }
+    // Só na montagem: migra o protótipo localStorage uma vez.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot localStorage → DB
+  }, [kind]);
+
   return {
     columns,
     background,
     isFullscreen,
+    appearance,
     error,
     rename,
     addColumn,
@@ -226,5 +317,10 @@ export function useKanbanBoard(kind: OperationCycleKind, initial: KanbanBoardIni
     toggleCollapse,
     setBackground,
     setFullscreen,
+    setAppearance,
+    setTheme,
+    setSolidColor,
+    setColumnColor,
+    setColorMode,
   };
 }

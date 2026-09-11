@@ -256,8 +256,8 @@ model KanbanColumn {
 }
 
 /// Configuração visual do board (Kanban de Compras ou Operações Full) por
-/// organização — hoje só a cor de fundo, estilo Trello. 1 linha por org+kind,
-/// materializada de forma lazy (mesmo padrão de `KanbanColumn`).
+/// organização — fundo, tela cheia e aparência das colunas, estilo Trello.
+/// 1 linha por org+kind, materializada de forma lazy (mesmo padrão de `KanbanColumn`).
 model KanbanBoardSettings {
   id             String             @id @default(cuid())
   organizationId String             @map("organization_id")
@@ -268,6 +268,9 @@ model KanbanBoardSettings {
   /// `background` acima: persistida aqui em vez de localStorage pra não
   /// "piscar" no primeiro paint (o servidor já manda o estado certo).
   isFullscreen   Boolean            @default(false) @map("is_fullscreen")
+  /// Tema/cores das colunas (`KanbanAppearance`) — JSON pequeno na mesma
+  /// linha pra não adicionar query no load do board.
+  appearance     Json               @default("{}")
   createdAt      DateTime           @default(now()) @map("created_at")
   updatedAt      DateTime           @updatedAt @map("updated_at")
 

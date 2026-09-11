@@ -3,14 +3,14 @@
 import { Check, Paintbrush } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useKanbanAppearance } from "@/hooks/use-kanban-appearance";
-import type { OperationCycleKind } from "@/generated/prisma/client";
 import {
   KANBAN_COLOR_MODES,
   KANBAN_COLUMN_COLORS,
   KANBAN_COLUMN_THEMES,
   KANBAN_STAGE_RAMP,
   getKanbanColumnColor,
+  type KanbanAppearance,
+  type KanbanColumnColorMode,
   type KanbanColumnTheme,
 } from "@/lib/kanban/kanban-column-colors";
 import { cn } from "@/lib/utils";
@@ -43,12 +43,16 @@ function ThemePreview({ theme, solidColor }: { theme: KanbanColumnTheme; solidCo
 }
 
 export function KanbanAppearancePicker({
-  kind,
+  appearance,
+  setTheme,
+  setSolidColor,
+  setColorMode,
 }: {
-  kind: OperationCycleKind;
+  appearance: KanbanAppearance;
+  setTheme: (theme: KanbanColumnTheme) => void;
+  setSolidColor: (solidColor: string) => void;
+  setColorMode: (colorMode: KanbanColumnColorMode) => void;
 }) {
-  const { appearance, setTheme, setSolidColor, setColorMode } = useKanbanAppearance(kind);
-
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -64,11 +68,8 @@ export function KanbanAppearancePicker({
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-64 max-w-[calc(100vw-1.5rem)] p-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
           Estilo das colunas
-        </p>
-        <p className="mt-1 mb-3 text-[11px] leading-snug text-[var(--muted-foreground)]">
-          Protótipo neste navegador — ainda não é compartilhado com a equipe.
         </p>
 
         <div className="grid grid-cols-3 gap-1.5">

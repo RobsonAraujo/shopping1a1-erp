@@ -21,10 +21,12 @@ import type {
   DeleteColumnResult,
   KanbanColumnRow,
 } from "@/hooks/use-kanban-columns";
-import { useKanbanAppearance } from "@/hooks/use-kanban-appearance";
 import { KanbanColumnColorPicker } from "@/components/kanban/KanbanColumnColorPicker";
-import { columnColorIdFor, resolveKanbanColumnPaint } from "@/lib/kanban/kanban-column-colors";
-import type { OperationCycleKind } from "@/generated/prisma/client";
+import {
+  columnColorIdFor,
+  resolveKanbanColumnPaint,
+  type KanbanAppearance,
+} from "@/lib/kanban/kanban-column-colors";
 import { Button } from "@/components/ui/button";
 import { FormSelect } from "@/components/ui/form-select";
 import {
@@ -56,7 +58,8 @@ type OperationsKanbanBoardProps = {
     moveCardsToColumnId?: string,
   ) => Promise<DeleteColumnResult>;
   onToggleCollapse: (id: string, isCollapsed: boolean) => void | Promise<void>;
-  kind: OperationCycleKind;
+  appearance: KanbanAppearance;
+  setColumnColor: (columnId: string, colorId: string) => void;
   /** CSS `background` (cor sólida ou gradiente) escolhido pelo usuário —
    * vazio/undefined = sem cor (fundo padrão do app). */
   background?: string;
@@ -294,11 +297,11 @@ export function OperationsKanbanBoard({
   onAddColumn,
   onDeleteColumn,
   onToggleCollapse,
-  kind,
+  appearance,
+  setColumnColor,
   background,
   fullHeight,
 }: OperationsKanbanBoardProps) {
-  const { appearance, setColumnColor } = useKanbanAppearance(kind);
   const [pendingDelete, setPendingDelete] = useState<{
     column: KanbanColumnRow;
     cardCount: number;

@@ -60,6 +60,7 @@ import { KanbanBackgroundPicker } from "@/components/kanban/KanbanBackgroundPick
 import { KanbanAppearancePicker } from "@/components/kanban/KanbanAppearancePicker";
 import { KanbanFullscreenFrame } from "@/components/kanban/KanbanFullscreenFrame";
 import type { SupplierRow } from "@/components/fornecedores/FornecedoresClient";
+import type { KanbanAppearance } from "@/lib/kanban/kanban-column-colors";
 import { cn } from "@/lib/utils";
 
 type PendingBackwardMove = MoveAction & {
@@ -78,14 +79,16 @@ export function SupplierPurchaseKanban({
   initialColumns,
   initialBackground,
   initialFullscreen,
+  initialAppearance,
 }: {
   initialCards: OperationsBoardCard[];
-  /** Colunas + cor de fundo + preferência de tela cheia já carregadas no
-   * servidor — evita o "piscar" de buscar isso num `useEffect` depois de
-   * montar (ver `useKanbanBoard`). */
+  /** Colunas + fundo + tela cheia + aparência já carregadas no servidor —
+   * evita o "piscar" de buscar isso num `useEffect` depois de montar
+   * (ver `useKanbanBoard`). */
   initialColumns: KanbanColumnRow[];
   initialBackground: string;
   initialFullscreen: boolean;
+  initialAppearance: KanbanAppearance;
 }) {
   const [cards, setCards] = useState(initialCards);
   const [searchQuery, setSearchQuery] = useState("");
@@ -106,6 +109,7 @@ export function SupplierPurchaseKanban({
     columns,
     background,
     isFullscreen,
+    appearance,
     rename: renameColumn,
     addColumn,
     removeColumn,
@@ -113,10 +117,15 @@ export function SupplierPurchaseKanban({
     toggleCollapse,
     setBackground,
     setFullscreen,
+    setTheme,
+    setSolidColor,
+    setColumnColor,
+    setColorMode,
   } = useKanbanBoard("purchase", {
     columns: initialColumns,
     background: initialBackground,
     isFullscreen: initialFullscreen,
+    appearance: initialAppearance,
   });
 
   // Lista leve (só o cadastro de fornecedores, sem sweep do catálogo ML) —
@@ -377,7 +386,12 @@ export function SupplierPurchaseKanban({
                   background={background}
                   onChange={setBackground}
                 />
-                <KanbanAppearancePicker kind="purchase" />
+                <KanbanAppearancePicker
+                  appearance={appearance}
+                  setTheme={setTheme}
+                  setSolidColor={setSolidColor}
+                  setColorMode={setColorMode}
+                />
                 <Button
                   type="button"
                   variant="outline"
@@ -436,7 +450,8 @@ export function SupplierPurchaseKanban({
               onAddColumn={addColumn}
               onDeleteColumn={removeColumn}
               onToggleCollapse={toggleCollapse}
-              kind="purchase"
+              appearance={appearance}
+              setColumnColor={setColumnColor}
               background={background}
               fullHeight={isFullscreen}
             />

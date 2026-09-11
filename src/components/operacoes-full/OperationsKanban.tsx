@@ -38,6 +38,7 @@ import { KanbanBackgroundPicker } from "@/components/kanban/KanbanBackgroundPick
 import { KanbanAppearancePicker } from "@/components/kanban/KanbanAppearancePicker";
 import { KanbanFullscreenFrame } from "@/components/kanban/KanbanFullscreenFrame";
 import type { OperationCycleKind } from "@/generated/prisma/client";
+import type { KanbanAppearance } from "@/lib/kanban/kanban-column-colors";
 import { cn } from "@/lib/utils";
 
 /** Move o card localmente pra coluna alvo antes da resposta do servidor —
@@ -107,12 +108,13 @@ type OperationsKanbanProps = {
   initialData: OperationsBoardsData;
   /** Board único — sem abas internas. */
   kind: OperationCycleKind;
-  /** Colunas + cor de fundo + preferência de tela cheia já carregadas no
-   * servidor — evita o "piscar" de buscar isso num `useEffect` depois de
-   * montar (ver `useKanbanBoard`). */
+  /** Colunas + fundo + tela cheia + aparência já carregadas no servidor —
+   * evita o "piscar" de buscar isso num `useEffect` depois de montar
+   * (ver `useKanbanBoard`). */
   initialColumns: KanbanColumnRow[];
   initialBackground: string;
   initialFullscreen: boolean;
+  initialAppearance: KanbanAppearance;
 };
 
 const KIND_CONFIG: Record<
@@ -148,6 +150,7 @@ export function OperationsKanban({
   initialColumns,
   initialBackground,
   initialFullscreen,
+  initialAppearance,
 }: OperationsKanbanProps) {
   const [data, setData] = useState(initialData);
   const [searchQuery, setSearchQuery] = useState("");
@@ -161,6 +164,7 @@ export function OperationsKanban({
     columns,
     background,
     isFullscreen,
+    appearance,
     rename: renameColumn,
     addColumn,
     removeColumn,
@@ -168,10 +172,15 @@ export function OperationsKanban({
     toggleCollapse,
     setBackground,
     setFullscreen,
+    setTheme,
+    setSolidColor,
+    setColumnColor,
+    setColorMode,
   } = useKanbanBoard(kind, {
     columns: initialColumns,
     background: initialBackground,
     isFullscreen: initialFullscreen,
+    appearance: initialAppearance,
   });
 
   const activeCards =
@@ -422,7 +431,12 @@ export function OperationsKanban({
           />
           <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto sm:gap-2">
             <KanbanBackgroundPicker background={background} onChange={setBackground} />
-            <KanbanAppearancePicker kind={kind} />
+            <KanbanAppearancePicker
+              appearance={appearance}
+              setTheme={setTheme}
+              setSolidColor={setSolidColor}
+              setColorMode={setColorMode}
+            />
             <Button
               type="button"
               variant="outline"
@@ -471,7 +485,8 @@ export function OperationsKanban({
         onAddColumn={addColumn}
         onDeleteColumn={removeColumn}
         onToggleCollapse={toggleCollapse}
-        kind={kind}
+        appearance={appearance}
+        setColumnColor={setColumnColor}
         background={background}
         fullHeight={isFullscreen}
       />

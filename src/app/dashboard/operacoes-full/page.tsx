@@ -19,10 +19,12 @@ import {
 import { readSession } from "@/lib/mercadolibre/session";
 import { getOrganizationContext } from "@/lib/organizations/context";
 import { publicPageLoadMessage } from "@/lib/infra/server-public-error";
+import { DEFAULT_KANBAN_APPEARANCE } from "@/lib/kanban/kanban-column-colors";
 
 const DEFAULT_SETTINGS: KanbanBoardSettingsRow = {
   background: "",
   isFullscreen: false,
+  appearance: DEFAULT_KANBAN_APPEARANCE,
 };
 
 async function OperacoesFullDataSection({
@@ -30,11 +32,13 @@ async function OperacoesFullDataSection({
   columnsPromise,
   background,
   isFullscreen,
+  appearance,
 }: {
   boardsPromise: Promise<OperationsBoardsData>;
   columnsPromise: Promise<KanbanColumnRow[]>;
   background: string;
   isFullscreen: boolean;
+  appearance: KanbanBoardSettingsRow["appearance"];
 }) {
   let loadError: string | null = null;
   let boards: OperationsBoardsData | null = null;
@@ -66,6 +70,7 @@ async function OperacoesFullDataSection({
       initialColumns={columns}
       initialBackground={background}
       initialFullscreen={isFullscreen}
+      initialAppearance={appearance}
     />
   );
 }
@@ -117,6 +122,7 @@ export default async function OperacoesFullPage() {
         columnsPromise={columnsPromise}
         background={settings.background}
         isFullscreen={settings.isFullscreen}
+        appearance={settings.appearance}
       />
     </Suspense>
   );

@@ -110,6 +110,64 @@ export function normalizeKanbanAppearance(
   };
 }
 
+export function parseKanbanAppearance(value: unknown): KanbanAppearance {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return DEFAULT_KANBAN_APPEARANCE;
+  }
+  return normalizeKanbanAppearance(value as Partial<KanbanAppearance>);
+}
+
+export function isDefaultKanbanAppearance(value: KanbanAppearance): boolean {
+  return value.theme === "default";
+}
+
+export function withKanbanTheme(
+  appearance: KanbanAppearance,
+  theme: KanbanColumnTheme,
+): KanbanAppearance {
+  return normalizeKanbanAppearance({
+    ...appearance,
+    theme,
+    columnColors: theme === "colorful" ? {} : appearance.columnColors,
+  });
+}
+
+export function withKanbanSolidColor(
+  appearance: KanbanAppearance,
+  solidColor: string,
+): KanbanAppearance {
+  return normalizeKanbanAppearance({ ...appearance, theme: "solid", solidColor });
+}
+
+export function withKanbanColumnColor(
+  appearance: KanbanAppearance,
+  columnId: string,
+  colorId: string,
+): KanbanAppearance {
+  if (appearance.theme === "solid") {
+    return normalizeKanbanAppearance({
+      ...appearance,
+      solidColor: colorId || appearance.solidColor,
+      theme: colorId ? "solid" : "default",
+    });
+  }
+  const columnColors = { ...appearance.columnColors };
+  if (!colorId) delete columnColors[columnId];
+  else columnColors[columnId] = colorId;
+  return normalizeKanbanAppearance({
+    ...appearance,
+    theme: "colorful",
+    columnColors,
+  });
+}
+
+export function withKanbanColorMode(
+  appearance: KanbanAppearance,
+  colorMode: KanbanColumnColorMode,
+): KanbanAppearance {
+  return normalizeKanbanAppearance({ ...appearance, colorMode });
+}
+
 export function columnColorIdFor(
   appearance: KanbanAppearance,
   columnId: string,
