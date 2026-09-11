@@ -1,67 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { MARKETING_NAV_LINKS } from "@/components/marketing/marketing-nav-links";
-import { MarketingMobileNav } from "@/components/marketing/MarketingMobileNav";
-import { OAuthCta } from "@/components/marketing/OauthCta";
 
-export function MarketingHeader({
-  isLoggedIn,
-  dashboardHref,
-  logoHref = "#topo",
-}: {
-  isLoggedIn: boolean;
-  dashboardHref: string;
-  logoHref?: string;
-}) {
-  return (
-    <header className="sticky top-0 z-40 border-b border-white/10 bg-[#152456]/95 pt-[env(safe-area-inset-top)] backdrop-blur-md">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
-        <a href={logoHref} className="flex shrink-0 items-center gap-2">
-          <Image
-            src="/logo-bg-blue.png"
-            alt=""
-            width={36}
-            height={36}
-            className="h-9 w-9 rounded-lg object-cover shadow-sm"
-            priority
-          />
-          <span className="font-semibold tracking-tight text-white">
-            ERP 1a1
-          </span>
-        </a>
-        <nav
-          aria-label="Funcionalidades"
-          className="hidden items-center gap-4 lg:flex"
-        >
-          {MARKETING_NAV_LINKS.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="text-sm font-semibold text-white transition-colors hover:text-cyan-200"
-            >
-              {link.label}
-            </Link>
-          ))}
-          <Link
-            href="/precos"
-            className="text-sm font-semibold text-white transition-colors hover:text-cyan-200"
-          >
-            Preços
-          </Link>
-        </nav>
-        <div className="flex shrink-0 items-center gap-1">
-          <MarketingMobileNav />
-          <OAuthCta
-            isLoggedIn={isLoggedIn}
-            dashboardHref={dashboardHref}
-            size="sm"
-            onDark
-          />
-        </div>
-      </div>
-    </header>
-  );
-}
+export { MarketingHeader } from "@/components/marketing/MarketingHeader";
 
 function FooterComingSoon() {
   return (

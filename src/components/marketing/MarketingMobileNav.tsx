@@ -1,51 +1,80 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { MARKETING_NAV_LINKS } from "@/components/marketing/marketing-nav-links";
+import { cn } from "@/lib/utils";
 
 export function MarketingMobileNav() {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild>
         <Button
           type="button"
           variant="ghost"
           size="icon-sm"
-          className="h-9 w-9 text-white hover:bg-white/10 hover:text-white lg:hidden"
-          aria-haspopup="menu"
+          className="size-10 text-[var(--foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)] lg:hidden"
+          aria-haspopup="dialog"
           aria-expanded={open}
-          aria-label="Abrir menu de funcionalidades"
+          aria-label="Abrir menu"
         >
           <Menu className="size-5" aria-hidden />
         </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-56 p-1.5">
-        <nav aria-label="Funcionalidades" className="flex flex-col">
-          {MARKETING_NAV_LINKS.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              onClick={() => setOpen(false)}
-              className="rounded-md px-3 py-2 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--muted)]"
-            >
-              {link.label}
-            </Link>
-          ))}
+      </SheetTrigger>
+      <SheetContent className="sm:max-w-sm">
+        <SheetHeader>
+          <SheetTitle>Menu</SheetTitle>
+        </SheetHeader>
+        <SheetBody className="flex flex-col gap-1 pb-8">
+          {MARKETING_NAV_LINKS.map((link) => {
+            const active = pathname === link.href;
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={() => setOpen(false)}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "rounded-xl px-3 py-3 transition-colors hover:bg-[var(--muted)]",
+                  active && "bg-[var(--muted)]",
+                )}
+              >
+                <span className="block text-sm font-semibold text-[var(--foreground)]">
+                  {link.label}
+                </span>
+                <span className="mt-0.5 block text-xs text-[var(--muted-foreground)]">
+                  {link.hint}
+                </span>
+              </Link>
+            );
+          })}
           <Link
             href="/precos"
             onClick={() => setOpen(false)}
-            className="rounded-md px-3 py-2 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--muted)]"
+            aria-current={pathname === "/precos" ? "page" : undefined}
+            className={cn(
+              "mt-2 rounded-xl px-3 py-3 text-sm font-semibold transition-colors hover:bg-[var(--muted)]",
+              pathname === "/precos" && "bg-[var(--muted)]",
+            )}
           >
             Preços
           </Link>
-        </nav>
-      </PopoverContent>
-    </Popover>
+        </SheetBody>
+      </SheetContent>
+    </Sheet>
   );
 }

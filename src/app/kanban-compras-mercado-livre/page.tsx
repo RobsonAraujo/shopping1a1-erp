@@ -5,7 +5,10 @@ import { Columns3, Share2, Truck } from "lucide-react";
 import { getMarketingCtaState } from "@/lib/mercadolibre/session";
 import { siteUrl } from "@/lib/infra/site-url";
 import { DemoKanban } from "@/components/marketing/DemoKanban";
-import { MarketingFooter, MarketingHeader } from "@/components/marketing/MarketingChrome";
+import {
+  MarketingFooter,
+  MarketingHeader,
+} from "@/components/marketing/MarketingChrome";
 import { OAuthCta } from "@/components/marketing/OauthCta";
 
 const title = "Kanban de compras e Full para Mercado Livre";
@@ -46,7 +49,7 @@ export default async function KanbanComprasMercadoLivrePage() {
               Operação · Kanban
             </p>
             <h1 className="mt-3 text-[clamp(2rem,5vw,3.25rem)] font-bold leading-[1.1] tracking-tight">
-              Compras e Full no mesmo estilo Trello — com os números da sua loja
+              Compras e Full no mesmo estilo Trello, com os números da sua loja
             </h1>
             <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-white/80 sm:text-lg">
               O card nasce quando o estoque vai faltar. Você arrasta do
@@ -72,8 +75,8 @@ export default async function KanbanComprasMercadoLivrePage() {
               </h2>
               <p className="mt-3 text-[15px] leading-relaxed text-[var(--muted-foreground)]">
                 Em Compras o card é o fornecedor: SKUs, quantidade sugerida e
-                urgência no mesmo lugar. Em Operações Full o card é o anúncio
-                — estoque ML, galpão e data para agendar a coleta.
+                urgência no mesmo lugar. Em Operações Full o card é o anúncio —
+                estoque ML, galpão e data para agendar a coleta.
               </p>
             </div>
             <DemoKanban />
@@ -104,7 +107,8 @@ export default async function KanbanComprasMercadoLivrePage() {
               </h3>
               <p className="mt-2 text-sm leading-relaxed text-[var(--muted-foreground)]">
                 Fundo, tela cheia e aparência das colunas ficam na organização.
-                Quem entra no painel vê o mesmo quadro — compras e Full alinhados.
+                Quem entra no painel vê o mesmo quadro — compras e Full
+                alinhados.
               </p>
             </article>
             <article className="rounded-2xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-white p-5 shadow-sm sm:p-6">
@@ -141,18 +145,22 @@ export default async function KanbanComprasMercadoLivrePage() {
                 sugerida. Arraste para avançar a etapa de compra.
               </li>
               <li>
-                <strong className="text-[var(--foreground)]">Operações Full</strong> —
-                cada anúncio que precisa de envio: agendar, coletar, sumir do
+                <strong className="text-[var(--foreground)]">
+                  Operações Full
+                </strong>{" "}
+                — cada anúncio que precisa de envio: agendar, coletar, sumir do
                 quadro quando o estoque ML sobe.
               </li>
               <li>
-                <strong className="text-[var(--foreground)]">Aparência</strong> —
-                padrão, uma cor ou colorida por etapa; faixa, cabeçalho ou
+                <strong className="text-[var(--foreground)]">Aparência</strong>{" "}
+                — padrão, uma cor ou colorida por etapa; faixa, cabeçalho ou
                 coluna inteira. Tela cheia no estilo Trello.
               </li>
               <li>
-                <strong className="text-[var(--foreground)]">Margem no mesmo painel</strong> —
-                o kanban não substitui a{" "}
+                <strong className="text-[var(--foreground)]">
+                  Margem no mesmo painel
+                </strong>{" "}
+                — o kanban não substitui a{" "}
                 <Link
                   href="/margem-de-contribuicao-mercado-livre"
                   className="text-[var(--primary)] underline underline-offset-2"
@@ -173,8 +181,8 @@ export default async function KanbanComprasMercadoLivrePage() {
               Veja o kanban da sua loja de verdade.
             </h2>
             <p className="mt-3 text-white/75">
-              Conecte a conta do Mercado Livre — os cards nascem do estoque e
-              do giro, não de uma planilha colada.
+              Conecte a conta do Mercado Livre — os cards nascem do estoque e do
+              giro, não de uma planilha colada.
             </p>
             <div className="mt-8 flex flex-col items-center gap-3">
               <OAuthCta

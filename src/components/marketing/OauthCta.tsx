@@ -10,12 +10,15 @@ export function OAuthCta({
   dashboardHref,
   size = "lg",
   onDark = false,
+  compactOnMobile = false,
   className,
 }: {
   isLoggedIn: boolean;
   dashboardHref: string;
   size?: "sm" | "lg";
   onDark?: boolean;
+  /** No header: encurta “Ir para o dashboard” em telas estreitas. */
+  compactOnMobile?: boolean;
   className?: string;
 }) {
   const shape =
@@ -27,20 +30,26 @@ export function OAuthCta({
     ? "border-0 bg-white text-[#0f1a45] shadow-[0_10px_30px_-12px_rgba(0,0,0,0.45)] hover:bg-white/90"
     : "border-0 bg-[#1b2d6f] text-white shadow-none hover:bg-[#152456]";
 
-  const label = isLoggedIn ? "Ir para o dashboard" : "Testar grátis";
   const href = isLoggedIn ? dashboardHref : SIGNIN;
+  const dashboardLabel =
+    compactOnMobile && isLoggedIn ? "Painel" : isLoggedIn ? "Ir para o dashboard" : "Testar grátis";
+  const showArrow = !(compactOnMobile && isLoggedIn);
 
   return (
-    <Button size={size} asChild className={cn(shape, appearance, className)}>
+    <Button
+      size={size}
+      asChild
+      className={cn(shape, appearance, "whitespace-nowrap", className)}
+    >
       {isLoggedIn ? (
         <Link href={href}>
-          {label}
-          <ArrowRight />
+          {dashboardLabel}
+          {showArrow ? <ArrowRight /> : null}
         </Link>
       ) : (
         <a href={href}>
-          {label}
-          <ArrowRight />
+          {dashboardLabel}
+          {showArrow ? <ArrowRight /> : null}
         </a>
       )}
     </Button>
