@@ -3,12 +3,10 @@ import { cache, Suspense } from "react";
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { Award, ExternalLink } from "lucide-react";
-import { DashboardHomeShortcuts } from "@/components/home/DashboardHomeShortcuts";
 import { DashboardOnboardingChecklist } from "@/components/home/DashboardOnboardingChecklist";
 import { DashboardOperationsSummary } from "@/components/home/DashboardOperationsSummary";
-import { DashboardPmaAlertPanel } from "@/components/home/DashboardPmaAlertPanel";
+import { DashboardSellerMetrics } from "@/components/home/DashboardSellerMetrics";
 import { DashboardSummaryClient } from "@/components/home/DashboardSummaryClient";
-import { Card, CardContent } from "@/components/ui/card";
 import { UserFeedback } from "@/components/ui/user-feedback";
 import { fetchMe } from "@/lib/mercadolibre/api";
 import { readSession } from "@/lib/mercadolibre/session";
@@ -23,7 +21,7 @@ import { loadPmaAlerts } from "@/lib/home/pma-alert-data";
 import { publicPageLoadMessage } from "@/lib/infra/server-public-error";
 import { cn } from "@/lib/utils";
 
-async function PmaAlertSection({
+async function AttentionSection({
   token,
   organizationId,
 }: {
@@ -31,13 +29,11 @@ async function PmaAlertSection({
   organizationId: string;
 }) {
   const rows = await loadPmaAlerts(token, organizationId).catch(() => []);
-  return <DashboardPmaAlertPanel rows={rows} />;
+  return <DashboardSummaryClient pmaRows={rows} />;
 }
 
-function PmaAlertSkeleton() {
-  return (
-    <div className="h-24 animate-pulse rounded-2xl border border-[var(--border)] bg-[var(--muted)]/30" />
-  );
+function AttentionSkeleton() {
+  return <div className="h-24 animate-pulse rounded-3xl bg-[var(--card)]" />;
 }
 
 const loadSellerProfile = cache(async (token: string) =>
@@ -45,16 +41,16 @@ const loadSellerProfile = cache(async (token: string) =>
 );
 
 const REPUTATION_BADGE_CLASS: Record<SellerReputationBadge["variant"], string> = {
-  success: "border-emerald-300 bg-[var(--card)] text-emerald-800",
-  warning: "border-amber-300 bg-[var(--card)] text-amber-800",
-  destructive: "border-rose-300 bg-[var(--card)] text-rose-800",
+  success: "text-emerald-700",
+  warning: "text-amber-700",
+  destructive: "text-rose-700",
 };
 
-function ReputationPill({ badge }: { badge: SellerReputationBadge }) {
+function ReputationMark({ badge }: { badge: SellerReputationBadge }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold",
+        "inline-flex items-center gap-1 text-sm font-medium",
         REPUTATION_BADGE_CLASS[badge.variant],
       )}
     >
@@ -67,62 +63,40 @@ function ReputationPill({ badge }: { badge: SellerReputationBadge }) {
 async function SellerIdentity({ token }: { token: string }) {
   const me = await loadSellerProfile(token);
   const badge = buildSellerReputationBadge(me?.seller_reputation);
-  const nickname = me?.nickname || null;
-  const heading = nickname ?? "Início";
-  const initial = nickname ? nickname.trim().charAt(0).toUpperCase() : "?";
+  const nickname = me?.nickname?.trim() || null;
+
+  if (!nickname && !badge && !me?.permalink) {
+    return null;
+  }
 
   return (
-    <div className="mt-1 flex items-center gap-3">
-      <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-[var(--primary)] text-lg font-semibold text-[var(--primary-foreground)]">
-        {initial}
-      </span>
-      <div>
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-bold tracking-tight text-[var(--primary)] sm:text-3xl">
-            {heading}
-          </h1>
+    <div>
+      {nickname ? (
+        <h1 className="text-[1.75rem] font-semibold tracking-tight text-[var(--foreground)] sm:text-4xl">
+          {nickname}
+        </h1>
+      ) : null}
+      {badge || me?.permalink ? (
+        <div
+          className={cn(
+            "flex flex-wrap items-center gap-x-2 gap-y-1 text-[15px] text-[var(--muted-foreground)]",
+            nickname && "mt-1.5",
+          )}
+        >
+          {badge ? <ReputationMark badge={badge} /> : null}
           {me?.permalink ? (
             <Link
               href={me.permalink}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center justify-center rounded-full p-1.5 text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--primary)]"
+              className="inline-flex items-center rounded-full p-1 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
               aria-label="Ver loja no Mercado Livre"
             >
-              <ExternalLink className="size-4" aria-hidden />
+              <ExternalLink className="size-3.5" aria-hidden />
             </Link>
           ) : null}
         </div>
-        {badge ? (
-          <div className="mt-1.5">
-            <ReputationPill badge={badge} />
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function SellerIdentityFallback() {
-  return (
-    <div className="mt-1 flex items-center gap-3">
-      <span className="size-11 shrink-0 rounded-full bg-[var(--muted)]" aria-hidden />
-      <h1 className="text-2xl font-bold tracking-tight text-[var(--primary)] sm:text-3xl">
-        Início
-      </h1>
-    </div>
-  );
-}
-
-function SellerStat({ value, label }: { value: string; label: string }) {
-  return (
-    <div className="text-center">
-      <div className="text-2xl font-bold tabular-nums text-[var(--primary)]">
-        {value}
-      </div>
-      <div className="text-[11px] font-medium tracking-wide text-[var(--muted-foreground)] uppercase">
-        {label}
-      </div>
+      ) : null}
     </div>
   );
 }
@@ -130,7 +104,7 @@ function SellerStat({ value, label }: { value: string; label: string }) {
 async function SellerStats({ token }: { token: string }) {
   const me = await loadSellerProfile(token);
   const transactions = me?.seller_reputation?.transactions;
-  const completed = transactions?.completed;
+  const completed = transactions?.completed ?? null;
   const canceled = transactions?.canceled;
   const positiveRatio = transactions?.ratings?.positive;
   const totalTransactions = (completed ?? 0) + (canceled ?? 0);
@@ -139,31 +113,16 @@ async function SellerStats({ token }: { token: string }) {
       ? canceled / totalTransactions
       : null;
 
-  if (completed == null && positiveRatio == null && cancelRatio == null) {
-    return null;
-  }
-
   return (
-    <div className="flex shrink-0 items-center gap-6 sm:border-l sm:border-[var(--border)] sm:pl-6">
-      {completed != null ? (
-        <SellerStat
-          value={completed.toLocaleString("pt-BR")}
-          label="vendas concluídas"
-        />
-      ) : null}
-      {positiveRatio != null ? (
-        <SellerStat
-          value={`${Math.round(positiveRatio * 100)}%`}
-          label="satisfação"
-        />
-      ) : null}
-      {cancelRatio != null ? (
-        <SellerStat
-          value={`${Math.round(cancelRatio * 100)}%`}
-          label="cancelamento"
-        />
-      ) : null}
-    </div>
+    <DashboardSellerMetrics
+      completed={completed}
+      satisfactionPercent={
+        positiveRatio != null ? Math.round(positiveRatio * 100) : null
+      }
+      cancelPercent={
+        cancelRatio != null ? Math.round(cancelRatio * 100) : null
+      }
+    />
   );
 }
 
@@ -184,105 +143,52 @@ export default async function DashboardPage() {
     return null;
   }
 
-  let operationsSummary: Awaited<
-    ReturnType<typeof loadOperationsSummaryFromDb>
-  > | null = null;
-  let loadError: string | null = null;
+  const organizationId = orgContext.organization.id;
 
-  const onboardingState = await getOnboardingChecklistState(
-    orgContext.organization.id,
-  ).catch(() => null);
+  const [onboardingState, operationsResult] = await Promise.all([
+    getOnboardingChecklistState(organizationId).catch(() => null),
+    loadOperationsSummaryFromDb(organizationId)
+      .then((summary) => ({ summary, error: null as string | null }))
+      .catch((e) => ({
+        summary: null,
+        error: publicPageLoadMessage(
+          "dashboard/home",
+          e,
+          "Não foi possível carregar o início agora. Tente de novo em instantes.",
+        ),
+      })),
+  ]);
 
-  try {
-    operationsSummary = await loadOperationsSummaryFromDb(orgContext.organization.id);
-  } catch (e) {
-    loadError = publicPageLoadMessage(
-      "dashboard/home",
-      e,
-      "Não foi possível carregar o início agora. Tente de novo em instantes.",
-    );
-  }
-
-  if (loadError) {
+  if (operationsResult.error) {
     return (
       <UserFeedback title="Não foi possível carregar o início">
-        {loadError}
+        {operationsResult.error}
       </UserFeedback>
     );
   }
 
-  const now = new Date();
-  const todayLabel = now.toLocaleDateString("pt-BR", {
-    timeZone: "America/Sao_Paulo",
-    weekday: "long",
-    day: "2-digit",
-    month: "long",
-  });
-
   return (
-    <div className="space-y-6 sm:space-y-8">
-      <header className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-5 sm:px-8 sm:py-7">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-medium capitalize text-[var(--muted-foreground)]">
-              {todayLabel}
-            </p>
-            <Suspense fallback={<SellerIdentityFallback />}>
-              <SellerIdentity token={token} />
-            </Suspense>
-            <p className="mt-1.5 max-w-2xl text-sm text-[var(--muted-foreground)]">
-              Prioridades do dia, atalhos e alertas
-            </p>
-          </div>
-
-          <Suspense fallback={null}>
-            <SellerStats token={token} />
-          </Suspense>
-        </div>
+    <div className="space-y-8 sm:space-y-10">
+      <header className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+        <Suspense fallback={null}>
+          <SellerIdentity token={token} />
+        </Suspense>
+        <Suspense fallback={null}>
+          <SellerStats token={token} />
+        </Suspense>
       </header>
 
       {onboardingState ? (
         <DashboardOnboardingChecklist state={onboardingState} />
       ) : null}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
-        <div className="min-w-0 space-y-8">
-          {operationsSummary ? (
-            <DashboardOperationsSummary summary={operationsSummary} />
-          ) : (
-            <Card className="border-amber-200 bg-amber-50/50">
-              <CardContent className="pt-6 text-sm text-amber-950">
-                Não foi possível carregar o resumo de operações. Atualize a
-                página ou tente de novo em instantes.
-              </CardContent>
-            </Card>
-          )}
+      {operationsResult.summary ? (
+        <DashboardOperationsSummary summary={operationsResult.summary} />
+      ) : null}
 
-          <Suspense fallback={<PmaAlertSkeleton />}>
-            <PmaAlertSection
-              token={token}
-              organizationId={orgContext.organization.id}
-            />
-          </Suspense>
-
-          <section className="space-y-3">
-            <div>
-              <h2 className="text-xl font-semibold tracking-tight text-[var(--primary)]">
-                Promoções
-              </h2>
-              <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-                Anúncios próprios ativos — sem desconto ou com promoção
-                terminando em breve.
-              </p>
-            </div>
-            <DashboardSummaryClient />
-          </section>
-        </div>
-
-        <aside className="space-y-6 lg:sticky lg:top-24">
-          <DashboardHomeShortcuts />
-        </aside>
-      </div>
+      <Suspense fallback={<AttentionSkeleton />}>
+        <AttentionSection token={token} organizationId={organizationId} />
+      </Suspense>
     </div>
   );
 }

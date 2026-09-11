@@ -30,8 +30,8 @@ export type PromotionSummaryRow = {
 };
 
 export type PromotionSummaryPayload = {
-  withoutPromotion: PromotionSummaryRow[];
   expiringSoon: PromotionSummaryRow[];
+  withoutPromotionCount: number;
   totalActiveItems: number;
   fetchedAt: string;
   expiringSoonDays: number;
@@ -185,14 +185,6 @@ async function scanItemPromotion(
   }
 }
 
-function sortRows(rows: PromotionSummaryRow[]): PromotionSummaryRow[] {
-  return [...rows].sort((a, b) => {
-    const keyA = (a.sku ?? a.title ?? a.mlItemId).toLowerCase();
-    const keyB = (b.sku ?? b.title ?? b.mlItemId).toLowerCase();
-    return keyA.localeCompare(keyB, "pt-BR");
-  });
-}
-
 export async function loadPromotionSummary(
   accessToken: string,
   userId: number,
@@ -209,8 +201,8 @@ export async function loadPromotionSummary(
 
   if (activeIds.length === 0) {
     return {
-      withoutPromotion: [],
       expiringSoon: [],
+      withoutPromotionCount: 0,
       totalActiveItems: 0,
       fetchedAt: now.toISOString(),
       expiringSoonDays,
@@ -241,11 +233,7 @@ export async function loadPromotionSummary(
     .map((scan) => scan.warning)
     .filter((warning): warning is string => warning !== null);
 
-  const withoutPromotion = sortRows(
-    scans
-      .filter((scan) => !scan.hasPromotion)
-      .map((scan) => scan.baseRow),
-  );
+  const withoutPromotionCount = scans.filter((scan) => !scan.hasPromotion).length;
 
   const expiringSoon = [...scans]
     .map((scan) => scan.expiringRow)
@@ -264,8 +252,8 @@ export async function loadPromotionSummary(
     });
 
   return {
-    withoutPromotion,
     expiringSoon,
+    withoutPromotionCount,
     totalActiveItems: ownActiveItems.length,
     fetchedAt: now.toISOString(),
     expiringSoonDays,

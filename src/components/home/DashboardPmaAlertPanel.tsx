@@ -1,111 +1,75 @@
 import Image from "next/image";
 import Link from "next/link";
-import { AlertTriangle, ImageOff } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { ImageOff } from "lucide-react";
 import { formatFinancialMoney } from "@/lib/pricing/financial-margin";
 import type { PmaAlertRow } from "@/lib/home/pma-alert-data";
 
 export function DashboardPmaAlertPanel({ rows }: { rows: PmaAlertRow[] }) {
   if (rows.length === 0) return null;
 
+  const visible = rows.slice(0, 8);
+
   return (
-    <section className="space-y-3">
-      <div>
-        <h2 className="text-xl font-semibold tracking-tight text-[var(--primary)]">
+    <section>
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <h2 className="text-sm font-medium text-[var(--muted-foreground)]">
           Abaixo do PMA
         </h2>
-        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-          Preço atual do anúncio abaixo do preço mínimo autorizado (PMA)
-          cadastrado para o produto.
-        </p>
+        <span className="text-sm tabular-nums text-rose-700">
+          {rows.length}
+        </span>
       </div>
-
-      <Card className="overflow-hidden border-[var(--border)] border-l-4 border-l-rose-500">
-        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0 pb-2">
-          <div className="flex items-center gap-2 text-sm font-medium text-rose-900">
-            <AlertTriangle className="size-4 shrink-0" aria-hidden />
-            Fora do preço combinado
-          </div>
-          <Badge variant="destructive" className="px-2.5 py-0.5 text-xs">
-            {rows.length} {rows.length === 1 ? "anúncio" : "anúncios"}
-          </Badge>
-        </CardHeader>
-        <CardContent className="pt-0 pb-4">
-          <ul className="space-y-2">
-            {rows.map((row) => (
-              <li
-                key={row.mlItemId}
-                className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 transition-colors hover:bg-[var(--muted)]/20"
-              >
-                <div className="flex items-start gap-3">
-                  <Link
-                    href={`/dashboard/items/${row.mlItemId}`}
-                    className="relative shrink-0 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--muted)]"
-                    aria-label={`Abrir detalhes: ${row.title}`}
-                  >
-                    {row.imageUrl ? (
-                      <Image
-                        src={row.imageUrl}
-                        alt={row.title}
-                        width={64}
-                        height={64}
-                        className="size-14 object-contain sm:size-16"
-                        sizes="64px"
-                      />
-                    ) : (
-                      <div className="flex size-14 items-center justify-center sm:size-16">
-                        <ImageOff
-                          className="size-6 text-[var(--muted-foreground)]/70"
-                          aria-hidden
-                        />
-                      </div>
-                    )}
-                  </Link>
-                  <div className="min-w-0 flex-1 space-y-1.5">
-                    <Link
-                      href={`/dashboard/items/${row.mlItemId}`}
-                      className="min-w-0 underline-offset-2 hover:underline"
-                      title={row.title}
-                    >
-                      <span className="block truncate text-sm font-semibold leading-snug text-[var(--primary)] sm:text-base">
-                        {row.sku}
-                      </span>
-                      <span className="mt-0.5 block truncate text-xs font-normal leading-snug text-[var(--muted-foreground)]">
-                        {row.title}
-                      </span>
-                    </Link>
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--muted-foreground)]">
-                      <span>
-                        Atual:{" "}
-                        <span className="font-semibold text-rose-900">
-                          {formatFinancialMoney(row.currentPrice)}
-                        </span>
-                      </span>
-                      <span>
-                        PMA:{" "}
-                        <span className="font-semibold text-[var(--foreground)]">
-                          {formatFinancialMoney(row.pmaPrice)}
-                        </span>
-                      </span>
-                      <Badge
-                        variant="destructive"
-                        className="h-5 px-2 text-[11px]"
-                      >
-                        -
-                        {row.shortfallPercent.toLocaleString("pt-BR", {
-                          maximumFractionDigits: 0,
-                        })}
-                        %
-                      </Badge>
-                    </div>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </CardContent>
-      </Card>
+      <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-3xl bg-[var(--card)]">
+        {visible.map((row) => (
+          <li key={row.mlItemId}>
+            <Link
+              href={`/dashboard/items/${row.mlItemId}`}
+              className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-[var(--muted)]/40 sm:px-5"
+            >
+              <span className="relative size-11 shrink-0 overflow-hidden rounded-xl bg-[var(--muted)] sm:size-12">
+                {row.imageUrl ? (
+                  <Image
+                    src={row.imageUrl}
+                    alt=""
+                    width={48}
+                    height={48}
+                    className="size-full object-contain"
+                    sizes="48px"
+                  />
+                ) : (
+                  <span className="flex size-full items-center justify-center">
+                    <ImageOff
+                      className="size-4 text-[var(--muted-foreground)]/70"
+                      aria-hidden
+                    />
+                  </span>
+                )}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-[var(--foreground)]">
+                  {row.sku}
+                </span>
+                <span className="mt-0.5 block truncate text-xs text-[var(--muted-foreground)]">
+                  {formatFinancialMoney(row.currentPrice)} · PMA{" "}
+                  {formatFinancialMoney(row.pmaPrice)}
+                </span>
+              </span>
+              <span className="shrink-0 text-sm font-semibold tabular-nums text-rose-700">
+                −
+                {row.shortfallPercent.toLocaleString("pt-BR", {
+                  maximumFractionDigits: 0,
+                })}
+                %
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+      {rows.length > 8 ? (
+        <p className="mt-2 text-xs text-[var(--muted-foreground)]">
+          + {rows.length - 8} anúncio(s)
+        </p>
+      ) : null}
     </section>
   );
 }

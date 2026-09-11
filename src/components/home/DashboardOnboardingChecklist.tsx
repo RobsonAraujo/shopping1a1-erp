@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Check } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { ArrowUpRight, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { OnboardingChecklistState } from "@/lib/onboarding/onboarding-checklist";
 
@@ -14,59 +13,57 @@ export function DashboardOnboardingChecklist({
   const doneCount = state.steps.filter((step) => step.done).length;
 
   return (
-    <Card className="border-[var(--primary)]/20 bg-[var(--primary)]/5">
-      <CardContent className="space-y-4 pt-6">
-        <div>
-          <h2 className="text-base font-semibold text-[var(--primary)]">
-            Primeiros passos ({doneCount}/{state.steps.length})
-          </h2>
-          <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-            Complete para ver a margem e o resultado do mês da sua loja.
-          </p>
-        </div>
-        <ul className="space-y-2">
-          {state.steps.map((step) => (
-            <li key={step.id}>
-              <Link
-                href={step.href}
-                aria-disabled={step.done}
+    <section className="rounded-3xl bg-[var(--card)] px-4 py-4 sm:px-5">
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <h2 className="text-sm font-medium text-[var(--muted-foreground)]">
+          Primeiros passos
+        </h2>
+        <span className="text-sm tabular-nums text-[var(--foreground)]">
+          {doneCount}/{state.steps.length}
+        </span>
+      </div>
+      <ol className="grid gap-1 sm:grid-cols-3 sm:gap-0">
+        {state.steps.map((step, index) => (
+          <li
+            key={step.id}
+            className={cn(index > 0 && "sm:border-l sm:border-[var(--border)]")}
+          >
+            <Link
+              href={step.href}
+              aria-disabled={step.done}
+              className={cn(
+                "flex items-center gap-3 rounded-2xl px-2 py-2.5 sm:px-4",
+                step.done
+                  ? "pointer-events-none opacity-50"
+                  : "hover:bg-[var(--muted)]/50",
+              )}
+            >
+              <span
                 className={cn(
-                  "flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 transition-colors",
+                  "flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
                   step.done
-                    ? "pointer-events-none opacity-60"
-                    : "hover:border-[var(--primary)]/40 hover:bg-[var(--accent)]/40",
+                    ? "bg-emerald-500 text-white"
+                    : "bg-[var(--muted)] text-[var(--muted-foreground)]",
                 )}
+                aria-hidden
               >
-                <span
-                  className={cn(
-                    "flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-                    step.done
-                      ? "bg-emerald-500 text-white"
-                      : "border border-[var(--border)] text-[var(--muted-foreground)]",
-                  )}
+                {step.done ? <Check className="size-3.5" /> : index + 1}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-[var(--foreground)]">
+                  {step.label}
+                </span>
+              </span>
+              {!step.done ? (
+                <ArrowUpRight
+                  className="size-3.5 shrink-0 text-[var(--muted-foreground)]"
                   aria-hidden
-                >
-                  {step.done ? <Check className="size-3.5" /> : null}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium text-[var(--foreground)]">
-                    {step.label}
-                  </span>
-                  <span className="block text-xs text-[var(--muted-foreground)]">
-                    {step.description}
-                  </span>
-                </span>
-                {!step.done ? (
-                  <ArrowRight
-                    className="size-4 shrink-0 text-[var(--muted-foreground)]"
-                    aria-hidden
-                  />
-                ) : null}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </CardContent>
-    </Card>
+                />
+              ) : null}
+            </Link>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }

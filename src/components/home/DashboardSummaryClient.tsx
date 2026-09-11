@@ -3,144 +3,129 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ExternalLink, ImageOff, Tag } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { CheckCircle2, ImageOff } from "lucide-react";
+import { DashboardPmaAlertPanel } from "@/components/home/DashboardPmaAlertPanel";
+import { Skeleton } from "@/components/ui/skeleton";
 import { UserFeedback } from "@/components/ui/user-feedback";
 import { formatFinancialMoney } from "@/lib/pricing/financial-margin";
+import type { PmaAlertRow } from "@/lib/home/pma-alert-data";
 import type {
   PromotionSummaryPayload,
   PromotionSummaryRow,
 } from "@/lib/home/promotion-summary-data";
 
-function formatPromotionEndDate(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("pt-BR", {
-    timeZone: "America/Sao_Paulo",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-}
-
 function daysUntilLabel(days: number | null): string {
   if (days === null) return "—";
-  if (days === 0) return "termina hoje";
-  if (days === 1) return "termina amanhã";
-  return `termina em ${days} dias`;
+  if (days === 0) return "hoje";
+  if (days === 1) return "amanhã";
+  return `${days} dias`;
 }
 
-function PromotionRow({
-  row,
-  showPromotionMeta,
-}: {
-  row: PromotionSummaryRow;
-  showPromotionMeta: boolean;
-}) {
+function PromotionRow({ row }: { row: PromotionSummaryRow }) {
+  const urgent = row.daysUntilEnd !== null && row.daysUntilEnd <= 1;
+
   return (
-    <li className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 transition-colors hover:bg-[var(--muted)]/20">
-      <div className="flex items-start gap-3">
-        <Link
-          href={`/dashboard/items/${row.mlItemId}`}
-          className="relative shrink-0 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--muted)]"
-          aria-label={`Abrir detalhes: ${row.title}`}
-        >
+    <li>
+      <Link
+        href={`/dashboard/items/${row.mlItemId}`}
+        className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-[var(--muted)]/40 sm:px-5"
+        title={row.title}
+      >
+        <span className="relative size-11 shrink-0 overflow-hidden rounded-xl bg-[var(--muted)] sm:size-12">
           {row.imageUrl ? (
             <Image
               src={row.imageUrl}
-              alt={row.title}
-              width={80}
-              height={80}
-              className="size-14 object-contain sm:size-16"
-              sizes="64px"
+              alt=""
+              width={48}
+              height={48}
+              className="size-full object-contain"
+              sizes="48px"
             />
           ) : (
-            <div className="flex size-14 items-center justify-center sm:size-16">
+            <span className="flex size-full items-center justify-center">
               <ImageOff
-                className="size-6 text-[var(--muted-foreground)]/70"
+                className="size-4 text-[var(--muted-foreground)]/70"
                 aria-hidden
               />
-            </div>
+            </span>
           )}
-        </Link>
-
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div className="min-w-0">
-              <Link
-                href={`/dashboard/items/${row.mlItemId}`}
-                className="block truncate text-sm font-semibold text-[var(--primary)] underline-offset-2 hover:underline sm:text-base"
-                title={row.title}
-              >
-                {row.sku ?? "Sem SKU"}
-              </Link>
-              <p className="truncate text-xs text-[var(--muted-foreground)] sm:text-sm">
-                {row.title}
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <Link
-                href={row.permalink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs text-[var(--muted-foreground)] underline-offset-2 hover:text-[var(--primary)] hover:underline"
-              >
-                ML
-                <ExternalLink className="size-3.5" aria-hidden />
-              </Link>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--muted-foreground)] sm:text-sm">
-            <span>
-              Preço:{" "}
-              <strong className="font-medium text-[var(--foreground)]">
-                {formatFinancialMoney(row.salePrice)}
-              </strong>
-            </span>
-            {row.regularPrice != null && row.regularPrice > row.salePrice ? (
-              <span className="line-through">
-                {formatFinancialMoney(row.regularPrice)}
-              </span>
-            ) : null}
-            <span className="font-mono text-[11px] sm:text-xs">
-              {row.mlItemId}
-            </span>
-          </div>
-
-          {showPromotionMeta ? (
-            <div className="flex flex-wrap items-center gap-2 pt-0.5">
-              <Badge
-                variant={
-                  row.daysUntilEnd !== null && row.daysUntilEnd <= 1
-                    ? "destructive"
-                    : "warning"
-                }
-                className="text-xs"
-              >
-                {daysUntilLabel(row.daysUntilEnd)}
-              </Badge>
-              <span className="text-xs text-[var(--muted-foreground)]">
-                até {formatPromotionEndDate(row.promotionEndsAt)}
-              </span>
-              {row.promotionName ? (
-                <span className="text-xs text-[var(--muted-foreground)]">
-                  · {row.promotionName}
-                </span>
-              ) : row.promotionType ? (
-                <span className="text-xs text-[var(--muted-foreground)]">
-                  · {row.promotionType}
-                </span>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      </div>
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium text-[var(--foreground)]">
+            {row.sku ?? "Sem SKU"}
+          </span>
+          <span className="mt-0.5 block truncate text-xs text-[var(--muted-foreground)]">
+            {formatFinancialMoney(row.salePrice)}
+            {row.promotionName ? ` · ${row.promotionName}` : ""}
+          </span>
+        </span>
+        <span
+          className={
+            urgent
+              ? "shrink-0 text-sm font-semibold tabular-nums text-rose-700"
+              : "shrink-0 text-sm font-medium tabular-nums text-amber-800"
+          }
+        >
+          {daysUntilLabel(row.daysUntilEnd)}
+        </span>
+      </Link>
     </li>
   );
 }
 
-export function DashboardSummaryClient() {
+function AllClear() {
+  return (
+    <div
+      role="status"
+      className="flex items-start gap-3 rounded-3xl bg-[var(--card)] px-4 py-5 sm:px-5"
+    >
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
+        <CheckCircle2 className="size-5" aria-hidden />
+      </span>
+      <div>
+        <p className="text-sm font-semibold text-[var(--foreground)]">
+          Tudo certo por aqui
+        </p>
+        <p className="mt-1 text-sm leading-relaxed text-[var(--muted-foreground)]">
+          Nenhum anúncio abaixo do PMA e nenhuma promoção vencendo nos próximos
+          dias.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function SectionClear({
+  title,
+  message,
+}: {
+  title: string;
+  message: string;
+}) {
+  return (
+    <section>
+      <h2 className="mb-3 text-sm font-medium text-[var(--muted-foreground)]">
+        {title}
+      </h2>
+      <div
+        role="status"
+        className="flex items-center gap-3 rounded-3xl bg-[var(--card)] px-4 py-4 sm:px-5"
+      >
+        <CheckCircle2
+          className="size-5 shrink-0 text-emerald-600"
+          aria-hidden
+        />
+        <p className="text-sm text-[var(--muted-foreground)]">{message}</p>
+      </div>
+    </section>
+  );
+}
+
+export function DashboardSummaryClient({
+  pmaRows,
+}: {
+  pmaRows: PmaAlertRow[];
+}) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<PromotionSummaryPayload | null>(null);
@@ -158,13 +143,13 @@ export function DashboardSummaryClient() {
       if (!res.ok) {
         setError(
           (json as { error?: string }).error ??
-            "Falha ao carregar resumo de promoções.",
+            "Falha ao carregar promoções.",
         );
         return;
       }
       setData(json as PromotionSummaryPayload);
     } catch {
-      setError("Falha de rede ao carregar resumo de promoções.");
+      setError("Falha de rede ao carregar promoções.");
     } finally {
       setLoading(false);
     }
@@ -175,11 +160,33 @@ export function DashboardSummaryClient() {
   }, [loadData]);
 
   const expiringSoon = data?.expiringSoon ?? [];
-  const withoutPromotion = data?.withoutPromotion ?? [];
-  const totalCount = expiringSoon.length + withoutPromotion.length;
+  const pmaEmpty = pmaRows.length === 0;
+  const promoReadyEmpty = !loading && !error && expiringSoon.length === 0;
+
+  if (loading && !data) {
+    return (
+      <div className="space-y-8">
+        {pmaEmpty ? null : <DashboardPmaAlertPanel rows={pmaRows} />}
+        <Skeleton className="h-24 rounded-3xl" />
+      </div>
+    );
+  }
+
+  if (pmaEmpty && promoReadyEmpty) {
+    return <AllClear />;
+  }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-8">
+      {pmaEmpty ? (
+        <SectionClear
+          title="Abaixo do PMA"
+          message="Nenhum anúncio abaixo do preço mínimo autorizado."
+        />
+      ) : (
+        <DashboardPmaAlertPanel rows={pmaRows} />
+      )}
+
       {error ? <UserFeedback>{error}</UserFeedback> : null}
 
       {data?.warnings?.length ? (
@@ -195,77 +202,32 @@ export function DashboardSummaryClient() {
         </UserFeedback>
       ) : null}
 
-      {loading && !data ? (
-        <Card>
-          <CardContent className="py-12 text-center text-sm text-[var(--muted-foreground)]">
-            Carregando promoções…
-          </CardContent>
-        </Card>
+      {error ? null : expiringSoon.length > 0 ? (
+        <section>
+          <div className="mb-3 flex items-baseline justify-between gap-3">
+            <h2 className="text-sm font-medium text-[var(--muted-foreground)]">
+              Promoções terminando
+            </h2>
+            <span className="text-sm tabular-nums text-amber-800">
+              {expiringSoon.length}
+            </span>
+          </div>
+          <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-3xl bg-[var(--card)]">
+            {expiringSoon.slice(0, 8).map((row) => (
+              <PromotionRow key={row.mlItemId} row={row} />
+            ))}
+          </ul>
+          {expiringSoon.length > 8 ? (
+            <p className="mt-2 text-xs text-[var(--muted-foreground)]">
+              + {expiringSoon.length - 8} promoção(ões)
+            </p>
+          ) : null}
+        </section>
       ) : (
-        <Card className="overflow-hidden border-[var(--border)] border-l-4 border-l-amber-500">
-          <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0 pb-2">
-            <div className="flex items-center gap-2 text-sm font-medium text-amber-900">
-              <Tag className="size-4 shrink-0" aria-hidden />
-              Anúncios próprios ativos
-            </div>
-            <Badge variant="warning" className="px-2.5 py-0.5 text-xs">
-              {totalCount} {totalCount === 1 ? "anúncio" : "anúncios"}
-            </Badge>
-          </CardHeader>
-          <CardContent className="space-y-5 pt-0 pb-4">
-            {totalCount === 0 ? (
-              <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-[var(--border)] bg-[var(--muted)]/30 px-6 py-12 text-center">
-                <p className="max-w-md text-sm leading-relaxed text-[var(--muted-foreground)]">
-                  {(data?.totalActiveItems ?? 0) === 0
-                    ? "Nenhum anúncio próprio ativo no momento."
-                    : "Todos os anúncios ativos já têm promoção e nenhuma vence nos próximos dias."}
-                </p>
-              </div>
-            ) : (
-              <>
-                {expiringSoon.length > 0 ? (
-                  <div className="space-y-2.5">
-                    <h3 className="text-sm font-semibold text-[var(--foreground)]">
-                      Termina em até {data?.expiringSoonDays ?? 3} dias
-                      <span className="ml-1.5 font-normal text-[var(--muted-foreground)]">
-                        ({expiringSoon.length})
-                      </span>
-                    </h3>
-                    <ul className="space-y-2">
-                      {expiringSoon.map((row) => (
-                        <PromotionRow
-                          key={row.mlItemId}
-                          row={row}
-                          showPromotionMeta
-                        />
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-
-                {withoutPromotion.length > 0 ? (
-                  <div className="space-y-2.5">
-                    <h3 className="text-sm font-semibold text-[var(--foreground)]">
-                      Sem promoção
-                      <span className="ml-1.5 font-normal text-[var(--muted-foreground)]">
-                        ({withoutPromotion.length})
-                      </span>
-                    </h3>
-                    <ul className="space-y-2">
-                      {withoutPromotion.map((row) => (
-                        <PromotionRow
-                          key={row.mlItemId}
-                          row={row}
-                          showPromotionMeta={false}
-                        />
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </>
-            )}
-          </CardContent>
-        </Card>
+        <SectionClear
+          title="Promoções terminando"
+          message="Nenhuma promoção vencendo nos próximos dias."
+        />
       )}
     </div>
   );

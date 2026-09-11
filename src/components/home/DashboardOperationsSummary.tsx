@@ -1,85 +1,99 @@
 import Link from "next/link";
-import { Kanban, ArrowRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { ArrowUpRight, Kanban, ShoppingCart } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { OperationsSummaryCounts } from "@/lib/compras/replenishment-cycle";
 
-type DashboardOperationsSummaryProps = {
-  summary: OperationsSummaryCounts;
-};
-
-function countLabel(count: number, singular: string, plural: string): string {
-  return `${count} ${count === 1 ? singular : plural}`;
+function OpTile({
+  href,
+  title,
+  inProgress,
+  final,
+  finalLabel,
+  icon: Icon,
+  featured,
+}: {
+  href: string;
+  title: string;
+  inProgress: number;
+  final: number;
+  finalLabel: string;
+  icon: typeof ShoppingCart;
+  featured?: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className={cn(
+        "group flex min-h-[9.5rem] flex-col justify-between rounded-3xl p-5 sm:min-h-[11rem] sm:p-6",
+        featured
+          ? "bg-[var(--primary)] text-white"
+          : "border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)]",
+      )}
+    >
+      <div
+        className={cn(
+          "flex items-center justify-between text-sm font-medium",
+          featured ? "text-white/75" : "text-[var(--muted-foreground)]",
+        )}
+      >
+        <span className="inline-flex items-center gap-2">
+          <Icon className="size-4" aria-hidden />
+          {title}
+        </span>
+        <ArrowUpRight
+          className={cn(
+            "size-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5",
+            featured ? "text-white/70" : "text-[var(--muted-foreground)]",
+          )}
+          aria-hidden
+        />
+      </div>
+      <div>
+        <p className="text-4xl font-semibold tabular-nums tracking-tight sm:text-5xl">
+          {inProgress}
+        </p>
+        <p
+          className={cn(
+            "mt-1 text-sm",
+            featured ? "text-white/70" : "text-[var(--muted-foreground)]",
+          )}
+        >
+          em andamento
+          {final > 0 ? ` · ${final} ${finalLabel}` : ""}
+        </p>
+      </div>
+    </Link>
+  );
 }
 
 export function DashboardOperationsSummary({
   summary,
-}: DashboardOperationsSummaryProps) {
-  const purchaseParts: string[] = [];
-  const fullParts: string[] = [];
-
-  const p = summary.purchase;
-  if (p.inProgress > 0) {
-    purchaseParts.push(countLabel(p.inProgress, "em andamento", "em andamento"));
-  }
-  if (p.final > 0) {
-    purchaseParts.push(countLabel(p.final, "comprado", "comprados"));
-  }
-
-  const f = summary.full;
-  if (f.inProgress > 0) {
-    fullParts.push(countLabel(f.inProgress, "Full em andamento", "Full em andamento"));
-  }
-  if (f.final > 0) {
-    fullParts.push(countLabel(f.final, "Full coletado", "Full coletados"));
-  }
-
-  const sections: string[] = [];
-  if (purchaseParts.length > 0) {
-    sections.push(`Compra: ${purchaseParts.join(" · ")}`);
-  }
-  if (fullParts.length > 0) {
-    sections.push(`Full: ${fullParts.join(" · ")}`);
-  }
-
-  const summaryText =
-    sections.length > 0
-      ? sections.join(" · ")
-      : "Nenhuma reposição ativa no momento.";
-
+}: {
+  summary: OperationsSummaryCounts;
+}) {
   return (
-    <section id="prioridades" className="scroll-mt-24">
-      <Card className="overflow-hidden rounded-2xl border-sky-200/90 bg-gradient-to-br from-sky-50/80 via-white to-[var(--card)] shadow-none ring-1 ring-sky-100/70 sm:shadow-md">
-        <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-900">
-              <Kanban className="size-5" aria-hidden />
-            </span>
-            <div>
-              <h2 className="text-lg font-semibold text-[var(--primary)]">
-                Reposição de compra
-              </h2>
-              <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-                {summaryText}
-              </p>
-            </div>
-          </div>
-          <div className="flex shrink-0 flex-col gap-2 sm:items-end">
-            <Button asChild className="gap-2">
-              <Link href="/dashboard/compras?tab=kanban">
-                Kanban de compra
-                <ArrowRight className="size-4" aria-hidden />
-              </Link>
-            </Button>
-            <Button asChild variant="outline" className="gap-2">
-              <Link href="/dashboard/operacoes-full">
-                Operações Full
-                <ArrowRight className="size-4" aria-hidden />
-              </Link>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+    <section
+      id="prioridades"
+      className="grid grid-cols-2 gap-3 scroll-mt-24 sm:gap-4"
+      aria-label="Reposição"
+    >
+      <OpTile
+        href="/dashboard/compras?tab=kanban"
+        title="Compras"
+        inProgress={summary.purchase.inProgress}
+        final={summary.purchase.final}
+        finalLabel={summary.purchase.final === 1 ? "comprado" : "comprados"}
+        icon={ShoppingCart}
+        featured
+      />
+      <OpTile
+        href="/dashboard/operacoes-full"
+        title="Full"
+        inProgress={summary.full.inProgress}
+        final={summary.full.final}
+        finalLabel={summary.full.final === 1 ? "coletado" : "coletados"}
+        icon={Kanban}
+      />
     </section>
   );
 }
