@@ -33,7 +33,8 @@ import {
 import { filterByItemListSearch } from "@/lib/item-list-search";
 import { useDndSensors } from "@/hooks/use-dnd-sensors";
 import { useSSEStream } from "@/hooks/use-sse-stream";
-import { useKanbanColumns, type KanbanColumnRow } from "@/hooks/use-kanban-columns";
+import { useKanbanBoard, type KanbanColumnRow } from "@/hooks/use-kanban-columns";
+import { KanbanBackgroundPicker } from "@/components/kanban/KanbanBackgroundPicker";
 import type { OperationCycleKind } from "@/generated/prisma/client";
 import { cn } from "@/lib/utils";
 
@@ -104,6 +105,10 @@ type OperationsKanbanProps = {
   initialData: OperationsBoardsData;
   /** Board único — sem abas internas. */
   kind: OperationCycleKind;
+  /** Colunas + cor de fundo já carregadas no servidor — evita o "piscar" de
+   * buscar isso num `useEffect` depois de montar (ver `useKanbanBoard`). */
+  initialColumns: KanbanColumnRow[];
+  initialBackground: string;
 };
 
 const KIND_CONFIG: Record<
@@ -133,7 +138,12 @@ function filterCards(
   }));
 }
 
-export function OperationsKanban({ initialData, kind }: OperationsKanbanProps) {
+export function OperationsKanban({
+  initialData,
+  kind,
+  initialColumns,
+  initialBackground,
+}: OperationsKanbanProps) {
   const [data, setData] = useState(initialData);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
@@ -144,11 +154,14 @@ export function OperationsKanban({ initialData, kind }: OperationsKanbanProps) {
   const sensors = useDndSensors();
   const {
     columns,
+    background,
     rename: renameColumn,
     addColumn,
     removeColumn,
     reorder: reorderColumns,
-  } = useKanbanColumns(kind);
+    toggleCollapse,
+    setBackground,
+  } = useKanbanBoard(kind, { columns: initialColumns, background: initialBackground });
 
   const activeCards =
     kind === "purchase" ? data.purchase.cards : data.full.cards;
@@ -379,20 +392,23 @@ export function OperationsKanban({ initialData, kind }: OperationsKanbanProps) {
           totalCount={activeCards.length}
           placeholder="Buscar por SKU, título ou MLB…"
         />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="gap-2"
-          disabled={loading}
-          onClick={() => void refresh()}
-        >
-          <RefreshCw
-            className={cn("size-4", loading && "animate-spin")}
-            aria-hidden
-          />
-          Sincronizar
-        </Button>
+        <div className="flex items-center gap-2">
+          <KanbanBackgroundPicker background={background} onChange={setBackground} />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            disabled={loading}
+            onClick={() => void refresh()}
+          >
+            <RefreshCw
+              className={cn("size-4", loading && "animate-spin")}
+              aria-hidden
+            />
+            Sincronizar
+          </Button>
+        </div>
       </div>
 
       {error ? <UserFeedback>{error}</UserFeedback> : null}
@@ -404,13 +420,14 @@ export function OperationsKanban({ initialData, kind }: OperationsKanbanProps) {
       ) : null}
 
       <OperationsKanbanBoard
-        kind={kind}
         cards={filteredActive}
         busyId={busyId}
         columns={columns}
         onRenameColumn={renameColumn}
         onAddColumn={addColumn}
         onDeleteColumn={removeColumn}
+        onToggleCollapse={toggleCollapse}
+        background={background}
       />
     </div>
       <DragOverlay>

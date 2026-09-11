@@ -52,7 +52,8 @@ import { readApiError } from "@/lib/api/api-client-error";
 import { useApiResource } from "@/hooks/use-api-resource";
 import { useDndSensors } from "@/hooks/use-dnd-sensors";
 import { useSSEStream } from "@/hooks/use-sse-stream";
-import { useKanbanColumns, type KanbanColumnRow } from "@/hooks/use-kanban-columns";
+import { useKanbanBoard, type KanbanColumnRow } from "@/hooks/use-kanban-columns";
+import { KanbanBackgroundPicker } from "@/components/kanban/KanbanBackgroundPicker";
 import type { SupplierRow } from "@/components/fornecedores/FornecedoresClient";
 import { cn } from "@/lib/utils";
 
@@ -69,8 +70,14 @@ type ResyncStreamEvent =
 
 export function SupplierPurchaseKanban({
   initialCards,
+  initialColumns,
+  initialBackground,
 }: {
   initialCards: OperationsBoardCard[];
+  /** Colunas + cor de fundo já carregadas no servidor — evita o "piscar" de
+   * buscar isso num `useEffect` depois de montar (ver `useKanbanBoard`). */
+  initialColumns: KanbanColumnRow[];
+  initialBackground: string;
 }) {
   const [cards, setCards] = useState(initialCards);
   const [searchQuery, setSearchQuery] = useState("");
@@ -85,11 +92,14 @@ export function SupplierPurchaseKanban({
   const router = useRouter();
   const {
     columns,
+    background,
     rename: renameColumn,
     addColumn,
     removeColumn,
     reorder: reorderColumns,
-  } = useKanbanColumns("purchase");
+    toggleCollapse,
+    setBackground,
+  } = useKanbanBoard("purchase", { columns: initialColumns, background: initialBackground });
 
   // Lista leve (só o cadastro de fornecedores, sem sweep do catálogo ML) —
   // acesso rápido a um fornecedor mesmo quando ele não tem nenhum produto
@@ -313,6 +323,7 @@ export function SupplierPurchaseKanban({
                 aria-label="Ir para a página de um fornecedor específico"
               />
             ) : null}
+            <KanbanBackgroundPicker background={background} onChange={setBackground} />
             <Button
               type="button"
               variant="outline"
@@ -347,6 +358,8 @@ export function SupplierPurchaseKanban({
             onRenameColumn={renameColumn}
             onAddColumn={addColumn}
             onDeleteColumn={removeColumn}
+            onToggleCollapse={toggleCollapse}
+            background={background}
           />
         )}
       </div>

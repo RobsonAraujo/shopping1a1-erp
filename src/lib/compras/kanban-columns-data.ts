@@ -13,6 +13,7 @@ export type KanbanColumnRow = {
   label: string;
   position: number;
   isLocked: boolean;
+  isCollapsed: boolean;
 };
 
 function defaultColumnsForKind(kind: OperationCycleKind): string[] {
@@ -27,6 +28,7 @@ function toRow(column: {
   label: string;
   position: number;
   isLocked: boolean;
+  isCollapsed: boolean;
 }): KanbanColumnRow {
   return {
     id: column.id,
@@ -34,6 +36,7 @@ function toRow(column: {
     label: column.label,
     position: column.position,
     isLocked: column.isLocked,
+    isCollapsed: column.isCollapsed,
   };
 }
 
@@ -151,6 +154,22 @@ export async function renameKanbanColumn(
   return toRow(updated);
 }
 
+/** Preferência compartilhada da organização (colapsar/expandir), persistida
+ * aqui em vez de localStorage — o servidor já manda o estado certo no
+ * primeiro paint, sem o "piscar" de esperar o client ler o valor depois de
+ * montar. */
+export async function setKanbanColumnCollapsed(
+  organizationId: string,
+  id: string,
+  isCollapsed: boolean,
+): Promise<KanbanColumnRow> {
+  const updated = await prisma.kanbanColumn.update({
+    where: { id, organizationId },
+    data: { isCollapsed },
+  });
+  return toRow(updated);
+}
+
 /** Reescreve a posição de todas as colunas do kind numa transação — chamado
  * ao soltar o drag de reordenar. `orderedIds` precisa conter exatamente as
  * colunas já existentes desse org+kind (validado pelo caller). */
@@ -224,4 +243,45 @@ export async function deleteKanbanColumn(
   });
 
   return { ok: true };
+}
+
+export type KanbanBoardSettingsRow = {
+  background: string;
+};
+
+/** Cor de fundo do board (Kanban de Compras ou Operações Full), compartilhada
+ * pela organização — igual à cor de um board no Trello, qualquer pessoa da
+ * organização vê a mesma. Materializa uma linha default ("" = sem cor) na
+ * primeira leitura, mesmo padrão de `loadOrMaterializeKanbanColumns`. */
+export async function loadOrMaterializeKanbanBoardSettings(
+  organizationId: string,
+  kind: OperationCycleKind,
+): Promise<KanbanBoardSettingsRow> {
+  const existing = await prisma.kanbanBoardSettings.findUnique({
+    where: { organizationId_kind: { organizationId, kind } },
+    select: { background: true },
+  });
+  if (existing) return existing;
+
+  const created = await prisma.kanbanBoardSettings.upsert({
+    where: { organizationId_kind: { organizationId, kind } },
+    create: { organizationId, kind, background: "" },
+    update: {},
+    select: { background: true },
+  });
+  return created;
+}
+
+export async function setKanbanBoardBackground(
+  organizationId: string,
+  kind: OperationCycleKind,
+  background: string,
+): Promise<KanbanBoardSettingsRow> {
+  const updated = await prisma.kanbanBoardSettings.upsert({
+    where: { organizationId_kind: { organizationId, kind } },
+    create: { organizationId, kind, background },
+    update: { background },
+    select: { background: true },
+  });
+  return updated;
 }

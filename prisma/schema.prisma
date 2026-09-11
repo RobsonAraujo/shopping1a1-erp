@@ -241,6 +241,11 @@ model KanbanColumn {
   label          String
   position       Int
   isLocked       Boolean            @default(false) @map("is_locked")
+  /// Preferência de UI compartilhada da organização (igual às demais colunas
+  /// do board) — persistida aqui em vez de localStorage pra não "piscar" no
+  /// primeiro paint (o servidor já manda o estado certo, sem depender do
+  /// client ler o valor depois de montar).
+  isCollapsed    Boolean            @default(false) @map("is_collapsed")
   createdAt      DateTime           @default(now()) @map("created_at")
   updatedAt      DateTime           @updatedAt @map("updated_at")
 
@@ -248,6 +253,22 @@ model KanbanColumn {
 
   @@index([organizationId, kind])
   @@map("kanban_columns")
+}
+
+/// Configuração visual do board (Kanban de Compras ou Operações Full) por
+/// organização — hoje só a cor de fundo, estilo Trello. 1 linha por org+kind,
+/// materializada de forma lazy (mesmo padrão de `KanbanColumn`).
+model KanbanBoardSettings {
+  id             String             @id @default(cuid())
+  organizationId String             @map("organization_id")
+  kind           OperationCycleKind
+  /// CSS `background` (cor sólida ou gradiente) — "" = sem cor (padrão do app).
+  background     String             @default("")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+
+  @@unique([organizationId, kind])
+  @@map("kanban_board_settings")
 }
 
 model CatalogCompetitionSnapshot {

@@ -6,6 +6,10 @@ import { ComprasPageClient } from "@/components/compras/ComprasPageClient";
 import { ComprasPageSkeleton } from "@/components/compras/ComprasPageSkeleton";
 import { UserFeedback } from "@/components/ui/user-feedback";
 import { loadOperationsBoardsFast, type loadOperationsBoards } from "@/lib/compras/replenishment-cycle-data";
+import {
+  loadOrMaterializeKanbanBoardSettings,
+  loadOrMaterializeKanbanColumns,
+} from "@/lib/compras/kanban-columns-data";
 import { readSession } from "@/lib/mercadolibre/session";
 import { getOrganizationContext } from "@/lib/organizations/context";
 import { publicPageLoadMessage } from "@/lib/infra/server-public-error";
@@ -19,10 +23,18 @@ async function ComprasDataSection({
 }) {
   let cards: Awaited<ReturnType<typeof loadOperationsBoards>>["purchase"]["cards"] | null =
     null;
+  let columns: Awaited<ReturnType<typeof loadOrMaterializeKanbanColumns>> = [];
+  let background = "";
   let loadError: string | null = null;
   try {
-    const boards = await loadOperationsBoardsFast(organizationId, token, "purchase");
+    const [boards, columnsResult, settings] = await Promise.all([
+      loadOperationsBoardsFast(organizationId, token, "purchase"),
+      loadOrMaterializeKanbanColumns(organizationId, "purchase"),
+      loadOrMaterializeKanbanBoardSettings(organizationId, "purchase"),
+    ]);
     cards = boards.purchase.cards;
+    columns = columnsResult;
+    background = settings.background;
   } catch (e) {
     loadError = publicPageLoadMessage(
       "dashboard/compras",
@@ -39,7 +51,9 @@ async function ComprasDataSection({
     );
   }
 
-  return <ComprasPageClient cards={cards} />;
+  return (
+    <ComprasPageClient cards={cards} initialColumns={columns} initialBackground={background} />
+  );
 }
 
 export const metadata: Metadata = {

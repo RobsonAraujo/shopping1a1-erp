@@ -3,6 +3,7 @@ import { z } from "zod";
 import { OperationCycleKind } from "@/generated/prisma/client";
 import {
   createKanbanColumn,
+  loadOrMaterializeKanbanBoardSettings,
   loadOrMaterializeKanbanColumns,
 } from "@/lib/compras/kanban-columns-data";
 import { requireOrganization } from "@/lib/api/api-auth";
@@ -30,8 +31,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const columns = await loadOrMaterializeKanbanColumns(organizationId, parsedKind.data);
-    return NextResponse.json({ columns });
+    const [columns, settings] = await Promise.all([
+      loadOrMaterializeKanbanColumns(organizationId, parsedKind.data),
+      loadOrMaterializeKanbanBoardSettings(organizationId, parsedKind.data),
+    ]);
+    return NextResponse.json({ columns, background: settings.background });
   } catch (e) {
     logServerError("api/kanban-columns GET", e);
     return NextResponse.json(apiErrorPayload(e, "kanban_columns_load_failed"), {

@@ -30,6 +30,7 @@ const TENANT_SCOPED_MODELS = new Set([
   "TaxReportSimulationSnapshot",
   "SimplesRevenueMonthSnapshot",
   "KanbanColumn",
+  "KanbanBoardSettings",
 ]);
 
 /**

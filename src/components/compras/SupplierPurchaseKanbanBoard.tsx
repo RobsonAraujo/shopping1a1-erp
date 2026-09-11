@@ -7,7 +7,6 @@ import { CSS } from "@dnd-kit/utilities";
 import type { SupplierBoardCard } from "@/lib/compras/supplier-board";
 import { SupplierPurchaseKanbanCard } from "@/components/compras/SupplierPurchaseKanbanCard";
 import { useDropHighlight } from "@/hooks/use-drop-highlight";
-import { useCollapsedKanbanColumns } from "@/hooks/use-collapsed-kanban-columns";
 import type { DeleteColumnResult, KanbanColumnRow } from "@/hooks/use-kanban-columns";
 import { Button } from "@/components/ui/button";
 import { FormSelect } from "@/components/ui/form-select";
@@ -34,6 +33,10 @@ type SupplierPurchaseKanbanBoardProps = {
   onRenameColumn: (id: string, label: string) => void | Promise<void>;
   onAddColumn: (label: string) => void | Promise<void>;
   onDeleteColumn: (id: string, moveCardsToColumnId?: string) => Promise<DeleteColumnResult>;
+  onToggleCollapse: (id: string, isCollapsed: boolean) => void | Promise<void>;
+  /** CSS `background` (cor sólida ou gradiente) escolhido pelo usuário —
+   * vazio/undefined = sem cor (fundo padrão do app). */
+  background?: string;
 };
 
 function DroppableColumn({
@@ -50,7 +53,7 @@ function DroppableColumn({
     <section
       ref={setNodeRef}
       className={cn(
-        "flex shrink-0 snap-center flex-col rounded-xl border border-[var(--border)] bg-[var(--muted)]/15 sm:snap-align-none",
+        "flex shrink-0 snap-center flex-col rounded-xl border border-[var(--border)] bg-[rgb(255_255_255_/_65%)] shadow-sm sm:snap-align-none",
         collapsed ? "w-10 self-start sm:w-10" : "w-[85vw] sm:w-72",
         className,
       )}
@@ -222,8 +225,9 @@ export function SupplierPurchaseKanbanBoard({
   onRenameColumn,
   onAddColumn,
   onDeleteColumn,
+  onToggleCollapse,
+  background,
 }: SupplierPurchaseKanbanBoardProps) {
-  const { collapsed, toggle } = useCollapsedKanbanColumns("purchase");
   const [pendingDelete, setPendingDelete] = useState<
     { column: KanbanColumnRow; cardCount: number } | null
   >(null);
@@ -269,17 +273,20 @@ export function SupplierPurchaseKanbanBoard({
 
   return (
     <>
-      <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 sm:snap-none">
+      <div
+        className="flex snap-x snap-mandatory gap-3 overflow-x-auto rounded-2xl p-3 sm:snap-none"
+        style={background ? { background } : undefined}
+      >
         <SortableContext items={middleColumnDragIds} strategy={horizontalListSortingStrategy}>
           {sortedColumns.map((column) => {
             const columnCards = cardsByColumnId.get(column.id) ?? [];
-            const isCollapsed = collapsed.has(column.id);
+            const isCollapsed = column.isCollapsed;
             return (
               <DroppableColumn key={column.id} columnId={column.id} collapsed={isCollapsed}>
                 {isCollapsed ? (
                   <button
                     type="button"
-                    onClick={() => toggle(column.id)}
+                    onClick={() => void onToggleCollapse(column.id, false)}
                     aria-label={`Expandir coluna ${column.label}`}
                     className="flex h-64 cursor-pointer flex-col items-center justify-between gap-2 py-3 text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
                   >
@@ -296,7 +303,7 @@ export function SupplierPurchaseKanbanBoard({
                     <ColumnHeader
                       column={column}
                       count={columnCards.length}
-                      onToggleCollapse={() => toggle(column.id)}
+                      onToggleCollapse={() => void onToggleCollapse(column.id, true)}
                       onRename={(label) => void onRenameColumn(column.id, label)}
                       onRequestDelete={() => requestDelete(column)}
                     />

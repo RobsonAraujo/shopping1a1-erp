@@ -6,6 +6,10 @@ import { OperationsKanban } from "@/components/operacoes-full/OperationsKanban";
 import { OperationsKanbanSkeleton } from "@/components/operacoes-full/OperationsKanbanSkeleton";
 import { UserFeedback } from "@/components/ui/user-feedback";
 import { loadOperationsBoardsFast, type loadOperationsBoards } from "@/lib/compras/replenishment-cycle-data";
+import {
+  loadOrMaterializeKanbanBoardSettings,
+  loadOrMaterializeKanbanColumns,
+} from "@/lib/compras/kanban-columns-data";
 import { readSession } from "@/lib/mercadolibre/session";
 import { getOrganizationContext } from "@/lib/organizations/context";
 import { publicPageLoadMessage } from "@/lib/infra/server-public-error";
@@ -19,9 +23,15 @@ async function OperacoesFullDataSection({
 }) {
   let loadError: string | null = null;
   let boards: Awaited<ReturnType<typeof loadOperationsBoards>> | null = null;
+  let columns: Awaited<ReturnType<typeof loadOrMaterializeKanbanColumns>> = [];
+  let background = "";
 
   try {
-    boards = await loadOperationsBoardsFast(organizationId, token, "full");
+    [boards, columns, { background }] = await Promise.all([
+      loadOperationsBoardsFast(organizationId, token, "full"),
+      loadOrMaterializeKanbanColumns(organizationId, "full"),
+      loadOrMaterializeKanbanBoardSettings(organizationId, "full"),
+    ]);
   } catch (e) {
     loadError = publicPageLoadMessage(
       "dashboard/operacoes-full",
@@ -39,7 +49,14 @@ async function OperacoesFullDataSection({
     );
   }
 
-  return <OperationsKanban initialData={boards} kind="full" />;
+  return (
+    <OperationsKanban
+      initialData={boards}
+      kind="full"
+      initialColumns={columns}
+      initialBackground={background}
+    />
+  );
 }
 
 export const metadata: Metadata = {

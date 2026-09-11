@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import type { OperationCycleKind } from "@/generated/prisma/client";
 import { readApiError } from "@/lib/api/api-client-error";
 
@@ -10,42 +10,43 @@ export type KanbanColumnRow = {
   label: string;
   position: number;
   isLocked: boolean;
+  isCollapsed: boolean;
 };
 
 export type DeleteColumnResult =
   | { ok: true }
   | { ok: false; code?: string; error: string };
 
-/** Colunas do Kanban (Compras ou Operações Full) pra uma organização — CRUD
- * completo (renomear, criar, excluir, reordenar), compartilhado pelos dois
- * boards. `columns` já vem materializado (com os defaults de hoje) mesmo
- * pra organizações que nunca customizaram nada. */
-export function useKanbanColumns(kind: OperationCycleKind) {
-  const [columns, setColumns] = useState<KanbanColumnRow[]>([]);
-  const [loading, setLoading] = useState(true);
+export type KanbanBoardInitialData = {
+  columns: KanbanColumnRow[];
+  background: string;
+};
+
+/**
+ * Colunas + cor de fundo do Kanban (Compras ou Operações Full) — tudo
+ * compartilhado pela organização e persistido no banco (igual a um board no
+ * Trello). Semeado com `initial` (já carregado no servidor, ver `page.tsx`
+ * de cada board) em vez de buscar num `useEffect` — sem isso a página nasce
+ * com o estado "vazio"/padrão e só corrige depois de montar, um "piscar"
+ * visível especialmente incômodo pra coluna colapsada (aparece expandida
+ * por um instante e depois encolhe).
+ */
+export function useKanbanBoard(kind: OperationCycleKind, initial: KanbanBoardInitialData) {
+  const [columns, setColumns] = useState<KanbanColumnRow[]>(initial.columns);
+  const [background, setBackgroundState] = useState<string>(initial.background);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const reloadColumns = useCallback(async () => {
     try {
       const res = await fetch(`/api/kanban-columns?kind=${kind}`);
-      if (!res.ok) {
-        setError(await readApiError(res, "kanban_columns_load_failed"));
-        return;
-      }
+      if (!res.ok) return;
       const json = (await res.json()) as { columns: KanbanColumnRow[] };
       setColumns(json.columns);
     } catch {
-      setError("Falha de rede ao carregar colunas.");
-    } finally {
-      setLoading(false);
+      // silencioso — a próxima ação do usuário (ou um reload manual da
+      // página) tenta de novo; não vale a pena um estado de erro pra isso.
     }
   }, [kind]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
 
   const rename = useCallback(
     async (id: string, label: string) => {
@@ -69,6 +70,28 @@ export function useKanbanColumns(kind: OperationCycleKind) {
     [columns],
   );
 
+  const toggleCollapse = useCallback(
+    async (id: string, isCollapsed: boolean) => {
+      const previous = columns;
+      setColumns((prev) => prev.map((c) => (c.id === id ? { ...c, isCollapsed } : c)));
+      try {
+        const res = await fetch(`/api/kanban-columns/${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ isCollapsed }),
+        });
+        if (!res.ok) {
+          setColumns(previous);
+          setError(await readApiError(res, "kanban_column_update_failed"));
+        }
+      } catch {
+        setColumns(previous);
+        setError("Falha de rede ao atualizar coluna.");
+      }
+    },
+    [columns],
+  );
+
   const addColumn = useCallback(
     async (label: string) => {
       setError(null);
@@ -82,12 +105,12 @@ export function useKanbanColumns(kind: OperationCycleKind) {
           setError(await readApiError(res, "kanban_column_create_failed"));
           return;
         }
-        await load();
+        await reloadColumns();
       } catch {
         setError("Falha de rede ao criar coluna.");
       }
     },
-    [kind, load],
+    [kind, reloadColumns],
   );
 
   const removeColumn = useCallback(
@@ -106,13 +129,13 @@ export function useKanbanColumns(kind: OperationCycleKind) {
             error: await readApiError(res, "kanban_column_delete_failed"),
           };
         }
-        await load();
+        await reloadColumns();
         return { ok: true };
       } catch {
         return { ok: false, error: "Falha de rede ao excluir coluna." };
       }
     },
-    [load],
+    [reloadColumns],
   );
 
   const reorder = useCallback(
@@ -145,5 +168,37 @@ export function useKanbanColumns(kind: OperationCycleKind) {
     [columns, kind],
   );
 
-  return { columns, loading, error, reload: load, rename, addColumn, removeColumn, reorder };
+  const setBackground = useCallback(
+    async (value: string) => {
+      const previous = background;
+      setBackgroundState(value);
+      try {
+        const res = await fetch("/api/kanban-board-settings", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kind, background: value }),
+        });
+        if (!res.ok) {
+          setBackgroundState(previous);
+          setError(await readApiError(res, "kanban_board_settings_update_failed"));
+        }
+      } catch {
+        setBackgroundState(previous);
+        setError("Falha de rede ao mudar a cor do fundo.");
+      }
+    },
+    [background, kind],
+  );
+
+  return {
+    columns,
+    background,
+    error,
+    rename,
+    addColumn,
+    removeColumn,
+    reorder,
+    toggleCollapse,
+    setBackground,
+  };
 }
