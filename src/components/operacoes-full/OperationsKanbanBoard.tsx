@@ -1,13 +1,26 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, GripVertical, Plus, Trash2 } from "lucide-react";
-import { SortableContext, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
+import {
+  ChevronLeft,
+  ChevronRight,
+  GripVertical,
+  Plus,
+  Trash2,
+} from "lucide-react";
+import {
+  SortableContext,
+  horizontalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { OperationsKanbanCard } from "@/components/operacoes-full/OperationsKanbanCard";
 import type { OperationsBoardCard } from "@/lib/compras/replenishment-cycle-data";
 import { useDropHighlight } from "@/hooks/use-drop-highlight";
-import type { DeleteColumnResult, KanbanColumnRow } from "@/hooks/use-kanban-columns";
+import type {
+  DeleteColumnResult,
+  KanbanColumnRow,
+} from "@/hooks/use-kanban-columns";
 import { Button } from "@/components/ui/button";
 import { FormSelect } from "@/components/ui/form-select";
 import {
@@ -34,7 +47,10 @@ type OperationsKanbanBoardProps = {
   columns: KanbanColumnRow[];
   onRenameColumn: (id: string, label: string) => void | Promise<void>;
   onAddColumn: (label: string) => void | Promise<void>;
-  onDeleteColumn: (id: string, moveCardsToColumnId?: string) => Promise<DeleteColumnResult>;
+  onDeleteColumn: (
+    id: string,
+    moveCardsToColumnId?: string,
+  ) => Promise<DeleteColumnResult>;
   onToggleCollapse: (id: string, isCollapsed: boolean) => void | Promise<void>;
   /** CSS `background` (cor sólida ou gradiente) escolhido pelo usuário —
    * vazio/undefined = sem cor (fundo padrão do app). */
@@ -88,7 +104,14 @@ function ColumnHeader({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(column.label);
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
     id: `${COLUMN_DRAG_ID_PREFIX}${column.id}`,
     disabled: column.isLocked,
   });
@@ -221,7 +244,13 @@ function AddColumnAffordance({ onAdd }: { onAdd: (label: string) => void }) {
         placeholder="Nome da coluna"
         className="min-w-0 flex-1 bg-transparent text-sm outline-none"
       />
-      <Button type="button" size="icon-sm" variant="ghost" onClick={commit} aria-label="Confirmar nova coluna">
+      <Button
+        type="button"
+        size="icon-sm"
+        variant="ghost"
+        onClick={commit}
+        aria-label="Confirmar nova coluna"
+      >
         <Plus className="size-4" aria-hidden />
       </Button>
     </div>
@@ -241,9 +270,10 @@ export function OperationsKanbanBoard({
   background,
   fullHeight,
 }: OperationsKanbanBoardProps) {
-  const [pendingDelete, setPendingDelete] = useState<
-    { column: KanbanColumnRow; cardCount: number } | null
-  >(null);
+  const [pendingDelete, setPendingDelete] = useState<{
+    column: KanbanColumnRow;
+    cardCount: number;
+  } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState("");
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -261,7 +291,10 @@ export function OperationsKanbanBoard({
   function requestDelete(column: KanbanColumnRow) {
     setDeleteError(null);
     setDeleteTarget("");
-    setPendingDelete({ column, cardCount: cardsByColumnId.get(column.id)?.length ?? 0 });
+    setPendingDelete({
+      column,
+      cardCount: cardsByColumnId.get(column.id)?.length ?? 0,
+    });
   }
 
   async function confirmDelete() {
@@ -295,7 +328,9 @@ export function OperationsKanbanBoard({
     >
       {title ? (
         <div>
-          <h2 className="text-xl font-semibold text-[var(--primary)]">{title}</h2>
+          <h2 className="text-xl font-semibold text-[var(--primary)]">
+            {title}
+          </h2>
           {description ? (
             <p className="mt-1 max-w-3xl text-sm text-[var(--muted-foreground)]">
               {description}
@@ -307,10 +342,15 @@ export function OperationsKanbanBoard({
       <div
         className={cn(
           "flex snap-x snap-mandatory gap-3 overflow-x-auto sm:snap-none",
-          fullHeight ? "min-h-0 flex-1 px-3 sm:px-4 kanban-scroll-x" : "pb-2",
+          fullHeight
+            ? "min-h-0  pb-12 flex-1 px-3 sm:px-4 kanban-scroll-x"
+            : "pb-2",
         )}
       >
-        <SortableContext items={middleColumnDragIds} strategy={horizontalListSortingStrategy}>
+        <SortableContext
+          items={middleColumnDragIds}
+          strategy={horizontalListSortingStrategy}
+        >
           {sortedColumns.map((column) => {
             const columnCards = cardsByColumnId.get(column.id) ?? [];
             const isCollapsed = column.isCollapsed;
@@ -341,8 +381,12 @@ export function OperationsKanbanBoard({
                     <ColumnHeader
                       column={column}
                       count={columnCards.length}
-                      onToggleCollapse={() => void onToggleCollapse(column.id, true)}
-                      onRename={(label) => void onRenameColumn(column.id, label)}
+                      onToggleCollapse={() =>
+                        void onToggleCollapse(column.id, true)
+                      }
+                      onRename={(label) =>
+                        void onRenameColumn(column.id, label)
+                      }
                       onRequestDelete={() => requestDelete(column)}
                     />
                     <div
@@ -380,7 +424,9 @@ export function OperationsKanbanBoard({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir coluna &quot;{pendingDelete?.column.label}&quot;?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Excluir coluna &quot;{pendingDelete?.column.label}&quot;?
+            </AlertDialogTitle>
             <AlertDialogDescription>
               {pendingDelete && pendingDelete.cardCount > 0
                 ? `Essa coluna tem ${pendingDelete.cardCount} card${pendingDelete.cardCount === 1 ? "" : "s"}. Escolha para qual coluna movê-los antes de excluir.`
@@ -401,7 +447,9 @@ export function OperationsKanbanBoard({
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
-              disabled={Boolean(pendingDelete && pendingDelete.cardCount > 0 && !deleteTarget)}
+              disabled={Boolean(
+                pendingDelete && pendingDelete.cardCount > 0 && !deleteTarget,
+              )}
               onClick={(e) => {
                 e.preventDefault();
                 void confirmDelete();

@@ -42,10 +42,10 @@ export function KanbanFullscreenFrame({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex h-screen animate-in fade-in-0 flex-col pb-12 duration-200"
+      className="fixed inset-0 z-50 flex h-screen animate-in fade-in-0 flex-col pb-12 duration-200 "
       style={{ background: background || "var(--background)" }}
     >
-      <div className="flex shrink-0 items-center gap-3 border-b border-white/10 bg-black/15 px-4 py-3 text-white backdrop-blur-md sm:px-6">
+      <div className="flex shrink-0  items-center gap-3 border-b border-white/10 bg-black/15 px-4 py-3 text-white backdrop-blur-md sm:px-6">
         <Button
           type="button"
           variant="ghost"
@@ -83,7 +83,8 @@ export function KanbanFullscreenFrame({
           Sair da tela cheia
         </Button>
       </div>
-      <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+
+      <div className="min-h-full flex-1  "> {children}</div>
     </div>
   );
 }

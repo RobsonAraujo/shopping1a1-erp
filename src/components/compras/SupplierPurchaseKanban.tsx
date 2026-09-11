@@ -52,7 +52,10 @@ import { readApiError } from "@/lib/api/api-client-error";
 import { useApiResource } from "@/hooks/use-api-resource";
 import { useDndSensors } from "@/hooks/use-dnd-sensors";
 import { useSSEStream } from "@/hooks/use-sse-stream";
-import { useKanbanBoard, type KanbanColumnRow } from "@/hooks/use-kanban-columns";
+import {
+  useKanbanBoard,
+  type KanbanColumnRow,
+} from "@/hooks/use-kanban-columns";
 import { KanbanBackgroundPicker } from "@/components/kanban/KanbanBackgroundPicker";
 import { KanbanFullscreenFrame } from "@/components/kanban/KanbanFullscreenFrame";
 import type { SupplierRow } from "@/components/fornecedores/FornecedoresClient";
@@ -88,8 +91,12 @@ export function SupplierPurchaseKanban({
   const [loading, setLoading] = useState(false);
   const [busySupplier, setBusySupplier] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeDragSupplier, setActiveDragSupplier] = useState<string | null>(null);
-  const [activeDragColumnId, setActiveDragColumnId] = useState<string | null>(null);
+  const [activeDragSupplier, setActiveDragSupplier] = useState<string | null>(
+    null,
+  );
+  const [activeDragColumnId, setActiveDragColumnId] = useState<string | null>(
+    null,
+  );
   const [pendingBackwardMove, setPendingBackwardMove] =
     useState<PendingBackwardMove | null>(null);
   const sensors = useDndSensors();
@@ -149,7 +156,9 @@ export function SupplierPurchaseKanban({
       const res = await fetch("/api/replenishment-cycles?kind=purchase", {
         method: "POST",
       });
-      const json = (await res.json()) as OperationsBoardsData & { error?: string };
+      const json = (await res.json()) as OperationsBoardsData & {
+        error?: string;
+      };
       if (!res.ok) {
         setError(json.error ?? "Falha ao sincronizar.");
         return;
@@ -171,7 +180,9 @@ export function SupplierPurchaseKanban({
     useCallback((event) => {
       if (event.type === "card-patch") {
         const { mlItemId, ...patch } = event;
-        setCards((prev) => patchOperationsBoardCardsSales(prev, mlItemId, patch));
+        setCards((prev) =>
+          patchOperationsBoardCardsSales(prev, mlItemId, patch),
+        );
       } else if (event.type === "done") {
         setCards((prev) => mergeOperationsBoardCards(prev, event.cards));
       } else if (event.type === "error") {
@@ -193,7 +204,10 @@ export function SupplierPurchaseKanban({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function planMove(supplier: string, targetColumn: KanbanColumnRow): PendingBackwardMove {
+  function planMove(
+    supplier: string,
+    targetColumn: KanbanColumnRow,
+  ): PendingBackwardMove {
     const cyclesInGroup = cards
       .filter((c) => c.kind === "purchase" && c.supplier === supplier)
       .map((c) => ({ cycleId: c.cycleId, columnPosition: c.columnPosition }));
@@ -218,7 +232,9 @@ export function SupplierPurchaseKanban({
               columnId: action.targetColumn.id,
               columnLabel: action.targetColumn.label,
               columnPosition: action.targetColumn.position,
-              status: action.isFinalColumn ? finalStatusForKind(c.kind) : "attention",
+              status: action.isFinalColumn
+                ? finalStatusForKind(c.kind)
+                : "attention",
             }
           : c,
       ),
@@ -318,93 +334,111 @@ export function SupplierPurchaseKanban({
         background={background}
         onExit={() => setFullscreen(false)}
       >
-      <div className={cn("flex flex-col gap-5", isFullscreen && "h-full")}>
-        <div className={cn("flex flex-col gap-5", isFullscreen && "px-3 pt-3 sm:px-4")}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <ItemListSearch
-            value={searchQuery}
-            onChange={setSearchQuery}
-            filteredCount={filteredSupplierCards.length}
-            totalCount={supplierCards.length}
-            placeholder="Buscar fornecedor…"
-            entitySingular="fornecedor"
-            entityPlural="fornecedores"
-          />
-          <div className="flex items-center gap-2">
-            {supplierOptions.length > 0 ? (
-              <FormSelect
-                value=""
-                onValueChange={(name) => router.push(`/dashboard/compras/${supplierPathSegment(name)}`)}
-                options={supplierOptions}
-                placeholder="Ir para fornecedor…"
-                triggerClassName="h-9 w-48"
-                aria-label="Ir para a página de um fornecedor específico"
-              />
-            ) : null}
-            <KanbanBackgroundPicker background={background} onChange={setBackground} />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-2"
-              disabled={loading}
-              onClick={() => void refresh()}
-            >
-              <RefreshCw className={cn("size-4", loading && "animate-spin")} aria-hidden />
-              Sincronizar
-            </Button>
-            {!isFullscreen ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-2"
-                onClick={() => void setFullscreen(true)}
-              >
-                <Maximize2 className="size-4" aria-hidden />
-                Tela cheia
-              </Button>
-            ) : null}
-          </div>
-        </div>
-
-        {error ? <UserFeedback>{error}</UserFeedback> : null}
-
-        {supplierCards.length > 0 && filteredSupplierCards.length === 0 ? (
-          <p className="text-sm text-[var(--muted-foreground)]">
-            {itemListSearchEmptyMessage(searchQuery, "fornecedor")}
-          </p>
-        ) : null}
-        </div>
-
-        {supplierCards.length === 0 ? (
-          <p
+        <div className={cn("flex flex-col gap-5 ", isFullscreen && "h-full")}>
+          <div
             className={cn(
-              "text-sm text-[var(--muted-foreground)]",
-              isFullscreen && "px-3 sm:px-4",
+              "flex flex-col gap-5",
+              isFullscreen && "px-3 pt-3 sm:px-4",
             )}
           >
-            Nenhum fornecedor precisa de compra no momento.
-          </p>
-        ) : (
-          <SupplierPurchaseKanbanBoard
-            cards={filteredSupplierCards}
-            busySupplier={busySupplier}
-            columns={columns}
-            onRenameColumn={renameColumn}
-            onAddColumn={addColumn}
-            onDeleteColumn={removeColumn}
-            onToggleCollapse={toggleCollapse}
-            background={background}
-            fullHeight={isFullscreen}
-          />
-        )}
-      </div>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <ItemListSearch
+                value={searchQuery}
+                onChange={setSearchQuery}
+                filteredCount={filteredSupplierCards.length}
+                totalCount={supplierCards.length}
+                placeholder="Buscar fornecedor…"
+                entitySingular="fornecedor"
+                entityPlural="fornecedores"
+              />
+              <div className="flex items-center gap-2">
+                {supplierOptions.length > 0 ? (
+                  <FormSelect
+                    value=""
+                    onValueChange={(name) =>
+                      router.push(
+                        `/dashboard/compras/${supplierPathSegment(name)}`,
+                      )
+                    }
+                    options={supplierOptions}
+                    placeholder="Ir para fornecedor…"
+                    triggerClassName="h-9 w-48"
+                    aria-label="Ir para a página de um fornecedor específico"
+                  />
+                ) : null}
+                <KanbanBackgroundPicker
+                  background={background}
+                  onChange={setBackground}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  disabled={loading}
+                  onClick={() => void refresh()}
+                >
+                  <RefreshCw
+                    className={cn("size-4", loading && "animate-spin")}
+                    aria-hidden
+                  />
+                  Sincronizar
+                </Button>
+                {!isFullscreen ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => void setFullscreen(true)}
+                  >
+                    <Maximize2 className="size-4" aria-hidden />
+                    Tela cheia
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+
+            {error ? <UserFeedback>{error}</UserFeedback> : null}
+
+            {supplierCards.length > 0 && filteredSupplierCards.length === 0 ? (
+              <p className="text-sm text-[var(--muted-foreground)]">
+                {itemListSearchEmptyMessage(searchQuery, "fornecedor")}
+              </p>
+            ) : null}
+          </div>
+
+          {supplierCards.length === 0 ? (
+            <p
+              className={cn(
+                "text-sm text-[var(--muted-foreground)]",
+                isFullscreen && "px-3 sm:px-4",
+              )}
+            >
+              Nenhum fornecedor precisa de compra no momento.
+            </p>
+          ) : (
+            <SupplierPurchaseKanbanBoard
+              cards={filteredSupplierCards}
+              busySupplier={busySupplier}
+              columns={columns}
+              onRenameColumn={renameColumn}
+              onAddColumn={addColumn}
+              onDeleteColumn={removeColumn}
+              onToggleCollapse={toggleCollapse}
+              background={background}
+              fullHeight={isFullscreen}
+            />
+          )}
+        </div>
       </KanbanFullscreenFrame>
 
       <DragOverlay>
         {activeDragCard ? (
-          <SupplierCardBody card={activeDragCard} className="w-[85vw] sm:w-72" />
+          <SupplierCardBody
+            card={activeDragCard}
+            className="w-[85vw] sm:w-72"
+          />
         ) : activeDragColumn ? (
           <div className="w-56 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-sm font-semibold shadow-md">
             {activeDragColumn.label}
@@ -418,7 +452,9 @@ export function SupplierPurchaseKanban({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Voltar fornecedor para uma etapa anterior?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Voltar fornecedor para uma etapa anterior?
+            </AlertDialogTitle>
             <AlertDialogDescription>
               {pendingBackwardMove
                 ? `Isso volta ${pendingBackwardMove.cycleIdsToTransition.length} produto(s) de "${pendingBackwardMove.supplier}" para "${pendingBackwardMove.targetColumn.label}".`
