@@ -10,7 +10,7 @@ const BETA_FEATURES = [
   "Apuração de Lucro Real por SKU",
   "Simples Nacional — RBT12 e DAS",
   "Estoque e reposição",
-  "Compras e Operações Full",
+  "Kanban de compras e Full",
 ];
 
 const PLACEHOLDER_FEATURES = ["Recurso a definir", "Recurso a definir", "Recurso a definir"];

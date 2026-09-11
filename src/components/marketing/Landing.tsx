@@ -5,6 +5,7 @@ import { UserFeedback } from "@/components/ui/user-feedback";
 import { DemoCatalog } from "@/components/marketing/DemoCatalog";
 import { DemoDre } from "@/components/marketing/DemoDre";
 import { DemoHeroSnapshot } from "@/components/marketing/DemoHeroSnapshot";
+import { DemoKanban } from "@/components/marketing/DemoKanban";
 import { DemoLucratividade } from "@/components/marketing/DemoLucratividade";
 import { DemoTributario } from "@/components/marketing/DemoTributario";
 import { MarketingFaq } from "@/components/marketing/Faq";
@@ -63,7 +64,7 @@ export function MarketingLanding({
                   Lucro real e Simples
                 </Badge>
                 <Badge className="border-white/20 bg-white/10 text-white">
-                  Catálogo · DRE · Full
+                  Catálogo · DRE · Kanban
                 </Badge>
               </div>
               <h1 className="text-[clamp(2.5rem,6vw,4.75rem)] font-bold leading-[1.06] tracking-tight">
@@ -82,8 +83,8 @@ export function MarketingLanding({
               <p className="mt-4 max-w-xl text-base leading-relaxed text-white/80 sm:text-lg">
                 Lucratividade por anúncio depois do ADS, apuração de lucro real
                 por SKU e DRE que fecha sozinho com a fatura do Mercado Livre —
-                Full e compras no mesmo painel. Um login: a conta que você já
-                usa na ML.
+                kanban de compras e Full no mesmo painel. Um login: a conta que
+                você já usa na ML.
               </p>
               {error ? (
                 <UserFeedback
@@ -239,6 +240,35 @@ export function MarketingLanding({
           </div>
         </section>
 
+        <section
+          id="kanban"
+          className="scroll-mt-20 bg-[var(--background)] px-4 py-16 sm:px-6 sm:py-20"
+        >
+          <div className="mx-auto max-w-6xl space-y-8">
+            <div className="max-w-2xl">
+              <p className="text-sm font-semibold uppercase tracking-wide text-sky-700">
+                Operação
+              </p>
+              <h2 className="mt-2 text-2xl font-bold tracking-tight text-[var(--primary)] sm:text-3xl">
+                Kanban de compras e Full
+              </h2>
+              <p className="mt-3 text-[15px] leading-relaxed text-[var(--muted-foreground)]">
+                O card nasce quando o estoque vai faltar. Arraste o fornecedor
+                da entrada até a compra — ou o anúncio até a coleta Full.
+                Colunas, cores e tela cheia iguais para toda a equipe.{" "}
+                <Link
+                  href="/kanban-compras-mercado-livre"
+                  className="text-[var(--primary)] underline underline-offset-2"
+                >
+                  Saiba mais sobre o kanban
+                </Link>
+                .
+              </p>
+            </div>
+            <DemoKanban />
+          </div>
+        </section>
+
         <MarketingMoreInPanel />
 
         <MarketingHowItStarts
@@ -255,7 +285,7 @@ export function MarketingLanding({
               Teste com a sua loja de verdade.
             </h2>
             <p className="mt-3 text-white/75">
-              Lucratividade, tributário, catálogo e DRE no mesmo lugar.
+              Lucratividade, tributário, kanban e DRE no mesmo lugar.
             </p>
             <div className="mt-8 flex flex-col items-center gap-3">
               <OAuthCta

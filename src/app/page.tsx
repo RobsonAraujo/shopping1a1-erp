@@ -8,7 +8,7 @@ import { faqStructuredData } from "@/components/marketing/Faq";
 
 const title = "Painel para vendedores Mercado Livre — margem, imposto e DRE";
 const description =
-  "Lucratividade (margem e pós ADS), apuração de lucro real, catálogo, DRE com sync da fatura, Full e compras. Teste grátis com sua conta do Mercado Livre.";
+  "Lucratividade (margem e pós ADS), apuração de lucro real, catálogo, DRE com sync da fatura e kanban de compras e Full. Teste grátis com sua conta do Mercado Livre.";
 
 export const metadata: Metadata = {
   title,

@@ -31,7 +31,7 @@ export function MarketingHeader({
         </a>
         <nav
           aria-label="Funcionalidades"
-          className="hidden items-center gap-5 md:flex"
+          className="hidden items-center gap-4 lg:flex"
         >
           {MARKETING_NAV_LINKS.map((link) => (
             <Link
@@ -98,8 +98,8 @@ export function MarketingFooter() {
               </span>
             </div>
             <p className="mt-4 max-w-xs text-sm text-[var(--muted-foreground)]">
-              Painel para vendedores Mercado Livre — lucratividade, tributário
-              e DRE que fecham com a fatura da loja.
+              Painel para vendedores Mercado Livre — lucratividade, tributário,
+              DRE e kanban de compras e Full.
             </p>
           </div>
 

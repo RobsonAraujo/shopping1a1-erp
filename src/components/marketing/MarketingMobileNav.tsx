@@ -17,7 +17,7 @@ export function MarketingMobileNav() {
           type="button"
           variant="ghost"
           size="icon-sm"
-          className="h-9 w-9 text-white hover:bg-white/10 hover:text-white md:hidden"
+          className="h-9 w-9 text-white hover:bg-white/10 hover:text-white lg:hidden"
           aria-haspopup="menu"
           aria-expanded={open}
           aria-label="Abrir menu de funcionalidades"

@@ -14,7 +14,7 @@ const STEPS = [
   {
     n: "03",
     title: "Acompanhe o mês",
-    body: "Catálogo, fatura, Full e vendas entram sozinhos. Você lê margem, apuração por SKU e DRE no mesmo painel.",
+    body: "Catálogo, fatura, Full e vendas entram sozinhos. Você lê margem, apuração por SKU, DRE e o kanban de compras no mesmo painel.",
   },
 ] as const;
 

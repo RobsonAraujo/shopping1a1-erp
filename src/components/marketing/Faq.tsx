@@ -15,7 +15,11 @@ const FAQ = [
   },
   {
     q: "Serve só para lucro real?",
-    a: "Não. Você escolhe o regime da empresa — Lucro Real ou Simples Nacional — em Configurações. No Simples, o painel usa a alíquota efetiva do DAS que você informa para calcular margem e precificação, sem pedir ICMS, ST ou monofásico (que não se aplicam a esse regime). A apuração fiscal detalhada por venda e SKU (débitos, créditos, ICMS-DIFAL) continua específica do Lucro Real. Lucratividade, catálogo, DRE, Full e compras servem a qualquer regime.",
+    a: "Não. Você escolhe o regime da empresa — Lucro Real ou Simples Nacional — em Configurações. No Simples, o painel usa a alíquota efetiva do DAS que você informa para calcular margem e precificação, sem pedir ICMS, ST ou monofásico (que não se aplicam a esse regime). A apuração fiscal detalhada por venda e SKU (débitos, créditos, ICMS-DIFAL) continua específica do Lucro Real. Lucratividade, catálogo, DRE, kanban de compras e Full servem a qualquer regime.",
+  },
+  {
+    q: "O kanban de compras é só no meu navegador?",
+    a: "Não. Colunas, fundo, tela cheia e aparência das etapas ficam na organização — a equipe vê o mesmo quadro, no estilo Trello. Os cards nascem do estoque e do giro da loja no Mercado Livre, não de um quadro montado à mão.",
   },
   {
     q: "Meus dados ficam misturados com os de outro vendedor?",

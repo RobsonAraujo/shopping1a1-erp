@@ -1,9 +1,11 @@
 import { Lightbulb, ShoppingCart, Truck } from "lucide-react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 const FEATURES = [
   {
     icon: Truck,
+    href: "/kanban-compras-mercado-livre",
     accent: {
       bar: "bg-sky-500",
       wrap: "border-sky-200/80 bg-gradient-to-br from-sky-50 via-white to-white",
@@ -21,6 +23,7 @@ const FEATURES = [
   },
   {
     icon: ShoppingCart,
+    href: "/kanban-compras-mercado-livre",
     accent: {
       bar: "bg-amber-400",
       wrap: "border-amber-200/80 bg-gradient-to-br from-amber-50 via-white to-white",
@@ -114,6 +117,14 @@ export function MarketingMoreInPanel() {
                       </li>
                     ))}
                   </ul>
+                  {"href" in item ? (
+                    <Link
+                      href={item.href}
+                      className="mt-4 text-sm font-semibold text-[var(--primary)] underline underline-offset-2"
+                    >
+                      Ver o kanban
+                    </Link>
+                  ) : null}
                   <div className="mt-5 flex flex-wrap gap-1.5">
                     {item.chips.map((chip) => (
                       <span
