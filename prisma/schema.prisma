@@ -264,6 +264,10 @@ model KanbanBoardSettings {
   kind           OperationCycleKind
   /// CSS `background` (cor sólida ou gradiente) — "" = sem cor (padrão do app).
   background     String             @default("")
+  /// Preferência de UI compartilhada da organização — mesmo raciocínio do
+  /// `background` acima: persistida aqui em vez de localStorage pra não
+  /// "piscar" no primeiro paint (o servidor já manda o estado certo).
+  isFullscreen   Boolean            @default(false) @map("is_fullscreen")
   createdAt      DateTime           @default(now()) @map("created_at")
   updatedAt      DateTime           @updatedAt @map("updated_at")
 

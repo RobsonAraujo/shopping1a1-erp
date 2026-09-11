@@ -39,15 +39,20 @@ type OperationsKanbanBoardProps = {
   /** CSS `background` (cor sólida ou gradiente) escolhido pelo usuário —
    * vazio/undefined = sem cor (fundo padrão do app). */
   background?: string;
+  /** Modo "tela cheia" (estilo Trello): colunas ocupam a altura total
+   * disponível e rolam verticalmente por dentro, em vez de esticar a página. */
+  fullHeight?: boolean;
 };
 
 function DroppableColumn({
   columnId,
   collapsed,
+  fullHeight,
   children,
 }: {
   columnId: string;
   collapsed: boolean;
+  fullHeight?: boolean;
   children: React.ReactNode;
 }) {
   const { setNodeRef, className } = useDropHighlight(
@@ -59,6 +64,7 @@ function DroppableColumn({
       className={cn(
         "flex shrink-0 snap-center flex-col rounded-xl border border-[var(--border)] bg-[rgb(255_255_255_/_65%)] shadow-sm sm:snap-align-none",
         collapsed ? "w-10 self-start sm:w-10" : "w-[85vw] sm:w-72",
+        fullHeight && !collapsed && "h-full",
         className,
       )}
     >
@@ -233,6 +239,7 @@ export function OperationsKanbanBoard({
   onDeleteColumn,
   onToggleCollapse,
   background,
+  fullHeight,
 }: OperationsKanbanBoardProps) {
   const [pendingDelete, setPendingDelete] = useState<
     { column: KanbanColumnRow; cardCount: number } | null
@@ -279,8 +286,12 @@ export function OperationsKanbanBoard({
 
   return (
     <section
-      className="space-y-3 rounded-2xl p-3"
-      style={background ? { background } : undefined}
+      className={cn(
+        fullHeight
+          ? "flex min-h-0 flex-1 flex-col gap-3 overflow-hidden"
+          : "space-y-3 rounded-2xl p-3",
+      )}
+      style={!fullHeight && background ? { background } : undefined}
     >
       {title ? (
         <div>
@@ -293,13 +304,23 @@ export function OperationsKanbanBoard({
         </div>
       ) : null}
 
-      <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 sm:snap-none">
+      <div
+        className={cn(
+          "flex snap-x snap-mandatory gap-3 overflow-x-auto sm:snap-none",
+          fullHeight ? "min-h-0 flex-1 px-3 sm:px-4 kanban-scroll-x" : "pb-2",
+        )}
+      >
         <SortableContext items={middleColumnDragIds} strategy={horizontalListSortingStrategy}>
           {sortedColumns.map((column) => {
             const columnCards = cardsByColumnId.get(column.id) ?? [];
             const isCollapsed = column.isCollapsed;
             return (
-              <DroppableColumn key={column.id} columnId={column.id} collapsed={isCollapsed}>
+              <DroppableColumn
+                key={column.id}
+                columnId={column.id}
+                collapsed={isCollapsed}
+                fullHeight={fullHeight}
+              >
                 {isCollapsed ? (
                   <button
                     type="button"
@@ -324,7 +345,12 @@ export function OperationsKanbanBoard({
                       onRename={(label) => void onRenameColumn(column.id, label)}
                       onRequestDelete={() => requestDelete(column)}
                     />
-                    <div className="flex flex-1 flex-col gap-2 p-2">
+                    <div
+                      className={cn(
+                        "flex flex-1 flex-col gap-2 p-2",
+                        fullHeight && "min-h-0 overflow-y-auto",
+                      )}
+                    >
                       {columnCards.length === 0 ? (
                         <p className="px-1 py-6 text-center text-xs text-[var(--muted-foreground)]">
                           Vazio

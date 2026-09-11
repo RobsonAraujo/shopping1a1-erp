@@ -25,6 +25,7 @@ async function ComprasDataSection({
     null;
   let columns: Awaited<ReturnType<typeof loadOrMaterializeKanbanColumns>> = [];
   let background = "";
+  let isFullscreen = false;
   let loadError: string | null = null;
   try {
     const [boards, columnsResult, settings] = await Promise.all([
@@ -35,6 +36,7 @@ async function ComprasDataSection({
     cards = boards.purchase.cards;
     columns = columnsResult;
     background = settings.background;
+    isFullscreen = settings.isFullscreen;
   } catch (e) {
     loadError = publicPageLoadMessage(
       "dashboard/compras",
@@ -52,7 +54,12 @@ async function ComprasDataSection({
   }
 
   return (
-    <ComprasPageClient cards={cards} initialColumns={columns} initialBackground={background} />
+    <ComprasPageClient
+      cards={cards}
+      initialColumns={columns}
+      initialBackground={background}
+      initialFullscreen={isFullscreen}
+    />
   );
 }
 

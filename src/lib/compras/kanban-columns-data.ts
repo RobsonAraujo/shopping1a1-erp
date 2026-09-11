@@ -247,27 +247,31 @@ export async function deleteKanbanColumn(
 
 export type KanbanBoardSettingsRow = {
   background: string;
+  isFullscreen: boolean;
 };
 
-/** Cor de fundo do board (Kanban de Compras ou Operações Full), compartilhada
- * pela organização — igual à cor de um board no Trello, qualquer pessoa da
- * organização vê a mesma. Materializa uma linha default ("" = sem cor) na
- * primeira leitura, mesmo padrão de `loadOrMaterializeKanbanColumns`. */
+const BOARD_SETTINGS_SELECT = { background: true, isFullscreen: true } as const;
+
+/** Cor de fundo + preferência de tela cheia do board (Kanban de Compras ou
+ * Operações Full), compartilhadas pela organização — igual à cor de um board
+ * no Trello, qualquer pessoa da organização vê o mesmo. Materializa uma
+ * linha default ("" = sem cor, tela cheia desligada) na primeira leitura,
+ * mesmo padrão de `loadOrMaterializeKanbanColumns`. */
 export async function loadOrMaterializeKanbanBoardSettings(
   organizationId: string,
   kind: OperationCycleKind,
 ): Promise<KanbanBoardSettingsRow> {
   const existing = await prisma.kanbanBoardSettings.findUnique({
     where: { organizationId_kind: { organizationId, kind } },
-    select: { background: true },
+    select: BOARD_SETTINGS_SELECT,
   });
   if (existing) return existing;
 
   const created = await prisma.kanbanBoardSettings.upsert({
     where: { organizationId_kind: { organizationId, kind } },
-    create: { organizationId, kind, background: "" },
+    create: { organizationId, kind },
     update: {},
-    select: { background: true },
+    select: BOARD_SETTINGS_SELECT,
   });
   return created;
 }
@@ -281,7 +285,21 @@ export async function setKanbanBoardBackground(
     where: { organizationId_kind: { organizationId, kind } },
     create: { organizationId, kind, background },
     update: { background },
-    select: { background: true },
+    select: BOARD_SETTINGS_SELECT,
+  });
+  return updated;
+}
+
+export async function setKanbanBoardFullscreen(
+  organizationId: string,
+  kind: OperationCycleKind,
+  isFullscreen: boolean,
+): Promise<KanbanBoardSettingsRow> {
+  const updated = await prisma.kanbanBoardSettings.upsert({
+    where: { organizationId_kind: { organizationId, kind } },
+    create: { organizationId, kind, isFullscreen },
+    update: { isFullscreen },
+    select: BOARD_SETTINGS_SELECT,
   });
   return updated;
 }

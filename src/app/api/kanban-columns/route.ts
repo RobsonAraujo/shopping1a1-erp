@@ -35,7 +35,11 @@ export async function GET(request: NextRequest) {
       loadOrMaterializeKanbanColumns(organizationId, parsedKind.data),
       loadOrMaterializeKanbanBoardSettings(organizationId, parsedKind.data),
     ]);
-    return NextResponse.json({ columns, background: settings.background });
+    return NextResponse.json({
+      columns,
+      background: settings.background,
+      isFullscreen: settings.isFullscreen,
+    });
   } catch (e) {
     logServerError("api/kanban-columns GET", e);
     return NextResponse.json(apiErrorPayload(e, "kanban_columns_load_failed"), {

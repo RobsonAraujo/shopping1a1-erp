@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { Maximize2, RefreshCw } from "lucide-react";
 import { DndContext, DragOverlay, type DragEndEvent } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import {
@@ -35,6 +35,7 @@ import { useDndSensors } from "@/hooks/use-dnd-sensors";
 import { useSSEStream } from "@/hooks/use-sse-stream";
 import { useKanbanBoard, type KanbanColumnRow } from "@/hooks/use-kanban-columns";
 import { KanbanBackgroundPicker } from "@/components/kanban/KanbanBackgroundPicker";
+import { KanbanFullscreenFrame } from "@/components/kanban/KanbanFullscreenFrame";
 import type { OperationCycleKind } from "@/generated/prisma/client";
 import { cn } from "@/lib/utils";
 
@@ -105,10 +106,12 @@ type OperationsKanbanProps = {
   initialData: OperationsBoardsData;
   /** Board único — sem abas internas. */
   kind: OperationCycleKind;
-  /** Colunas + cor de fundo já carregadas no servidor — evita o "piscar" de
-   * buscar isso num `useEffect` depois de montar (ver `useKanbanBoard`). */
+  /** Colunas + cor de fundo + preferência de tela cheia já carregadas no
+   * servidor — evita o "piscar" de buscar isso num `useEffect` depois de
+   * montar (ver `useKanbanBoard`). */
   initialColumns: KanbanColumnRow[];
   initialBackground: string;
+  initialFullscreen: boolean;
 };
 
 const KIND_CONFIG: Record<
@@ -143,6 +146,7 @@ export function OperationsKanban({
   kind,
   initialColumns,
   initialBackground,
+  initialFullscreen,
 }: OperationsKanbanProps) {
   const [data, setData] = useState(initialData);
   const [searchQuery, setSearchQuery] = useState("");
@@ -155,13 +159,19 @@ export function OperationsKanban({
   const {
     columns,
     background,
+    isFullscreen,
     rename: renameColumn,
     addColumn,
     removeColumn,
     reorder: reorderColumns,
     toggleCollapse,
     setBackground,
-  } = useKanbanBoard(kind, { columns: initialColumns, background: initialBackground });
+    setFullscreen,
+  } = useKanbanBoard(kind, {
+    columns: initialColumns,
+    background: initialBackground,
+    isFullscreen: initialFullscreen,
+  });
 
   const activeCards =
     kind === "purchase" ? data.purchase.cards : data.full.cards;
@@ -370,54 +380,79 @@ export function OperationsKanban({
         setActiveDragColumnId(null);
       }}
     >
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-base font-semibold text-[var(--foreground)]">
-          {config.label}
-        </h2>
-        <span className="rounded-full bg-[var(--muted)] px-2 py-0.5 text-xs tabular-nums text-[var(--foreground)]">
-          {activeCount}
-        </span>
-      </div>
+    <KanbanFullscreenFrame
+      active={isFullscreen}
+      title={config.label}
+      count={activeCount}
+      background={background}
+      onExit={() => setFullscreen(false)}
+    >
+    <div className={cn("flex flex-col gap-5", isFullscreen && "h-full")}>
+      <div className={cn("flex flex-col gap-5", isFullscreen && "px-3 pt-3 sm:px-4")}>
+        {!isFullscreen ? (
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-semibold text-[var(--foreground)]">
+                {config.label}
+              </h2>
+              <span className="rounded-full bg-[var(--muted)] px-2 py-0.5 text-xs tabular-nums text-[var(--foreground)]">
+                {activeCount}
+              </span>
+            </div>
 
-      <p className="max-w-3xl text-sm text-[var(--muted-foreground)]">
-        {config.description}
-      </p>
+            <p className="max-w-3xl text-sm text-[var(--muted-foreground)]">
+              {config.description}
+            </p>
+          </>
+        ) : null}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <ItemListSearch
-          value={searchQuery}
-          onChange={setSearchQuery}
-          filteredCount={filteredActive.length}
-          totalCount={activeCards.length}
-          placeholder="Buscar por SKU, título ou MLB…"
-        />
-        <div className="flex items-center gap-2">
-          <KanbanBackgroundPicker background={background} onChange={setBackground} />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-2"
-            disabled={loading}
-            onClick={() => void refresh()}
-          >
-            <RefreshCw
-              className={cn("size-4", loading && "animate-spin")}
-              aria-hidden
-            />
-            Sincronizar
-          </Button>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <ItemListSearch
+            value={searchQuery}
+            onChange={setSearchQuery}
+            filteredCount={filteredActive.length}
+            totalCount={activeCards.length}
+            placeholder="Buscar por SKU, título ou MLB…"
+          />
+          <div className="flex items-center gap-2">
+            <KanbanBackgroundPicker background={background} onChange={setBackground} />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              disabled={loading}
+              onClick={() => void refresh()}
+            >
+              <RefreshCw
+                className={cn("size-4", loading && "animate-spin")}
+                aria-hidden
+              />
+              Sincronizar
+            </Button>
+            {!isFullscreen ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => void setFullscreen(true)}
+              >
+                <Maximize2 className="size-4" aria-hidden />
+                Tela cheia
+              </Button>
+            ) : null}
+          </div>
         </div>
+
+        {error ? <UserFeedback>{error}</UserFeedback> : null}
+
+        {activeCards.length > 0 && filteredActive.length === 0 ? (
+          <p className="text-sm text-[var(--muted-foreground)]">
+            {itemListSearchEmptyMessage(searchQuery)}
+          </p>
+        ) : null}
       </div>
-
-      {error ? <UserFeedback>{error}</UserFeedback> : null}
-
-      {activeCards.length > 0 && filteredActive.length === 0 ? (
-        <p className="text-sm text-[var(--muted-foreground)]">
-          {itemListSearchEmptyMessage(searchQuery)}
-        </p>
-      ) : null}
 
       <OperationsKanbanBoard
         cards={filteredActive}
@@ -428,8 +463,10 @@ export function OperationsKanban({
         onDeleteColumn={removeColumn}
         onToggleCollapse={toggleCollapse}
         background={background}
+        fullHeight={isFullscreen}
       />
     </div>
+    </KanbanFullscreenFrame>
       <DragOverlay>
         {activeDragCard ? (
           <OperationsCardBody card={activeDragCard} className="w-[85vw] sm:w-72" />

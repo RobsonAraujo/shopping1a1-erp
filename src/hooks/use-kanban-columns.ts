@@ -20,6 +20,7 @@ export type DeleteColumnResult =
 export type KanbanBoardInitialData = {
   columns: KanbanColumnRow[];
   background: string;
+  isFullscreen: boolean;
 };
 
 /**
@@ -34,6 +35,7 @@ export type KanbanBoardInitialData = {
 export function useKanbanBoard(kind: OperationCycleKind, initial: KanbanBoardInitialData) {
   const [columns, setColumns] = useState<KanbanColumnRow[]>(initial.columns);
   const [background, setBackgroundState] = useState<string>(initial.background);
+  const [isFullscreen, setIsFullscreenState] = useState<boolean>(initial.isFullscreen);
   const [error, setError] = useState<string | null>(null);
 
   const reloadColumns = useCallback(async () => {
@@ -190,9 +192,32 @@ export function useKanbanBoard(kind: OperationCycleKind, initial: KanbanBoardIni
     [background, kind],
   );
 
+  const setFullscreen = useCallback(
+    async (value: boolean) => {
+      const previous = isFullscreen;
+      setIsFullscreenState(value);
+      try {
+        const res = await fetch("/api/kanban-board-settings", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kind, isFullscreen: value }),
+        });
+        if (!res.ok) {
+          setIsFullscreenState(previous);
+          setError(await readApiError(res, "kanban_board_settings_update_failed"));
+        }
+      } catch {
+        setIsFullscreenState(previous);
+        setError("Falha de rede ao mudar o modo de visualização.");
+      }
+    },
+    [isFullscreen, kind],
+  );
+
   return {
     columns,
     background,
+    isFullscreen,
     error,
     rename,
     addColumn,
@@ -200,5 +225,6 @@ export function useKanbanBoard(kind: OperationCycleKind, initial: KanbanBoardIni
     reorder,
     toggleCollapse,
     setBackground,
+    setFullscreen,
   };
 }

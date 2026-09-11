@@ -63,6 +63,26 @@ a,
   cursor: pointer;
 }
 
+/* Scroll horizontal do kanban em tela cheia — claro/translúcido em vez do
+   scroll nativo escuro, pra combinar com o fundo colorido do board. */
+.kanban-scroll-x {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.4) transparent;
+}
+.kanban-scroll-x::-webkit-scrollbar {
+  height: 8px;
+}
+.kanban-scroll-x::-webkit-scrollbar-track {
+  background: transparent;
+}
+.kanban-scroll-x::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.4);
+  border-radius: 9999px;
+}
+.kanban-scroll-x::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.6);
+}
+
 /* Landing only — keep dashboard tokens untouched */
 .marketing-landing .marketing-hero-grid {
   background-image:

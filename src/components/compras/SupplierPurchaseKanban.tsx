@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { RefreshCw } from "lucide-react";
+import { Maximize2, RefreshCw } from "lucide-react";
 import { DndContext, DragOverlay, type DragEndEvent } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import {
@@ -54,6 +54,7 @@ import { useDndSensors } from "@/hooks/use-dnd-sensors";
 import { useSSEStream } from "@/hooks/use-sse-stream";
 import { useKanbanBoard, type KanbanColumnRow } from "@/hooks/use-kanban-columns";
 import { KanbanBackgroundPicker } from "@/components/kanban/KanbanBackgroundPicker";
+import { KanbanFullscreenFrame } from "@/components/kanban/KanbanFullscreenFrame";
 import type { SupplierRow } from "@/components/fornecedores/FornecedoresClient";
 import { cn } from "@/lib/utils";
 
@@ -72,12 +73,15 @@ export function SupplierPurchaseKanban({
   initialCards,
   initialColumns,
   initialBackground,
+  initialFullscreen,
 }: {
   initialCards: OperationsBoardCard[];
-  /** Colunas + cor de fundo já carregadas no servidor — evita o "piscar" de
-   * buscar isso num `useEffect` depois de montar (ver `useKanbanBoard`). */
+  /** Colunas + cor de fundo + preferência de tela cheia já carregadas no
+   * servidor — evita o "piscar" de buscar isso num `useEffect` depois de
+   * montar (ver `useKanbanBoard`). */
   initialColumns: KanbanColumnRow[];
   initialBackground: string;
+  initialFullscreen: boolean;
 }) {
   const [cards, setCards] = useState(initialCards);
   const [searchQuery, setSearchQuery] = useState("");
@@ -93,13 +97,19 @@ export function SupplierPurchaseKanban({
   const {
     columns,
     background,
+    isFullscreen,
     rename: renameColumn,
     addColumn,
     removeColumn,
     reorder: reorderColumns,
     toggleCollapse,
     setBackground,
-  } = useKanbanBoard("purchase", { columns: initialColumns, background: initialBackground });
+    setFullscreen,
+  } = useKanbanBoard("purchase", {
+    columns: initialColumns,
+    background: initialBackground,
+    isFullscreen: initialFullscreen,
+  });
 
   // Lista leve (só o cadastro de fornecedores, sem sweep do catálogo ML) —
   // acesso rápido a um fornecedor mesmo quando ele não tem nenhum produto
@@ -301,7 +311,15 @@ export function SupplierPurchaseKanban({
         setActiveDragColumnId(null);
       }}
     >
-      <div className="space-y-5">
+      <KanbanFullscreenFrame
+        active={isFullscreen}
+        title="Compras"
+        count={supplierCards.length}
+        background={background}
+        onExit={() => setFullscreen(false)}
+      >
+      <div className={cn("flex flex-col gap-5", isFullscreen && "h-full")}>
+        <div className={cn("flex flex-col gap-5", isFullscreen && "px-3 pt-3 sm:px-4")}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <ItemListSearch
             value={searchQuery}
@@ -335,6 +353,18 @@ export function SupplierPurchaseKanban({
               <RefreshCw className={cn("size-4", loading && "animate-spin")} aria-hidden />
               Sincronizar
             </Button>
+            {!isFullscreen ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => void setFullscreen(true)}
+              >
+                <Maximize2 className="size-4" aria-hidden />
+                Tela cheia
+              </Button>
+            ) : null}
           </div>
         </div>
 
@@ -345,9 +375,15 @@ export function SupplierPurchaseKanban({
             {itemListSearchEmptyMessage(searchQuery, "fornecedor")}
           </p>
         ) : null}
+        </div>
 
         {supplierCards.length === 0 ? (
-          <p className="text-sm text-[var(--muted-foreground)]">
+          <p
+            className={cn(
+              "text-sm text-[var(--muted-foreground)]",
+              isFullscreen && "px-3 sm:px-4",
+            )}
+          >
             Nenhum fornecedor precisa de compra no momento.
           </p>
         ) : (
@@ -360,9 +396,11 @@ export function SupplierPurchaseKanban({
             onDeleteColumn={removeColumn}
             onToggleCollapse={toggleCollapse}
             background={background}
+            fullHeight={isFullscreen}
           />
         )}
       </div>
+      </KanbanFullscreenFrame>
 
       <DragOverlay>
         {activeDragCard ? (

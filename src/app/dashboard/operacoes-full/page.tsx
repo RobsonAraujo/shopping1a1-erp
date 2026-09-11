@@ -25,9 +25,10 @@ async function OperacoesFullDataSection({
   let boards: Awaited<ReturnType<typeof loadOperationsBoards>> | null = null;
   let columns: Awaited<ReturnType<typeof loadOrMaterializeKanbanColumns>> = [];
   let background = "";
+  let isFullscreen = false;
 
   try {
-    [boards, columns, { background }] = await Promise.all([
+    [boards, columns, { background, isFullscreen }] = await Promise.all([
       loadOperationsBoardsFast(organizationId, token, "full"),
       loadOrMaterializeKanbanColumns(organizationId, "full"),
       loadOrMaterializeKanbanBoardSettings(organizationId, "full"),
@@ -55,6 +56,7 @@ async function OperacoesFullDataSection({
       kind="full"
       initialColumns={columns}
       initialBackground={background}
+      initialFullscreen={isFullscreen}
     />
   );
 }
