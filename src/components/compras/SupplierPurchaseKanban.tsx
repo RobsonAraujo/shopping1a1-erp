@@ -316,6 +316,10 @@ export function SupplierPurchaseKanban({
     handleMoveDecision(planMove(supplier, targetColumn));
   }
 
+  const exitFullscreen = useCallback(() => {
+    void setFullscreen(false);
+  }, [setFullscreen]);
+
   return (
     <DndContext
       sensors={sensors}
@@ -332,7 +336,7 @@ export function SupplierPurchaseKanban({
         title="Compras"
         count={supplierCards.length}
         background={background}
-        onExit={() => setFullscreen(false)}
+        onExit={exitFullscreen}
       >
         <div className={cn("flex flex-col gap-5 ", isFullscreen && "h-full")}>
           <div

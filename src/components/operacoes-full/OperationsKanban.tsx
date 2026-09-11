@@ -369,6 +369,10 @@ export function OperationsKanban({
 
   const config = KIND_CONFIG[kind];
 
+  const exitFullscreen = useCallback(() => {
+    void setFullscreen(false);
+  }, [setFullscreen]);
+
   return (
     <DndContext
       sensors={sensors}
@@ -385,7 +389,7 @@ export function OperationsKanban({
       title={config.label}
       count={activeCount}
       background={background}
-      onExit={() => setFullscreen(false)}
+      onExit={exitFullscreen}
     >
     <div className={cn("flex flex-col gap-5", isFullscreen && "h-full")}>
       <div className={cn("flex flex-col gap-5", isFullscreen && "px-3 pt-3 sm:px-4")}>
