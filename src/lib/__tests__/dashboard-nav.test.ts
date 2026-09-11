@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  DASHBOARD_MOBILE_TAB_ITEMS,
   DASHBOARD_NAV_GROUPS,
   getAllDashboardNavItems,
   isDashboardNavActive,
@@ -65,5 +66,24 @@ describe("isDashboardNavGroupActive / getAllDashboardNavItems", () => {
     assert.equal(hrefs[0], "/dashboard");
     assert.ok(hrefs.includes("/dashboard/produtos"));
     assert.equal(new Set(hrefs).size, hrefs.length);
+  });
+});
+
+describe("DASHBOARD_MOBILE_TAB_ITEMS", () => {
+  it("highlights Full on envios-full without marking Início", () => {
+    const inicio = DASHBOARD_MOBILE_TAB_ITEMS[0];
+    const compras = DASHBOARD_MOBILE_TAB_ITEMS[1];
+    const full = DASHBOARD_MOBILE_TAB_ITEMS[2];
+    assert.equal(isDashboardNavItemActive("/dashboard", inicio), true);
+    assert.equal(isDashboardNavItemActive("/dashboard/compras", inicio), false);
+    assert.equal(
+      isDashboardNavItemActive("/dashboard/compras/acme", compras),
+      true,
+    );
+    assert.equal(
+      isDashboardNavItemActive("/dashboard/envios-full", full),
+      true,
+    );
+    assert.equal(isDashboardNavItemActive("/dashboard/dre", full), false);
   });
 });

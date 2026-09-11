@@ -3,6 +3,7 @@ import Link from "next/link";
 import { LogOut } from "lucide-react";
 import { Toaster } from "sonner";
 import { DashboardNav } from "@/components/shared/DashboardNav";
+import { DashboardMobileTabBar } from "@/components/shared/DashboardMobileTabBar";
 import { MobileDashboardMenu } from "@/components/shared/MobileDashboardMenu";
 import { Button } from "@/components/ui/button";
 import { AccountBlockedNotice } from "@/components/shared/AccountBlockedNotice";
@@ -28,56 +29,55 @@ export default async function DashboardLayout({
       >
         Pular para o conteúdo
       </a>
-      <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[var(--card)]/85 pt-[env(safe-area-inset-top)] backdrop-blur-md supports-[backdrop-filter]:bg-[var(--card)]/75">
-        <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6">
-          <div className="flex items-center justify-between gap-3">
-            <Link
-              href="/dashboard"
-              className="flex shrink-0 items-center gap-2 text-[var(--primary)] transition-opacity hover:opacity-90"
-            >
-              <Image
-                src="/logo-bg-blue.png"
-                alt=""
-                width={36}
-                height={36}
-                className="h-9 w-9 rounded-lg object-cover shadow-sm"
-                priority
-              />
-              <span className="hidden font-semibold tracking-tight sm:inline">
-                ERP 1a1
-              </span>
-            </Link>
-            <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-              <span
-                className="hidden max-w-[10rem] truncate text-sm text-[var(--muted-foreground)] lg:inline xl:max-w-[12rem]"
-                title={nickname}
-              >
-                {nickname}
-              </span>
-              <MobileDashboardMenu />
-              <form
-                action="/api/auth/mercadolibre/signout"
-                method="post"
-                className="hidden sm:block"
-              >
-                <Button
-                  type="submit"
-                  variant="outline"
-                  size="sm"
-                  className="gap-2 border-[var(--border)]"
-                >
-                  <LogOut className="size-4" aria-hidden />
-                  <span className="hidden lg:inline">Sair</span>
-                </Button>
-              </form>
-            </div>
-          </div>
+      <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[var(--card)] pt-[env(safe-area-inset-top)]">
+        <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:h-20 sm:px-6">
+          <Link
+            href="/dashboard"
+            className="flex shrink-0 items-center gap-2.5 text-[var(--foreground)]"
+            aria-label="ERP 1a1"
+          >
+            <Image
+              src="/logo-bg-blue.png"
+              alt=""
+              width={40}
+              height={40}
+              className="size-10 rounded-xl object-cover"
+              priority
+            />
+            <span className="text-lg font-semibold tracking-tight sm:hidden lg:inline">
+              ERP 1a1
+            </span>
+          </Link>
           <DashboardNav />
+          <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
+            <span
+              className="hidden max-w-[10rem] truncate text-sm text-[var(--muted-foreground)] lg:inline xl:max-w-[12rem]"
+              title={nickname}
+            >
+              {nickname}
+            </span>
+            <MobileDashboardMenu accountName={nickname} />
+            <form
+              action="/api/auth/mercadolibre/signout"
+              method="post"
+              className="hidden sm:block"
+            >
+              <Button
+                type="submit"
+                variant="ghost"
+                size="sm"
+                className="gap-2"
+              >
+                <LogOut className="size-4" aria-hidden />
+                <span className="hidden lg:inline">Sair</span>
+              </Button>
+            </form>
+          </div>
         </div>
       </header>
       <main
         id="main-content"
-        className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 pb-[max(2rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-10"
+        className="mx-auto w-full max-w-7xl flex-1 px-4 pt-4 pb-[calc(5rem+env(safe-area-inset-bottom,0px))] sm:px-6 sm:py-10 sm:pb-10"
       >
         {orgContext.status === "active" ? (
           children
@@ -91,6 +91,7 @@ export default async function DashboardLayout({
           </p>
         )}
       </main>
+      <DashboardMobileTabBar />
       <Toaster position="top-right" richColors closeButton />
     </div>
   );

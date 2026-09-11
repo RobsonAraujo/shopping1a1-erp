@@ -199,7 +199,7 @@ export function isDashboardNavActive(pathname: string, href: string): boolean {
 /** Como `isDashboardNavActive`, mas também considera `item.matchHrefs`. */
 export function isDashboardNavItemActive(
   pathname: string,
-  item: DashboardNavItem,
+  item: Pick<DashboardNavItem, "href" | "matchHrefs">,
 ): boolean {
   return [item.href, ...(item.matchHrefs ?? [])].some((href) =>
     isDashboardNavActive(pathname, href),
@@ -220,6 +220,29 @@ export const DASHBOARD_TOP_NAV_ITEMS = DASHBOARD_NAV_GROUPS.find(
 export const DASHBOARD_DROPDOWN_NAV_GROUPS = DASHBOARD_NAV_GROUPS.filter(
   (g) => g.kind === "dropdown",
 );
+
+/** Atalhos do polegar no mobile — Início, Compras e Full. */
+export const DASHBOARD_MOBILE_TAB_ITEMS: Pick<
+  DashboardNavItem,
+  "href" | "label" | "icon" | "matchHrefs"
+>[] = [
+  {
+    href: "/dashboard",
+    label: "Início",
+    icon: LayoutGrid,
+  },
+  {
+    href: "/dashboard/compras",
+    label: "Compras",
+    icon: ShoppingCart,
+  },
+  {
+    href: "/dashboard/operacoes-full",
+    label: "Full",
+    icon: Kanban,
+    matchHrefs: ["/dashboard/envios-full"],
+  },
+];
 
 export const DASHBOARD_NAV_LAYOUT_STORAGE_KEY = "dashboard-nav-layout";
 

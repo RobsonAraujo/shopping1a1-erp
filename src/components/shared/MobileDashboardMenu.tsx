@@ -1,9 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { LogOut, Menu, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import {
   isDashboardNavItemActive,
   type DashboardNavItem,
 } from "@/lib/dashboard-nav";
+import { cn } from "@/lib/utils";
 
 function MobileNavLink({
   item,
@@ -30,16 +31,16 @@ function MobileNavLink({
       aria-current={active ? "page" : undefined}
       title={item.title}
       onClick={onNavigate}
-      className={[
-        "flex items-start gap-3 rounded-xl px-3 py-3 transition-colors",
+      className={cn(
+        "flex items-start gap-3 rounded-2xl px-3 py-3 transition-colors",
         active
-          ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
-          : "text-[var(--foreground)] hover:bg-[var(--accent)] hover:text-[var(--accent-foreground)]",
-      ].join(" ")}
+          ? "bg-[var(--muted)]"
+          : "text-[var(--foreground)] hover:bg-[var(--muted)]",
+      )}
     >
       <Icon className="mt-0.5 size-5 shrink-0" aria-hidden />
       <span className="min-w-0">
-        <span className="flex items-center gap-2 font-medium leading-none">
+        <span className="flex items-center gap-2 text-[15px] font-semibold leading-none">
           {item.label}
           {item.badge ? (
             <Badge
@@ -58,112 +59,60 @@ function MobileNavLink({
   );
 }
 
-export function MobileDashboardMenu() {
+export function MobileDashboardMenu({
+  accountName,
+}: {
+  accountName?: string;
+}) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
-  useEffect(() => {
-    if (!open) return;
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setOpen(false);
-      }
-    }
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
-
   return (
-    <>
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        className="border-[var(--border)] sm:hidden"
-        aria-controls="mobile-dashboard-menu"
-        aria-expanded={open}
-        aria-label="Abrir menu principal"
-        onClick={() => setOpen(true)}
-      >
-        <Menu className="size-5" aria-hidden />
-      </Button>
-
-      <div
-        className={[
-          "fixed inset-0 z-[100] sm:hidden h-screen",
-          open ? "pointer-events-auto" : "pointer-events-none",
-        ].join(" ")}
-        aria-hidden={!open}
-        inert={!open}
-      >
-        <button
+    <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
+      <DialogPrimitive.Trigger asChild>
+        <Button
           type="button"
-          className={[
-            "absolute inset-0 bg-black/35 transition-opacity duration-200 ease-out",
-            open ? "opacity-100" : "opacity-0",
-          ].join(" ")}
-          aria-label="Fechar menu"
-          onClick={() => setOpen(false)}
-        />
-        <aside
-          id="mobile-dashboard-menu"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Menu principal"
-          className={[
-            "absolute right-0 top-0 flex h-screen w-[min(86vw,22rem)] flex-col border-l border-[var(--border)] bg-white shadow-2xl transition-transform duration-200 ease-out",
-            open ? "translate-x-0" : "translate-x-full",
-          ].join(" ")}
+          variant="ghost"
+          size="icon-sm"
+          className="size-10 sm:hidden"
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-label="Abrir menu principal"
         >
-          <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-4">
-            <div className="flex items-center gap-3">
-              <Image
-                src="/logo-bg-blue.png"
-                alt=""
-                width={40}
-                height={40}
-                className="h-10 w-10 rounded-xl object-cover shadow-sm"
-              />
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                  Menu
+          <Menu className="size-5" aria-hidden />
+        </Button>
+      </DialogPrimitive.Trigger>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="marketing-nav-overlay fixed inset-0 z-[110] bg-black/45 sm:hidden" />
+        <DialogPrimitive.Content
+          className="marketing-nav-drawer fixed inset-y-0 right-0 z-[110] flex h-dvh w-[min(22rem,100vw)] flex-col bg-[var(--card)] shadow-[-16px_0_40px_-24px_rgba(15,18,31,0.45)] outline-none sm:hidden"
+          aria-describedby={undefined}
+        >
+          <div className="flex items-center justify-between gap-3 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
+            <div className="min-w-0">
+              <DialogPrimitive.Title className="text-lg font-semibold tracking-tight text-[var(--foreground)]">
+                Menu
+              </DialogPrimitive.Title>
+              {accountName ? (
+                <p className="mt-0.5 truncate text-sm text-[var(--muted-foreground)]">
+                  {accountName}
                 </p>
-                <p className="mt-1 text-sm font-semibold text-[var(--foreground)]">
-                  ERP 1a1
-                </p>
-              </div>
+              ) : null}
             </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
+            <DialogPrimitive.Close
+              className="inline-flex size-10 cursor-pointer items-center justify-center rounded-full text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
               aria-label="Fechar menu"
-              onClick={() => setOpen(false)}
             >
-              <X className="size-4" aria-hidden />
-            </Button>
-          </div>
-
-          <div className="px-4 pb-3 pt-4">
-            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-              Acesso rápido às áreas do ERP.
-            </p>
+              <X className="size-5" aria-hidden />
+            </DialogPrimitive.Close>
           </div>
 
           <nav
-            className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 bg-white"
+            className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-3"
             aria-label="Principal mobile"
           >
             {DASHBOARD_NAV_GROUPS.map((group) => (
-              <div key={group.id} className="flex flex-col gap-1">
+              <div key={group.id} className="marketing-nav-item flex flex-col gap-0.5">
                 {group.kind === "dropdown" && group.label ? (
                   <p className="px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                     {group.label}
@@ -184,18 +133,18 @@ export function MobileDashboardMenu() {
           <form
             action="/api/auth/mercadolibre/signout"
             method="post"
-            className="border-t border-[var(--border)] p-3"
+            className="marketing-nav-item border-t border-[var(--border)] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4"
           >
             <button
               type="submit"
-              className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--accent-foreground)]"
+              className="flex w-full items-center justify-center gap-2 rounded-full bg-[var(--muted)] px-4 py-3 text-sm font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--accent-foreground)]"
             >
-              <LogOut className="size-5" aria-hidden />
+              <LogOut className="size-4" aria-hidden />
               Sair
             </button>
           </form>
-        </aside>
-      </div>
-    </>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }

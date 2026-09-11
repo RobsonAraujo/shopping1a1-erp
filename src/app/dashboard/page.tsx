@@ -220,8 +220,8 @@ export default async function DashboardPage() {
   });
 
   return (
-    <div className="space-y-8">
-      <header className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-6 py-7 sm:px-8">
+    <div className="space-y-6 sm:space-y-8">
+      <header className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-5 sm:px-8 sm:py-7">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-medium capitalize text-[var(--muted-foreground)]">
@@ -279,7 +279,7 @@ export default async function DashboardPage() {
           </section>
         </div>
 
-        <aside className="space-y-6 lg:sticky lg:top-6">
+        <aside className="space-y-6 lg:sticky lg:top-24">
           <DashboardHomeShortcuts />
         </aside>
       </div>

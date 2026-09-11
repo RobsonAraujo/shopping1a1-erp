@@ -49,7 +49,7 @@ export function DashboardOperationsSummary({
 
   return (
     <section id="prioridades" className="scroll-mt-24">
-      <Card className="overflow-hidden border-sky-200/90 bg-gradient-to-br from-sky-50/80 via-white to-[var(--card)] shadow-md ring-1 ring-sky-100/70">
+      <Card className="overflow-hidden rounded-2xl border-sky-200/90 bg-gradient-to-br from-sky-50/80 via-white to-[var(--card)] shadow-none ring-1 ring-sky-100/70 sm:shadow-md">
         <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-900">

@@ -44,6 +44,12 @@ html {
   scroll-behavior: smooth;
 }
 
+/* Smooth scroll no html atrasa o scrollY no mobile (Safari/Chrome) e o
+   header da landing fica transparente até o movimento “assentar”. */
+html:has(.marketing-landing) {
+  scroll-behavior: auto;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

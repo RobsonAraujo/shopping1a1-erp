@@ -55,7 +55,7 @@ export function DashboardHomeShortcuts() {
       <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
         Atalhos
       </h2>
-      <Card className="overflow-hidden p-0">
+      <Card className="overflow-hidden rounded-2xl p-0">
         <ul className="divide-y divide-[var(--border)]">
           {SHORTCUTS.map(({ href, label, description, icon: Icon }) => (
             <li key={href}>

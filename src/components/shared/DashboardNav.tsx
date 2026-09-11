@@ -76,7 +76,7 @@ function NavDropdownGroup({
           aria-haspopup="menu"
           aria-expanded={open}
           className={cn(
-            "gap-1",
+            "shrink-0 gap-1",
             groupActive && "bg-[var(--accent)] text-[var(--accent-foreground)]",
           )}
         >
@@ -124,7 +124,7 @@ function CategorizedNav({ pathname }: { pathname: string }) {
             <Link
               href={item.href}
               className={cn(
-                "gap-2",
+                "shrink-0 gap-2",
                 active && "bg-[var(--accent)] text-[var(--accent-foreground)]",
               )}
               aria-current={active ? "page" : undefined}
@@ -147,7 +147,7 @@ export function DashboardNav() {
 
   return (
     <nav
-      className="mt-3 hidden border-t border-[var(--border)] pt-3 sm:flex items-center gap-0.5"
+      className="ml-4 hidden min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] sm:flex lg:ml-6 [&::-webkit-scrollbar]:hidden"
       aria-label="Principal"
     >
       <CategorizedNav pathname={pathname} />
