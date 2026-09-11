@@ -57,6 +57,7 @@ import {
   type KanbanColumnRow,
 } from "@/hooks/use-kanban-columns";
 import { KanbanBackgroundPicker } from "@/components/kanban/KanbanBackgroundPicker";
+import { KanbanAppearancePicker } from "@/components/kanban/KanbanAppearancePicker";
 import { KanbanFullscreenFrame } from "@/components/kanban/KanbanFullscreenFrame";
 import type { SupplierRow } from "@/components/fornecedores/FornecedoresClient";
 import { cn } from "@/lib/utils";
@@ -374,6 +375,7 @@ export function SupplierPurchaseKanban({
                   background={background}
                   onChange={setBackground}
                 />
+                <KanbanAppearancePicker kind="purchase" />
                 <Button
                   type="button"
                   variant="outline"
@@ -430,6 +432,7 @@ export function SupplierPurchaseKanban({
               onAddColumn={addColumn}
               onDeleteColumn={removeColumn}
               onToggleCollapse={toggleCollapse}
+              kind="purchase"
               background={background}
               fullHeight={isFullscreen}
             />

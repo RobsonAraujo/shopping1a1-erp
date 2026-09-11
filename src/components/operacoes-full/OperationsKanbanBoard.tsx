@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -21,6 +21,10 @@ import type {
   DeleteColumnResult,
   KanbanColumnRow,
 } from "@/hooks/use-kanban-columns";
+import { useKanbanAppearance } from "@/hooks/use-kanban-appearance";
+import { KanbanColumnColorPicker } from "@/components/kanban/KanbanColumnColorPicker";
+import { columnColorIdFor, resolveKanbanColumnPaint } from "@/lib/kanban/kanban-column-colors";
+import type { OperationCycleKind } from "@/generated/prisma/client";
 import { Button } from "@/components/ui/button";
 import { FormSelect } from "@/components/ui/form-select";
 import {
@@ -52,6 +56,7 @@ type OperationsKanbanBoardProps = {
     moveCardsToColumnId?: string,
   ) => Promise<DeleteColumnResult>;
   onToggleCollapse: (id: string, isCollapsed: boolean) => void | Promise<void>;
+  kind: OperationCycleKind;
   /** CSS `background` (cor sólida ou gradiente) escolhido pelo usuário —
    * vazio/undefined = sem cor (fundo padrão do app). */
   background?: string;
@@ -64,11 +69,15 @@ function DroppableColumn({
   columnId,
   collapsed,
   fullHeight,
+  stripe,
+  shellStyle,
   children,
 }: {
   columnId: string;
   collapsed: boolean;
   fullHeight?: boolean;
+  stripe?: string;
+  shellStyle?: CSSProperties;
   children: React.ReactNode;
 }) {
   const { setNodeRef, className } = useDropHighlight(
@@ -78,12 +87,16 @@ function DroppableColumn({
     <section
       ref={setNodeRef}
       className={cn(
-        "flex shrink-0 snap-center flex-col rounded-xl border border-[var(--border)] bg-[rgb(255_255_255_/_65%)] shadow-sm sm:snap-align-none",
+        "flex shrink-0 snap-center flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[rgb(255_255_255_/_65%)] shadow-sm sm:snap-align-none",
         collapsed ? "w-10 self-start sm:w-10" : "w-[85vw] sm:w-72",
         fullHeight && !collapsed && "h-full",
         className,
       )}
+      style={shellStyle}
     >
+      {stripe ? (
+        <div aria-hidden className="h-1.5 shrink-0" style={{ background: stripe }} />
+      ) : null}
       {children}
     </section>
   );
@@ -92,12 +105,18 @@ function DroppableColumn({
 function ColumnHeader({
   column,
   count,
+  headerStyle,
+  colorId,
+  onColorChange,
   onToggleCollapse,
   onRename,
   onRequestDelete,
 }: {
   column: KanbanColumnRow;
   count: number;
+  headerStyle?: CSSProperties;
+  colorId?: string;
+  onColorChange?: (colorId: string) => void;
   onToggleCollapse: () => void;
   onRename: (label: string) => void;
   onRequestDelete: () => void;
@@ -129,6 +148,7 @@ function ColumnHeader({
       style={{
         transform: CSS.Transform.toString(transform),
         transition,
+        ...headerStyle,
       }}
       className={cn(
         "border-b border-[var(--border)] px-3 py-2.5",
@@ -174,6 +194,13 @@ function ColumnHeader({
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
+          {onColorChange ? (
+            <KanbanColumnColorPicker
+              colorId={colorId}
+              columnLabel={column.label}
+              onChange={onColorChange}
+            />
+          ) : null}
           <span className="rounded-full bg-[var(--muted)] px-2 py-0.5 text-xs tabular-nums">
             {count}
           </span>
@@ -267,9 +294,11 @@ export function OperationsKanbanBoard({
   onAddColumn,
   onDeleteColumn,
   onToggleCollapse,
+  kind,
   background,
   fullHeight,
 }: OperationsKanbanBoardProps) {
+  const { appearance, setColumnColor } = useKanbanAppearance(kind);
   const [pendingDelete, setPendingDelete] = useState<{
     column: KanbanColumnRow;
     cardCount: number;
@@ -278,6 +307,7 @@ export function OperationsKanbanBoard({
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const sortedColumns = [...columns].sort((a, b) => a.position - b.position);
+  const columnIds = sortedColumns.map((c) => c.id);
   const middleColumnDragIds = sortedColumns
     .filter((c) => !c.isLocked)
     .map((c) => `${COLUMN_DRAG_ID_PREFIX}${c.id}`);
@@ -354,12 +384,16 @@ export function OperationsKanbanBoard({
           {sortedColumns.map((column) => {
             const columnCards = cardsByColumnId.get(column.id) ?? [];
             const isCollapsed = column.isCollapsed;
+            const colorId = columnColorIdFor(appearance, column.id, columnIds);
+            const paint = resolveKanbanColumnPaint(colorId, appearance.colorMode);
             return (
               <DroppableColumn
                 key={column.id}
                 columnId={column.id}
                 collapsed={isCollapsed}
                 fullHeight={fullHeight}
+                stripe={paint.stripe}
+                shellStyle={paint.shellStyle}
               >
                 {isCollapsed ? (
                   <button
@@ -381,6 +415,13 @@ export function OperationsKanbanBoard({
                     <ColumnHeader
                       column={column}
                       count={columnCards.length}
+                      headerStyle={paint.headerStyle}
+                      colorId={colorId}
+                      onColorChange={
+                        appearance.theme === "colorful"
+                          ? (next) => setColumnColor(column.id, next)
+                          : undefined
+                      }
                       onToggleCollapse={() =>
                         void onToggleCollapse(column.id, true)
                       }

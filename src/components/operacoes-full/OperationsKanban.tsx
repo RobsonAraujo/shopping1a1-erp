@@ -35,6 +35,7 @@ import { useDndSensors } from "@/hooks/use-dnd-sensors";
 import { useSSEStream } from "@/hooks/use-sse-stream";
 import { useKanbanBoard, type KanbanColumnRow } from "@/hooks/use-kanban-columns";
 import { KanbanBackgroundPicker } from "@/components/kanban/KanbanBackgroundPicker";
+import { KanbanAppearancePicker } from "@/components/kanban/KanbanAppearancePicker";
 import { KanbanFullscreenFrame } from "@/components/kanban/KanbanFullscreenFrame";
 import type { OperationCycleKind } from "@/generated/prisma/client";
 import { cn } from "@/lib/utils";
@@ -420,6 +421,7 @@ export function OperationsKanban({
           />
           <div className="flex items-center gap-2">
             <KanbanBackgroundPicker background={background} onChange={setBackground} />
+            <KanbanAppearancePicker kind={kind} />
             <Button
               type="button"
               variant="outline"
@@ -466,6 +468,7 @@ export function OperationsKanban({
         onAddColumn={addColumn}
         onDeleteColumn={removeColumn}
         onToggleCollapse={toggleCollapse}
+        kind={kind}
         background={background}
         fullHeight={isFullscreen}
       />
