@@ -48,7 +48,7 @@ function IcmsRateRowEditor({ row, saving, onSave }: IcmsRateRowEditorProps) {
 
   if (!editing) {
     return (
-      <tr className="border-b border-[var(--border)]">
+      <tr className="border-b border-[var(--border)] hover:bg-[var(--muted)]/30">
         <td className="py-2 pr-3 font-medium">{row.uf}</td>
         <td className="py-2 pr-3 tabular-nums">{(row.aliquotaBase * 100).toFixed(2)}%</td>
         <td className="py-2 pr-3 tabular-nums">{(row.fcp * 100).toFixed(2)}%</td>

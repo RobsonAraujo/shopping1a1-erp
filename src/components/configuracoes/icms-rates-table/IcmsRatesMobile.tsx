@@ -38,7 +38,7 @@ function IcmsRateCardEditor({ row, saving, onSave }: IcmsRateRowEditorProps) {
 
   if (!editing) {
     return (
-      <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] px-3 py-2.5">
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] px-3.5 py-3">
         <div className="min-w-0">
           <p className="text-sm font-semibold">{row.uf}</p>
           <p className="mt-0.5 text-xs text-[var(--muted-foreground)] tabular-nums">
@@ -61,7 +61,7 @@ function IcmsRateCardEditor({ row, saving, onSave }: IcmsRateRowEditorProps) {
   }
 
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/10 px-3 py-3">
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/20 px-3.5 py-3">
       <p className="text-sm font-semibold">{row.uf}</p>
       <div className="mt-2 grid grid-cols-2 gap-3">
         <FormInput label="Base %" value={base} onChange={(e) => setBase(e.target.value)} />

@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Building2, Pencil } from "lucide-react";
+import { MapPin, Pencil, Scale } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FormInput } from "@/components/ui/form-input";
 import { FormSelect } from "@/components/ui/form-select";
 import { Switch } from "@/components/ui/switch";
 import { UserFeedback } from "@/components/ui/user-feedback";
+import { ConfiguracoesSkeleton } from "@/components/configuracoes/ConfiguracoesSkeleton";
 import { readApiError } from "@/lib/api/api-client-error";
 import { BRAZILIAN_UF_OPTIONS } from "@/lib/tax-report/brazilian-ufs";
 import type { IcmsRateRow, TaxCompanyConfig } from "@/lib/tax-report/types";
@@ -50,7 +51,7 @@ function CompanySettingView({
   className?: string;
 }) {
   return (
-    <div className={cn("rounded-lg border border-[var(--border)] bg-[var(--muted)]/10 px-3 py-2.5", className)}>
+    <div className={cn("rounded-xl border border-[var(--border)] bg-[var(--muted)]/20 px-3.5 py-3", className)}>
       <p className="text-xs text-[var(--muted-foreground)]">{label}</p>
       <p className="mt-1 text-sm font-semibold tabular-nums">{value}</p>
     </div>
@@ -153,7 +154,7 @@ export function TaxConfigClient() {
   };
 
   if (loading) {
-    return <p className="text-sm text-[var(--muted-foreground)]">Carregando…</p>;
+    return <ConfiguracoesSkeleton cards={2} />;
   }
 
   const company = data?.company;
@@ -170,15 +171,17 @@ export function TaxConfigClient() {
         </UserFeedback>
       ) : null}
 
-      <Card className="overflow-hidden p-0">
+      <Card className="overflow-hidden rounded-2xl p-0">
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border)] px-4 py-4 sm:px-5">
           <div className="flex min-w-0 items-start gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--muted)]/30 text-[var(--primary)]">
-              <Building2 className="size-5" aria-hidden />
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[var(--primary)]/10 text-[var(--primary)]">
+              <Scale className="size-5" aria-hidden />
             </span>
             <div>
-              <h2 className="text-sm font-semibold">Parâmetros Lucro Real</h2>
-              <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+              <h2 className="text-base font-semibold tracking-tight">
+                Parâmetros Lucro Real
+              </h2>
+              <p className="mt-1 text-sm text-[var(--muted-foreground)]">
                 UF de origem, PIS/COFINS e créditos usados na apuração do
                 Lucro Real.
               </p>
@@ -200,7 +203,7 @@ export function TaxConfigClient() {
 
         <div className="px-4 py-4 sm:px-5">
           {isSimples ? (
-            <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
+            <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
               A empresa está no regime Simples Nacional — esses parâmetros
               (usados na apuração do Lucro Real) não se aplicam e ficam
               ocultos. Os valores continuam salvos e voltam a aparecer aqui se
@@ -249,7 +252,7 @@ export function TaxConfigClient() {
                     }))
                   }
                 />
-                <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2.5">
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-2.5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-xs font-medium text-[var(--muted-foreground)]">
@@ -271,7 +274,7 @@ export function TaxConfigClient() {
                     />
                   </div>
                 </div>
-                <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2.5">
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-2.5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-xs font-medium text-[var(--muted-foreground)]">
@@ -341,13 +344,22 @@ export function TaxConfigClient() {
       </Card>
 
       {!isSimples ? (
-        <Card className="p-4">
-          <h2 className="text-sm font-semibold">ICMS interno + FCP por UF</h2>
-          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-            Valores iniciais devem ser validados com CONFAZ/RICMS. Alíquota
-            total = base + FCP.
-          </p>
-          <div className="mt-4">
+        <Card className="overflow-hidden rounded-2xl p-0">
+          <div className="flex items-start gap-3 border-b border-[var(--border)] px-4 py-4 sm:px-5">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-900">
+              <MapPin className="size-5" aria-hidden />
+            </span>
+            <div>
+              <h2 className="text-base font-semibold tracking-tight">
+                ICMS interno + FCP por UF
+              </h2>
+              <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+                Valores iniciais devem ser validados com CONFAZ/RICMS. Alíquota
+                total = base + FCP.
+              </p>
+            </div>
+          </div>
+          <div className="p-4 sm:p-5">
             <IcmsRatesTable
               rows={data?.icmsRates ?? []}
               saving={saving}
@@ -357,18 +369,32 @@ export function TaxConfigClient() {
         </Card>
       ) : null}
 
-      <Card className="p-4">
-        <h2 className="text-sm font-semibold">CBS / IBS (informativo)</h2>
-        <ul className="mt-2 space-y-2 text-xs text-[var(--muted-foreground)]">
+      <Card className="overflow-hidden rounded-2xl p-0">
+        <div className="border-b border-[var(--border)] px-4 py-4 sm:px-5">
+          <h2 className="text-base font-semibold tracking-tight">
+            CBS / IBS (informativo)
+          </h2>
+        </div>
+        <ul className="divide-y divide-[var(--border)]">
           {data?.cbsIbs.map((row) => (
-            <li key={row.year}>
-              {row.year}: CBS{" "}
-              {row.cbsRate != null ? `${(row.cbsRate * 100).toFixed(2)}%` : "ref."}{" "}
-              · IBS est.{" "}
-              {row.ibsEstadualRate != null
-                ? `${(row.ibsEstadualRate * 100).toFixed(2)}%`
-                : "—"}{" "}
-              · {row.notes}
+            <li
+              key={row.year}
+              className="flex flex-col gap-1 px-4 py-3.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4 sm:px-5"
+            >
+              <span className="text-sm font-semibold tabular-nums">
+                {row.year}
+              </span>
+              <span className="text-sm text-[var(--muted-foreground)]">
+                CBS{" "}
+                {row.cbsRate != null
+                  ? `${(row.cbsRate * 100).toFixed(2)}%`
+                  : "ref."}{" "}
+                · IBS est.{" "}
+                {row.ibsEstadualRate != null
+                  ? `${(row.ibsEstadualRate * 100).toFixed(2)}%`
+                  : "—"}
+                {row.notes ? ` · ${row.notes}` : ""}
+              </span>
             </li>
           ))}
         </ul>

@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { FormInput } from "@/components/ui/form-input";
 import { UserFeedback } from "@/components/ui/user-feedback";
 import { MetricWithHint } from "@/components/shared/MetricWithHint";
+import { ConfiguracoesSkeleton } from "@/components/configuracoes/ConfiguracoesSkeleton";
 import { readApiError } from "@/lib/api/api-client-error";
 import { buildPurchaseCoverageBufferTooltip } from "@/lib/compras/purchase-analysis";
 import { cn } from "@/lib/utils";
@@ -83,15 +84,15 @@ function SectionHeader({
     <div className="flex items-start gap-3 border-b border-[var(--border)] px-4 py-4 sm:px-5">
       <span
         className={cn(
-          "flex size-10 shrink-0 items-center justify-center rounded-lg shadow-sm",
+          "flex size-10 shrink-0 items-center justify-center rounded-xl",
           SECTION_TONES[tone].icon,
         )}
       >
         <Icon className="size-5" aria-hidden />
       </span>
       <div>
-        <h2 className="text-sm font-semibold">{title}</h2>
-        <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+        <h2 className="text-base font-semibold tracking-tight">{title}</h2>
+        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
           {description}
         </p>
       </div>
@@ -126,7 +127,7 @@ function SettingField({
   const toneClasses = SECTION_TONES[tone];
 
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3.5 py-3">
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] px-3.5 py-3">
       <MetricWithHint content={tooltip}>
         <span className="text-sm font-medium text-[var(--foreground)]">
           {label}
@@ -275,9 +276,7 @@ export function OperationalSettingsClient() {
   };
 
   if (loading) {
-    return (
-      <p className="text-sm text-[var(--muted-foreground)]">Carregando…</p>
-    );
+    return <ConfiguracoesSkeleton cards={3} />;
   }
 
   const hasChanges =
@@ -302,7 +301,7 @@ export function OperationalSettingsClient() {
         </UserFeedback>
       ) : null}
 
-      <Card className={cn("overflow-hidden p-0", SECTION_TONES.sky.border)}>
+      <Card className={cn("overflow-hidden rounded-2xl p-0", SECTION_TONES.sky.border)}>
         <SectionHeader
           icon={Boxes}
           title="Reposição de estoque"
@@ -344,7 +343,7 @@ export function OperationalSettingsClient() {
         </div>
       </Card>
 
-      <Card className={cn("overflow-hidden p-0", SECTION_TONES.emerald.border)}>
+      <Card className={cn("overflow-hidden rounded-2xl p-0", SECTION_TONES.emerald.border)}>
         <SectionHeader
           icon={ShoppingCart}
           title="Sugestão de compra"
@@ -386,7 +385,7 @@ export function OperationalSettingsClient() {
         </div>
       </Card>
 
-      <Card className={cn("overflow-hidden p-0", SECTION_TONES.amber.border)}>
+      <Card className={cn("overflow-hidden rounded-2xl p-0", SECTION_TONES.amber.border)}>
         <SectionHeader
           icon={Tag}
           title="Promoções"
@@ -406,7 +405,7 @@ export function OperationalSettingsClient() {
         </div>
       </Card>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-3">
         <Button type="button" disabled={saving || !hasChanges} onClick={() => void save()}>
           {saving ? "Salvando…" : "Salvar"}
         </Button>

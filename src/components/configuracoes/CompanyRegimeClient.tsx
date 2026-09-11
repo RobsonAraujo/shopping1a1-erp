@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { FormInput } from "@/components/ui/form-input";
 import { FormSelect } from "@/components/ui/form-select";
 import { UserFeedback } from "@/components/ui/user-feedback";
+import { ConfiguracoesSkeleton } from "@/components/configuracoes/ConfiguracoesSkeleton";
 import { readApiError } from "@/lib/api/api-client-error";
 import type { TaxCompanyConfig } from "@/lib/tax-report/types";
 
@@ -94,7 +95,7 @@ export function CompanyRegimeClient() {
   };
 
   if (loading) {
-    return <p className="text-sm text-[var(--muted-foreground)]">Carregando…</p>;
+    return <ConfiguracoesSkeleton />;
   }
 
   const regimeChanged = company !== null && draftRegime !== company.taxRegime;
@@ -110,14 +111,16 @@ export function CompanyRegimeClient() {
         </UserFeedback>
       ) : null}
 
-      <Card className="overflow-hidden p-0">
+      <Card className="overflow-hidden rounded-2xl p-0">
         <div className="flex items-start gap-3 border-b border-[var(--border)] px-4 py-4 sm:px-5">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--muted)]/30 text-[var(--primary)]">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[var(--primary)]/10 text-[var(--primary)]">
             <Building2 className="size-5" aria-hidden />
           </span>
           <div>
-            <h2 className="text-sm font-semibold">Regime tributário</h2>
-            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+            <h2 className="text-base font-semibold tracking-tight">
+              Regime tributário
+            </h2>
+            <p className="mt-1 text-sm text-[var(--muted-foreground)]">
               Define como impostos são calculados em Produtos, Lucratividade e
               nos relatórios fiscais.
             </p>
@@ -148,7 +151,7 @@ export function CompanyRegimeClient() {
           </div>
 
           {regimeChanged ? (
-            <Card className="border-amber-200 bg-amber-50/60 p-3 text-xs leading-relaxed text-amber-900">
+            <Card className="rounded-2xl border-amber-200 bg-amber-50/60 p-4 text-sm leading-relaxed text-amber-900">
               Você está trocando o regime de{" "}
               <strong>{TAX_REGIME_LABEL[company!.taxRegime]}</strong> para{" "}
               <strong>{TAX_REGIME_LABEL[draftRegime]}</strong>. Produtos
