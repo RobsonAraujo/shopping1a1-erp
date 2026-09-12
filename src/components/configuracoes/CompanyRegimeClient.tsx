@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Building2 } from "lucide-react";
+import { Building2, Landmark, ReceiptText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FormInput } from "@/components/ui/form-input";
-import { FormSelect } from "@/components/ui/form-select";
 import { UserFeedback } from "@/components/ui/user-feedback";
+import { cn } from "@/lib/utils";
 import { ConfiguracoesSkeleton } from "@/components/configuracoes/ConfiguracoesSkeleton";
 import { readApiError } from "@/lib/api/api-client-error";
 import type { TaxCompanyConfig } from "@/lib/tax-report/types";
@@ -16,8 +16,8 @@ type TaxConfigResponse = {
 };
 
 const TAX_REGIME_OPTIONS = [
-  { value: "LUCRO_REAL", label: "Lucro Real" },
-  { value: "SIMPLES", label: "Simples Nacional" },
+  { value: "LUCRO_REAL" as const, label: "Lucro Real", icon: Landmark },
+  { value: "SIMPLES" as const, label: "Simples Nacional", icon: ReceiptText },
 ];
 
 const TAX_REGIME_LABEL: Record<string, string> = {
@@ -129,16 +129,42 @@ export function CompanyRegimeClient() {
 
         <div className="space-y-4 px-4 py-4 sm:px-5">
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormSelect
-              id="company-regime"
-              label="Regime tributário"
-              value={draftRegime}
-              onValueChange={(value) =>
-                setDraftRegime(value as TaxCompanyConfig["taxRegime"])
-              }
-              options={TAX_REGIME_OPTIONS}
-              triggerClassName="w-full"
-            />
+            <div className="space-y-1.5">
+              <label
+                id="company-regime-label"
+                className="block text-xs font-medium text-[var(--muted-foreground)]"
+              >
+                Regime tributário
+              </label>
+              <div
+                role="radiogroup"
+                aria-labelledby="company-regime-label"
+                className="inline-flex w-full rounded-lg bg-[var(--muted)]/50 p-1"
+              >
+                {TAX_REGIME_OPTIONS.map((option) => {
+                  const isActive = draftRegime === option.value;
+                  const Icon = option.icon;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={isActive}
+                      onClick={() => setDraftRegime(option.value)}
+                      className={cn(
+                        "flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-all",
+                        isActive
+                          ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm ring-1 ring-[var(--border)]"
+                          : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
+                      )}
+                    >
+                      <Icon className="size-4 shrink-0" aria-hidden />
+                      <span className="truncate">{option.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             {draftRegime === "SIMPLES" ? (
               <FormInput
                 id="company-regime-simples-aliquota"
