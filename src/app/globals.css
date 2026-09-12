@@ -258,142 +258,338 @@ a,
   animation-delay: 0.3s;
 }
 
-/* Easter egg: xícara de café animada usada como fallback de loading no
-   dashboard (Suspense). Puramente decorativo/CSS — sem custo de JS. */
-.coffee-loader {
-  width: 100px;
-  height: 80px;
+/* Risco animado sobre o texto da tarefa concluída no checklist do dia
+   (home). Fica em CSS puro pra não repintar a lista inteira no React a
+   cada toggle — só troca o atributo data-done. */
+.daily-task-label {
   position: relative;
-  display: flex;
-  justify-items: center;
-  align-items: center;
+  display: inline-block;
+  max-width: 100%;
 }
 
-.coffee-loader .coffee-loader-cup {
-  position: absolute;
-  width: 25px;
-  height: 18px;
-  background-color: var(--card);
-  border: 1px solid var(--foreground);
-  z-index: 1;
-  border-radius: 2px 2px 10px 10px;
-  animation: coffee-loader-expansion 6s infinite ease-in-out;
-  transform-origin: center;
-}
-
-.coffee-loader-cup::after {
+.daily-task-label::after {
   content: "";
   position: absolute;
-  top: -2px;
-  width: calc(100% - 2px);
-  height: 2px;
-  background: #fed59fca;
-  border: 1px solid rgba(15, 18, 31, 0.75);
-  border-radius: 50%;
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: 1.5px;
+  background-color: var(--destructive);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.4s ease-out;
 }
 
-.coffee-loader-cup::before {
-  content: "";
-  position: absolute;
-  top: 15px;
-  width: calc(100% - 2px);
-  height: 4px;
-  background: transparent;
-  border: 1px solid var(--foreground);
-  border-top: none;
-  border-radius: 50%;
-  z-index: -1;
-}
-
-.coffee-loader-cup .coffee-loader-handle {
-  position: absolute;
-  width: 5px;
-  height: 10px;
-  background-color: var(--card);
-  border: 1px solid var(--foreground);
-  right: -5px;
-  top: 2px;
-  border-radius: 2px 10px 20px 2px;
-}
-
-.coffee-loader-cup .coffee-loader-smoke {
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  width: 15px;
-  height: 25px;
-  background: var(--muted-foreground);
-  opacity: 0.4;
-  border-radius: 50%;
-  transform: translateX(-50%);
-  animation: coffee-loader-rise 6s infinite ease-in-out;
-  filter: blur(8px);
-}
-
-.coffee-loader-cup .coffee-loader-smoke.one {
-  animation-delay: 0s;
-}
-.coffee-loader-cup .coffee-loader-smoke.two {
-  animation-delay: 1s;
-}
-.coffee-loader-cup .coffee-loader-smoke.three {
-  animation-delay: 2s;
-}
-
-.coffee-loader-label {
-  position: absolute;
-  font-size: 10px;
-  opacity: 0.7;
-  top: 45%;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: -1;
-  color: var(--muted-foreground);
-}
-
-@keyframes coffee-loader-expansion {
-  0% {
-    width: 25px;
-    transform: translateX(0);
-  }
-  40% {
-    width: 100%;
-    transform: translateX(0);
-  }
-  80% {
-    width: 25px;
-    transform: translateX(64px);
-  }
-  90% {
-    width: 100%;
-    transform: translateX(0);
-  }
-  100% {
-    width: 25px;
-    transform: translateX(0);
-  }
-}
-
-@keyframes coffee-loader-rise {
-  0% {
-    transform: translate(-50%, 0) scale(0.4);
-    opacity: 0;
-  }
-  30% {
-    opacity: 0.7;
-  }
-  60% {
-    opacity: 0.4;
-  }
-  100% {
-    transform: translate(-50%, -120px) scale(1);
-    opacity: 0;
-  }
+.daily-task-label[data-done="true"]::after {
+  transform: scaleX(1);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .coffee-loader-cup,
-  .coffee-loader-smoke {
+  .daily-task-label::after {
+    transition: none;
+  }
+}
+
+/* Easter egg: máquina de café animada usada como fallback de loading no
+   dashboard (Suspense) e como enfeite no card de tarefas do dia.
+   Puramente decorativo/CSS — sem custo de JS. Renderizada em 300x280 e
+   encolhida via transform:scale no wrapper (.coffee-machine-scale),
+   controlado pelo componente CoffeeLoader (prop `size`). */
+.coffee-machine-scale {
+  position: relative;
+  overflow: hidden;
+}
+
+.coffee-machine-loader {
+  position: relative;
+  width: 300px;
+  height: 280px;
+  transform-origin: top left;
+}
+
+.coffee-machine-header {
+  width: 100%;
+  height: 80px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  background-color: #ddcfcc;
+  border-radius: 10px;
+}
+
+.coffee-machine-header__buttons {
+  width: 25px;
+  height: 25px;
+  position: absolute;
+  top: 25px;
+  background-color: #282323;
+  border-radius: 50%;
+}
+
+.coffee-machine-header__buttons::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  position: absolute;
+  bottom: -8px;
+  left: calc(50% - 4px);
+  background-color: #615e5e;
+}
+
+.coffee-machine-header__button-one {
+  left: 15px;
+}
+
+.coffee-machine-header__button-two {
+  left: 50px;
+}
+
+.coffee-machine-header__display {
+  width: 50px;
+  height: 50px;
+  position: absolute;
+  top: calc(50% - 25px);
+  left: calc(50% - 25px);
+  border-radius: 50%;
+  background-color: #9acfc5;
+  border: 5px solid #43beae;
+  box-sizing: border-box;
+}
+
+.coffee-machine-header__details {
+  width: 8px;
+  height: 20px;
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background-color: #9b9091;
+  box-shadow:
+    -12px 0 0 #9b9091,
+    -24px 0 0 #9b9091;
+}
+
+.coffee-machine-medium {
+  width: 90%;
+  height: 160px;
+  position: absolute;
+  top: 80px;
+  left: calc(50% - 45%);
+  background-color: #bcb0af;
+}
+
+.coffee-machine-medium::before {
+  content: "";
+  width: 90%;
+  height: 100px;
+  background-color: #776f6e;
+  position: absolute;
+  bottom: 0;
+  left: calc(50% - 45%);
+  border-radius: 20px 20px 0 0;
+}
+
+.coffee-machine-medium__exit {
+  width: 60px;
+  height: 20px;
+  position: absolute;
+  top: 0;
+  left: calc(50% - 30px);
+  background-color: #231f20;
+}
+
+.coffee-machine-medium__exit::before {
+  content: "";
+  width: 50px;
+  height: 20px;
+  border-radius: 0 0 50% 50%;
+  position: absolute;
+  bottom: -20px;
+  left: calc(50% - 25px);
+  background-color: #231f20;
+}
+
+.coffee-machine-medium__exit::after {
+  content: "";
+  width: 10px;
+  height: 10px;
+  position: absolute;
+  bottom: -30px;
+  left: calc(50% - 5px);
+  background-color: #231f20;
+}
+
+.coffee-machine-medium__arm {
+  width: 70px;
+  height: 20px;
+  position: absolute;
+  top: 15px;
+  right: 25px;
+  background-color: #231f20;
+}
+
+.coffee-machine-medium__arm::before {
+  content: "";
+  width: 15px;
+  height: 5px;
+  position: absolute;
+  top: 7px;
+  left: -15px;
+  background-color: #9e9495;
+}
+
+.coffee-machine-medium__cup {
+  width: 80px;
+  height: 47px;
+  position: absolute;
+  bottom: 0;
+  left: calc(50% - 40px);
+  background-color: #fff;
+  border-radius: 0 0 70px 70px / 0 0 110px 110px;
+}
+
+.coffee-machine-medium__cup::after {
+  content: "";
+  width: 20px;
+  height: 20px;
+  position: absolute;
+  top: 6px;
+  right: -13px;
+  border: 5px solid #fff;
+  border-radius: 50%;
+}
+
+@keyframes coffee-machine-liquid {
+  0% {
+    height: 0;
+    opacity: 1;
+  }
+  5% {
+    height: 0;
+    opacity: 1;
+  }
+  20% {
+    height: 62px;
+    opacity: 1;
+  }
+  95% {
+    height: 62px;
+    opacity: 1;
+  }
+  100% {
+    height: 62px;
+    opacity: 0;
+  }
+}
+
+.coffee-machine-medium__liquid {
+  width: 6px;
+  height: 63px;
+  opacity: 0;
+  position: absolute;
+  top: 50px;
+  left: calc(50% - 3px);
+  background-color: #74372b;
+  animation: coffee-machine-liquid 4s 4s linear infinite;
+}
+
+.coffee-machine-medium__smoke {
+  width: 8px;
+  height: 20px;
+  position: absolute;
+  border-radius: 5px;
+  background-color: #b3aeae;
+}
+
+@keyframes coffee-machine-smoke-near {
+  0% {
+    bottom: 20px;
+    opacity: 0;
+  }
+  40% {
+    bottom: 50px;
+    opacity: 0.5;
+  }
+  80% {
+    bottom: 80px;
+    opacity: 0.3;
+  }
+  100% {
+    bottom: 80px;
+    opacity: 0;
+  }
+}
+
+@keyframes coffee-machine-smoke-far {
+  0% {
+    bottom: 40px;
+    opacity: 0;
+  }
+  40% {
+    bottom: 70px;
+    opacity: 0.5;
+  }
+  80% {
+    bottom: 80px;
+    opacity: 0.3;
+  }
+  100% {
+    bottom: 80px;
+    opacity: 0;
+  }
+}
+
+.coffee-machine-medium__smoke-one {
+  opacity: 0;
+  bottom: 50px;
+  left: 102px;
+  animation: coffee-machine-smoke-near 3s 4s linear infinite;
+}
+
+.coffee-machine-medium__smoke-two {
+  opacity: 0;
+  bottom: 70px;
+  left: 118px;
+  animation: coffee-machine-smoke-far 3s 5s linear infinite;
+}
+
+.coffee-machine-medium__smoke-three {
+  opacity: 0;
+  bottom: 65px;
+  right: 118px;
+  animation: coffee-machine-smoke-far 3s 6s linear infinite;
+}
+
+.coffee-machine-medium__smoke-four {
+  opacity: 0;
+  bottom: 50px;
+  right: 102px;
+  animation: coffee-machine-smoke-near 3s 5s linear infinite;
+}
+
+.coffee-machine-footer {
+  width: 95%;
+  height: 15px;
+  position: absolute;
+  bottom: 25px;
+  left: calc(50% - 47.5%);
+  background-color: #41bdad;
+  border-radius: 10px;
+}
+
+.coffee-machine-footer::after {
+  content: "";
+  width: 106%;
+  height: 26px;
+  position: absolute;
+  bottom: -25px;
+  left: -8px;
+  background-color: #000;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .coffee-machine-medium__liquid,
+  .coffee-machine-medium__smoke {
     animation: none !important;
+    opacity: 0 !important;
   }
 }

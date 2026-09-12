@@ -3,9 +3,11 @@ import { cache, Suspense } from "react";
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
-import { CoffeeLoader } from "@/components/home/CoffeeLoader";
 import { DashboardCatalogLosingPanel } from "@/components/home/DashboardCatalogLosingPanel";
+import { DashboardDailyChecklist } from "@/components/home/DashboardDailyChecklist";
+import { DashboardFocusTimer } from "@/components/home/DashboardFocusTimer";
 import { DashboardOnboardingChecklist } from "@/components/home/DashboardOnboardingChecklist";
+import { DashboardQuickNotes } from "@/components/home/DashboardQuickNotes";
 import { DashboardOperationsSummary } from "@/components/home/DashboardOperationsSummary";
 import { DashboardSalesCard } from "@/components/home/DashboardSalesCard";
 import { DashboardSummaryClient } from "@/components/home/DashboardSummaryClient";
@@ -50,11 +52,7 @@ function SellerIdentitySkeleton() {
 }
 
 function AttentionSkeleton() {
-  return (
-    <div className="flex h-24 items-center justify-center rounded-3xl bg-[var(--card)]">
-      <CoffeeLoader />
-    </div>
-  );
+  return <div className="h-24 animate-pulse rounded-3xl bg-[var(--card)]" />;
 }
 
 function SalesCardSkeleton() {
@@ -165,21 +163,21 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-8 sm:space-y-10">
-      <header className="flex items-start justify-between gap-4">
+      <header>
         <Suspense fallback={<SellerIdentitySkeleton />}>
           <SellerIdentity token={token} />
         </Suspense>
-        <div
-          className="hidden shrink-0 origin-top-right scale-75 sm:block"
-          title="☕"
-        >
-          <CoffeeLoader />
-        </div>
       </header>
 
       {onboardingState ? (
         <DashboardOnboardingChecklist state={onboardingState} />
       ) : null}
+
+      <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-3 sm:gap-4">
+        <DashboardDailyChecklist />
+        <DashboardQuickNotes />
+        <DashboardFocusTimer />
+      </div>
 
       <div
         id="prioridades"
