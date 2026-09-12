@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { Clock, RefreshCw } from "lucide-react";
 import {
   ItemListSearch,
   itemListSearchEmptyMessage,
@@ -51,15 +51,22 @@ type ReportResponse = {
 
 function statusBadgeClass(status: string | null) {
   if (status === "winning") {
-    return "inline-flex rounded-md bg-emerald-600 px-2 py-1 text-xs font-semibold text-white";
+    return "inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-semibold text-emerald-600 ring-1 ring-inset ring-emerald-500/20 dark:text-emerald-400";
   }
   if (status === "losing") {
-    return "inline-flex rounded-md bg-rose-600 px-2 py-1 text-xs font-semibold text-white";
+    return "inline-flex items-center gap-1.5 rounded-full bg-rose-500/10 px-2 py-1 text-xs font-semibold text-rose-600 ring-1 ring-inset ring-rose-500/20 dark:text-rose-400";
   }
   if (status === "shared") {
-    return "inline-flex rounded-md bg-amber-500 px-2 py-1 text-xs font-semibold text-white";
+    return "inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2 py-1 text-xs font-semibold text-amber-600 ring-1 ring-inset ring-amber-500/20 dark:text-amber-400";
   }
-  return "inline-flex rounded-md bg-[var(--muted)] px-2 py-1 text-xs font-semibold text-[var(--muted-foreground)]";
+  return "inline-flex items-center gap-1.5 rounded-full bg-[var(--muted)] px-2 py-1 text-xs font-semibold text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--border)]";
+}
+
+function statusDotClass(status: string | null): string {
+  if (status === "winning") return "size-1.5 rounded-full bg-emerald-500";
+  if (status === "losing") return "size-1.5 rounded-full bg-rose-500";
+  if (status === "shared") return "size-1.5 rounded-full bg-amber-500";
+  return "size-1.5 rounded-full bg-[var(--muted-foreground)]";
 }
 
 function statusLabel(status: string | null) {
@@ -187,23 +194,28 @@ export function CatalogCompetitionReportClient() {
   return (
     <div className="space-y-6">
       {data ? (
-        <Card className="border-[var(--border)] bg-[var(--muted)]/20">
-          <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
-            <div className="text-sm">
-              <span className="font-medium">Coletas hoje:</span>{" "}
-              <span className="text-lg font-semibold">
-                {data.pollStats.todayCount}
+        <Card className="border-dashed bg-[var(--muted)]/20">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6 sm:pt-6">
+            <div className="flex items-center gap-2 text-sm">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--background)] text-[var(--muted-foreground)] ring-1 ring-[var(--border)]">
+                <Clock className="size-4" />
               </span>
-              <span className="ml-3 text-[var(--muted-foreground)]">
-                Última coleta às{" "}
-                {formatLastRun(
-                  data.pollStats.lastRunAt,
-                  data.pollStats.timezone,
-                )}
-                {data.pollStats.lastRunSource
-                  ? ` (${data.pollStats.lastRunSource === "cron" ? "cron" : "manual"})`
-                  : ""}
-              </span>
+              <div>
+                <span className="font-medium">Coletas hoje:</span>{" "}
+                <span className="text-lg font-semibold tabular-nums text-[var(--foreground)]">
+                  {data.pollStats.todayCount}
+                </span>
+                <div className="text-[var(--muted-foreground)]">
+                  Última coleta às{" "}
+                  {formatLastRun(
+                    data.pollStats.lastRunAt,
+                    data.pollStats.timezone,
+                  )}
+                  {data.pollStats.lastRunSource
+                    ? ` (${data.pollStats.lastRunSource === "cron" ? "cron" : "manual"})`
+                    : ""}
+                </div>
+              </div>
             </div>
             <Button
               variant="outline"
@@ -273,7 +285,7 @@ export function CatalogCompetitionReportClient() {
                     key={row.mlItemId}
                     href={`/dashboard/catalog-report/${row.mlItemId}`}
                     className={cn(
-                      "flex items-center gap-2.5 rounded-lg border border-[var(--border)] px-3 py-2.5 active:bg-[var(--muted)]/40",
+                      "flex items-center gap-2.5 rounded-lg border border-[var(--border)] px-3 py-2.5 transition-colors active:bg-[var(--muted)]/40",
                       listingRowMutedClass(mlStatus, 0, 0),
                     )}
                   >
@@ -307,6 +319,7 @@ export function CatalogCompetitionReportClient() {
                       </div>
                       <div className="mt-1">
                         <span className={statusBadgeClass(row.catalogStatus)}>
+                          <span className={statusDotClass(row.catalogStatus)} />
                           {statusLabel(row.catalogStatus)}
                         </span>
                       </div>
@@ -345,7 +358,7 @@ export function CatalogCompetitionReportClient() {
                       <tr
                         key={row.mlItemId}
                         className={cn(
-                          "border-b border-[var(--border)]",
+                          "border-b border-[var(--border)] transition-colors hover:bg-[var(--muted)]/20",
                           listingRowMutedClass(mlStatus, 0, 0),
                         )}
                       >
