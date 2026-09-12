@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useCallback, useState, type CSSProperties } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -17,6 +17,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { OperationsKanbanCard } from "@/components/operacoes-full/OperationsKanbanCard";
 import type { OperationsBoardCard } from "@/lib/compras/replenishment-cycle-data";
 import { useDropHighlight } from "@/hooks/use-drop-highlight";
+import { useKanbanPanScroll } from "@/hooks/use-kanban-pan-scroll";
 import type {
   DeleteColumnResult,
   KanbanColumnRow,
@@ -68,39 +69,68 @@ type OperationsKanbanBoardProps = {
   fullHeight?: boolean;
 };
 
+type ColumnDragHandle = Pick<
+  ReturnType<typeof useSortable>,
+  "attributes" | "listeners"
+> & { isDragging: boolean };
+
 function DroppableColumn({
-  columnId,
+  column,
   collapsed,
   fullHeight,
   stripe,
   shellStyle,
   children,
 }: {
-  columnId: string;
+  column: KanbanColumnRow;
   collapsed: boolean;
   fullHeight?: boolean;
   stripe?: string;
   shellStyle?: CSSProperties;
-  children: React.ReactNode;
+  children: (drag: ColumnDragHandle) => React.ReactNode;
 }) {
-  const { setNodeRef, className } = useDropHighlight(
-    `${OPERATIONS_COLUMN_DROP_ID_PREFIX}${columnId}`,
+  const { setNodeRef: setDropRef, className } = useDropHighlight(
+    `${OPERATIONS_COLUMN_DROP_ID_PREFIX}${column.id}`,
   );
+  const {
+    attributes,
+    listeners,
+    setNodeRef: setSortableRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: `${COLUMN_DRAG_ID_PREFIX}${column.id}`,
+    disabled: column.isLocked,
+  });
+  const setNodeRef = useCallback(
+    (node: HTMLElement | null) => {
+      setDropRef(node);
+      setSortableRef(node);
+    },
+    [setDropRef, setSortableRef],
+  );
+
   return (
     <section
       ref={setNodeRef}
       className={cn(
         "flex shrink-0 snap-center flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[rgb(255_255_255_/_65%)] shadow-sm sm:snap-align-none",
         collapsed ? "w-10 self-start sm:w-10" : "w-[calc(100vw-2.75rem)] sm:w-72",
-        fullHeight && !collapsed && "h-full",
+        fullHeight && !collapsed && "self-start max-h-full",
+        isDragging && "opacity-60",
         className,
       )}
-      style={shellStyle}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        ...shellStyle,
+      }}
     >
       {stripe ? (
         <div aria-hidden className="h-1.5 shrink-0" style={{ background: stripe }} />
       ) : null}
-      {children}
+      {children({ attributes, listeners, isDragging })}
     </section>
   );
 }
@@ -114,6 +144,7 @@ function ColumnHeader({
   onToggleCollapse,
   onRename,
   onRequestDelete,
+  drag,
 }: {
   column: KanbanColumnRow;
   count: number;
@@ -123,20 +154,10 @@ function ColumnHeader({
   onToggleCollapse: () => void;
   onRename: (label: string) => void;
   onRequestDelete: () => void;
+  drag: ColumnDragHandle;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(column.label);
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({
-    id: `${COLUMN_DRAG_ID_PREFIX}${column.id}`,
-    disabled: column.isLocked,
-  });
 
   function commitRename() {
     setEditing(false);
@@ -147,29 +168,22 @@ function ColumnHeader({
 
   return (
     <header
-      ref={setNodeRef}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-        ...headerStyle,
-      }}
+      {...(!column.isLocked ? drag.attributes : undefined)}
+      {...(!column.isLocked ? drag.listeners : undefined)}
+      style={headerStyle}
+      aria-label={!column.isLocked ? `Arrastar coluna ${column.label}` : undefined}
       className={cn(
         "border-b border-[var(--border)] px-3 py-2.5",
-        isDragging && "opacity-40",
+        !column.isLocked && "touch-none",
       )}
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-1">
           {!column.isLocked ? (
-            <button
-              type="button"
-              {...attributes}
-              {...listeners}
-              className="cursor-grab touch-none text-[var(--muted-foreground)] active:cursor-grabbing"
-              aria-label={`Arrastar coluna ${column.label}`}
-            >
-              <GripVertical className="size-3.5" aria-hidden />
-            </button>
+            <GripVertical
+              className="size-3.5 shrink-0 text-[var(--muted-foreground)]"
+              aria-hidden
+            />
           ) : null}
           {editing ? (
             <input
@@ -184,19 +198,24 @@ function ColumnHeader({
                   setEditing(false);
                 }
               }}
+              onPointerDown={(e) => e.stopPropagation()}
               className="min-w-0 rounded border border-[var(--border)] bg-[var(--background)] px-1.5 py-0.5 text-sm font-semibold"
             />
           ) : (
             <h3
               className="cursor-text truncate text-sm font-semibold"
               onDoubleClick={() => setEditing(true)}
+              onPointerDown={(e) => e.stopPropagation()}
               title="Duplo clique para renomear"
             >
               {column.label}
             </h3>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div
+          className="flex shrink-0 items-center gap-1.5"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
           {onColorChange ? (
             <KanbanColumnColorPicker
               colorId={colorId}
@@ -350,6 +369,8 @@ export function OperationsKanbanBoard({
         .map((c) => ({ value: c.id, label: c.label }))
     : [];
 
+  const panScroll = useKanbanPanScroll();
+
   return (
     <section
       className={cn(
@@ -379,6 +400,7 @@ export function OperationsKanbanBoard({
             ? "min-h-0 flex-1 px-3 pb-3 sm:px-4 sm:pb-12 kanban-scroll-x"
             : "pb-2",
         )}
+        {...panScroll}
       >
         <SortableContext
           items={middleColumnDragIds}
@@ -392,69 +414,72 @@ export function OperationsKanbanBoard({
             return (
               <DroppableColumn
                 key={column.id}
-                columnId={column.id}
+                column={column}
                 collapsed={isCollapsed}
                 fullHeight={fullHeight}
                 stripe={paint.stripe}
                 shellStyle={paint.shellStyle}
               >
-                {isCollapsed ? (
-                  <button
-                    type="button"
-                    onClick={() => void onToggleCollapse(column.id, false)}
-                    aria-label={`Expandir coluna ${column.label}`}
-                    className="flex h-64 cursor-pointer flex-col items-center justify-between gap-2 py-3 text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
-                  >
-                    <ChevronRight className="size-4 shrink-0" aria-hidden />
-                    <span className="flex-1 text-sm font-semibold [writing-mode:vertical-rl]">
-                      {column.label}
-                    </span>
-                    <span className="rounded-full bg-[var(--muted)] px-1.5 py-0.5 text-xs tabular-nums">
-                      {columnCards.length}
-                    </span>
-                  </button>
-                ) : (
-                  <>
-                    <ColumnHeader
-                      column={column}
-                      count={columnCards.length}
-                      headerStyle={paint.headerStyle}
-                      colorId={colorId}
-                      onColorChange={
-                        appearance.theme === "colorful"
-                          ? (next) => setColumnColor(column.id, next)
-                          : undefined
-                      }
-                      onToggleCollapse={() =>
-                        void onToggleCollapse(column.id, true)
-                      }
-                      onRename={(label) =>
-                        void onRenameColumn(column.id, label)
-                      }
-                      onRequestDelete={() => requestDelete(column)}
-                    />
-                    <div
-                      className={cn(
-                        "flex flex-1 flex-col gap-2 p-2",
-                        fullHeight && "min-h-0 overflow-y-auto",
-                      )}
+                {(drag) =>
+                  isCollapsed ? (
+                    <button
+                      type="button"
+                      onClick={() => void onToggleCollapse(column.id, false)}
+                      aria-label={`Expandir coluna ${column.label}`}
+                      className="flex h-64 cursor-pointer flex-col items-center justify-between gap-2 py-3 text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
                     >
-                      {columnCards.length === 0 ? (
-                        <p className="px-1 py-6 text-center text-xs text-[var(--muted-foreground)]">
-                          Vazio
-                        </p>
-                      ) : (
-                        columnCards.map((card) => (
-                          <OperationsKanbanCard
-                            key={card.cycleId}
-                            card={card}
-                            busy={busyId === card.cycleId}
-                          />
-                        ))
-                      )}
-                    </div>
-                  </>
-                )}
+                      <ChevronRight className="size-4 shrink-0" aria-hidden />
+                      <span className="flex-1 text-sm font-semibold [writing-mode:vertical-rl]">
+                        {column.label}
+                      </span>
+                      <span className="rounded-full bg-[var(--muted)] px-1.5 py-0.5 text-xs tabular-nums">
+                        {columnCards.length}
+                      </span>
+                    </button>
+                  ) : (
+                    <>
+                      <ColumnHeader
+                        column={column}
+                        count={columnCards.length}
+                        headerStyle={paint.headerStyle}
+                        colorId={colorId}
+                        onColorChange={
+                          appearance.theme === "colorful"
+                            ? (next) => setColumnColor(column.id, next)
+                            : undefined
+                        }
+                        onToggleCollapse={() =>
+                          void onToggleCollapse(column.id, true)
+                        }
+                        onRename={(label) =>
+                          void onRenameColumn(column.id, label)
+                        }
+                        onRequestDelete={() => requestDelete(column)}
+                        drag={drag}
+                      />
+                      <div
+                        className={cn(
+                          "flex flex-1 flex-col gap-2 p-2",
+                          fullHeight && "min-h-0 overflow-y-auto",
+                        )}
+                      >
+                        {columnCards.length === 0 ? (
+                          <p className="px-1 py-6 text-center text-xs text-[var(--muted-foreground)]">
+                            Vazio
+                          </p>
+                        ) : (
+                          columnCards.map((card) => (
+                            <OperationsKanbanCard
+                              key={card.cycleId}
+                              card={card}
+                              busy={busyId === card.cycleId}
+                            />
+                          ))
+                        )}
+                      </div>
+                    </>
+                  )
+                }
               </DroppableColumn>
             );
           })}
