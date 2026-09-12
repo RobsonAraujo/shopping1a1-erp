@@ -1,5 +1,6 @@
 import { TrendingUp } from "lucide-react";
 import { DashboardKpiCard } from "@/components/home/DashboardKpiCard";
+import { CATEGORY_BADGE_CLASS } from "@/lib/ui/tone";
 import type { DashboardSalesSnapshot } from "@/lib/home/sales-card-data";
 
 const POSITIVE_RATINGS_LABEL = "Avaliações positivas";
@@ -19,7 +20,7 @@ export function DashboardSalesCard({
     <DashboardKpiCard
       title="Vendas"
       icon={TrendingUp}
-      accentClassName="bg-emerald-500"
+      badgeClassName={CATEGORY_BADGE_CLASS.emerald}
       meterFillClassName="bg-emerald-500"
       meterValueClassName="text-emerald-700"
       pending={pending}

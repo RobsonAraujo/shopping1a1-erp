@@ -1,5 +1,6 @@
 import { Kanban, ShoppingCart } from "lucide-react";
 import { DashboardKpiCard } from "@/components/home/DashboardKpiCard";
+import { CATEGORY_BADGE_CLASS } from "@/lib/ui/tone";
 import type { OperationsSummaryCounts } from "@/lib/compras/replenishment-cycle";
 
 function completedShare(inProgress: number, final: number): number {
@@ -22,7 +23,7 @@ export function DashboardOperationsSummary({
         href="/dashboard/compras?tab=kanban"
         title="Compras"
         icon={ShoppingCart}
-        accentClassName="bg-[var(--primary)]"
+        badgeClassName={CATEGORY_BADGE_CLASS.primary}
         meterFillClassName="bg-[var(--primary)]"
         meterValueClassName="text-[var(--primary)]"
         value={summary.purchase.inProgress.toLocaleString("pt-BR")}
@@ -42,9 +43,9 @@ export function DashboardOperationsSummary({
         href="/dashboard/operacoes-full"
         title="Full"
         icon={Kanban}
-        accentClassName="bg-teal-700"
-        meterFillClassName="bg-teal-600"
-        meterValueClassName="text-teal-800"
+        badgeClassName={CATEGORY_BADGE_CLASS.violet}
+        meterFillClassName="bg-violet-500"
+        meterValueClassName="text-violet-700"
         value={summary.full.inProgress.toLocaleString("pt-BR")}
         valueLabel={
           summary.full.inProgress === 1

@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 export function DashboardKpiCard({
   title,
   icon: Icon,
-  accentClassName,
+  badgeClassName,
   meterFillClassName,
   meterValueClassName,
   value,
@@ -20,7 +20,7 @@ export function DashboardKpiCard({
 }: {
   title: string;
   icon: LucideIcon;
-  accentClassName: string;
+  badgeClassName: string;
   meterFillClassName: string;
   meterValueClassName: string;
   value?: string;
@@ -41,14 +41,11 @@ export function DashboardKpiCard({
       <div className="flex items-center">
         <span
           className={cn(
-            "relative size-6 shrink-0 rounded-full",
-            accentClassName,
+            "relative flex size-8 shrink-0 items-center justify-center rounded-full",
+            badgeClassName,
           )}
         >
-          <Icon
-            className="absolute top-1/2 left-1/2 size-4 -translate-x-1/2 -translate-y-1/2 text-white"
-            aria-hidden
-          />
+          <Icon className="size-4" aria-hidden />
         </span>
         <h2 className="ml-2 min-w-0 flex-1 truncate text-lg font-medium text-[var(--foreground)]">
           {title}
@@ -131,7 +128,7 @@ export function DashboardKpiCard({
   );
 
   const className =
-    "flex h-full w-full flex-col justify-between rounded-[20px] bg-[var(--card)] p-4 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] sm:p-5";
+    "flex h-full w-full flex-col justify-between rounded-3xl bg-[var(--card)] p-4 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] sm:p-5";
 
   if (href) {
     return (

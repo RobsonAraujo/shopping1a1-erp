@@ -3,6 +3,7 @@ import { cache, Suspense } from "react";
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
+import { CoffeeLoader } from "@/components/home/CoffeeLoader";
 import { DashboardCatalogLosingPanel } from "@/components/home/DashboardCatalogLosingPanel";
 import { DashboardOnboardingChecklist } from "@/components/home/DashboardOnboardingChecklist";
 import { DashboardOperationsSummary } from "@/components/home/DashboardOperationsSummary";
@@ -39,8 +40,21 @@ async function AttentionSection({
   );
 }
 
+function SellerIdentitySkeleton() {
+  return (
+    <div aria-hidden>
+      <div className="h-7 w-48 animate-pulse rounded-lg bg-[var(--muted)] sm:h-9 sm:w-64" />
+      <div className="mt-1.5 h-4 w-36 animate-pulse rounded bg-[var(--muted)]" />
+    </div>
+  );
+}
+
 function AttentionSkeleton() {
-  return <div className="h-24 animate-pulse rounded-3xl bg-[var(--card)]" />;
+  return (
+    <div className="flex h-24 items-center justify-center rounded-3xl bg-[var(--card)]">
+      <CoffeeLoader />
+    </div>
+  );
 }
 
 function SalesCardSkeleton() {
@@ -151,10 +165,16 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-8 sm:space-y-10">
-      <header>
-        <Suspense fallback={null}>
+      <header className="flex items-start justify-between gap-4">
+        <Suspense fallback={<SellerIdentitySkeleton />}>
           <SellerIdentity token={token} />
         </Suspense>
+        <div
+          className="hidden shrink-0 origin-top-right scale-75 sm:block"
+          title="☕"
+        >
+          <CoffeeLoader />
+        </div>
       </header>
 
       {onboardingState ? (
