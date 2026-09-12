@@ -1,7 +1,7 @@
 import Image from "next/image";
-import Link from "next/link";
 import { ImageOff } from "lucide-react";
 import { formatFinancialMoney } from "@/lib/pricing/financial-margin";
+import { sellerListingModifyUrl } from "@/lib/mercadolibre/seller-listing-url";
 import type { CatalogLosingRow } from "@/lib/home/catalog-losing-data";
 
 export function DashboardCatalogLosingPanel({
@@ -10,8 +10,6 @@ export function DashboardCatalogLosingPanel({
   rows: CatalogLosingRow[];
 }) {
   if (rows.length === 0) return null;
-
-  const visible = rows.slice(0, 8);
 
   return (
     <section>
@@ -22,12 +20,14 @@ export function DashboardCatalogLosingPanel({
         <span className="text-sm tabular-nums text-rose-700">{rows.length}</span>
       </div>
       <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-3xl bg-[var(--card)]">
-        {visible.map((row) => (
+        {rows.map((row) => (
           <li key={row.mlItemId}>
-            <Link
-              href={`/dashboard/catalog-report/${row.mlItemId}`}
+            <a
+              href={sellerListingModifyUrl(row.mlItemId)}
+              target="_blank"
+              rel="noopener noreferrer"
               className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-[var(--muted)]/40 sm:px-5"
-              title={row.title}
+              title={`${row.title} · editar no Mercado Livre`}
             >
               <span className="relative size-11 shrink-0 overflow-hidden rounded-xl bg-[var(--muted)] sm:size-12">
                 {row.imageUrl ? (
@@ -60,15 +60,10 @@ export function DashboardCatalogLosingPanel({
               <span className="shrink-0 text-sm font-semibold tabular-nums text-rose-700">
                 {row.gap != null ? formatFinancialMoney(row.gap) : "Perdendo"}
               </span>
-            </Link>
+            </a>
           </li>
         ))}
       </ul>
-      {rows.length > 8 ? (
-        <p className="mt-2 text-xs text-[var(--muted-foreground)]">
-          + {rows.length - 8} anúncio(s)
-        </p>
-      ) : null}
     </section>
   );
 }

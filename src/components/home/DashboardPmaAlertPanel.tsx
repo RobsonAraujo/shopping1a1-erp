@@ -1,7 +1,7 @@
 import Image from "next/image";
-import Link from "next/link";
 import { ImageOff } from "lucide-react";
 import { formatFinancialMoney } from "@/lib/pricing/financial-margin";
+import { sellerListingModifyUrl } from "@/lib/mercadolibre/seller-listing-url";
 import type { PmaAlertRow } from "@/lib/home/pma-alert-data";
 
 export function DashboardPmaAlertPanel({ rows }: { rows: PmaAlertRow[] }) {
@@ -22,9 +22,12 @@ export function DashboardPmaAlertPanel({ rows }: { rows: PmaAlertRow[] }) {
       <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-3xl bg-[var(--card)]">
         {visible.map((row) => (
           <li key={row.mlItemId}>
-            <Link
-              href={`/dashboard/items/${row.mlItemId}`}
+            <a
+              href={sellerListingModifyUrl(row.mlItemId)}
+              target="_blank"
+              rel="noopener noreferrer"
               className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-[var(--muted)]/40 sm:px-5"
+              title="Editar no Mercado Livre"
             >
               <span className="relative size-11 shrink-0 overflow-hidden rounded-xl bg-[var(--muted)] sm:size-12">
                 {row.imageUrl ? (
@@ -61,7 +64,7 @@ export function DashboardPmaAlertPanel({ rows }: { rows: PmaAlertRow[] }) {
                 })}
                 %
               </span>
-            </Link>
+            </a>
           </li>
         ))}
       </ul>
