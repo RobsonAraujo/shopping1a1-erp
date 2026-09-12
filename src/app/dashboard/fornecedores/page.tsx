@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { Truck } from "lucide-react";
 import { FornecedoresClient } from "@/components/fornecedores/FornecedoresClient";
 import { FornecedoresPageSkeleton } from "@/components/fornecedores/FornecedoresPageSkeleton";
 import { UserFeedback } from "@/components/ui/user-feedback";
@@ -62,16 +63,21 @@ export default async function FornecedoresPage() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-[var(--primary)] sm:text-3xl">
-          Fornecedores
-        </h1>
-        <p className="mt-1.5 max-w-3xl text-sm leading-relaxed text-[var(--muted-foreground)]">
-          Cadastre seus fornecedores e arraste os produtos até eles (ou vincule
-          pelo cadastro em <span className="font-medium">Meus produtos</span>).
-          Produtos sem fornecedor vinculado continuam agrupados pelo texto do
-          SKU em Compras e Estoque.
-        </p>
+      <div className="flex items-center gap-3">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[var(--primary)]/10 text-[var(--primary)] sm:size-11">
+          <Truck className="size-5" aria-hidden />
+        </span>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--foreground)] sm:text-3xl">
+            Fornecedores
+          </h1>
+          <p className="mt-1 max-w-3xl text-sm leading-relaxed text-[var(--muted-foreground)]">
+            Cadastre seus fornecedores e arraste os produtos até eles (ou vincule
+            pelo cadastro em <span className="font-medium">Meus produtos</span>).
+            Produtos sem fornecedor vinculado continuam agrupados pelo texto do
+            SKU em Compras e Estoque.
+          </p>
+        </div>
       </div>
       <Suspense fallback={<FornecedoresPageSkeleton />}>
         <FornecedoresDataSection organizationId={orgContext.organization.id} />

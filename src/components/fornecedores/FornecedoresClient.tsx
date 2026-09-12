@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import {
   ChevronDown,
   ChevronRight,
+  PackageOpen,
   Pencil,
   Plus,
   Power,
@@ -391,8 +392,9 @@ export function FornecedoresClient({
       </div>
 
       {unassignedProducts.length > 0 ? (
-        <Card className="space-y-2 p-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+        <Card className="space-y-2 rounded-2xl border-dashed p-3">
+          <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+            <PackageOpen className="size-3.5 shrink-0" aria-hidden />
             Produtos sem fornecedor ({unassignedProducts.length}) — arraste para um
             fornecedor na lista abaixo (ou de volta pra cá, pra desvincular)
           </p>

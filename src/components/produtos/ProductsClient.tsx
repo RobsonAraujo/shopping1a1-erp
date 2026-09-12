@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Boxes, Download, Plus, RefreshCw } from "lucide-react";
+import { Boxes, Download, Percent, Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { KitsModal } from "@/components/produtos/KitsModal";
 import { ImportAllProductsModal } from "@/components/produtos/ImportAllProductsModal";
@@ -683,8 +683,11 @@ export function ProductsClient() {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader className="pb-2">
+      <Card className="rounded-2xl">
+        <CardHeader className="flex flex-row items-center gap-3 space-y-0 pb-2 sm:pb-2">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--primary)]/10 text-[var(--primary)]">
+            <Percent className="size-4" aria-hidden />
+          </span>
           <CardTitle className="text-base">
             {data?.taxRegime === "SIMPLES"
               ? "Alíquota efetiva do Simples Nacional"
