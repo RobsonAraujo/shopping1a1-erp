@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Calculator, ExternalLink, RefreshCw } from "lucide-react";
+import { Calculator, ExternalLink, RefreshCw, Target, TrendingUp } from "lucide-react";
 import {
   ItemListSearch,
   itemListSearchEmptyMessage,
@@ -614,7 +614,7 @@ export function FinancialEvaluationClient() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="mb-4 flex flex-wrap items-end gap-3 rounded-lg border border-[var(--border)] bg-[var(--muted)]/10 px-3 py-2">
+          <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-dashed border-[var(--border)] bg-[var(--muted)]/10 px-3 py-3">
             <div className="flex rounded-lg border border-[var(--border)] bg-[var(--background)] p-0.5">
               <Button
                 type="button"
@@ -715,7 +715,11 @@ export function FinancialEvaluationClient() {
           </div>
 
           {data && overallAverages.listingCount > 0 ? (
-            <div className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2.5">
+            <div className="mb-4 flex items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--primary)]/5 px-3 py-2.5">
+              <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--primary)]/10 text-[var(--primary)]">
+                <TrendingUp className="size-4" aria-hidden />
+              </span>
+              <div>
               <p className="text-sm text-[var(--foreground)]">
                 No geral
                 {isPeriodMode && appliedFrom && appliedTo
@@ -760,6 +764,7 @@ export function FinancialEvaluationClient() {
                   ? "Como calculamos: somamos o valor de cada venda do período e dividimos pelas unidades vendidas → preço médio por anúncio; com esse preço calculamos a margem. No topo, média simples entre anúncios (cada um com o mesmo peso)."
                   : "Como calculamos: média simples das margens dos anúncios listados (mesmo peso cada um, sem ponderar por volume de vendas)."}
               </p>
+              </div>
             </div>
           ) : null}
 
@@ -797,9 +802,10 @@ export function FinancialEvaluationClient() {
 
           {data && sortedItems.length > 0 ? (
             <>
-              <div className="mb-4 flex flex-wrap items-end justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--muted)]/15 px-3 py-2">
+              <div className="mb-4 flex flex-wrap items-end justify-between gap-3 rounded-xl border border-dashed border-[var(--border)] bg-[var(--muted)]/10 px-3 py-3">
                 <div className="min-w-0 space-y-1">
-                  <p className="text-xs text-[var(--muted-foreground)]">
+                  <p className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
+                    <Target className="size-3.5 shrink-0" aria-hidden />
                     {isPeriodMode ? (
                       <>
                         Margem com preço médio das vendas; Pós ADS usa TACOS{" "}
@@ -817,7 +823,7 @@ export function FinancialEvaluationClient() {
                     )}
                   </p>
                   {minPriceStale ? (
-                    <p className="text-xs text-amber-700">
+                    <p className="text-xs text-amber-600 dark:text-amber-400">
                       Meta alterada — atualize os preços mínimos com taxa e
                       frete ML.
                     </p>

@@ -424,7 +424,7 @@ export function WholesaleReductionSettingsCard({
               </div>
               {saveError ? (
                 <p
-                  className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+                  className="rounded-lg border border-rose-500/20 bg-rose-500/5 px-3 py-2 text-sm text-rose-700 dark:text-rose-400"
                   role="alert"
                 >
                   {saveError}
