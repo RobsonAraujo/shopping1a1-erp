@@ -53,15 +53,22 @@ function fmtMinutes(minutes: number): string {
 
 function statusClass(status: string | null): string {
   if (status === "winning") {
-    return "inline-flex rounded-md bg-emerald-600 px-2 py-0.5 font-semibold text-white";
+    return "inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 font-semibold text-emerald-600 ring-1 ring-inset ring-emerald-500/20 dark:text-emerald-400";
   }
   if (status === "losing") {
-    return "inline-flex rounded-md bg-rose-600 px-2 py-0.5 font-semibold text-white";
+    return "inline-flex items-center gap-1.5 rounded-full bg-rose-500/10 px-2.5 py-0.5 font-semibold text-rose-600 ring-1 ring-inset ring-rose-500/20 dark:text-rose-400";
   }
   if (status === "shared") {
-    return "inline-flex rounded-md bg-amber-500 px-2 py-0.5 font-semibold text-white";
+    return "inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-0.5 font-semibold text-amber-600 ring-1 ring-inset ring-amber-500/20 dark:text-amber-400";
   }
-  return "inline-flex rounded-md bg-[var(--muted)] px-2 py-0.5 font-semibold text-[var(--muted-foreground)]";
+  return "inline-flex items-center gap-1.5 rounded-full bg-[var(--muted)] px-2.5 py-0.5 font-semibold text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--border)]";
+}
+
+function statusDotClass(status: string | null): string {
+  if (status === "winning") return "size-1.5 rounded-full bg-emerald-500";
+  if (status === "losing") return "size-1.5 rounded-full bg-rose-500";
+  if (status === "shared") return "size-1.5 rounded-full bg-amber-500";
+  return "size-1.5 rounded-full bg-[var(--muted-foreground)]";
 }
 
 function segmentClass(status: string): string {
@@ -169,9 +176,12 @@ function TimelineEntryRow({
   entry: DetailResponse["days"][number]["entries"][number];
 }) {
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--muted)]/15 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--muted)]/15 px-3 py-2.5 transition-colors hover:bg-[var(--muted)]/30 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-        <span className={statusClass(entry.status)}>{entry.statusLabel}</span>
+        <span className={statusClass(entry.status)}>
+          <span className={statusDotClass(entry.status)} />
+          {entry.statusLabel}
+        </span>
         <span className="text-sm text-[var(--muted-foreground)]">
           das{" "}
           <span className="font-medium tabular-nums text-[var(--foreground)]">
@@ -264,76 +274,79 @@ export function CatalogCompetitionItemReportClient({ itemId }: { itemId: string 
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end gap-3">
-        <div>
-          <label className="mb-1 block text-xs text-[var(--muted-foreground)]">
-            Período
-          </label>
-          <DateRangePicker
-            fromYmd={fromDate}
-            toYmd={toDate}
-            disabled={loading}
-            onChange={(from, to) => {
-              setRangePreset("custom");
-              setFromDate(from);
-              setToDate(to);
-            }}
-          />
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant={rangePreset === 7 ? "default" : "outline"}
-            size="sm"
-            onClick={() => applyPreset(7)}
-            disabled={loading}
-          >
-            Últimos 7 dias
+      <Card className="border-dashed">
+        <CardContent className="flex flex-wrap items-end gap-3 pt-6 sm:pt-6">
+          <div>
+            <label className="mb-1 block text-xs text-[var(--muted-foreground)]">
+              Período
+            </label>
+            <DateRangePicker
+              fromYmd={fromDate}
+              toYmd={toDate}
+              disabled={loading}
+              onChange={(from, to) => {
+                setRangePreset("custom");
+                setFromDate(from);
+                setToDate(to);
+              }}
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant={rangePreset === 7 ? "default" : "outline"}
+              size="sm"
+              onClick={() => applyPreset(7)}
+              disabled={loading}
+            >
+              Últimos 7 dias
+            </Button>
+            <Button
+              variant={rangePreset === 15 ? "default" : "outline"}
+              size="sm"
+              onClick={() => applyPreset(15)}
+              disabled={loading}
+            >
+              Últimos 15 dias
+            </Button>
+            <Button
+              variant={rangePreset === 30 ? "default" : "outline"}
+              size="sm"
+              onClick={() => applyPreset(30)}
+              disabled={loading}
+            >
+              Últimos 30 dias
+            </Button>
+          </div>
+          <Button size="sm" onClick={() => void loadDetail()} disabled={loading}>
+            {loading ? "Carregando..." : "Atualizar período"}
           </Button>
-          <Button
-            variant={rangePreset === 15 ? "default" : "outline"}
-            size="sm"
-            onClick={() => applyPreset(15)}
-            disabled={loading}
-          >
-            Últimos 15 dias
-          </Button>
-          <Button
-            variant={rangePreset === 30 ? "default" : "outline"}
-            size="sm"
-            onClick={() => applyPreset(30)}
-            disabled={loading}
-          >
-            Últimos 30 dias
-          </Button>
-        </div>
-        <Button size="sm" onClick={() => void loadDetail()} disabled={loading}>
-          {loading ? "Carregando..." : "Atualizar período"}
-        </Button>
-      </div>
+        </CardContent>
+      </Card>
 
       {error ? <UserFeedback>{error}</UserFeedback> : null}
 
       {data ? (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <span className="relative inline-flex size-14 shrink-0 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--muted)]">
+        <Card className="overflow-hidden">
+          <CardContent className="pt-6 sm:pt-6">
+            <div className="flex items-center gap-4">
+              <span className="relative inline-flex size-16 shrink-0 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 ring-1 ring-[var(--border)]">
                 {data.item.imageUrlSnapshot ? (
                   <Image
                     src={data.item.imageUrlSnapshot}
                     alt={data.item.titleSnapshot ?? ""}
                     fill
-                    sizes="56px"
-                    className="object-contain"
+                    sizes="64px"
+                    className="object-contain p-1"
                   />
                 ) : null}
               </span>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="truncate text-base font-semibold">
+                  <div className="truncate text-base font-semibold text-[var(--foreground)]">
                     {data.item.skuSnapshot ?? "Sem SKU"}
                   </div>
                   <span className={statusClass(data.item.catalogStatus)}>
+                    <span className={statusDotClass(data.item.catalogStatus)} />
                     {statusLabel(data.item.catalogStatus)}
                   </span>
                 </div>
@@ -345,10 +358,17 @@ export function CatalogCompetitionItemReportClient({ itemId }: { itemId: string 
                 </div>
               </div>
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-[var(--muted-foreground)]">
+            <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-[var(--border)] pt-3 text-xs text-[var(--muted-foreground)]">
               <span>
-                Fuso: {data.timezone} · Total observado: {fmtMinutes(totalMinutes)}
-                {data.pollIsStale ? " · coleta atrasada (>30 min)" : ""}
+                Fuso: {data.timezone} · Total observado:{" "}
+                <span className="font-medium text-[var(--foreground)]">
+                  {fmtMinutes(totalMinutes)}
+                </span>
+                {data.pollIsStale ? (
+                  <span className="ml-1 text-amber-600 dark:text-amber-400">
+                    · coleta atrasada (&gt;30 min)
+                  </span>
+                ) : null}
               </span>
               {data.item.catalogSellerPrice !== null ||
               data.item.catalogPriceToWin !== null ? (
@@ -374,13 +394,14 @@ export function CatalogCompetitionItemReportClient({ itemId }: { itemId: string 
       <div className="space-y-4">
         {data && data.days.length === 0 ? (
           <Card>
-            <CardContent className="pt-6 text-sm text-[var(--muted-foreground)]">
+            <CardContent className="pt-6 text-sm text-[var(--muted-foreground)] sm:pt-6">
               Nenhum período com status observado no intervalo selecionado.
               {data.item.catalogStatus ? (
                 <>
                   {" "}
                   Status atual:{" "}
                   <span className={statusClass(data.item.catalogStatus)}>
+                    <span className={statusDotClass(data.item.catalogStatus)} />
                     {statusLabel(data.item.catalogStatus)}
                   </span>
                   .
@@ -390,7 +411,10 @@ export function CatalogCompetitionItemReportClient({ itemId }: { itemId: string 
           </Card>
         ) : null}
         {data?.days.map((day) => (
-          <Card key={day.dayKey}>
+          <Card
+            key={day.dayKey}
+            className="transition-shadow hover:shadow-md"
+          >
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
               <CardTitle className="text-base capitalize">{day.label}</CardTitle>
               <span className="text-sm text-[var(--muted-foreground)]">
@@ -406,32 +430,30 @@ export function CatalogCompetitionItemReportClient({ itemId }: { itemId: string 
                 </span>
               </span>
             </CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className="space-y-3">
               {day.entries.length === 0 ? (
                 <p className="text-sm text-[var(--muted-foreground)]">Sem eventos.</p>
               ) : (
                 <>
-                  <div className="overflow-hidden rounded-md border border-[var(--border)]">
-                    <div className="flex h-6 w-full">
-                      {day.entries.map((entry, idx) => {
-                        const dayTotal = day.entries.reduce(
-                          (sum, part) => sum + part.minutes,
-                          0,
-                        );
-                        const widthPct =
-                          dayTotal > 0 ? (entry.minutes / dayTotal) * 100 : 0;
-                        return (
-                          <div
-                            key={`${day.dayKey}-bar-${idx}`}
-                            className={segmentClass(entry.status)}
-                            style={{ width: `${widthPct}%` }}
-                            title={`${entry.statusLabel}: ${entry.from} - ${entry.to} (${fmtMinutes(
-                              entry.minutes,
-                            )})${priceTooltip(entry)}`}
-                          />
-                        );
-                      })}
-                    </div>
+                  <div className="flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full bg-[var(--muted)]">
+                    {day.entries.map((entry, idx) => {
+                      const dayTotal = day.entries.reduce(
+                        (sum, part) => sum + part.minutes,
+                        0,
+                      );
+                      const widthPct =
+                        dayTotal > 0 ? (entry.minutes / dayTotal) * 100 : 0;
+                      return (
+                        <div
+                          key={`${day.dayKey}-bar-${idx}`}
+                          className={`${segmentClass(entry.status)} transition-opacity hover:opacity-80`}
+                          style={{ width: `${widthPct}%` }}
+                          title={`${entry.statusLabel}: ${entry.from} - ${entry.to} (${fmtMinutes(
+                            entry.minutes,
+                          )})${priceTooltip(entry)}`}
+                        />
+                      );
+                    })}
                   </div>
                   <div className="space-y-2">
                     {day.entries.map((entry, idx) => (
