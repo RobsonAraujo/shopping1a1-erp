@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { RotateCcw, X } from "lucide-react";
+import { AlertTriangle, RotateCcw, Target, Wallet, TrendingUp, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   usePersistedJson,
@@ -219,18 +219,24 @@ export function RevenuePotentialView({ rows }: { rows: RevenuePotentialRow[] }) 
       label: "Potencial mensal",
       value: fmtBrl(totals.totalPotential),
       tone: "text-[var(--primary)]",
+      iconTone: "bg-[var(--primary)]/10 text-[var(--primary)]",
+      icon: TrendingUp,
     },
     {
       key: "atual",
       label: "Faturamento atual estimado",
       value: fmtBrl(totals.totalCurrent),
       tone: "text-[var(--muted-foreground)]",
+      iconTone: "bg-[var(--muted)] text-[var(--muted-foreground)]",
+      icon: Wallet,
     },
     {
       key: "gap",
       label: "Oportunidade (gap)",
       value: fmtBrl(totals.totalGap),
-      tone: "text-emerald-700",
+      tone: "text-emerald-600 dark:text-emerald-400",
+      iconTone: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+      icon: Target,
     },
   ];
 
@@ -245,8 +251,9 @@ export function RevenuePotentialView({ rows }: { rows: RevenuePotentialRow[] }) 
   return (
     <div className="space-y-6">
       {hasChanges && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
-          <p className="text-sm font-medium text-amber-900">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+          <p className="flex items-start gap-2.5 text-sm font-medium text-amber-900 dark:text-amber-200">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
             {activeSimulation
               ? `Você está editando a simulação salva "${activeSimulation.name}".`
               : "Você está vendo uma simulação: alguns produtos foram editados ou não considerados na análise."}
@@ -313,20 +320,32 @@ export function RevenuePotentialView({ rows }: { rows: RevenuePotentialRow[] }) 
         <WorkingCapitalCard rows={activeConsideredRows} />
       ) : (
       <>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {kpis.map(({ key, label, value, tone }) => (
-          <div
-            key={key}
-            className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/30 px-4 py-3"
-          >
-            <div className="text-xs font-medium text-[var(--muted-foreground)]">
-              {label}
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 sm:px-6">
+        <div className="flex flex-col divide-y divide-[var(--border)] sm:flex-row sm:divide-x sm:divide-y-0">
+          {kpis.map(({ key, label, value, tone, iconTone, icon: Icon }) => (
+            <div
+              key={key}
+              className="flex flex-1 items-center gap-3 py-3 first:pt-0 sm:px-5 sm:py-1 sm:first:pl-0"
+            >
+              <span
+                className={cn(
+                  "flex size-9 shrink-0 items-center justify-center rounded-full",
+                  iconTone,
+                )}
+              >
+                <Icon className="size-4" aria-hidden />
+              </span>
+              <div className="min-w-0">
+                <div className="text-xs font-medium text-[var(--muted-foreground)]">
+                  {label}
+                </div>
+                <div className={cn("text-xl font-bold tabular-nums tracking-tight", tone)}>
+                  {value}
+                </div>
+              </div>
             </div>
-            <div className={cn("mt-1 text-2xl font-bold tracking-tight", tone)}>
-              {value}
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
       <ItemListSearch
