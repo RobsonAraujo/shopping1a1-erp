@@ -6,6 +6,7 @@ import { ExternalLink } from "lucide-react";
 import { DashboardCatalogLosingPanel } from "@/components/home/DashboardCatalogLosingPanel";
 import { DashboardOnboardingChecklist } from "@/components/home/DashboardOnboardingChecklist";
 import { DashboardOperationsSummary } from "@/components/home/DashboardOperationsSummary";
+import { DashboardSalesCard } from "@/components/home/DashboardSalesCard";
 import { DashboardSummaryClient } from "@/components/home/DashboardSummaryClient";
 import { UserFeedback } from "@/components/ui/user-feedback";
 import { fetchMe } from "@/lib/mercadolibre/api";
@@ -15,6 +16,7 @@ import { buildSellerReputationBadge } from "@/lib/mercadolibre/seller-reputation
 import { loadOperationsSummaryFromDb } from "@/lib/compras/replenishment-cycle-data";
 import { getOnboardingChecklistState } from "@/lib/onboarding/onboarding-checklist";
 import { loadCatalogLosingAlerts } from "@/lib/home/catalog-losing-data";
+import { buildDashboardSalesSnapshot } from "@/lib/home/sales-card-data";
 import { loadPmaAlerts } from "@/lib/home/pma-alert-data";
 import { publicPageLoadMessage } from "@/lib/infra/server-public-error";
 import { cn } from "@/lib/utils";
@@ -41,30 +43,26 @@ function AttentionSkeleton() {
   return <div className="h-24 animate-pulse rounded-3xl bg-[var(--card)]" />;
 }
 
+function SalesCardSkeleton() {
+  return <DashboardSalesCard pending />;
+}
+
 const loadSellerProfile = cache(async (token: string) =>
   fetchMe(token).catch(() => null),
 );
+
+async function SalesCardSection({ token }: { token: string }) {
+  const me = await loadSellerProfile(token);
+  const snapshot = buildDashboardSalesSnapshot(me);
+  if (!snapshot) return null;
+  return <DashboardSalesCard snapshot={snapshot} />;
+}
 
 function sellerCaptionFacts(
   me: Awaited<ReturnType<typeof loadSellerProfile>>,
 ): string[] {
   const badge = buildSellerReputationBadge(me?.seller_reputation);
-  const transactions = me?.seller_reputation?.transactions;
-  const completed = transactions?.completed ?? null;
-  const canceled = transactions?.canceled;
-  const positiveRatio = transactions?.ratings?.positive;
-  const total = (completed ?? 0) + (canceled ?? 0);
-  const satisfactionPercent =
-    positiveRatio != null ? Math.round(positiveRatio * 100) : null;
-  const cancelPercent =
-    canceled != null && total > 0 ? Math.round((canceled / total) * 100) : null;
-
-  return [
-    badge?.label,
-    completed != null ? `${completed.toLocaleString("pt-BR")} vendas` : null,
-    satisfactionPercent != null ? `${satisfactionPercent}% satisfação` : null,
-    cancelPercent != null ? `${cancelPercent}% canceladas` : null,
-  ].filter((fact): fact is string => Boolean(fact));
+  return [badge?.label].filter((fact): fact is string => Boolean(fact));
 }
 
 async function SellerIdentity({ token }: { token: string }) {
@@ -163,9 +161,17 @@ export default async function DashboardPage() {
         <DashboardOnboardingChecklist state={onboardingState} />
       ) : null}
 
-      {operationsResult.summary ? (
-        <DashboardOperationsSummary summary={operationsResult.summary} />
-      ) : null}
+      <div
+        id="prioridades"
+        className="grid scroll-mt-24 grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4"
+      >
+        <Suspense fallback={<SalesCardSkeleton />}>
+          <SalesCardSection token={token} />
+        </Suspense>
+        {operationsResult.summary ? (
+          <DashboardOperationsSummary summary={operationsResult.summary} />
+        ) : null}
+      </div>
 
       {catalogLosing.length > 0 ? (
         <DashboardCatalogLosingPanel rows={catalogLosing} />
