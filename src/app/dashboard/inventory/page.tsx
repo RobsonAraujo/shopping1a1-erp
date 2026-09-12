@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { cookies } from "next/headers";
+import { AlertTriangle, Boxes } from "lucide-react";
 import { InventoryStockTable, type InventoryRow } from "@/components/inventory/InventoryStockTable";
 import { InventoryStockTableSkeleton } from "@/components/inventory/InventoryStockTableSkeleton";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { UserFeedback } from "@/components/ui/user-feedback";
 import { fetchOperationalListings } from "@/lib/mercadolibre/api";
 import { fetchUnitsSoldForItemsInWindowCached } from "@/lib/mercadolibre/sales-window-cache";
@@ -196,15 +197,16 @@ async function InventoryDataSection({
   return (
     <>
       {warehouseLoadFailed ? (
-        <Card className="border-amber-200 bg-amber-50/50">
-          <CardContent className="pt-6 text-sm text-amber-950">
+        <Card className="flex items-start gap-3 rounded-2xl border-amber-500/20 bg-amber-500/5 p-4 text-sm">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
+          <p className="text-amber-900 dark:text-amber-200">
             Não foi possível ler o estoque do galpão (PostgreSQL). As colunas do
             galpão aparecem como zero; confira o banco e o{" "}
-            <code className="rounded bg-amber-100/80 px-1 font-mono text-xs">
+            <code className="rounded bg-amber-500/10 px-1 font-mono text-xs">
               DATABASE_URL
             </code>
             .
-          </CardContent>
+          </p>
         </Card>
       ) : null}
 
@@ -214,13 +216,19 @@ async function InventoryDataSection({
         supplierNames={supplierNames}
       />
 
-      <Card>
-        <CardContent className="p-4 text-sm text-[var(--muted-foreground)] sm:py-4">
-          {total} anúncio{total !== 1 ? "s" : ""} no total
+      <Card className="flex items-center gap-3 rounded-2xl p-4">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--primary)]/10 text-[var(--primary)]">
+          <Boxes className="size-4" aria-hidden />
+        </span>
+        <p className="text-sm text-[var(--muted-foreground)]">
+          <span className="font-semibold tabular-nums text-[var(--foreground)]">
+            {total}
+          </span>{" "}
+          anúncio{total !== 1 ? "s" : ""} no total
           {statusCounts.paused > 0
             ? ` · ${statusCounts.active} ativo${statusCounts.active !== 1 ? "s" : ""} · ${statusCounts.paused} pausado${statusCounts.paused !== 1 ? "s" : ""}`
             : null}
-        </CardContent>
+        </p>
       </Card>
     </>
   );
@@ -245,20 +253,25 @@ export default async function InventoryPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-[var(--primary)]">
-          Estoque
-        </h1>
-        <p className="mt-2 max-w-3xl text-[15px] leading-relaxed text-[var(--muted-foreground)]">
-          Anúncios <strong>ativos e pausados</strong> no Mercado Livre (pausados
-          aparecem com aviso). Estoque no <strong>galpão</strong>, no{" "}
-          <strong>Full</strong> (já liberado para venda), <strong>a caminho</strong>{" "}
-          (transferência e processamento interno via API) e total geral. O
-          &quot;a caminho&quot; pode ser menor que no painel do Meli quando há{" "}
-          <strong>entrada pendente</strong> não exposta pela API.{" "}
-          <strong>Editar</strong> ajusta só o galpão;{" "}
-          <strong>Configurações</strong> define o prazo compra → galpão.
-        </p>
+      <div className="flex items-center gap-3">
+        <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[var(--primary)]/10 text-[var(--primary)]">
+          <Boxes className="size-5" aria-hidden />
+        </span>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--foreground)] sm:text-3xl">
+            Estoque
+          </h1>
+          <p className="mt-1 max-w-3xl text-sm leading-relaxed text-[var(--muted-foreground)] sm:text-[15px]">
+            Anúncios <strong>ativos e pausados</strong> no Mercado Livre (pausados
+            aparecem com aviso). Estoque no <strong>galpão</strong>, no{" "}
+            <strong>Full</strong> (já liberado para venda), <strong>a caminho</strong>{" "}
+            (transferência e processamento interno via API) e total geral. O
+            &quot;a caminho&quot; pode ser menor que no painel do Meli quando há{" "}
+            <strong>entrada pendente</strong> não exposta pela API.{" "}
+            <strong>Editar</strong> ajusta só o galpão;{" "}
+            <strong>Configurações</strong> define o prazo compra → galpão.
+          </p>
+        </div>
       </div>
 
       <Suspense fallback={<InventoryStockTableSkeleton />}>
