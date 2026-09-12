@@ -3,6 +3,25 @@ import { ArrowUpRight, Kanban, ShoppingCart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { OperationsSummaryCounts } from "@/lib/compras/replenishment-cycle";
 
+function Metric({
+  value,
+  label,
+}: {
+  value: number;
+  label: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="text-3xl font-semibold tabular-nums tracking-tight text-[var(--foreground)] sm:text-4xl">
+        {value}
+      </p>
+      <p className="mt-1 truncate text-xs text-[var(--muted-foreground)] sm:text-sm">
+        {label}
+      </p>
+    </div>
+  );
+}
+
 function OpTile({
   href,
   title,
@@ -10,7 +29,7 @@ function OpTile({
   final,
   finalLabel,
   icon: Icon,
-  featured,
+  stripeClassName,
 }: {
   href: string;
   title: string;
@@ -18,49 +37,31 @@ function OpTile({
   final: number;
   finalLabel: string;
   icon: typeof ShoppingCart;
-  featured?: boolean;
+  stripeClassName: string;
 }) {
   return (
     <Link
       href={href}
-      className={cn(
-        "group flex min-h-[9.5rem] flex-col justify-between rounded-3xl p-5 sm:min-h-[11rem] sm:p-6",
-        featured
-          ? "bg-[var(--primary)] text-white"
-          : "border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)]",
-      )}
+      className="group overflow-hidden rounded-3xl bg-[var(--card)]"
     >
-      <div
-        className={cn(
-          "flex items-center justify-between text-sm font-medium",
-          featured ? "text-white/75" : "text-[var(--muted-foreground)]",
-        )}
-      >
-        <span className="inline-flex items-center gap-2">
-          <Icon className="size-4" aria-hidden />
-          {title}
-        </span>
-        <ArrowUpRight
-          className={cn(
-            "size-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5",
-            featured ? "text-white/70" : "text-[var(--muted-foreground)]",
-          )}
-          aria-hidden
-        />
-      </div>
-      <div>
-        <p className="text-4xl font-semibold tabular-nums tracking-tight sm:text-5xl">
-          {inProgress}
-        </p>
-        <p
-          className={cn(
-            "mt-1 text-sm",
-            featured ? "text-white/70" : "text-[var(--muted-foreground)]",
-          )}
-        >
-          em andamento
-          {final > 0 ? ` · ${final} ${finalLabel}` : ""}
-        </p>
+      <span aria-hidden className={cn("block h-1", stripeClassName)} />
+      <div className="px-4 py-4 sm:px-5 sm:py-5">
+        <div className="flex items-center justify-between gap-3">
+          <span className="inline-flex items-center gap-2 text-sm font-medium text-[var(--foreground)]">
+            <Icon className="size-4 text-[var(--primary)]" aria-hidden />
+            {title}
+          </span>
+          <ArrowUpRight
+            className="size-4 text-[var(--muted-foreground)] transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+            aria-hidden
+          />
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-3">
+          <Metric value={inProgress} label="em andamento" />
+          <div className="border-l border-[var(--border)] pl-3 sm:pl-4">
+            <Metric value={final} label={finalLabel} />
+          </div>
+        </div>
       </div>
     </Link>
   );
@@ -84,7 +85,7 @@ export function DashboardOperationsSummary({
         final={summary.purchase.final}
         finalLabel={summary.purchase.final === 1 ? "comprado" : "comprados"}
         icon={ShoppingCart}
-        featured
+        stripeClassName="bg-[var(--primary)]"
       />
       <OpTile
         href="/dashboard/operacoes-full"
@@ -93,6 +94,7 @@ export function DashboardOperationsSummary({
         final={summary.full.final}
         finalLabel={summary.full.final === 1 ? "coletado" : "coletados"}
         icon={Kanban}
+        stripeClassName="bg-[var(--ring)]"
       />
     </section>
   );
