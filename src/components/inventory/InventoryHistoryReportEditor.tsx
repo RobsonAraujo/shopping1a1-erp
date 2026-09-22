@@ -10,11 +10,13 @@ import {
   CircleDollarSign,
   FileDown,
   FileSpreadsheet,
+  FileText,
   Info,
   Package,
   PackagePlus,
   Settings2,
   SlidersHorizontal,
+  TrendingUp,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -749,29 +751,31 @@ export function InventoryHistoryReportEditor({
         </div>
       </div>
 
-      <div className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 p-1">
+      <div className="inline-flex gap-1 rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 p-1.5">
         <button
           type="button"
           onClick={() => setActiveTab("report")}
           className={cn(
-            "cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+            "flex cursor-pointer items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition-colors",
             activeTab === "report"
-              ? "bg-[var(--card)] text-[var(--foreground)] shadow-sm"
-              : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
+              ? "bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm"
+              : "text-[var(--muted-foreground)] hover:bg-[var(--card)] hover:text-[var(--foreground)]",
           )}
         >
+          <FileText className="size-4" aria-hidden />
           Relatório do mês
         </button>
         <button
           type="button"
           onClick={() => setActiveTab("compare")}
           className={cn(
-            "cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+            "flex cursor-pointer items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition-colors",
             activeTab === "compare"
-              ? "bg-[var(--card)] text-[var(--foreground)] shadow-sm"
-              : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
+              ? "bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm"
+              : "text-[var(--muted-foreground)] hover:bg-[var(--card)] hover:text-[var(--foreground)]",
           )}
         >
+          <TrendingUp className="size-4" aria-hidden />
           Comparar mês a mês
         </button>
       </div>

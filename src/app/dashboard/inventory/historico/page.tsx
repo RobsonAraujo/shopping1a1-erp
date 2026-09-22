@@ -88,6 +88,11 @@ async function InventoryHistoryMonthContent({
 
   return (
     <InventoryHistoryReportEditor
+      // Força remontar ao trocar de mês pelo seletor — sem isso o
+      // `useState(initialHeader)` interno mantém o título (e ajustes/merge)
+      // do mês anterior, já que é a mesma instância do componente sendo
+      // reconciliada com props novas, não recriada.
+      key={`${selected.year}-${selected.month}`}
       listings={listings}
       productsBySku={productsBySku}
       initialHeader={header}
