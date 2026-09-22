@@ -7,7 +7,7 @@ import {
   normalizeProductSku,
 } from "@/lib/pricing/product-pricing";
 
-const MONTH_NAMES_PT = [
+export const MONTH_NAMES_PT = [
   "Janeiro",
   "Fevereiro",
   "Março",
@@ -24,19 +24,19 @@ const MONTH_NAMES_PT = [
 
 export const DEFAULT_STOCK_REPORT_COMPANY = "Shopping Um a Um LTDA";
 
+/**
+ * Correções locais opcionais aplicadas na hora de gerar o relatório do
+ * fechamento — não persistem, servem só pra ajustar a exibição/exportação
+ * quando o usuário sabe de algo que o snapshot não capturou (ex.: NF já
+ * emitida mas ainda não entregue).
+ */
 export type StockReportListingAdjustment = {
-  salesAfterSnapshot: number;
   nfEmitidaNaoEntregue: number;
   ajusteManual: number;
 };
 
-export type StockReportListingSnapshotSource =
-  | { kind: "sales" }
-  | { kind: "catalog_snapshot"; mlStockAtSnapshot: number; snapshotAt: string };
-
 export type StockReportListingState = {
   adjustment: StockReportListingAdjustment;
-  snapshotSource: StockReportListingSnapshotSource;
 };
 
 export type StockReportProductInfo = {
@@ -86,12 +86,9 @@ export type StockReportBuildResult = {
 };
 
 const EMPTY_ADJUSTMENT: StockReportListingAdjustment = {
-  salesAfterSnapshot: 0,
   nfEmitidaNaoEntregue: 0,
   ajusteManual: 0,
 };
-
-const SALES_SNAPSHOT_SOURCE: StockReportListingSnapshotSource = { kind: "sales" };
 
 export function stockUnits(value: number | null | undefined): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return 0;
@@ -116,55 +113,39 @@ export function inventoryBaseUnits(
   );
 }
 
+/**
+ * Unidades de um anúncio no relatório: base congelada do snapshot (galpão +
+ * ML + a caminho) mais as correções locais opcionais.
+ */
 export function listingUnitsAtSnapshot(
   row: StockReportListingInput,
   adjustment: StockReportListingAdjustment = EMPTY_ADJUSTMENT,
-  snapshotSource: StockReportListingSnapshotSource = SALES_SNAPSHOT_SOURCE,
 ): number {
   const nf = stockUnits(adjustment.nfEmitidaNaoEntregue);
   const manual = manualUnits(adjustment.ajusteManual);
-
-  const base =
-    snapshotSource.kind === "catalog_snapshot"
-      ? stockUnits(snapshotSource.mlStockAtSnapshot) +
-        stockUnits(row.warehouseStock) +
-        stockUnits(row.mlStockOnTheWay)
-      : inventoryBaseUnits(row) + stockUnits(adjustment.salesAfterSnapshot);
-
-  return Math.max(0, base + nf + manual);
+  return Math.max(0, inventoryBaseUnits(row) + nf + manual);
 }
 
 export function listingStateFor(
   map: Record<string, StockReportListingState | undefined>,
   mlItemId: string,
 ): StockReportListingState {
-  return (
-    map[mlItemId] ?? {
-      adjustment: EMPTY_ADJUSTMENT,
-      snapshotSource: SALES_SNAPSHOT_SOURCE,
-    }
-  );
+  return map[mlItemId] ?? { adjustment: EMPTY_ADJUSTMENT };
 }
 
 export function listingTotalUnits(
   row: StockReportListingInput,
   state: StockReportListingState,
 ): number {
-  return listingUnitsAtSnapshot(row, state.adjustment, state.snapshotSource);
+  return listingUnitsAtSnapshot(row, state.adjustment);
 }
 
 /** Detalhamento auditável de como o total de um anúncio foi calculado — cada
  * parcela que entra na soma, para exibição transparente na UI. */
 export type ListingAuditBreakdown = {
   warehouseStock: number;
+  mlStock: number;
   mlStockOnTheWay: number;
-  /** Estoque ML de hoje (sempre calculado, mesmo quando não é a fonte usada). */
-  mlStockToday: number;
-  mlStockSource: "today" | "catalog_snapshot";
-  /** Estoque ML no snapshot de catálogo, quando essa é a fonte usada. */
-  mlStockAtSnapshot: number | null;
-  snapshotAt: string | null;
-  salesAfterSnapshot: number;
   nfEmitidaNaoEntregue: number;
   ajusteManual: number;
   total: number;
@@ -174,27 +155,13 @@ export function listingAuditBreakdown(
   row: StockReportListingInput,
   state: StockReportListingState,
 ): ListingAuditBreakdown {
-  const snapshotSource = state.snapshotSource;
-  const usesCatalogSnapshot = snapshotSource.kind === "catalog_snapshot";
   return {
     warehouseStock: stockUnits(row.warehouseStock),
+    mlStock: stockUnits(row.mlStock),
     mlStockOnTheWay: stockUnits(row.mlStockOnTheWay),
-    mlStockToday: stockUnits(row.mlStock),
-    mlStockSource: usesCatalogSnapshot ? "catalog_snapshot" : "today",
-    mlStockAtSnapshot:
-      snapshotSource.kind === "catalog_snapshot"
-        ? stockUnits(snapshotSource.mlStockAtSnapshot)
-        : null,
-    snapshotAt:
-      snapshotSource.kind === "catalog_snapshot"
-        ? snapshotSource.snapshotAt
-        : null,
-    salesAfterSnapshot: usesCatalogSnapshot
-      ? 0
-      : stockUnits(state.adjustment.salesAfterSnapshot),
     nfEmitidaNaoEntregue: stockUnits(state.adjustment.nfEmitidaNaoEntregue),
     ajusteManual: manualUnits(state.adjustment.ajusteManual),
-    total: listingUnitsAtSnapshot(row, state.adjustment, state.snapshotSource),
+    total: listingUnitsAtSnapshot(row, state.adjustment),
   };
 }
 
@@ -208,6 +175,7 @@ export function skuLabelFromKey(skuKey: string): string {
   return skuKey;
 }
 
+/** Último dia do último mês já fechado (23:59:59 no timezone configurado) — usado pelo cron de fechamento pra decidir qual mês fechar. */
 export function defaultStockReportSnapshotDate(
   now: Date = new Date(),
   timeZone: string = reportsConfig.catalogCompetitionTimezone,
@@ -230,114 +198,6 @@ export function defaultStockReportSnapshotDate(
     999,
     timeZone,
   );
-}
-
-/** @deprecated Use defaultStockReportSnapshotDate */
-export function defaultStockReportReferenceDate(
-  now: Date = new Date(),
-  timeZone: string = reportsConfig.catalogCompetitionTimezone,
-): Date {
-  return defaultStockReportSnapshotDate(now, timeZone);
-}
-
-export function formatStockReportSnapshotDateInput(
-  date: Date,
-  timeZone: string = reportsConfig.catalogCompetitionTimezone,
-): string {
-  const parts = getZonedParts(date, timeZone);
-  const y = String(parts.year);
-  const m = String(parts.month).padStart(2, "0");
-  const d = String(parts.day).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-export function parseStockReportSnapshotDateInput(
-  value: string,
-  timeZone: string = reportsConfig.catalogCompetitionTimezone,
-): Date | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
-  if (!match) return null;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  if (
-    !Number.isInteger(year) ||
-    !Number.isInteger(month) ||
-    !Number.isInteger(day) ||
-    month < 1 ||
-    month > 12 ||
-    day < 1 ||
-    day > 31
-  ) {
-    return null;
-  }
-  const daysInMonth = new Date(year, month, 0).getDate();
-  if (day > daysInMonth) return null;
-  return zonedLocalToUtc(year, month, day, 23, 59, 59, 999, timeZone);
-}
-
-export function stockReportSalesAdjustmentRange(
-  snapshotDate: Date,
-  asOf: Date = new Date(),
-  timeZone: string = reportsConfig.catalogCompetitionTimezone,
-): { from: Date; to: Date } | null {
-  const parts = getZonedParts(snapshotDate, timeZone);
-  const snapshotDayEnd = zonedLocalToUtc(
-    parts.year,
-    parts.month,
-    parts.day,
-    23,
-    59,
-    59,
-    999,
-    timeZone,
-  );
-  if (snapshotDayEnd.getTime() >= asOf.getTime()) return null;
-
-  const noonUtc = zonedLocalToUtc(
-    parts.year,
-    parts.month,
-    parts.day,
-    12,
-    0,
-    0,
-    0,
-    timeZone,
-  );
-  const nextDay = getZonedParts(
-    new Date(noonUtc.getTime() + 24 * 60 * 60 * 1000),
-    timeZone,
-  );
-  const from = zonedLocalToUtc(
-    nextDay.year,
-    nextDay.month,
-    nextDay.day,
-    0,
-    0,
-    0,
-    0,
-    timeZone,
-  );
-  return { from, to: asOf };
-}
-
-export function formatStockReportSubtitle(
-  date: Date,
-  timeZone: string = reportsConfig.catalogCompetitionTimezone,
-): string {
-  const parts = getZonedParts(date, timeZone);
-  const monthName = MONTH_NAMES_PT[parts.month - 1] ?? String(parts.month);
-  return `Saldo em Estoque dia ${parts.day} de ${monthName} de ${parts.year}`;
-}
-
-export function buildDefaultStockReportHeader(
-  now: Date = new Date(),
-): StockReportHeader {
-  const snapshotDate = defaultStockReportSnapshotDate(now);
-  return {
-    companyName: DEFAULT_STOCK_REPORT_COMPANY,
-    subtitle: formatStockReportSubtitle(snapshotDate),
-  };
 }
 
 export const formatStockReportCurrency = formatMoneyBRL;

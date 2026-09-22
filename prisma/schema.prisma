@@ -330,6 +330,82 @@ model WarehouseStock {
   @@map("warehouse_stock")
 }
 
+enum InventoryMonthSnapshotStatus {
+  pending
+  in_progress
+  done
+  failed
+}
+
+/// `auto`: cron de fim de mês. `manual`: usuário disparou pela tela de
+/// Histórico (ex.: corte no meio do mês pra mandar pra contabilidade antes
+/// do fechamento oficial) — sempre para o mês corrente, ainda aberto.
+enum InventoryMonthSnapshotSource {
+  auto
+  manual
+}
+
+/// Fila + auditoria do fechamento mensal de estoque (1 linha por
+/// organização+mês). Funciona como cursor de lote do cron (como
+/// `lastCatalogCronPolledAt` faz pro cron de catálogo) só que via `status`
+/// explícito em vez de timestamp solto, porque aqui também precisamos
+/// contar tentativas e reter o motivo de falha pra retry. Um snapshot
+/// `manual` do mês corrente é sempre provisório: quando esse mês vira "o
+/// último mês fechado", o cron reabre a linha (status volta a `pending`) e
+/// sobrescreve com os números oficiais de fim de mês, source `auto` (ver
+/// `ensurePendingSnapshotRuns`).
+model InventoryMonthSnapshotRun {
+  id               String                       @id @default(cuid())
+  organizationId   String                       @map("organization_id")
+  year             Int
+  month            Int
+  status           InventoryMonthSnapshotStatus @default(pending)
+  source           InventoryMonthSnapshotSource @default(auto)
+  itemsSnapshotted Int                          @default(0) @map("items_snapshotted")
+  attempts         Int                          @default(0)
+  errorSummary     String?                      @map("error_summary") @db.Text
+  startedAt        DateTime?                    @map("started_at")
+  completedAt      DateTime?                    @map("completed_at")
+  updatedAt        DateTime                     @updatedAt @map("updated_at")
+
+  @@unique([organizationId, year, month])
+  @@index([status, updatedAt])
+  @@map("inventory_month_snapshot_runs")
+}
+
+/// Saldo de estoque CONGELADO por anúncio no fechamento de um mês (galpão +
+/// ML + custo efetivo na época) — ver InventoryMonthSnapshotRun para o
+/// cron que popula isso. Ao contrário do relatório "ao vivo" em
+/// inventory-stock-report.ts (que reconstrói o passado a partir de hoje),
+/// aqui o valor é o dado real gravado no momento do fechamento, imune a
+/// mudança posterior de estoque do galpão ou de custo do produto.
+model InventoryStockMonthSnapshot {
+  id              String   @id @default(cuid())
+  organizationId  String   @map("organization_id")
+  year            Int
+  month           Int
+  mlItemId        String   @map("ml_item_id")
+  sku             String?
+  title           String
+  ncm             String?
+  /// Custo efetivo (stockReportUnitCostFromProduct) congelado na época —
+  /// null quando o produto não tinha custo cadastrado nesse momento.
+  unitCost        Decimal? @map("unit_cost") @db.Decimal(18, 2)
+  warehouseStock  Int      @map("warehouse_stock")
+  mlStock         Int      @map("ml_stock")
+  /// Estoque Full em processamento ("a caminho"), congelado no fechamento —
+  /// mesma fonte que a tela ao vivo (enrichItemsWithFulfillmentStock), só
+  /// que buscada direto aqui (sem streaming) já que roda 1x por mês, não a
+  /// cada carregamento de página. 0 pra anúncio que não é Full.
+  mlStockOnTheWay Int      @default(0) @map("ml_stock_on_the_way")
+  catalogListing  Boolean  @default(false) @map("catalog_listing")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@unique([organizationId, mlItemId, year, month])
+  @@index([organizationId, year, month])
+  @@map("inventory_stock_month_snapshots")
+}
+
 /// Cache de "unidades vendidas por item numa janela de N dias" — TTL curto
 /// (ver SALES_WINDOW_CACHE_TTL_MS em sales-window-cache.ts), não um snapshot
 /// mensal fechado como TaxReportMonthSnapshot/SimplesRevenueMonthSnapshot. A

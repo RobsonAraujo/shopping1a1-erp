@@ -1,0 +1,214 @@
+import type { Metadata } from "next";
+import { Boxes } from "lucide-react";
+import { Breadcrumbs } from "@/components/shared/Breadcrumbs";
+import { Card } from "@/components/ui/card";
+import { UserFeedback } from "@/components/ui/user-feedback";
+import { getOrganizationContext } from "@/lib/organizations/context";
+import { zonedLocalToUtc } from "@/lib/report-timezone";
+import { reportsConfig } from "@/config/reports";
+import {
+  DEFAULT_STOCK_REPORT_COMPANY,
+  MONTH_NAMES_PT,
+} from "@/lib/inventory/inventory-stock-report";
+import {
+  buildInventoryMonthSnapshotListingInputs,
+  listClosedInventorySnapshotMonths,
+  loadInventoryMonthSnapshotEvolution,
+  loadInventoryMonthSnapshotRows,
+  type InventoryMonthSnapshotStatusSummary,
+} from "@/lib/inventory/inventory-month-snapshot-report";
+import { InventoryAutoCloseInfoTooltip } from "@/components/inventory/InventoryAutoCloseInfoTooltip";
+import { InventoryHistoryMonthPicker } from "@/components/inventory/InventoryHistoryMonthPicker";
+import { InventoryHistoryReportEditor } from "@/components/inventory/InventoryHistoryReportEditor";
+import { InventoryManualSnapshotButton } from "@/components/inventory/InventoryManualSnapshotButton";
+
+export const metadata: Metadata = {
+  title: "Histórico de Estoque",
+};
+
+const EVOLUTION_MONTHS_LIMIT = 12;
+
+function formatCompletedAt(date: Date | null): string {
+  if (!date) return "";
+  return date.toLocaleString("pt-BR", {
+    timeZone: reportsConfig.catalogCompetitionTimezone,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+async function InventoryHistoryMonthContent({
+  organizationId,
+  months,
+  selected,
+}: {
+  organizationId: string;
+  months: InventoryMonthSnapshotStatusSummary[];
+  selected: InventoryMonthSnapshotStatusSummary;
+}) {
+  const snapshotRows = await loadInventoryMonthSnapshotRows(
+    organizationId,
+    selected.year,
+    selected.month,
+  );
+  const { listings, productsBySku } =
+    buildInventoryMonthSnapshotListingInputs(snapshotRows);
+
+  const daysInMonth = new Date(selected.year, selected.month, 0).getDate();
+  const referenceDate = zonedLocalToUtc(
+    selected.year,
+    selected.month,
+    daysInMonth,
+    23,
+    59,
+    59,
+    999,
+    reportsConfig.catalogCompetitionTimezone,
+  );
+  const header = {
+    companyName: DEFAULT_STOCK_REPORT_COMPANY,
+    subtitle: `Fechamento oficial de estoque — ${MONTH_NAMES_PT[selected.month - 1]} de ${selected.year}`,
+  };
+
+  // Meses fechados imediatamente ANTERIORES ao selecionado (não o próprio
+  // mês selecionado — esse já aparece nas colunas "Unidades"/"Valor" atuais
+  // da tabela principal, mostrar de novo seria redundante). `months` vem
+  // mais recente primeiro; a tabela lê melhor em ordem cronológica
+  // (mais antigo → mais recente), por isso inverte.
+  const selectedIndex = months.findIndex(
+    (m) => m.year === selected.year && m.month === selected.month,
+  );
+  const priorMonths = (
+    selectedIndex === -1
+      ? []
+      : months.slice(selectedIndex + 1, selectedIndex + 1 + EVOLUTION_MONTHS_LIMIT)
+  )
+    .slice()
+    .reverse();
+  const evolution = await loadInventoryMonthSnapshotEvolution(
+    organizationId,
+    priorMonths,
+  );
+
+  return (
+    <div className="space-y-6">
+      <InventoryHistoryReportEditor
+        listings={listings}
+        productsBySku={productsBySku}
+        initialHeader={header}
+        referenceDateIso={referenceDate.toISOString()}
+        evolution={evolution}
+      />
+    </div>
+  );
+}
+
+type PageProps = {
+  searchParams: Promise<{ year?: string; month?: string }>;
+};
+
+export default async function InventoryHistoryPage({
+  searchParams,
+}: PageProps) {
+  const orgContext = await getOrganizationContext();
+  if (orgContext.status !== "active") {
+    return null;
+  }
+  const organizationId = orgContext.organization.id;
+
+  const months = await listClosedInventorySnapshotMonths(organizationId);
+
+  const rawSearchParams = await searchParams;
+  const requestedYear = rawSearchParams.year
+    ? Number(rawSearchParams.year)
+    : null;
+  const requestedMonth = rawSearchParams.month
+    ? Number(rawSearchParams.month)
+    : null;
+  const requested =
+    requestedYear && requestedMonth
+      ? months.find(
+          (m) => m.year === requestedYear && m.month === requestedMonth,
+        )
+      : null;
+  const selected = requested ?? months[0] ?? null;
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <Breadcrumbs
+          items={[
+            { label: "Estoque", href: "/dashboard/inventory" },
+            { label: "Histórico" },
+          ]}
+        />
+        <div className="mt-3 flex items-center gap-3">
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[var(--primary)]/10 text-[var(--primary)]">
+            <Boxes className="size-5" aria-hidden />
+          </span>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-[var(--foreground)] sm:text-3xl">
+              Histórico de Estoque
+            </h1>
+            <p className="mt-1 max-w-3xl text-sm leading-relaxed text-[var(--muted-foreground)] sm:text-[15px]">
+              Estoque de galpão, Mercado Livre e custo{" "}
+              <strong>congelados</strong> no fechamento de cada mês.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <Card className="divide-y divide-[var(--border)] p-0">
+        {selected ? (
+          <div className="flex flex-wrap items-end justify-between gap-4 p-4">
+            <InventoryHistoryMonthPicker months={months} selected={selected} />
+            <p className="text-xs text-[var(--muted-foreground)]">
+              {selected.source === "manual" ? (
+                <>
+                  Snapshot{" "}
+                  <strong className="text-[var(--foreground)]">manual</strong>
+                  , gerado em {formatCompletedAt(selected.completedAt)}: será
+                  substituído pelo fechamento automático quando este mês
+                  fechar.
+                </>
+              ) : (
+                <>
+                  Fechamento{" "}
+                  <strong className="text-[var(--foreground)]">
+                    automático
+                  </strong>
+                  , gerado em {formatCompletedAt(selected.completedAt)}.
+                </>
+              )}
+            </p>
+          </div>
+        ) : null}
+
+        <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+          <div className="flex items-center gap-1.5 text-sm text-[var(--foreground)]">
+            <span>Fechamento automático todo início de mês</span>
+            <InventoryAutoCloseInfoTooltip />
+          </div>
+          <InventoryManualSnapshotButton />
+        </div>
+      </Card>
+
+      {selected === null ? (
+        <UserFeedback title="Ainda não há mês fechado">
+          O fechamento automático roda todo início de mês e o primeiro mês
+          completo vai aparecer aqui assim que for processado. Ou gere um
+          snapshot manual agora mesmo, acima.
+        </UserFeedback>
+      ) : (
+        <InventoryHistoryMonthContent
+          organizationId={organizationId}
+          months={months}
+          selected={selected}
+        />
+      )}
+    </div>
+  );
+}

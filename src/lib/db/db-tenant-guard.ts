@@ -31,6 +31,7 @@ const TENANT_SCOPED_MODELS = new Set([
   "SimplesRevenueMonthSnapshot",
   "KanbanColumn",
   "KanbanBoardSettings",
+  "InventoryStockMonthSnapshot",
 ]);
 
 /**
@@ -38,6 +39,12 @@ const TENANT_SCOPED_MODELS = new Set([
  * são escopadas por `sellerId` (não `organizationId`), um proxy válido — 1
  * seller ML pertence a no máximo 1 org (`OrganizationMlSeller.mlUserId` é
  * @unique). Ver docs/architecture/tenant-data-model.md ("Parcial ML").
+ *
+ * `InventoryMonthSnapshotRun` e `OrganizationMlSeller` também ficam de fora
+ * de propósito: são as próprias tabelas de fan-out cross-tenant do cron
+ * (inventory-month-snapshot.ts / catalog-competition-poll.ts), que
+ * precisam varrer TODAS as organizações sem filtro nenhum pra decidir o
+ * próximo lote a processar.
  */
 
 /** Operações em lote — onde "esqueci o filtro" pode vazar/apagar N linhas de outra org de uma vez. */

@@ -7,7 +7,6 @@ import {
   inventoryBaseUnits,
   listingAuditBreakdown,
   listingUnitsAtSnapshot,
-  stockReportSalesAdjustmentRange,
 } from "../inventory-stock-report";
 
 describe("inventory-stock-report", () => {
@@ -19,56 +18,6 @@ describe("inventory-stock-report", () => {
         mlStockOnTheWay: 5,
       }),
       35,
-    );
-  });
-
-  it("reconstructs own listing stock by adding sales after snapshot date", () => {
-    assert.equal(
-      listingUnitsAtSnapshot(
-        {
-          mlItemId: "MLB1",
-          sku: "SKU A",
-          title: "Produto",
-          warehouseStock: 50,
-          mlStock: 30,
-          mlStockOnTheWay: 5,
-          catalogListing: false,
-        },
-        {
-          salesAfterSnapshot: 15,
-          nfEmitidaNaoEntregue: 0,
-          ajusteManual: 0,
-        },
-        { kind: "sales" },
-      ),
-      100,
-    );
-  });
-
-  it("uses catalog snapshot ml stock without sales adjustment", () => {
-    assert.equal(
-      listingUnitsAtSnapshot(
-        {
-          mlItemId: "MLB1",
-          sku: "SKU A",
-          title: "Produto",
-          warehouseStock: 10,
-          mlStock: 999,
-          mlStockOnTheWay: 0,
-          catalogListing: true,
-        },
-        {
-          salesAfterSnapshot: 50,
-          nfEmitidaNaoEntregue: 0,
-          ajusteManual: 0,
-        },
-        {
-          kind: "catalog_snapshot",
-          mlStockAtSnapshot: 90,
-          snapshotAt: "2026-06-30T17:00:00.000Z",
-        },
-      ),
-      100,
     );
   });
 
@@ -84,11 +33,9 @@ describe("inventory-stock-report", () => {
           mlStockOnTheWay: 0,
         },
         {
-          salesAfterSnapshot: 0,
           nfEmitidaNaoEntregue: 0,
           ajusteManual: -50,
         },
-        { kind: "sales" },
       ),
       50,
     );
@@ -104,17 +51,15 @@ describe("inventory-stock-report", () => {
           mlStockOnTheWay: 0,
         },
         {
-          salesAfterSnapshot: 0,
           nfEmitidaNaoEntregue: 0,
           ajusteManual: -50,
         },
-        { kind: "sales" },
       ),
       0,
     );
   });
 
-  it("adds nf and manual extras to listing units", () => {
+  it("adds nf and manual extras to the frozen base units", () => {
     assert.equal(
       listingUnitsAtSnapshot(
         {
@@ -126,13 +71,11 @@ describe("inventory-stock-report", () => {
           mlStockOnTheWay: 0,
         },
         {
-          salesAfterSnapshot: 10,
           nfEmitidaNaoEntregue: 20,
           ajusteManual: 30,
         },
-        { kind: "sales" },
       ),
-      210,
+      200,
     );
   });
 
@@ -328,11 +271,9 @@ describe("inventory-stock-report", () => {
       {
         MLB1: {
           adjustment: {
-            salesAfterSnapshot: 0,
             nfEmitidaNaoEntregue: 0,
             ajusteManual: 5,
           },
-          snapshotSource: { kind: "sales" },
         },
       },
       {
@@ -378,23 +319,7 @@ describe("inventory-stock-report", () => {
     assert.equal(result.missingCostCount, 1);
   });
 
-  it("returns sales adjustment range starting day after snapshot", () => {
-    const snapshot = new Date("2026-06-30T23:59:59.999-03:00");
-    const asOf = new Date("2026-07-02T12:00:00.000-03:00");
-    const range = stockReportSalesAdjustmentRange(
-      snapshot,
-      asOf,
-      "America/Sao_Paulo",
-    );
-    assert.ok(range);
-    assert.equal(
-      range.from.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }),
-      "2026-07-01",
-    );
-    assert.equal(range.to.getTime(), asOf.getTime());
-  });
-
-  it("listingAuditBreakdown exposes every component used to reach the total (sales source)", () => {
+  it("listingAuditBreakdown exposes every component used to reach the total", () => {
     const audit = listingAuditBreakdown(
       {
         mlItemId: "MLB1",
@@ -407,56 +332,18 @@ describe("inventory-stock-report", () => {
       },
       {
         adjustment: {
-          salesAfterSnapshot: 6,
           nfEmitidaNaoEntregue: 1,
           ajusteManual: -2,
         },
-        snapshotSource: { kind: "sales" },
       },
     );
     assert.deepEqual(audit, {
       warehouseStock: 4,
+      mlStock: 10,
       mlStockOnTheWay: 2,
-      mlStockToday: 10,
-      mlStockSource: "today",
-      mlStockAtSnapshot: null,
-      snapshotAt: null,
-      salesAfterSnapshot: 6,
       nfEmitidaNaoEntregue: 1,
       ajusteManual: -2,
-      total: 21,
+      total: 15,
     });
-  });
-
-  it("listingAuditBreakdown zeroes sales and reports the snapshot value (catalog source)", () => {
-    const audit = listingAuditBreakdown(
-      {
-        mlItemId: "MLB1",
-        sku: "SKU A",
-        title: "Produto",
-        warehouseStock: 3,
-        mlStock: 999,
-        mlStockOnTheWay: 1,
-        catalogListing: true,
-      },
-      {
-        adjustment: {
-          salesAfterSnapshot: 50,
-          nfEmitidaNaoEntregue: 0,
-          ajusteManual: 0,
-        },
-        snapshotSource: {
-          kind: "catalog_snapshot",
-          mlStockAtSnapshot: 8,
-          snapshotAt: "2026-07-31T23:00:00.000Z",
-        },
-      },
-    );
-    assert.equal(audit.mlStockSource, "catalog_snapshot");
-    assert.equal(audit.mlStockAtSnapshot, 8);
-    assert.equal(audit.mlStockToday, 999);
-    assert.equal(audit.salesAfterSnapshot, 0);
-    assert.equal(audit.snapshotAt, "2026-07-31T23:00:00.000Z");
-    assert.equal(audit.total, 3 + 8 + 1);
   });
 });

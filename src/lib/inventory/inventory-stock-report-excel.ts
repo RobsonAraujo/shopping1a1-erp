@@ -2,7 +2,7 @@ import * as XLSX from "xlsx";
 import { formatMoneyBRLOrDash } from "@/lib/format-money";
 import {
   buildStockReportFilename,
-  defaultStockReportReferenceDate,
+  defaultStockReportSnapshotDate,
   formatStockReportUnits,
   type StockReportBuildResult,
   type StockReportHeader,
@@ -15,7 +15,7 @@ function cell(value: string | number | null): string | number {
 export function downloadStockReportExcel(
   header: StockReportHeader,
   result: StockReportBuildResult,
-  referenceDate: Date = defaultStockReportReferenceDate(),
+  referenceDate: Date = defaultStockReportSnapshotDate(),
 ): void {
   const sheetData: (string | number)[][] = [
     [header.companyName],

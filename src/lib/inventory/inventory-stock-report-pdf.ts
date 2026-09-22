@@ -2,7 +2,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import {
   buildStockReportFilename,
-  defaultStockReportReferenceDate,
+  defaultStockReportSnapshotDate,
   formatStockReportCurrency,
   formatStockReportUnits,
   type StockReportBuildResult,
@@ -12,7 +12,7 @@ import {
 export function downloadStockReportPdf(
   header: StockReportHeader,
   result: StockReportBuildResult,
-  referenceDate: Date = defaultStockReportReferenceDate(),
+  referenceDate: Date = defaultStockReportSnapshotDate(),
 ): void {
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
 

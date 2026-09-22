@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { HelpCircle } from "lucide-react";
+import Link from "next/link";
+import { HelpCircle, History, Info } from "lucide-react";
 import { toast } from "sonner";
 import {
   ShowPausedListingsSwitch,
@@ -26,10 +27,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ItemListSearch } from "@/components/shared/ItemListSearch";
-import { getSkuSupplier, groupBySupplierName } from "@/lib/mercadolibre/item-sku";
+import {
+  getSkuSupplier,
+  groupBySupplierName,
+} from "@/lib/mercadolibre/item-sku";
 import { filterByItemListSearch } from "@/lib/item-list-search";
-import type { StockReportProductInfo } from "@/lib/inventory/inventory-stock-report";
-import { InventoryStockReportLauncher } from "@/components/inventory/InventoryStockReportDialog";
 import { InventoryStockTableGrid } from "@/components/inventory/inventory-stock-table/index";
 import type { InventorySortKey } from "@/components/inventory/inventory-stock-table/types";
 import { getInventorySortValue } from "@/components/inventory/inventory-stock-table/utils";
@@ -72,7 +74,6 @@ type FulfillmentStreamEvent =
 
 type InventoryStockTableProps = {
   rows: InventoryRow[];
-  productsBySku: Record<string, StockReportProductInfo>;
   /** Nome do fornecedor cadastrado por `mlItemId` — fallback para o
    * inferido pelo SKU (`getSkuSupplier`) quando o produto não tem
    * fornecedor vinculado. */
@@ -90,7 +91,6 @@ function leadTimeToForm(days: number | null): {
 
 export function InventoryStockTable({
   rows: initialRows,
-  productsBySku,
   supplierNames = {},
 }: InventoryStockTableProps) {
   const [rows, setRows] = useState(initialRows);
@@ -101,7 +101,9 @@ export function InventoryStockTable({
   const applyRowPatch = useCallback(
     (mlItemId: string, patch: Partial<InventoryRow>) => {
       setRows((prev) =>
-        prev.map((row) => (row.mlItemId === mlItemId ? { ...row, ...patch } : row)),
+        prev.map((row) =>
+          row.mlItemId === mlItemId ? { ...row, ...patch } : row,
+        ),
       );
     },
     [],
@@ -199,10 +201,21 @@ export function InventoryStockTable({
     <TooltipProvider delayDuration={200}>
       <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <InventoryStockReportLauncher
-            rows={rows}
-            productsBySku={productsBySku}
-          />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button asChild>
+                <Link href="/dashboard/inventory/historico">
+                  <History className="size-4" />
+                  Histórico de fechamentos
+                  <Info className="size-3.5 opacity-70" aria-hidden />
+                </Link>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-xs">
+              Veja o relatório de saldo em estoque de cada mês fechado, do mesmo
+              tipo de informação que a contabilidade costuma pedir.
+            </TooltipContent>
+          </Tooltip>
           <ShowPausedListingsSwitch
             checked={showPaused}
             onCheckedChange={setShowPaused}
@@ -309,7 +322,9 @@ function WarehouseEditModal({
         | InventoryPatchResponse
         | { error: string };
       if (!res.ok || "error" in data) {
-        setError(("error" in data ? data.error : null) ?? "Não foi possível salvar.");
+        setError(
+          ("error" in data ? data.error : null) ?? "Não foi possível salvar.",
+        );
         return;
       }
       onSaved(toRowPatch(data));
@@ -449,7 +464,9 @@ function LeadTimeSettingsModal({
         | InventoryPatchResponse
         | { error: string };
       if (!res.ok || "error" in data) {
-        setError(("error" in data ? data.error : null) ?? "Não foi possível salvar.");
+        setError(
+          ("error" in data ? data.error : null) ?? "Não foi possível salvar.",
+        );
         return;
       }
       onSaved(toRowPatch(data));
@@ -481,8 +498,7 @@ function LeadTimeSettingsModal({
         <SheetHeader>
           <SheetTitle>Configurações do anúncio</SheetTitle>
           <SheetDescription>
-            Ajuste o tempo entre decidir a compra e o produto chegar no
-            galpão.
+            Ajuste o tempo entre decidir a compra e o produto chegar no galpão.
           </SheetDescription>
         </SheetHeader>
         <SheetBody>
@@ -517,9 +533,9 @@ function LeadTimeSettingsModal({
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="max-w-xs">
-                  O prazo do seu fornecedor: da hora que você decide comprar
-                  até a mercadoria chegar neste galpão. Cada produto pode ter
-                  um prazo diferente, por isso é configurado aqui.
+                  O prazo do seu fornecedor: da hora que você decide comprar até
+                  a mercadoria chegar neste galpão. Cada produto pode ter um
+                  prazo diferente, por isso é configurado aqui.
                 </TooltipContent>
               </Tooltip>
             </div>
@@ -551,11 +567,11 @@ function LeadTimeSettingsModal({
               />
             </div>
             <p className="text-xs text-[var(--muted-foreground)]">
-              Ex.: se o fornecedor demora 15 dias pra entregar, informe 15
-              aqui (ou 2 semanas). Esse prazo vai só até o galpão — o tempo
-              depois disso, do galpão até o Full liberar o anúncio pra venda
-              de novo, é configurado uma vez em Configurações → Planejamento.
-              Deixe em branco para remover o prazo.
+              Ex.: se o fornecedor demora 15 dias pra entregar, informe 15 aqui
+              (ou 2 semanas). Esse prazo vai só até o galpão — o tempo depois
+              disso, do galpão até o Full liberar o anúncio pra venda de novo, é
+              configurado uma vez em Configurações → Planejamento. Deixe em
+              branco para remover o prazo.
             </p>
           </div>
 

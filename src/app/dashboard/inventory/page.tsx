@@ -18,12 +18,10 @@ import {
   loadOperationalSettings,
   toStockPlanningValues,
 } from "@/lib/configuracoes/operational-settings";
-import { loadStockReportProductsForListings } from "@/lib/products/product-data";
 import {
   loadInactiveProductMlItemIds,
   loadSupplierNamesByMlItemId,
 } from "@/lib/products/product-resolver";
-import type { StockReportProductInfo } from "@/lib/inventory/inventory-stock-report";
 import { prisma } from "@/lib/db/db";
 import { readSession } from "@/lib/mercadolibre/session";
 import { getOrganizationContext } from "@/lib/organizations/context";
@@ -41,7 +39,6 @@ async function InventoryDataSection({
   let total = 0;
   let statusCounts = { active: 0, paused: 0, other: 0 };
   let warehouseLoadFailed = false;
-  let productsBySku: Record<string, StockReportProductInfo> = {};
   let supplierNames: Record<string, string> = {};
   let rows: InventoryRow[] = [];
 
@@ -171,17 +168,10 @@ async function InventoryDataSection({
     total = items.length;
     statusCounts = countListingsByStatus(items);
 
-    const [productsResult, supplierNamesMap] = await Promise.all([
-      loadStockReportProductsForListings(
-        organizationId,
-        rows.map((row) => ({ mlItemId: row.mlItemId, sku: row.sku })),
-      ),
-      loadSupplierNamesByMlItemId(
-        organizationId,
-        rows.map((row) => row.mlItemId),
-      ),
-    ]);
-    productsBySku = productsResult;
+    const supplierNamesMap = await loadSupplierNamesByMlItemId(
+      organizationId,
+      rows.map((row) => row.mlItemId),
+    );
     supplierNames = Object.fromEntries(supplierNamesMap);
   } catch (e) {
     const msg = publicPageLoadMessage(
@@ -210,11 +200,7 @@ async function InventoryDataSection({
         </Card>
       ) : null}
 
-      <InventoryStockTable
-        rows={rows}
-        productsBySku={productsBySku}
-        supplierNames={supplierNames}
-      />
+      <InventoryStockTable rows={rows} supplierNames={supplierNames} />
 
       <Card className="flex items-center gap-3 rounded-2xl p-4">
         <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--primary)]/10 text-[var(--primary)]">

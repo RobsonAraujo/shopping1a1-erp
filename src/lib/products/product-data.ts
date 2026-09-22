@@ -338,42 +338,11 @@ function productToStockReportInfo(product: {
 }
 
 /**
- * Record por SKU (do anúncio ao vivo) — contrato usado pelo relatório de
- * Estoque, que agrupa fisicamente por texto de SKU (inclusive "merge
- * groups" manuais entre SKUs divergentes). Resolve o Product pelo
- * `mlItemId` direto (identidade real); o SKU aqui é só a chave de saída
- * pro relatório, não influencia a resolução.
- */
-export async function loadStockReportProductsForListings(
-  organizationId: string,
-  lines: { mlItemId: string; sku: string | null }[],
-): Promise<Record<string, StockReportProductInfo>> {
-  if (lines.length === 0) return {};
-  const maps = await loadProductResolverMaps(
-    organizationId,
-    lines.map((l) => ({ itemId: l.mlItemId })),
-    { excludeInactive: true },
-  );
-
-  const result: Record<string, StockReportProductInfo> = {};
-  for (const line of lines) {
-    const normalizedSku = line.sku ? normalizeProductSku(line.sku) : "";
-    if (!normalizedSku || result[normalizedSku]) continue;
-    const resolution = resolveProductForLine({ itemId: line.mlItemId }, maps);
-    if (!resolution.product) continue;
-    result[normalizedSku] = productToStockReportInfo(resolution.product);
-  }
-  return result;
-}
-
-/**
- * Mesma resolução de custo que `loadStockReportProductsForListings`, mas
- * indexada por `mlItemId` (1:1 real) em vez de texto de SKU — pra
- * consumidores como Insights, onde cada anúncio precisa do seu próprio
- * custo mesmo que dois anúncios compartilhem o mesmo texto de SKU exibido
- * (`Product.sku` não é único). Não usar pro relatório de Estoque, que
- * agrupa fisicamente por SKU de propósito (merge groups) — essa função não
- * substitui `loadStockReportProductsForListings`, é uma variante paralela.
+ * Custo/NCM por `mlItemId` (1:1 real) — usada pelo cron de fechamento de
+ * estoque (que agrupa por SKU só na hora de montar o relatório, a partir do
+ * snapshot já congelado) e por consumidores como Insights, onde cada
+ * anúncio precisa do seu próprio custo mesmo que dois anúncios compartilhem
+ * o mesmo texto de SKU exibido (`Product.sku` não é único).
  */
 export async function loadStockReportProductsByMlItemId(
   organizationId: string,
