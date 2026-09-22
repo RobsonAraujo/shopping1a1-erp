@@ -136,6 +136,48 @@ describe("buildInventoryMonthSnapshotReport", () => {
     assert.equal(result.rows[0].units, 1539);
   });
 
+  it("resolves unit cost from the listing that HAS it, regardless of row order", () => {
+    // 2 mlItemId no mesmo SKU (anúncio "espelho" de Catálogo): só um deles tem
+    // Product cadastrado, então só um tem custo congelado. O relatório tem
+    // que achar o custo nas DUAS ordens — antes, quem vencia era a primeira
+    // linha da iteração (orderBy title, empate arbitrário entre títulos
+    // iguais), e o produto aparecia "sem custo" de forma instável.
+    const semCusto = makeSnapshotRow({
+      mlItemId: "MLB7680193850",
+      sku: "Alltec - 2001 VO/GA (Catálogo)",
+      title: "Alltec 2001",
+      warehouseStock: 0,
+      mlStock: 10,
+      mlStockOnTheWay: 0,
+      unitCost: null,
+      ncm: null,
+    });
+    const comCusto = makeSnapshotRow({
+      mlItemId: "MLB5713296080",
+      sku: "Alltec - 2001 VO/GA (Catálogo)",
+      title: "Alltec 2001",
+      warehouseStock: 5,
+      mlStock: 10,
+      mlStockOnTheWay: 0,
+      unitCost: 20,
+      ncm: "85444200",
+      inventoryIds: ["FULL-INV-1"],
+    });
+
+    for (const rows of [
+      [semCusto, comCusto],
+      [comCusto, semCusto],
+    ]) {
+      const result = buildInventoryMonthSnapshotReport(rows);
+
+      assert.equal(result.rows.length, 1);
+      assert.equal(result.rows[0].unitCost, 20);
+      assert.equal(result.rows[0].ncm, "85444200");
+      assert.equal(result.rows[0].missingCost, false);
+      assert.equal(result.missingCostCount, 0);
+    }
+  });
+
   it("flags rows without a frozen cost as missingCost and excludes them from the total", () => {
     const rows = [
       makeSnapshotRow({

@@ -53,18 +53,19 @@ import { useTableSort } from "@/hooks/use-table-sort";
 import {
   aggregateStockReportBySku,
   buildStockReportRows,
+  consolidateListingsBySku,
   formatStockReportCurrency,
   formatStockReportUnits,
   inventoryBaseUnits,
   listingAuditBreakdown,
   listingStateFor,
   listingTotalUnits,
-  skuKeyFromListing,
   skuLabelFromKey,
   type StockReportHeader,
   type StockReportListingInput,
   type StockReportListingState,
   type StockReportMergeGroup,
+  type StockReportProductGroup,
   type StockReportProductInfo,
   type StockReportRow,
 } from "@/lib/inventory/inventory-stock-report";
@@ -188,19 +189,31 @@ function sameManual(
   );
 }
 
+/**
+ * Converte os ajustes (que o usuário informa por PRODUTO) para o formato que
+ * o relatório consome (por anúncio). O ajuste do produto entra inteiro no
+ * anúncio âncora e os demais membros ficam zerados: `aggregateStockReportBySku`
+ * soma os ajustes de todos os anúncios do grupo, então lançar tudo no âncora
+ * dá o mesmo total sem contar a mesma correção duas vezes.
+ */
 function listingStatesFromManual(
-  listings: StockReportListingInput[],
+  groups: StockReportProductGroup[],
   map: Record<string, ManualListingAdjustments>,
 ): Record<string, StockReportListingState> {
   const next: Record<string, StockReportListingState> = {};
-  for (const listing of listings) {
-    const manual = manualFor(map, listing.mlItemId);
-    next[listing.mlItemId] = {
-      adjustment: {
-        nfEmitidaNaoEntregue: manual.nfEmitidaNaoEntregue,
-        ajusteManual: manual.ajusteManual,
-      },
-    };
+  for (const group of groups) {
+    const manual = manualFor(map, group.skuKey);
+    for (const mlItemId of group.mlItemIds) {
+      next[mlItemId] = {
+        adjustment:
+          mlItemId === group.mlItemId
+            ? {
+                nfEmitidaNaoEntregue: manual.nfEmitidaNaoEntregue,
+                ajusteManual: manual.ajusteManual,
+              }
+            : EMPTY_MANUAL,
+      };
+    }
   }
   return next;
 }
@@ -255,23 +268,25 @@ function MemoriaDivider() {
 
 function SkuCalculationMemory({
   row,
-  memberListings,
-  listingStatesByMlItemId,
+  memberGroups,
+  groupStateBySkuKey,
   productsBySku,
 }: {
   row: StockReportRow;
-  memberListings: StockReportListingInput[];
-  listingStatesByMlItemId: Record<string, StockReportListingState>;
+  /** Produtos que compõem a linha: 1 normalmente, N quando o usuário agrupou
+   *  SKUs diferentes manualmente. Cada um já vem consolidado (galpão somado,
+   *  Full contado uma vez), então a conta aqui fecha com a do relatório. */
+  memberGroups: StockReportProductGroup[];
+  groupStateBySkuKey: Record<string, StockReportListingState>;
   productsBySku: Record<string, StockReportProductInfo>;
 }) {
   const perSkuValuation = (() => {
     if (row.skus.length <= 1) return null;
     const unitsBySku = new Map<string, number>();
-    for (const listing of memberListings) {
-      const skuKey = skuKeyFromListing(listing.sku, listing.mlItemId);
-      const state = listingStateFor(listingStatesByMlItemId, listing.mlItemId);
-      const units = listingTotalUnits(listing, state);
-      unitsBySku.set(skuKey, (unitsBySku.get(skuKey) ?? 0) + units);
+    for (const group of memberGroups) {
+      const state = listingStateFor(groupStateBySkuKey, group.skuKey);
+      const units = listingTotalUnits(group, state);
+      unitsBySku.set(group.skuKey, (unitsBySku.get(group.skuKey) ?? 0) + units);
     }
     return row.skus
       .filter((skuKey) => (unitsBySku.get(skuKey) ?? 0) > 0)
@@ -288,29 +303,34 @@ function SkuCalculationMemory({
         Memória de cálculo — {row.label}
       </p>
 
-      {memberListings.length === 0 ? (
+      {memberGroups.length === 0 ? (
         <p className="text-xs text-[var(--muted-foreground)]">
           Nenhum anúncio encontrado para este produto no fechamento deste mês.
         </p>
       ) : (
-        memberListings.map((listing, index) => {
-          const state = listingStateFor(
-            listingStatesByMlItemId,
-            listing.mlItemId,
-          );
-          const audit = listingAuditBreakdown(listing, state);
+        memberGroups.map((group, index) => {
+          const state = listingStateFor(groupStateBySkuKey, group.skuKey);
+          const audit = listingAuditBreakdown(group, state);
 
           return (
             <div
-              key={listing.mlItemId}
+              key={group.skuKey}
               className={cn(index > 0 && "mt-3 border-t border-[var(--border)] pt-3")}
             >
-              {memberListings.length > 1 ? (
+              {memberGroups.length > 1 ? (
                 <p className="mb-1.5 text-xs font-medium text-[var(--foreground)]">
-                  Anúncio: {listing.sku ?? "Sem SKU"}{" "}
+                  Produto: {group.sku ?? "Sem SKU"}{" "}
                   <span className="font-normal text-[var(--muted-foreground)]">
-                    — {listing.title}
+                    — {group.title}
                   </span>
+                </p>
+              ) : null}
+
+              {group.mlItemIds.length > 1 ? (
+                <p className="mb-1.5 text-[11px] text-[var(--muted-foreground)]">
+                  {group.mlItemIds.length} anúncios no Mercado Livre para este
+                  produto ({group.mlItemIds.join(", ")}) — galpão somado e
+                  estoque Full contado uma vez só (mesmo estoque físico).
                 </p>
               ) : null}
 
@@ -362,9 +382,9 @@ function SkuCalculationMemory({
 
       <MemoriaDivider />
 
-      {memberListings.length > 1 ? (
+      {memberGroups.length > 1 ? (
         <MemoriaLinha
-          label={`Soma de ${memberListings.length} anúncios`}
+          label={`Soma de ${memberGroups.length} produtos`}
           value={formatStockReportUnits(row.units)}
           destaque
         />
@@ -446,7 +466,10 @@ export function InventoryHistoryReportEditor({
   const referenceDate = useMemo(() => new Date(referenceDateIso), [referenceDateIso]);
   const [activeTab, setActiveTab] = useState<"report" | "compare">("report");
   const [header, setHeader] = useState(initialHeader);
-  const [manualByMlItemId, setManualByMlItemId] = useState<
+  // Ajustes são por PRODUTO (skuKey), não por anúncio: 2 anúncios espelho
+  // dividem o mesmo estoque físico, então "NF emitida não entregue" lançada
+  // em cada um dobraria a correção.
+  const [manualBySkuKey, setManualBySkuKey] = useState<
     Record<string, ManualListingAdjustments>
   >({});
   const [adjustmentDraft, setAdjustmentDraft] = useState<
@@ -464,35 +487,54 @@ export function InventoryHistoryReportEditor({
     null,
   );
 
-  const listingsBySkuKey = useMemo(() => {
-    const map = new Map<string, StockReportListingInput[]>();
-    for (const listing of listings) {
-      const key = skuKeyFromListing(listing.sku, listing.mlItemId);
-      const arr = map.get(key);
-      if (arr) arr.push(listing);
-      else map.set(key, [listing]);
-    }
+  // 1 entrada por produto (SKU), com galpão somado e Full contado uma vez só
+  // quando os anúncios compartilham o mesmo pool — a mesma consolidação que o
+  // relatório aplica, pra modal, memória de cálculo e relatório fecharem a
+  // mesma conta.
+  const productGroups = useMemo(
+    () => consolidateListingsBySku(listings),
+    [listings],
+  );
+
+  const productGroupsBySkuKey = useMemo(() => {
+    const map = new Map<string, StockReportProductGroup>();
+    for (const group of productGroups) map.set(group.skuKey, group);
     return map;
-  }, [listings]);
+  }, [productGroups]);
 
   const listingStatesByMlItemId = useMemo(
-    () => listingStatesFromManual(listings, manualByMlItemId),
-    [listings, manualByMlItemId],
+    () => listingStatesFromManual(productGroups, manualBySkuKey),
+    [productGroups, manualBySkuKey],
   );
 
-  const draftListingStatesByMlItemId = useMemo(
-    () => listingStatesFromManual(listings, manualMapFromDraft(adjustmentDraft)),
-    [listings, adjustmentDraft],
-  );
+  // Os mesmos ajustes, mas indexados por skuKey — é o que a modal e a memória
+  // de cálculo consomem, já que lá a unidade é o produto.
+  const groupStateBySkuKey = useMemo(() => {
+    const map: Record<string, StockReportListingState> = {};
+    for (const group of productGroups) {
+      map[group.skuKey] = { adjustment: manualFor(manualBySkuKey, group.skuKey) };
+    }
+    return map;
+  }, [productGroups, manualBySkuKey]);
 
-  const filteredListings = useMemo(
+  const draftGroupStateBySkuKey = useMemo(() => {
+    const draftManual = manualMapFromDraft(adjustmentDraft);
+    const map: Record<string, StockReportListingState> = {};
+    for (const group of productGroups) {
+      map[group.skuKey] = { adjustment: manualFor(draftManual, group.skuKey) };
+    }
+    return map;
+  }, [productGroups, adjustmentDraft]);
+
+  const filteredGroups = useMemo(
     () =>
-      filterByItemListSearch(listings, listingSearch, (row) => ({
+      filterByItemListSearch(productGroups, listingSearch, (row) => ({
         sku: row.sku,
         title: row.title,
-        mlItemId: row.mlItemId,
+        // busca por qualquer um dos anúncios do produto
+        extra: row.mlItemIds,
       })),
-    [listings, listingSearch],
+    [productGroups, listingSearch],
   );
 
   const skuPreview = useMemo(
@@ -533,22 +575,22 @@ export function InventoryHistoryReportEditor({
 
   const adjustmentCount = useMemo(
     () =>
-      Object.values(manualByMlItemId).filter((manual) =>
+      Object.values(manualBySkuKey).filter((manual) =>
         hasManualAdjustments(manual),
       ).length,
-    [manualByMlItemId],
+    [manualBySkuKey],
   );
 
   const adjustmentDirtyCount = useMemo(() => {
     const ids = new Set([
-      ...Object.keys(manualByMlItemId),
+      ...Object.keys(manualBySkuKey),
       ...Object.keys(adjustmentDraft),
     ]);
     let count = 0;
     for (const id of ids) {
       if (
         !sameManual(
-          manualFor(manualByMlItemId, id),
+          manualFor(manualBySkuKey, id),
           parseDraftToManual(draftFor(adjustmentDraft, id)),
         )
       ) {
@@ -556,23 +598,20 @@ export function InventoryHistoryReportEditor({
       }
     }
     return count;
-  }, [adjustmentDraft, manualByMlItemId]);
+  }, [adjustmentDraft, manualBySkuKey]);
 
   const {
     sort: extrasSort,
-    sortedRows: sortedFilteredListings,
+    sortedRows: sortedFilteredGroups,
     onSortChange: onExtrasSortChange,
-  } = useTableSort<(typeof filteredListings)[number], ListingAdjustmentSortKey>(
-    filteredListings,
-    (listing, key) => {
-      const state = listingStateFor(
-        draftListingStatesByMlItemId,
-        listing.mlItemId,
-      );
-      const audit = listingAuditBreakdown(listing, state);
+  } = useTableSort<(typeof filteredGroups)[number], ListingAdjustmentSortKey>(
+    filteredGroups,
+    (group, key) => {
+      const state = listingStateFor(draftGroupStateBySkuKey, group.skuKey);
+      const audit = listingAuditBreakdown(group, state);
       switch (key) {
         case "estoqueCongelado":
-          return inventoryBaseUnits(listing);
+          return inventoryBaseUnits(group);
         case "estoqueNoRelatorio":
           return audit.total;
       }
@@ -605,7 +644,7 @@ export function InventoryHistoryReportEditor({
 
   function handleAdjustmentsOpenChange(open: boolean) {
     if (open) {
-      setAdjustmentDraft(draftMapFromManual(manualByMlItemId));
+      setAdjustmentDraft(draftMapFromManual(manualBySkuKey));
       setShowExtras(true);
       return;
     }
@@ -628,7 +667,7 @@ export function InventoryHistoryReportEditor({
   }
 
   function applyAdjustmentDraft() {
-    setManualByMlItemId(manualMapFromDraft(adjustmentDraft));
+    setManualBySkuKey(manualMapFromDraft(adjustmentDraft));
     setShowExtras(false);
     setAdjustmentDraft({});
   }
@@ -812,17 +851,17 @@ export function InventoryHistoryReportEditor({
             <ItemListSearch
               value={listingSearch}
               onChange={setListingSearch}
-              filteredCount={filteredListings.length}
-              totalCount={listings.length}
+              filteredCount={filteredGroups.length}
+              totalCount={productGroups.length}
             />
-            {filteredListings.length === 0 ? (
+            {filteredGroups.length === 0 ? (
               <p className="rounded-xl border border-dashed border-[var(--border)] px-4 py-10 text-center text-sm text-[var(--muted-foreground)]">
                 {itemListSearchEmptyMessage(listingSearch)}
               </p>
             ) : (
               <div className="overflow-hidden rounded-xl border border-[var(--border)]">
                 <div className="hidden items-center gap-3 border-b border-[var(--border)] bg-[var(--muted)]/70 px-4 py-2 text-[11px] font-semibold tracking-wide text-[var(--muted-foreground)] uppercase md:grid md:grid-cols-[minmax(0,1.6fr)_5.5rem_7rem_7.5rem_6.5rem]">
-                  <span>Anúncio</span>
+                  <span>Produto</span>
                   <button
                     type="button"
                     className={cn(
@@ -849,32 +888,23 @@ export function InventoryHistoryReportEditor({
                   </button>
                 </div>
                 <ul className="max-h-[min(28rem,50vh)] divide-y divide-[var(--border)] overflow-y-auto">
-                  {sortedFilteredListings.map((listing) => {
-                    const draftFields = draftFor(
-                      adjustmentDraft,
-                      listing.mlItemId,
-                    );
-                    const appliedManual = manualFor(
-                      manualByMlItemId,
-                      listing.mlItemId,
-                    );
+                  {sortedFilteredGroups.map((group) => {
+                    const draftFields = draftFor(adjustmentDraft, group.skuKey);
+                    const appliedManual = manualFor(manualBySkuKey, group.skuKey);
                     const draftManual = parseDraftToManual(draftFields);
                     const draftState = listingStateFor(
-                      draftListingStatesByMlItemId,
-                      listing.mlItemId,
+                      draftGroupStateBySkuKey,
+                      group.skuKey,
                     );
-                    const draftAudit = listingAuditBreakdown(
-                      listing,
-                      draftState,
-                    );
-                    const currentUnits = inventoryBaseUnits(listing);
+                    const draftAudit = listingAuditBreakdown(group, draftState);
+                    const currentUnits = inventoryBaseUnits(group);
                     const included = draftAudit.total > 0;
                     const rowDirty = !sameManual(draftManual, appliedManual);
                     const delta = draftAudit.total - currentUnits;
 
                     return (
                       <li
-                        key={listing.mlItemId}
+                        key={group.skuKey}
                         className={cn(
                           "grid gap-3 px-4 py-3 md:grid-cols-[minmax(0,1.6fr)_5.5rem_7rem_7.5rem_6.5rem] md:items-center",
                           rowDirty && "bg-[var(--primary)]/5",
@@ -883,8 +913,13 @@ export function InventoryHistoryReportEditor({
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="font-medium text-[var(--foreground)]">
-                              {listing.sku ?? "Sem SKU"}
+                              {group.sku ?? "Sem SKU"}
                             </p>
+                            {group.mlItemIds.length > 1 ? (
+                              <Badge variant="muted" className="text-[10px]">
+                                {group.mlItemIds.length} anúncios
+                              </Badge>
+                            ) : null}
                             {rowDirty ? (
                               <Badge variant="outline" className="text-[10px]">
                                 Alterado
@@ -900,7 +935,7 @@ export function InventoryHistoryReportEditor({
                             )}
                           </div>
                           <p className="mt-0.5 line-clamp-1 text-xs text-[var(--muted-foreground)]">
-                            {listing.title}
+                            {group.title}
                           </p>
                         </div>
                         <div className="flex items-center justify-between text-sm md:block md:text-right">
@@ -912,7 +947,7 @@ export function InventoryHistoryReportEditor({
                           </span>
                         </div>
                         <FormInput
-                          id={`ajuste-nf-${listing.mlItemId}`}
+                          id={`ajuste-nf-${group.skuKey}`}
                           type="number"
                           min={0}
                           step={1}
@@ -920,7 +955,7 @@ export function InventoryHistoryReportEditor({
                           value={draftFields.nfEmitidaNaoEntregue}
                           onChange={(e) =>
                             updateAdjustmentDraft(
-                              listing.mlItemId,
+                              group.skuKey,
                               "nfEmitidaNaoEntregue",
                               e.target.value,
                             )
@@ -929,14 +964,14 @@ export function InventoryHistoryReportEditor({
                           inputClassName="h-9 tabular-nums md:text-right"
                         />
                         <FormInput
-                          id={`ajuste-manual-${listing.mlItemId}`}
+                          id={`ajuste-manual-${group.skuKey}`}
                           type="number"
                           step={1}
                           label="Ajuste +/−"
                           value={draftFields.ajusteManual}
                           onChange={(e) =>
                             updateAdjustmentDraft(
-                              listing.mlItemId,
+                              group.skuKey,
                               "ajusteManual",
                               e.target.value,
                             )
@@ -1272,9 +1307,10 @@ export function InventoryHistoryReportEditor({
                   const isExpanded = expandedSkuRowKey === row.rowKey;
                   const memberSkuKeys =
                     row.skus.length > 0 ? row.skus : [row.rowKey];
-                  const memberListings = memberSkuKeys.flatMap(
-                    (skuKey) => listingsBySkuKey.get(skuKey) ?? [],
-                  );
+                  const memberGroups = memberSkuKeys.flatMap((skuKey) => {
+                    const group = productGroupsBySkuKey.get(skuKey);
+                    return group ? [group] : [];
+                  });
 
                   return (
                     <Fragment key={row.rowKey}>
@@ -1382,8 +1418,8 @@ export function InventoryHistoryReportEditor({
                           <td colSpan={7} className="px-3 py-3">
                             <SkuCalculationMemory
                               row={row}
-                              memberListings={memberListings}
-                              listingStatesByMlItemId={listingStatesByMlItemId}
+                              memberGroups={memberGroups}
+                              groupStateBySkuKey={groupStateBySkuKey}
                               productsBySku={productsBySku}
                             />
                           </td>

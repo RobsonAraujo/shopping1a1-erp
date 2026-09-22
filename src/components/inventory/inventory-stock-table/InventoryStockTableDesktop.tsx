@@ -335,14 +335,22 @@ export function InventoryStockTableDesktop({
     );
   }
 
+  // `overflow-clip` em vez de `overflow-hidden`, e `overflow-x` liberado em
+  // telas largas: os dois cortam igual, mas `hidden`/`auto` criam scroll
+  // container, e qualquer scroll container ancestral faz o cabeçalho `sticky`
+  // grudar nele em vez de na janela (virando estático na prática). Abaixo de
+  // `xl` a tabela (63rem) ainda precisa de scroll horizontal, então lá o
+  // cabeçalho rola junto — degrada sem quebrar.
   return (
-    <Card className="overflow-hidden p-0 shadow-sm">
-      <div className="overflow-x-auto">
+    <Card className="overflow-clip p-0 shadow-sm">
+      <div className="overflow-x-auto xl:overflow-x-visible">
         <div style={{ minWidth: TABLE_MIN_WIDTH }}>
           <div
             className={cn(
               GRID_ROW_CLASS,
-              "border-b border-[var(--border)] bg-[var(--muted)]/80",
+              // `top-20` = altura do header do dashboard (`sm:h-20`), que é
+              // `sticky top-0 z-40` — por isso o z-index aqui fica abaixo.
+              "sticky top-20 z-20 border-b border-[var(--border)] bg-[var(--muted)]/95 backdrop-blur-sm",
             )}
             style={{ gridTemplateColumns: GRID_COLS }}
           >

@@ -160,12 +160,20 @@ export function buildInventoryMonthSnapshotListingInputs(
     });
 
     const skuKey = skuKeyFromListing(row.sku, row.mlItemId);
-    if (!productsBySku[skuKey]) {
+    const unitCost = decimalToNumber(row.unitCost);
+    const existing = productsBySku[skuKey];
+    // Quando 2+ mlItemId caem no mesmo SKU (ex.: anúncio "espelho" de
+    // Catálogo, com só um deles cadastrado em Meus Produtos), prefere a
+    // linha que TEM custo. Sem isso, quem "vencia" dependia da ordem de
+    // iteração (`orderBy: title`, empate arbitrário entre títulos iguais) —
+    // o mesmo produto aparecia ora com custo, ora como "sem custo", de um
+    // snapshot pro outro.
+    if (!existing || (existing.unitCost == null && unitCost != null)) {
       productsBySku[skuKey] = {
-        ncm: row.ncm,
+        ncm: row.ncm ?? existing?.ncm ?? null,
         // Custo já congelado no momento do fechamento — hasIcmsSt não é
         // usado depois daqui (buildStockReportRows só lê unitCost/ncm).
-        unitCost: decimalToNumber(row.unitCost),
+        unitCost,
         hasIcmsSt: false,
       };
     }

@@ -16,14 +16,22 @@ cerca de **1× por hora**, com `CRON_SECRET`. A rota pega até **10** sellers
 organizações `trialing` ou `active`, os mais atrasados primeiro
 (`organization_ml_sellers.last_catalog_cron_polled_at`).
 
-O webhook `POST /api/ml/notifications/catalog-competition` já atualiza
-item a item quando a Mercado Livre notifica. O cron é o pente-fino (anúncios
-que o webhook perdeu ou nunca disparou).
+Esse cron é a **única** fonte de atualização de competição de catálogo.
+Existiu um webhook (`POST /api/ml/notifications/catalog-competition`) que
+atualizava item a item quando a Mercado Livre notificava; foi removido de
+propósito, por dois motivos: um caminho só é mais fácil de raciocinar, e o
+endpoint era público sem assinatura (a ML não oferece HMAC, só a mitigação de
+"re-busque o recurso com seu próprio token").
 
-Isso existe para **não** estourar a cota do app ML compartilhado
-(`MERCADOLIBRE_CLIENT_ID`) enquanto a base é pequena. Com mais de 10 sellers
-pagantes, **ninguém** é coberto de hora em hora pelo cron — cada um espera
-`ceil(N / 10)` horas. Ex.: 50 sellers ≈ a cada 5 horas.
+O preço dessa simplificação é latência, e ela **escala com o número de
+clientes**: o lote existe para **não** estourar a cota do app ML compartilhado
+(`MERCADOLIBRE_CLIENT_ID`). Com mais de 10 sellers pagantes, **ninguém** é
+coberto de hora em hora — cada um espera `ceil(N / 10)` horas. Ex.: 50 sellers
+≈ a cada 5 horas.
+
+Antes, esse atraso só afetava o pente-fino (o webhook segurava o tempo real).
+Agora ele é o atraso real com que o cliente convive para ver que perdeu o buy
+box. **O gatilho de escala abaixo ficou mais sensível por causa disso.**
 
 Não criar um job no cron-job.org **por cliente**. O fan-out tem que
 continuar dentro do produto.
@@ -34,7 +42,8 @@ continuar dentro do produto.
 
 | Sinal | O que fazer |
 |-------|-------------|
-| Mais de ~10 sellers pagantes e o relatório de catálogo atrasar de verdade (não só no papel) | Subir `CRON_BATCH_SIZE` e/ou a frequência do job (ex. a cada 15 min). Medir HTTP 429 da ML **antes**. |
+| Mais de ~10 sellers pagantes e o relatório de catálogo atrasar de verdade (não só no papel) | Subir `CRON_BATCH_SIZE` e/ou a frequência do job (ex. a cada 15 min). Medir HTTP 429 da ML **antes**. Sem o webhook, esse sinal chega antes do que chegava — não há mais nada cobrindo o tempo real. |
+| Cliente reclamar que demora pra saber que perdeu o buy box | Primeiro subir frequência/lote (linha acima). Só se a cota da ML não permitir, reconsiderar um webhook — aí com o handler gravando também `Listing.catalogStatus/SellerPrice/PriceToWin`, que o antigo **não** fazia (só gravava o snapshot da timeline). |
 | Clientes pagando e exigindo pente-fino **hora a hora em todos** os orgs | Parar de caber o lote inteiro num request só (timeout Vercel). Fan-out: fila / worker (QStash, Inngest, ou N POSTs internos autenticados). O job externo continua **um**; quem espalha é o worker. |
 | 429 frequentes, ou headers de rate limit no teto | 1) logar os headers reais em `src/lib/mercadolibre/api.ts`; 2) pedir aumento de cota à ML (Developer Partner); 3) só então app ML por tenant (plano B). Detalhe na seção seguinte. |
 | O POST do cron estourar timeout da Vercel | Mesmo fan-out: cada seller numa invocation curta. |

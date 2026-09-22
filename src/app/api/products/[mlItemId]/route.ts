@@ -183,8 +183,8 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   const { mlItemId } = await context.params;
 
   try {
-    const warehouseStock = await prisma.warehouseStock.findUnique({
-      where: { mlItemId },
+    const warehouseStock = await prisma.warehouseStock.findFirst({
+      where: { mlItemId, organizationId },
       select: { quantity: true },
     });
     if (warehouseStock && warehouseStock.quantity > 0) {

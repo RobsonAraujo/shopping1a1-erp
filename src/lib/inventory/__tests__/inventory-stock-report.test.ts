@@ -4,8 +4,10 @@ import {
   aggregateStockReportBySku,
   applyStockReportMergeGroups,
   buildStockReportRows,
+  consolidateListingsBySku,
   inventoryBaseUnits,
   listingAuditBreakdown,
+  listingTotalUnits,
   listingUnitsAtSnapshot,
 } from "../inventory-stock-report";
 
@@ -353,6 +355,114 @@ describe("inventory-stock-report", () => {
     assert.equal(result.rows.length, 2);
     assert.equal(result.totalValue, 20);
     assert.equal(result.missingCostCount, 1);
+  });
+
+  it("consolidates 2 listings of the same sku into one product, Full counted once", () => {
+    const groups = consolidateListingsBySku([
+      {
+        mlItemId: "MLB7680193850",
+        sku: "Alltec - 2001 VO/GA (Catálogo)",
+        title: "Alltec 2001",
+        warehouseStock: 0,
+        mlStock: 100,
+        mlStockOnTheWay: 5,
+        inventoryIds: ["FULL-INV-1"],
+      },
+      {
+        mlItemId: "MLB5713296080",
+        sku: "Alltec - 2001 VO/GA (Catálogo)",
+        title: "Alltec 2001",
+        warehouseStock: 580,
+        mlStock: 100,
+        mlStockOnTheWay: 5,
+        inventoryIds: ["FULL-INV-1"],
+      },
+    ]);
+
+    assert.equal(groups.length, 1);
+    const group = groups[0]!;
+    assert.equal(group.warehouseStock, 580); // somado
+    assert.equal(group.mlStock, 100); // contado 1x (mesmo pool)
+    assert.equal(group.mlStockOnTheWay, 5); // contado 1x
+    assert.deepEqual(group.mlItemIds, ["MLB7680193850", "MLB5713296080"]);
+    // âncora é quem recebe os ajustes manuais do produto
+    assert.equal(group.mlItemId, "MLB7680193850");
+  });
+
+  it("consolidates but keeps summing Full when the pools are genuinely separate", () => {
+    const groups = consolidateListingsBySku([
+      {
+        mlItemId: "MLB1",
+        sku: "SKU A",
+        title: "A",
+        warehouseStock: 100,
+        mlStock: 400,
+        mlStockOnTheWay: 39,
+        inventoryIds: ["FULL-INV-1"],
+      },
+      {
+        mlItemId: "MLB2",
+        sku: "SKU A",
+        title: "A",
+        warehouseStock: 0,
+        mlStock: 1000,
+        mlStockOnTheWay: 0,
+        inventoryIds: ["FULL-INV-2"],
+      },
+    ]);
+
+    assert.equal(groups.length, 1);
+    assert.equal(groups[0]?.warehouseStock, 100);
+    assert.equal(groups[0]?.mlStock, 1400);
+    assert.equal(groups[0]?.mlStockOnTheWay, 39);
+  });
+
+  it("never groups listings without sku", () => {
+    const groups = consolidateListingsBySku([
+      { mlItemId: "MLB1", sku: null, title: "A", warehouseStock: 1, mlStock: 0, mlStockOnTheWay: 0 },
+      { mlItemId: "MLB2", sku: null, title: "B", warehouseStock: 2, mlStock: 0, mlStockOnTheWay: 0 },
+    ]);
+
+    assert.equal(groups.length, 2);
+  });
+
+  it("product total matches the report total (adjustments modal must not contradict the report)", () => {
+    // Regressão do caso real: a modal de Ajustes e a memória de cálculo
+    // mostravam os anúncios brutos (Full contado 2x) enquanto o relatório já
+    // deduplicava — as telas não fechavam a mesma conta.
+    const listings = [
+      {
+        mlItemId: "MLB7680193850",
+        sku: "Alltec - 2001 VO/GA (Catálogo)",
+        title: "Alltec 2001",
+        warehouseStock: 0,
+        mlStock: 100,
+        mlStockOnTheWay: 5,
+        inventoryIds: ["FULL-INV-1"],
+      },
+      {
+        mlItemId: "MLB5713296080",
+        sku: "Alltec - 2001 VO/GA (Catálogo)",
+        title: "Alltec 2001",
+        warehouseStock: 580,
+        mlStock: 100,
+        mlStockOnTheWay: 5,
+        inventoryIds: ["FULL-INV-1"],
+      },
+    ];
+
+    const reportRows = aggregateStockReportBySku(listings, {}, {});
+    const groups = consolidateListingsBySku(listings);
+
+    assert.equal(reportRows.length, 1);
+    assert.equal(groups.length, 1);
+    // o número que a modal/memória mostram para o produto...
+    const groupUnits = listingTotalUnits(groups[0]!, {
+      adjustment: { nfEmitidaNaoEntregue: 0, ajusteManual: 0 },
+    });
+    // ...tem que ser exatamente o do relatório
+    assert.equal(groupUnits, reportRows[0]?.units);
+    assert.equal(groupUnits, 685);
   });
 
   it("listingAuditBreakdown exposes every component used to reach the total", () => {

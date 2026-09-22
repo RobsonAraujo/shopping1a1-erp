@@ -16,8 +16,12 @@ import { prisma } from "@/lib/db/db";
  * de onde parou na próxima hora — sem fila/worker novo, sem precisar
  * reconfigurar nada no cron-job.org quando um cliente entra ou sai.
  *
- * É só o heartbeat de segurança: o webhook (api/ml/notifications/catalog-competition)
- * já cobre o caso real-time barato pra cada seller.
+ * É a ÚNICA fonte de atualização de competição de catálogo. Existiu um
+ * webhook (`api/ml/notifications/catalog-competition`) cobrindo o caso
+ * real-time, removido de propósito: um caminho só é mais fácil de raciocinar,
+ * e o endpoint era público sem assinatura (a ML não oferece HMAC). O preço é
+ * latência — cada seller espera `ceil(N / CRON_BATCH_SIZE)` horas. Ver
+ * docs/architecture/saas-scale-triggers.md.
  */
 const CRON_BATCH_SIZE = 10;
 

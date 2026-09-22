@@ -81,9 +81,9 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const { listing, warehouseStock } = await prisma.$transaction(
+    const { warehouseStock } = await prisma.$transaction(
       async (tx) => {
-        const listingRow = await upsertListingFromItem(organizationId, item, tx);
+        await upsertListingFromItem(organizationId, item, tx);
 
         const stockRow = await tx.warehouseStock.upsert({
           // `organizationId` no `where` é defensivo — `mlItemId` já é
@@ -95,11 +95,11 @@ export async function GET(_request: NextRequest, context: RouteContext) {
           update: {},
         });
 
-        return { listing: listingRow, warehouseStock: stockRow };
+        return { warehouseStock: stockRow };
       },
     );
 
-    return NextResponse.json({ listing, warehouseStock });
+    return NextResponse.json({ warehouseStock });
   } catch (e) {
     logServerError("api/inventory/[mlItemId] GET", e);
     return NextResponse.json(apiErrorPayload(e, "inventory_get_failed"), {
@@ -151,9 +151,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     });
     const previousQty = existingStock?.quantity ?? 0;
 
-    const { listing, warehouseStock } = await prisma.$transaction(
+    const { warehouseStock } = await prisma.$transaction(
       async (tx) => {
-        const listingRow = await upsertListingFromItem(organizationId, item, tx);
+        await upsertListingFromItem(organizationId, item, tx);
 
         const existing = await tx.warehouseStock.findUnique({
           where: { mlItemId, organizationId },
@@ -188,7 +188,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           },
         });
 
-        return { listing: listingRow, warehouseStock: stockRow };
+        return { warehouseStock: stockRow };
       },
     );
 
@@ -214,7 +214,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     // já recalculados pra este item específico — o client usa isso pra
     // atualizar a linha editada localmente, sem precisar de
     // `router.refresh()` (que refaria o sweep do catálogo inteiro).
-    return NextResponse.json({ listing, warehouseStock, row: updatedRowFields });
+    return NextResponse.json({ warehouseStock, row: updatedRowFields });
   } catch (e) {
     logServerError("api/inventory/[mlItemId] PATCH", e);
     return NextResponse.json(apiErrorPayload(e, "inventory_patch_failed"), {

@@ -295,6 +295,64 @@ function dedupeSharedFullStock(
   );
 }
 
+/**
+ * O produto como o usuário pensa nele — 1 entrada por SKU, mesmo quando o
+ * mesmo produto tem 2+ anúncios no ML (anúncio "espelho" de Catálogo).
+ *
+ * É `StockReportListingInput` de propósito: assim tudo que já opera sobre um
+ * anúncio (`listingTotalUnits`, `listingAuditBreakdown`, `inventoryBaseUnits`)
+ * funciona igual sobre o produto consolidado, sem duplicar a matemática. O
+ * `mlItemId` aqui é o anúncio âncora — é nele que os ajustes manuais do
+ * produto são lançados.
+ */
+export type StockReportProductGroup = StockReportListingInput & {
+  skuKey: string;
+  label: string;
+  /** Todos os anúncios que compõem o produto; >1 = tem anúncio espelho. */
+  mlItemIds: string[];
+};
+
+/**
+ * Agrupa os anúncios do snapshot em produtos (por SKU), somando o galpão e
+ * contando o Full uma vez só quando os anúncios compartilham o mesmo pool
+ * físico (ver `dedupeSharedFullStock`). Anúncio sem SKU nunca agrupa — cada
+ * um vira seu próprio produto, via `skuKeyFromListing`.
+ */
+export function consolidateListingsBySku(
+  listings: StockReportListingInput[],
+): StockReportProductGroup[] {
+  const groupsBySku = new Map<string, StockReportListingInput[]>();
+  for (const listing of listings) {
+    const skuKey = skuKeyFromListing(listing.sku, listing.mlItemId);
+    const group = groupsBySku.get(skuKey);
+    if (group) group.push(listing);
+    else groupsBySku.set(skuKey, [listing]);
+  }
+
+  return [...groupsBySku.entries()].map(([skuKey, group]) => {
+    const deduped = dedupeSharedFullStock(group);
+    // Mesmo índice que `dedupeSharedFullStock` usa pra guardar o Full — o
+    // âncora precisa ser o membro que carrega os números, senão o ajuste
+    // manual cairia num anúncio zerado.
+    const anchor = group[0]!;
+    const sum = (pick: (l: StockReportListingInput) => number) =>
+      deduped.reduce((total, listing) => total + stockUnits(pick(listing)), 0);
+
+    return {
+      skuKey,
+      label: skuLabelFromKey(skuKey),
+      mlItemIds: group.map((listing) => listing.mlItemId),
+      mlItemId: anchor.mlItemId,
+      sku: anchor.sku,
+      title: anchor.title,
+      catalogListing: anchor.catalogListing,
+      warehouseStock: sum((l) => l.warehouseStock),
+      mlStock: sum((l) => l.mlStock),
+      mlStockOnTheWay: sum((l) => l.mlStockOnTheWay),
+    };
+  });
+}
+
 export function aggregateStockReportBySku(
   listings: StockReportListingInput[],
   listingStatesByMlItemId: Record<string, StockReportListingState | undefined>,

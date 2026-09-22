@@ -39,6 +39,7 @@ async function InventoryDataSection({
   let supplierNames: Record<string, string> = {};
   let rows: InventoryRow[] = [];
   let unregisteredCount = 0;
+  let missingOnMlCount = 0;
 
   try {
     const operationalSettings = await loadOperationalSettings(organizationId);
@@ -62,17 +63,36 @@ async function InventoryDataSection({
         .map((p) => [p.mlItemId, p.supplier.name]),
     );
 
-    const [rawItems, activeIds, pausedIds] = await Promise.all([
+    // A varredura de anúncios do ML alimenta só o aviso de "não cadastrado".
+    // Ela tem `catch` próprio de propósito: é informativa, então uma falha
+    // dela (rate limit, timeout) esconde o aviso em vez de derrubar a página
+    // inteira com os dados de estoque já carregados.
+    const [rawItems, liveMlItemIds] = await Promise.all([
       productMlItemIds.length > 0
         ? fetchItemsByIdsBatched(token, productMlItemIds)
         : Promise.resolve([]),
-      fetchAllUserItemIds(token, userId, { status: "active" }),
-      fetchAllUserItemIds(token, userId, { status: "paused" }),
+      Promise.all([
+        fetchAllUserItemIds(token, userId, { status: "active" }),
+        fetchAllUserItemIds(token, userId, { status: "paused" }),
+      ])
+        .then(([activeIds, pausedIds]) => [...activeIds, ...pausedIds])
+        .catch(() => null),
     ]);
+
     const registeredIds = new Set(productMlItemIds);
-    for (const id of new Set([...activeIds, ...pausedIds])) {
-      if (!registeredIds.has(id)) unregisteredCount++;
+    if (liveMlItemIds) {
+      for (const id of new Set(liveMlItemIds)) {
+        if (!registeredIds.has(id)) unregisteredCount++;
+      }
     }
+
+    // Espelho do aviso acima: produto cadastrado e ativo cujo anúncio o ML
+    // não devolve mais (encerrado de vez, apagado) sumiria da tela sem
+    // explicação nenhuma — `fetchItemsByIds` descarta esses ids calado.
+    const returnedMlItemIds = new Set(rawItems.map((item) => item.id));
+    missingOnMlCount = productMlItemIds.filter(
+      (id) => !returnedMlItemIds.has(id),
+    ).length;
 
     const items = rawItems.filter((item) => !isKitItem(item));
 
@@ -196,6 +216,17 @@ async function InventoryDataSection({
     );
   }
 
+  // Quebra por status só com o que existe de fato. Inclui a fatia "outro
+  // status" (`countListingsByStatus.other`: encerrado, em revisão, etc.), que
+  // antes ficava de fora e fazia a soma das parcelas não bater com o total.
+  const statusBreakdown = [
+    statusCounts.active > 0 ? `${statusCounts.active} ativo${statusCounts.active !== 1 ? "s" : ""}` : null,
+    statusCounts.paused > 0 ? `${statusCounts.paused} pausado${statusCounts.paused !== 1 ? "s" : ""}` : null,
+    statusCounts.other > 0 ? `${statusCounts.other} em outro status` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <>
       <Card className="flex items-center gap-3 rounded-2xl p-4">
@@ -206,10 +237,8 @@ async function InventoryDataSection({
           <span className="font-semibold tabular-nums text-[var(--foreground)]">
             {total}
           </span>{" "}
-          anúncio{total !== 1 ? "s" : ""} no total
-          {statusCounts.paused > 0
-            ? ` · ${statusCounts.active} ativo${statusCounts.active !== 1 ? "s" : ""} · ${statusCounts.paused} pausado${statusCounts.paused !== 1 ? "s" : ""}`
-            : null}
+          produto{total !== 1 ? "s" : ""} cadastrado{total !== 1 ? "s" : ""}
+          {statusBreakdown ? ` · ${statusBreakdown}` : null}
         </p>
       </Card>
 
@@ -228,6 +257,25 @@ async function InventoryDataSection({
             </Link>{" "}
             — não {unregisteredCount !== 1 ? "aparecem" : "aparece"} aqui até serem
             cadastrados.
+          </p>
+        </Card>
+      ) : null}
+
+      {missingOnMlCount > 0 ? (
+        <Card className="flex items-start gap-3 rounded-2xl border-amber-500/20 bg-amber-500/5 p-4 text-sm">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
+          <p className="text-amber-900 dark:text-amber-200">
+            <strong>
+              {missingOnMlCount} produto{missingOnMlCount !== 1 ? "s" : ""}
+            </strong>{" "}
+            cadastrado{missingOnMlCount !== 1 ? "s" : ""} em{" "}
+            <Link href="/dashboard/produtos" className="font-medium underline underline-offset-2">
+              Meus Produtos
+            </Link>{" "}
+            não {missingOnMlCount !== 1 ? "têm" : "tem"} mais anúncio no Mercado
+            Livre (encerrado ou apagado de vez) — por isso não{" "}
+            {missingOnMlCount !== 1 ? "aparecem" : "aparece"} na tabela. Inative
+            ou remova o cadastro para parar de {missingOnMlCount !== 1 ? "vê-los" : "vê-lo"} aqui.
           </p>
         </Card>
       ) : null}
@@ -279,8 +327,9 @@ export default async function InventoryPage() {
             Estoque
           </h1>
           <p className="mt-1 max-w-3xl text-sm leading-relaxed text-[var(--muted-foreground)] sm:text-[15px]">
-            Anúncios <strong>ativos e pausados</strong> no Mercado Livre (pausados
-            aparecem com aviso). Estoque no <strong>galpão</strong>, no{" "}
+            Produtos cadastrados em <strong>Meus Produtos</strong>, com os números
+            buscados ao vivo no Mercado Livre (pausados aparecem com aviso).
+            Estoque no <strong>galpão</strong>, no{" "}
             <strong>Full</strong> (já liberado para venda), <strong>a caminho</strong>{" "}
             (transferência e processamento interno via API) e total geral. O
             &quot;a caminho&quot; pode ser menor que no painel do Meli quando há{" "}
