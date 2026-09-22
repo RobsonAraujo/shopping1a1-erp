@@ -27,7 +27,10 @@ export const metadata: Metadata = {
   title: "Histórico de Estoque",
 };
 
-const EVOLUTION_MONTHS_LIMIT = 12;
+// Cobre uns 2 anos de fechamentos — a aba "Comparar mês a mês" agrupa isso
+// por ano, então precisa de mais que 12 pra não cortar um ano mais antigo
+// pela metade.
+const EVOLUTION_MONTHS_LIMIT = 24;
 
 function formatCompletedAt(date: Date | null): string {
   if (!date) return "";
@@ -74,27 +77,13 @@ async function InventoryHistoryMonthContent({
     subtitle: `Fechamento oficial de estoque — ${MONTH_NAMES_PT[selected.month - 1]} de ${selected.year}`,
   };
 
-  // Meses fechados imediatamente ANTERIORES ao selecionado (não o próprio
-  // mês selecionado — esse já aparece nas colunas "Unidades"/"Valor" atuais
-  // da tabela principal, mostrar de novo seria redundante). `months` vem
-  // mais recente primeiro; a tabela lê melhor em ordem cronológica
-  // (mais antigo → mais recente), por isso inverte.
-  const selectedIndex = months.findIndex(
-    (m) => m.year === selected.year && m.month === selected.month,
-  );
-  const priorMonths = (
-    selectedIndex === -1
-      ? []
-      : months.slice(
-          selectedIndex + 1,
-          selectedIndex + 1 + EVOLUTION_MONTHS_LIMIT,
-        )
-  )
-    .slice()
-    .reverse();
+  // TODOS os meses fechados (não só os anteriores ao selecionado) — a aba
+  // "Comparar mês a mês" deixa o usuário escolher o ano independente do mês
+  // aberto no relatório principal. `months` vem mais recente primeiro; a
+  // tabela de comparação lê melhor em ordem cronológica, por isso inverte.
   const evolution = await loadInventoryMonthSnapshotEvolution(
     organizationId,
-    priorMonths,
+    months.slice(0, EVOLUTION_MONTHS_LIMIT).slice().reverse(),
   );
 
   return (

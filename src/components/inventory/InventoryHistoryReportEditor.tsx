@@ -57,7 +57,6 @@ import {
   listingAuditBreakdown,
   listingStateFor,
   listingTotalUnits,
-  MONTH_NAMES_PT,
   skuKeyFromListing,
   skuLabelFromKey,
   type StockReportHeader,
@@ -67,10 +66,8 @@ import {
   type StockReportProductInfo,
   type StockReportRow,
 } from "@/lib/inventory/inventory-stock-report";
-import type {
-  InventoryMonthSnapshotEvolution,
-  InventoryMonthSnapshotEvolutionRow,
-} from "@/lib/inventory/inventory-month-snapshot-report";
+import type { InventoryMonthSnapshotEvolution } from "@/lib/inventory/inventory-month-snapshot-report";
+import { InventoryHistoryYearComparisonTable } from "@/components/inventory/InventoryHistoryYearComparisonTable";
 import { cn } from "@/lib/utils";
 
 type ManualListingAdjustments = {
@@ -211,32 +208,6 @@ function anchorNcm(
   productsBySku: Record<string, StockReportProductInfo>,
 ): string {
   return productsBySku[anchorSkuKey]?.ncm ?? "";
-}
-
-function monthKeyLabel(monthKey: string): string {
-  const [year, month] = monthKey.split("-").map(Number);
-  const shortYear = String(year).slice(-2);
-  return `${MONTH_NAMES_PT[month - 1]?.slice(0, 3)}/${shortYear}`;
-}
-
-/** Soma unidades/valor de um mês anterior entre os membros de uma linha (já mesclada ou não) — mesma lógica de agregação usada pro mês atual, aplicada ao histórico. */
-function sumEvolutionForMonth(
-  memberSkuKeys: string[],
-  monthKey: string,
-  evolutionBySkuKey: Map<string, InventoryMonthSnapshotEvolutionRow>,
-): { units: number; value: number | null } {
-  let units = 0;
-  let value = 0;
-  let hasData = false;
-  for (const skuKey of memberSkuKeys) {
-    const evoRow = evolutionBySkuKey.get(skuKey);
-    const memberUnits = evoRow?.unitsByMonthKey[monthKey];
-    if (memberUnits == null) continue;
-    hasData = true;
-    units += memberUnits;
-    value += evoRow?.valueByMonthKey[monthKey] ?? 0;
-  }
-  return { units, value: hasData ? value : null };
 }
 
 function MemoriaLinha({
@@ -471,10 +442,7 @@ export function InventoryHistoryReportEditor({
   evolution: InventoryMonthSnapshotEvolution;
 }) {
   const referenceDate = useMemo(() => new Date(referenceDateIso), [referenceDateIso]);
-  const evolutionBySkuKey = useMemo(
-    () => new Map(evolution.rows.map((row) => [row.skuKey, row])),
-    [evolution.rows],
-  );
+  const [activeTab, setActiveTab] = useState<"report" | "compare">("report");
   const [header, setHeader] = useState(initialHeader);
   const [manualByMlItemId, setManualByMlItemId] = useState<
     Record<string, ManualListingAdjustments>
@@ -781,6 +749,48 @@ export function InventoryHistoryReportEditor({
         </div>
       </div>
 
+      <div className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 p-1">
+        <button
+          type="button"
+          onClick={() => setActiveTab("report")}
+          className={cn(
+            "cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+            activeTab === "report"
+              ? "bg-[var(--card)] text-[var(--foreground)] shadow-sm"
+              : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
+          )}
+        >
+          Relatório do mês
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("compare")}
+          className={cn(
+            "cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+            activeTab === "compare"
+              ? "bg-[var(--card)] text-[var(--foreground)] shadow-sm"
+              : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
+          )}
+        >
+          Comparar mês a mês
+        </button>
+      </div>
+
+      {activeTab === "compare" ? (
+        <Card className="space-y-4 p-4 sm:p-5">
+          <div>
+            <h2 className="text-sm font-semibold text-[var(--foreground)]">
+              Comparar mês a mês
+            </h2>
+            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+              Unidades e valor em estoque de cada produto, mês a mês, num ano
+              escolhido.
+            </p>
+          </div>
+          <InventoryHistoryYearComparisonTable evolution={evolution} />
+        </Card>
+      ) : (
+      <>
       <Sheet open={showExtras} onOpenChange={handleAdjustmentsOpenChange}>
         <SheetContent className="sm:max-w-4xl">
           <SheetHeader className="pr-10">
@@ -1231,11 +1241,6 @@ export function InventoryHistoryReportEditor({
                   align="left"
                   className="px-3 py-2.5"
                 />
-                {evolution.monthKeys.map((monthKey) => (
-                  <th key={monthKey} className="px-3 py-2.5 text-right">
-                    {monthKeyLabel(monthKey)}
-                  </th>
-                ))}
                 <th className="px-3 py-2.5" />
               </tr>
             </thead>
@@ -1243,7 +1248,7 @@ export function InventoryHistoryReportEditor({
               {report.rows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8 + evolution.monthKeys.length}
+                    colSpan={8}
                     className="px-3 py-8 text-center text-[var(--muted-foreground)]"
                   >
                     {skuSearch.trim()
@@ -1344,34 +1349,6 @@ export function InventoryHistoryReportEditor({
                             ? formatStockReportCurrency(row.stockValue)
                             : "—"}
                         </td>
-                        {evolution.monthKeys.map((monthKey) => {
-                          const evo = sumEvolutionForMonth(
-                            memberSkuKeys,
-                            monthKey,
-                            evolutionBySkuKey,
-                          );
-                          return (
-                            <td
-                              key={monthKey}
-                              className="px-3 py-2 text-right tabular-nums"
-                            >
-                              {evo.value != null || evo.units > 0 ? (
-                                <>
-                                  <div>{formatStockReportUnits(evo.units)}</div>
-                                  <div className="text-[10px] text-[var(--muted-foreground)]">
-                                    {evo.value != null
-                                      ? formatStockReportCurrency(evo.value)
-                                      : "—"}
-                                  </div>
-                                </>
-                              ) : (
-                                <span className="text-[var(--muted-foreground)]">
-                                  —
-                                </span>
-                              )}
-                            </td>
-                          );
-                        })}
                         <td className="px-3 py-2">
                           {isMerged && mergeGroup ? (
                             <div className="flex flex-wrap gap-1">
@@ -1398,10 +1375,7 @@ export function InventoryHistoryReportEditor({
                       {isExpanded ? (
                         <tr className="border-b border-[var(--border)] bg-[var(--muted)]/20 last:border-0">
                           <td />
-                          <td
-                            colSpan={7 + evolution.monthKeys.length}
-                            className="px-3 py-3"
-                          >
+                          <td colSpan={7} className="px-3 py-3">
                             <SkuCalculationMemory
                               row={row}
                               memberListings={memberListings}
@@ -1425,13 +1399,15 @@ export function InventoryHistoryReportEditor({
                   <td className="px-3 py-3 tabular-nums">
                     {formatStockReportCurrency(report.totalValue)}
                   </td>
-                  <td colSpan={evolution.monthKeys.length + 1} />
+                  <td />
                 </tr>
               </tfoot>
             ) : null}
           </table>
         </div>
       </Card>
+      </>
+      )}
     </div>
     </TooltipProvider>
   );

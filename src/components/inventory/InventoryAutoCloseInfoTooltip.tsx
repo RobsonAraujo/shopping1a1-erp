@@ -29,11 +29,11 @@ export function InventoryAutoCloseInfoTooltip() {
           </button>
         </TooltipTrigger>
         <TooltipContent side="top" className="max-w-xs">
-          O fechamento congela o estoque do mês anterior automaticamente,
-          todo início de mês. Precisa de um corte antes disso — por exemplo,
-          pra mandar pra contabilidade no meio do mês? Gere um snapshot
-          manual do estoque de hoje ao lado; ele fica disponível até o
-          fechamento automático oficial deste mês o substituir.
+          O fechamento congela o estoque do mês anterior automaticamente, todo
+          início de mês. Precisa de um corte antes disso, por exemplo, para
+          mandar para contabilidade no meio do mês? Gere um snapshot manual do
+          estoque de hoje ao lado; ele fica disponível até o fechamento
+          automático oficial deste mês o substituir.
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
