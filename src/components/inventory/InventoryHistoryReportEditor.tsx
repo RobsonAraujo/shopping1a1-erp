@@ -2,11 +2,16 @@
 
 import { Fragment, useMemo, useState } from "react";
 import {
+  AlertTriangle,
+  Boxes,
+  Check,
   ChevronDown,
   ChevronRight,
+  CircleDollarSign,
   FileDown,
   FileSpreadsheet,
   Info,
+  Package,
   PackagePlus,
   Settings2,
   SlidersHorizontal,
@@ -26,9 +31,9 @@ import {
   SheetBody,
   SheetContent,
   SheetDescription,
+  SheetFooter,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from "@/components/ui/sheet";
 import { SortableTh } from "@/components/ui/sortable-th";
 import {
@@ -73,9 +78,19 @@ type ManualListingAdjustments = {
   ajusteManual: number;
 };
 
+type ManualListingAdjustmentDraft = {
+  nfEmitidaNaoEntregue: string;
+  ajusteManual: string;
+};
+
 const EMPTY_MANUAL: ManualListingAdjustments = {
   nfEmitidaNaoEntregue: 0,
   ajusteManual: 0,
+};
+
+const EMPTY_DRAFT: ManualListingAdjustmentDraft = {
+  nfEmitidaNaoEntregue: "",
+  ajusteManual: "",
 };
 
 type MergeDraft = {
@@ -117,6 +132,78 @@ function manualFor(
 
 function hasManualAdjustments(manual: ManualListingAdjustments): boolean {
   return manual.nfEmitidaNaoEntregue !== 0 || manual.ajusteManual !== 0;
+}
+
+function draftFor(
+  map: Record<string, ManualListingAdjustmentDraft>,
+  mlItemId: string,
+): ManualListingAdjustmentDraft {
+  return map[mlItemId] ?? EMPTY_DRAFT;
+}
+
+function parseDraftToManual(
+  draft: ManualListingAdjustmentDraft,
+): ManualListingAdjustments {
+  return {
+    nfEmitidaNaoEntregue: parseNonNegativeUnits(draft.nfEmitidaNaoEntregue),
+    ajusteManual: parseSignedUnits(draft.ajusteManual),
+  };
+}
+
+function manualToDraft(
+  manual: ManualListingAdjustments,
+): ManualListingAdjustmentDraft {
+  return {
+    nfEmitidaNaoEntregue:
+      manual.nfEmitidaNaoEntregue === 0 ? "" : String(manual.nfEmitidaNaoEntregue),
+    ajusteManual: manual.ajusteManual === 0 ? "" : String(manual.ajusteManual),
+  };
+}
+
+function draftMapFromManual(
+  map: Record<string, ManualListingAdjustments>,
+): Record<string, ManualListingAdjustmentDraft> {
+  return Object.fromEntries(
+    Object.entries(map).map(([id, manual]) => [id, manualToDraft(manual)]),
+  );
+}
+
+function manualMapFromDraft(
+  map: Record<string, ManualListingAdjustmentDraft>,
+): Record<string, ManualListingAdjustments> {
+  const next: Record<string, ManualListingAdjustments> = {};
+  for (const [id, draft] of Object.entries(map)) {
+    const parsed = parseDraftToManual(draft);
+    if (hasManualAdjustments(parsed)) next[id] = parsed;
+  }
+  return next;
+}
+
+function sameManual(
+  a: ManualListingAdjustments,
+  b: ManualListingAdjustments,
+): boolean {
+  return (
+    a.nfEmitidaNaoEntregue === b.nfEmitidaNaoEntregue &&
+    a.ajusteManual === b.ajusteManual
+  );
+}
+
+function listingStatesFromManual(
+  listings: StockReportListingInput[],
+  map: Record<string, ManualListingAdjustments>,
+): Record<string, StockReportListingState> {
+  const next: Record<string, StockReportListingState> = {};
+  for (const listing of listings) {
+    const manual = manualFor(map, listing.mlItemId);
+    next[listing.mlItemId] = {
+      adjustment: {
+        nfEmitidaNaoEntregue: manual.nfEmitidaNaoEntregue,
+        ajusteManual: manual.ajusteManual,
+      },
+    };
+  }
+  return next;
 }
 
 function anchorNcm(
@@ -392,12 +479,16 @@ export function InventoryHistoryReportEditor({
   const [manualByMlItemId, setManualByMlItemId] = useState<
     Record<string, ManualListingAdjustments>
   >({});
+  const [adjustmentDraft, setAdjustmentDraft] = useState<
+    Record<string, ManualListingAdjustmentDraft>
+  >({});
   const [mergeGroups, setMergeGroups] = useState<StockReportMergeGroup[]>([]);
   const [selectedSkuKeys, setSelectedSkuKeys] = useState<Set<string>>(
     () => new Set(),
   );
   const [mergeDraft, setMergeDraft] = useState<MergeDraft | null>(null);
   const [listingSearch, setListingSearch] = useState("");
+  const [skuSearch, setSkuSearch] = useState("");
   const [showExtras, setShowExtras] = useState(false);
   const [expandedSkuRowKey, setExpandedSkuRowKey] = useState<string | null>(
     null,
@@ -414,19 +505,15 @@ export function InventoryHistoryReportEditor({
     return map;
   }, [listings]);
 
-  const listingStatesByMlItemId = useMemo(() => {
-    const map: Record<string, StockReportListingState> = {};
-    for (const listing of listings) {
-      const manual = manualFor(manualByMlItemId, listing.mlItemId);
-      map[listing.mlItemId] = {
-        adjustment: {
-          nfEmitidaNaoEntregue: manual.nfEmitidaNaoEntregue,
-          ajusteManual: manual.ajusteManual,
-        },
-      };
-    }
-    return map;
-  }, [listings, manualByMlItemId]);
+  const listingStatesByMlItemId = useMemo(
+    () => listingStatesFromManual(listings, manualByMlItemId),
+    [listings, manualByMlItemId],
+  );
+
+  const draftListingStatesByMlItemId = useMemo(
+    () => listingStatesFromManual(listings, manualMapFromDraft(adjustmentDraft)),
+    [listings, adjustmentDraft],
+  );
 
   const filteredListings = useMemo(
     () =>
@@ -459,6 +546,48 @@ export function InventoryHistoryReportEditor({
     [listings, listingStatesByMlItemId, productsBySku, mergeGroups],
   );
 
+  const filteredReportRows = useMemo(
+    () =>
+      filterByItemListSearch(report.rows, skuSearch, (row) => ({
+        sku: row.label,
+        title: row.label,
+        extra: [row.ncm, ...row.skus.map((skuKey) => skuLabelFromKey(skuKey))],
+      })),
+    [report.rows, skuSearch],
+  );
+
+  const totalUnits = useMemo(
+    () => report.rows.reduce((sum, row) => sum + row.units, 0),
+    [report.rows],
+  );
+
+  const adjustmentCount = useMemo(
+    () =>
+      Object.values(manualByMlItemId).filter((manual) =>
+        hasManualAdjustments(manual),
+      ).length,
+    [manualByMlItemId],
+  );
+
+  const adjustmentDirtyCount = useMemo(() => {
+    const ids = new Set([
+      ...Object.keys(manualByMlItemId),
+      ...Object.keys(adjustmentDraft),
+    ]);
+    let count = 0;
+    for (const id of ids) {
+      if (
+        !sameManual(
+          manualFor(manualByMlItemId, id),
+          parseDraftToManual(draftFor(adjustmentDraft, id)),
+        )
+      ) {
+        count += 1;
+      }
+    }
+    return count;
+  }, [adjustmentDraft, manualByMlItemId]);
+
   const {
     sort: extrasSort,
     sortedRows: sortedFilteredListings,
@@ -466,7 +595,10 @@ export function InventoryHistoryReportEditor({
   } = useTableSort<(typeof filteredListings)[number], ListingAdjustmentSortKey>(
     filteredListings,
     (listing, key) => {
-      const state = listingStateFor(listingStatesByMlItemId, listing.mlItemId);
+      const state = listingStateFor(
+        draftListingStatesByMlItemId,
+        listing.mlItemId,
+      );
       const audit = listingAuditBreakdown(listing, state);
       switch (key) {
         case "estoqueCongelado":
@@ -483,7 +615,7 @@ export function InventoryHistoryReportEditor({
     sortedRows: sortedReportRows,
     onSortChange: onSkuSortChange,
   } = useTableSort<(typeof report.rows)[number], SkuPreviewSortKey>(
-    report.rows,
+    filteredReportRows,
     (row, key) => {
       switch (key) {
         case "produto":
@@ -501,21 +633,34 @@ export function InventoryHistoryReportEditor({
     { key: "valor", direction: "desc" },
   );
 
-  function updateManual(
+  function handleAdjustmentsOpenChange(open: boolean) {
+    if (open) {
+      setAdjustmentDraft(draftMapFromManual(manualByMlItemId));
+      setShowExtras(true);
+      return;
+    }
+    setShowExtras(false);
+    setAdjustmentDraft({});
+  }
+
+  function updateAdjustmentDraft(
     mlItemId: string,
-    field: keyof ManualListingAdjustments,
+    field: keyof ManualListingAdjustmentDraft,
     value: string,
   ) {
-    setManualByMlItemId((prev) => ({
+    setAdjustmentDraft((prev) => ({
       ...prev,
       [mlItemId]: {
-        ...manualFor(prev, mlItemId),
-        [field]:
-          field === "ajusteManual"
-            ? parseSignedUnits(value)
-            : parseNonNegativeUnits(value),
+        ...draftFor(prev, mlItemId),
+        [field]: value,
       },
     }));
+  }
+
+  function applyAdjustmentDraft() {
+    setManualByMlItemId(manualMapFromDraft(adjustmentDraft));
+    setShowExtras(false);
+    setAdjustmentDraft({});
   }
 
   function toggleSkuSelection(rowKey: string) {
@@ -579,250 +724,276 @@ export function InventoryHistoryReportEditor({
 
   return (
     <TooltipProvider delayDuration={200}>
-    <div className="space-y-6">
-      <Card className="flex flex-wrap items-center justify-between gap-4 border-[var(--primary)]/30 bg-[var(--primary)]/5 p-4">
-        <div className="min-w-0">
-          <p className="font-semibold text-[var(--foreground)]">
-            {header.companyName}
-          </p>
-          <p className="truncate text-sm text-[var(--muted-foreground)]">
-            {header.subtitle}
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-3">
+          <div className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
+            <CircleDollarSign className="size-3.5" aria-hidden />
+            Valor em estoque
+          </div>
+          <p className="mt-1.5 text-lg font-semibold tracking-tight tabular-nums sm:text-xl">
+            {formatStockReportCurrency(report.totalValue)}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button type="button" variant="ghost" size="sm">
-                <Settings2 className="size-3.5" aria-hidden />
-                Personalizar
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-72 space-y-3" align="end">
-              <FormInput
-                label="Empresa"
-                value={header.companyName}
-                onChange={(e) =>
-                  setHeader((prev) => ({ ...prev, companyName: e.target.value }))
-                }
-              />
-              <FormInput
-                label="Título do relatório"
-                value={header.subtitle}
-                onChange={(e) =>
-                  setHeader((prev) => ({ ...prev, subtitle: e.target.value }))
-                }
-              />
-            </PopoverContent>
-          </Popover>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={report.rows.length === 0}
-            onClick={() => {
-              // xlsx só é baixado quando o usuário realmente exporta — evita o
-              // pacote no bundle inicial da tela de Histórico.
-              void import("@/lib/inventory/inventory-stock-report-excel").then(
-                ({ downloadStockReportExcel }) =>
-                  downloadStockReportExcel(header, report, referenceDate),
-              );
-            }}
-          >
-            <FileSpreadsheet className="size-4" />
-            Excel
-          </Button>
-          <Button
-            type="button"
-            disabled={report.rows.length === 0}
-            onClick={() => {
-              // jspdf/jspdf-autotable idem — só baixado sob demanda.
-              void import("@/lib/inventory/inventory-stock-report-pdf").then(
-                ({ downloadStockReportPdf }) =>
-                  downloadStockReportPdf(header, report, referenceDate),
-              );
-            }}
-          >
-            <FileDown className="size-4" />
-            PDF
-          </Button>
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-3">
+          <div className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
+            <Boxes className="size-3.5" aria-hidden />
+            Unidades
+          </div>
+          <p className="mt-1.5 text-lg font-semibold tracking-tight tabular-nums sm:text-xl">
+            {formatStockReportUnits(totalUnits)}
+          </p>
         </div>
-      </Card>
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-3">
+          <div className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
+            <Package className="size-3.5" aria-hidden />
+            SKUs no relatório
+          </div>
+          <p className="mt-1.5 text-lg font-semibold tracking-tight tabular-nums sm:text-xl">
+            {report.rows.length}
+          </p>
+        </div>
+        <div
+          className={cn(
+            "rounded-2xl border bg-[var(--card)] px-4 py-3",
+            report.missingCostCount > 0
+              ? "border-amber-200/80"
+              : "border-[var(--border)]",
+          )}
+        >
+          <div className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
+            <AlertTriangle className="size-3.5" aria-hidden />
+            Sem custo
+          </div>
+          <p
+            className={cn(
+              "mt-1.5 text-lg font-semibold tracking-tight tabular-nums sm:text-xl",
+              report.missingCostCount > 0 && "text-amber-800",
+            )}
+          >
+            {report.missingCostCount}
+          </p>
+          <p className="mt-0.5 text-[11px] text-[var(--muted-foreground)]">
+            {report.missingCostCount > 0
+              ? "não entram no valor total"
+              : "todos com custo cadastrado"}
+          </p>
+        </div>
+      </div>
 
-      <Sheet open={showExtras} onOpenChange={setShowExtras}>
-        <SheetTrigger asChild>
-          <Card className="cursor-pointer p-4 transition-colors border-[var(--primary)]/30 hover:border-[var(--primary)]/50">
-            <div className="flex items-start gap-4">
-              <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-[var(--primary)]/10 text-[var(--primary)]">
-                <SlidersHorizontal className="size-4" aria-hidden />
-              </span>
-              <div>
-                <p className="font-semibold text-[var(--foreground)]">
-                  Ajustes por anúncio (opcional)
-                </p>
-                <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-                  NF emitida, ajuste manual (+/−) — correções locais, não
-                  alteram o fechamento salvo.
-                </p>
-              </div>
-            </div>
-          </Card>
-        </SheetTrigger>
-        <SheetContent className="sm:max-w-5xl">
-          <SheetHeader>
+      <Sheet open={showExtras} onOpenChange={handleAdjustmentsOpenChange}>
+        <SheetContent className="sm:max-w-4xl">
+          <SheetHeader className="pr-10">
             <SheetTitle>Ajustes por anúncio</SheetTitle>
             <SheetDescription>
-              Os ajustes abaixo só valem pra esta visualização/exportação —
-              nada é salvo no fechamento congelado. A memória de cálculo
-              completa por produto está na prévia do relatório.
+              Rascunho local — o relatório e a exportação só mudam depois de
+              aplicar. Nada é gravado no fechamento congelado.
             </SheetDescription>
           </SheetHeader>
-          <SheetBody className="space-y-3">
+          <SheetBody className="space-y-4">
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3.5 py-3 text-sm leading-relaxed text-[var(--muted-foreground)]">
+              Use para NF emitida ainda não entregue ou um ajuste pontual
+              (+/−). Fechar sem aplicar descarta o que você digitou aqui.
+            </div>
             <ItemListSearch
               value={listingSearch}
               onChange={setListingSearch}
               filteredCount={filteredListings.length}
               totalCount={listings.length}
             />
-            <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
-              <table className="w-full min-w-[48rem] text-left text-sm">
-                <thead className="border-b border-[var(--border)] bg-[var(--muted)]/80 text-xs uppercase tracking-wide text-[var(--muted-foreground)]">
-                  <tr>
-                    <th className="px-3 py-2.5">Anúncio</th>
-                    <SortableTh
-                      label="Estoque congelado"
-                      sortKey="estoqueCongelado"
-                      sort={extrasSort}
-                      onSortChange={onExtrasSortChange}
-                      align="left"
-                      className="px-3 py-2.5"
-                    />
-                    <th className="px-3 py-2.5">NF não entregue</th>
-                    <th className="px-3 py-2.5">Ajuste manual (+/−)</th>
-                    <SortableTh
-                      label="Estoque no relatório"
-                      sortKey="estoqueNoRelatorio"
-                      sort={extrasSort}
-                      onSortChange={onExtrasSortChange}
-                      align="left"
-                      className="px-3 py-2.5"
-                    />
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredListings.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={5}
-                        className="px-3 py-6 text-center text-[var(--muted-foreground)]"
-                      >
-                        {itemListSearchEmptyMessage(listingSearch)}
-                      </td>
-                    </tr>
-                  ) : (
-                    sortedFilteredListings.map((listing) => {
-                      const state = listingStateFor(
-                        listingStatesByMlItemId,
-                        listing.mlItemId,
-                      );
-                      const manual = manualFor(
-                        manualByMlItemId,
-                        listing.mlItemId,
-                      );
-                      const audit = listingAuditBreakdown(listing, state);
-                      const currentUnits = inventoryBaseUnits(listing);
-                      const included = audit.total > 0;
-                      const zeroBase =
-                        currentUnits === 0 && !hasManualAdjustments(manual);
+            {filteredListings.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-[var(--border)] px-4 py-10 text-center text-sm text-[var(--muted-foreground)]">
+                {itemListSearchEmptyMessage(listingSearch)}
+              </p>
+            ) : (
+              <div className="overflow-hidden rounded-xl border border-[var(--border)]">
+                <div className="hidden items-center gap-3 border-b border-[var(--border)] bg-[var(--muted)]/70 px-4 py-2 text-[11px] font-semibold tracking-wide text-[var(--muted-foreground)] uppercase md:grid md:grid-cols-[minmax(0,1.6fr)_5.5rem_7rem_7.5rem_6.5rem]">
+                  <span>Anúncio</span>
+                  <button
+                    type="button"
+                    className={cn(
+                      "cursor-pointer text-right hover:text-[var(--foreground)]",
+                      extrasSort.key === "estoqueCongelado" &&
+                        "text-[var(--foreground)]",
+                    )}
+                    onClick={() => onExtrasSortChange("estoqueCongelado")}
+                  >
+                    Congelado
+                  </button>
+                  <span className="text-right">NF não entregue</span>
+                  <span className="text-right">Ajuste +/−</span>
+                  <button
+                    type="button"
+                    className={cn(
+                      "cursor-pointer text-right hover:text-[var(--foreground)]",
+                      extrasSort.key === "estoqueNoRelatorio" &&
+                        "text-[var(--foreground)]",
+                    )}
+                    onClick={() => onExtrasSortChange("estoqueNoRelatorio")}
+                  >
+                    Prévia
+                  </button>
+                </div>
+                <ul className="max-h-[min(28rem,50vh)] divide-y divide-[var(--border)] overflow-y-auto">
+                  {sortedFilteredListings.map((listing) => {
+                    const draftFields = draftFor(
+                      adjustmentDraft,
+                      listing.mlItemId,
+                    );
+                    const appliedManual = manualFor(
+                      manualByMlItemId,
+                      listing.mlItemId,
+                    );
+                    const draftManual = parseDraftToManual(draftFields);
+                    const draftState = listingStateFor(
+                      draftListingStatesByMlItemId,
+                      listing.mlItemId,
+                    );
+                    const draftAudit = listingAuditBreakdown(
+                      listing,
+                      draftState,
+                    );
+                    const currentUnits = inventoryBaseUnits(listing);
+                    const included = draftAudit.total > 0;
+                    const rowDirty = !sameManual(draftManual, appliedManual);
+                    const delta = draftAudit.total - currentUnits;
 
-                      return (
-                        <tr
-                          key={listing.mlItemId}
-                          className={cn(
-                            "border-b border-[var(--border)] last:border-0",
-                            zeroBase && "bg-[var(--muted)]/30",
-                          )}
-                        >
-                          <td className="px-3 py-2">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <div>
-                                <p className="font-medium">
-                                  {listing.sku ?? "Sem SKU"}
-                                </p>
-                                <p className="text-xs text-[var(--muted-foreground)] line-clamp-1">
-                                  {listing.title}
-                                </p>
-                              </div>
-                              {included ? (
-                                <Badge variant="default" className="text-[10px]">
-                                  Incluído
-                                </Badge>
-                              ) : (
-                                <Badge variant="secondary" className="text-[10px]">
-                                  Fora do relatório
-                                </Badge>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-3 py-2 tabular-nums">
+                    return (
+                      <li
+                        key={listing.mlItemId}
+                        className={cn(
+                          "grid gap-3 px-4 py-3 md:grid-cols-[minmax(0,1.6fr)_5.5rem_7rem_7.5rem_6.5rem] md:items-center",
+                          rowDirty && "bg-[var(--primary)]/5",
+                        )}
+                      >
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-medium text-[var(--foreground)]">
+                              {listing.sku ?? "Sem SKU"}
+                            </p>
+                            {rowDirty ? (
+                              <Badge variant="outline" className="text-[10px]">
+                                Alterado
+                              </Badge>
+                            ) : included ? (
+                              <Badge variant="muted" className="text-[10px]">
+                                Incluído
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary" className="text-[10px]">
+                                Fora
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="mt-0.5 line-clamp-1 text-xs text-[var(--muted-foreground)]">
+                            {listing.title}
+                          </p>
+                        </div>
+                        <div className="flex items-center justify-between text-sm md:block md:text-right">
+                          <span className="text-xs text-[var(--muted-foreground)] md:hidden">
+                            Congelado
+                          </span>
+                          <span className="tabular-nums text-[var(--foreground)]">
                             {currentUnits}
-                          </td>
-                          <td className="px-3 py-2">
-                            <FormInput
-                              type="number"
-                              min={0}
-                              step={1}
-                              value={manual.nfEmitidaNaoEntregue || ""}
-                              onChange={(e) =>
-                                updateManual(
-                                  listing.mlItemId,
-                                  "nfEmitidaNaoEntregue",
-                                  e.target.value,
-                                )
-                              }
-                              inputClassName="h-8 w-20 tabular-nums"
-                              aria-label="NF emitida não entregue"
-                            />
-                          </td>
-                          <td className="px-3 py-2">
-                            <FormInput
-                              type="number"
-                              step={1}
-                              value={
-                                manual.ajusteManual === 0
-                                  ? ""
-                                  : manual.ajusteManual
-                              }
-                              onChange={(e) =>
-                                updateManual(
-                                  listing.mlItemId,
-                                  "ajusteManual",
-                                  e.target.value,
-                                )
-                              }
-                              inputClassName="h-8 w-24 tabular-nums"
-                              aria-label="Ajuste manual"
-                            />
-                          </td>
-                          <td className="px-3 py-2 tabular-nums font-medium">
-                            {audit.total}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+                          </span>
+                        </div>
+                        <FormInput
+                          id={`ajuste-nf-${listing.mlItemId}`}
+                          type="number"
+                          min={0}
+                          step={1}
+                          label="NF não entregue"
+                          value={draftFields.nfEmitidaNaoEntregue}
+                          onChange={(e) =>
+                            updateAdjustmentDraft(
+                              listing.mlItemId,
+                              "nfEmitidaNaoEntregue",
+                              e.target.value,
+                            )
+                          }
+                          className="md:[&_label]:sr-only"
+                          inputClassName="h-9 tabular-nums md:text-right"
+                        />
+                        <FormInput
+                          id={`ajuste-manual-${listing.mlItemId}`}
+                          type="number"
+                          step={1}
+                          label="Ajuste +/−"
+                          value={draftFields.ajusteManual}
+                          onChange={(e) =>
+                            updateAdjustmentDraft(
+                              listing.mlItemId,
+                              "ajusteManual",
+                              e.target.value,
+                            )
+                          }
+                          className="md:[&_label]:sr-only"
+                          inputClassName="h-9 tabular-nums md:text-right"
+                        />
+                        <div className="flex items-center justify-between md:block md:text-right">
+                          <span className="text-xs text-[var(--muted-foreground)] md:hidden">
+                            Prévia
+                          </span>
+                          <div>
+                            <p className="font-semibold tabular-nums text-[var(--foreground)]">
+                              {draftAudit.total}
+                            </p>
+                            {delta !== 0 ? (
+                              <p
+                                className={cn(
+                                  "text-[11px] tabular-nums",
+                                  delta > 0
+                                    ? "text-emerald-700"
+                                    : "text-rose-700",
+                                )}
+                              >
+                                {delta > 0 ? "+" : ""}
+                                {delta}
+                              </p>
+                            ) : null}
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
           </SheetBody>
+          <SheetFooter className="flex-col sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-[var(--muted-foreground)]">
+              {adjustmentDirtyCount > 0
+                ? `${adjustmentDirtyCount} anúncio${adjustmentDirtyCount !== 1 ? "s" : ""} com mudança pendente`
+                : "Nenhuma mudança neste rascunho"}
+            </p>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleAdjustmentsOpenChange(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                disabled={adjustmentDirtyCount === 0}
+                onClick={applyAdjustmentDraft}
+              >
+                <Check className="size-4" aria-hidden />
+                Aplicar mudanças
+              </Button>
+            </div>
+          </SheetFooter>
         </SheetContent>
       </Sheet>
 
-      <Card className="space-y-3 p-4">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
+      <Card className="overflow-hidden rounded-2xl p-0">
+        <div className="flex flex-col gap-3 border-b border-[var(--border)] px-4 py-4 sm:px-5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-1.5">
-              <h3 className="text-sm font-semibold text-[var(--foreground)]">
+              <h2 className="text-sm font-semibold text-[var(--foreground)]">
                 Relatório por SKU
-              </h3>
+              </h2>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
@@ -841,35 +1012,120 @@ export function InventoryHistoryReportEditor({
                 </TooltipContent>
               </Tooltip>
             </div>
-            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-              Só entram produtos com estoque total maior que zero no
-              fechamento.
-              {evolution.monthKeys.length > 0
-                ? " Colunas à direita mostram a evolução nos meses anteriores."
-                : null}
-            </p>
-            {report.missingCostCount > 0 ? (
-              <p className="mt-1 text-xs text-amber-700">
-                {report.missingCostCount} produto
-                {report.missingCostCount !== 1 ? "s" : ""} sem custo
-                cadastrado — não entram no total.
-              </p>
-            ) : null}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => handleAdjustmentsOpenChange(true)}
+              >
+                <SlidersHorizontal className="size-3.5" aria-hidden />
+                Ajustes
+                {adjustmentCount > 0 ? (
+                  <Badge variant="default" className="ml-0.5 h-5 min-w-5 px-1.5 text-[10px]">
+                    {adjustmentCount}
+                  </Badge>
+                ) : null}
+              </Button>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button type="button" variant="ghost" size="sm">
+                    <Settings2 className="size-3.5" aria-hidden />
+                    Cabeçalho
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-72 space-y-3" align="end">
+                  <FormInput
+                    label="Empresa"
+                    value={header.companyName}
+                    onChange={(e) =>
+                      setHeader((prev) => ({ ...prev, companyName: e.target.value }))
+                    }
+                  />
+                  <FormInput
+                    label="Título do relatório"
+                    value={header.subtitle}
+                    onChange={(e) =>
+                      setHeader((prev) => ({ ...prev, subtitle: e.target.value }))
+                    }
+                  />
+                </PopoverContent>
+              </Popover>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={report.rows.length === 0}
+                onClick={() => {
+                  void import("@/lib/inventory/inventory-stock-report-excel").then(
+                    ({ downloadStockReportExcel }) =>
+                      downloadStockReportExcel(header, report, referenceDate),
+                  );
+                }}
+              >
+                <FileSpreadsheet className="size-4" />
+                Excel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={report.rows.length === 0}
+                onClick={() => {
+                  void import("@/lib/inventory/inventory-stock-report-pdf").then(
+                    ({ downloadStockReportPdf }) =>
+                      downloadStockReportPdf(header, report, referenceDate),
+                  );
+                }}
+              >
+                <FileDown className="size-4" />
+                PDF
+              </Button>
+            </div>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={selectedSkuKeys.size < 2}
-            onClick={() => openMergeDraft()}
-          >
-            <PackagePlus className="size-4" />
-            Agrupar selecionados ({selectedSkuKeys.size})
-          </Button>
+          <ItemListSearch
+            value={skuSearch}
+            onChange={setSkuSearch}
+            filteredCount={filteredReportRows.length}
+            totalCount={report.rows.length}
+            placeholder="Buscar produto, SKU ou NCM…"
+            entitySingular="produto"
+            entityPlural="produtos"
+          />
         </div>
 
+        {selectedSkuKeys.size > 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--primary)]/20 bg-[var(--primary)]/5 px-4 py-2.5 sm:px-5">
+            <p className="text-sm text-[var(--foreground)]">
+              <span className="font-semibold tabular-nums">
+                {selectedSkuKeys.size}
+              </span>{" "}
+              SKU{selectedSkuKeys.size !== 1 ? "s" : ""} selecionado
+              {selectedSkuKeys.size !== 1 ? "s" : ""}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedSkuKeys(new Set())}
+              >
+                Limpar
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={selectedSkuKeys.size < 2}
+                onClick={() => openMergeDraft()}
+              >
+                <PackagePlus className="size-4" />
+                Agrupar
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
         {mergeDraft ? (
-          <Card className="space-y-3 border-[var(--primary)]/40 bg-[var(--primary)]/5 p-4">
+          <Card className="mx-4 mt-4 space-y-3 border-[var(--primary)]/40 bg-[var(--primary)]/5 p-4 sm:mx-5">
             <p className="text-sm font-semibold text-[var(--foreground)]">
               {mergeDraft.editingGroupId ? "Editar grupo" : "Novo grupo de SKUs"}
             </p>
@@ -929,9 +1185,9 @@ export function InventoryHistoryReportEditor({
           </Card>
         ) : null}
 
-        <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
+        <div className="overflow-x-auto">
           <table className="w-full min-w-[52rem] text-left text-sm">
-            <thead className="border-b border-[var(--border)] bg-[var(--muted)]/80 text-xs uppercase tracking-wide text-[var(--muted-foreground)]">
+            <thead className="sticky top-0 z-10 border-b border-[var(--border)] bg-[var(--muted)]/95 text-xs uppercase tracking-wide text-[var(--muted-foreground)] backdrop-blur-sm">
               <tr>
                 <th className="w-8 px-2 py-2.5" />
                 <th className="w-10 px-3 py-2.5" />
@@ -990,8 +1246,9 @@ export function InventoryHistoryReportEditor({
                     colSpan={8 + evolution.monthKeys.length}
                     className="px-3 py-8 text-center text-[var(--muted-foreground)]"
                   >
-                    Nenhum produto com estoque para o relatório. Abra os
-                    ajustes por anúncio para incluir produtos zerados.
+                    {skuSearch.trim()
+                      ? itemListSearchEmptyMessage(skuSearch, "produto")
+                      : "Nenhum produto com estoque neste fechamento. Use Ajustes para incluir anúncios zerados."}
                   </td>
                 </tr>
               ) : (
@@ -1014,7 +1271,7 @@ export function InventoryHistoryReportEditor({
                     <Fragment key={row.rowKey}>
                       <tr
                         className={cn(
-                          "border-b border-[var(--border)] last:border-0",
+                          "border-b border-[var(--border)] last:border-0 hover:bg-[var(--muted)]/40",
                           row.missingCost && "bg-amber-50/40",
                           isExpanded && "bg-[var(--primary)]/5",
                         )}
@@ -1053,7 +1310,24 @@ export function InventoryHistoryReportEditor({
                             />
                           ) : null}
                         </td>
-                        <td className="px-3 py-2 font-medium">{row.label}</td>
+                        <td className="px-3 py-2 font-medium">
+                          <button
+                            type="button"
+                            className="cursor-pointer text-left hover:underline"
+                            onClick={() =>
+                              setExpandedSkuRowKey((prev) =>
+                                prev === row.rowKey ? null : row.rowKey,
+                              )
+                            }
+                          >
+                            {row.label}
+                          </button>
+                          {isMerged ? (
+                            <p className="mt-0.5 text-[11px] font-normal text-[var(--muted-foreground)]">
+                              {row.skus.length} SKUs agrupados
+                            </p>
+                          ) : null}
+                        </td>
                         <td className="px-3 py-2 tabular-nums">
                           {row.ncm ?? "—"}
                         </td>
@@ -1142,11 +1416,11 @@ export function InventoryHistoryReportEditor({
                 })
               )}
             </tbody>
-            {report.rows.length > 0 ? (
+            {sortedReportRows.length > 0 ? (
               <tfoot>
-                <tr className="bg-[var(--muted)]/50 font-semibold">
-                  <td colSpan={5} className="px-3 py-3 text-right">
-                    Valor Total em Estoque
+                <tr className="border-t border-[var(--border)] bg-[var(--muted)]/60 font-semibold">
+                  <td colSpan={6} className="px-3 py-3 text-right">
+                    Valor total em estoque
                   </td>
                   <td className="px-3 py-3 tabular-nums">
                     {formatStockReportCurrency(report.totalValue)}

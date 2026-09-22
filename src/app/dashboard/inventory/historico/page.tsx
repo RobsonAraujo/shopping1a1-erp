@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import { Boxes } from "lucide-react";
+import { Camera, Snowflake } from "lucide-react";
 import { Breadcrumbs } from "@/components/shared/Breadcrumbs";
+import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { UserFeedback } from "@/components/ui/user-feedback";
 import { getOrganizationContext } from "@/lib/organizations/context";
@@ -84,7 +85,10 @@ async function InventoryHistoryMonthContent({
   const priorMonths = (
     selectedIndex === -1
       ? []
-      : months.slice(selectedIndex + 1, selectedIndex + 1 + EVOLUTION_MONTHS_LIMIT)
+      : months.slice(
+          selectedIndex + 1,
+          selectedIndex + 1 + EVOLUTION_MONTHS_LIMIT,
+        )
   )
     .slice()
     .reverse();
@@ -94,15 +98,13 @@ async function InventoryHistoryMonthContent({
   );
 
   return (
-    <div className="space-y-6">
-      <InventoryHistoryReportEditor
-        listings={listings}
-        productsBySku={productsBySku}
-        initialHeader={header}
-        referenceDateIso={referenceDate.toISOString()}
-        evolution={evolution}
-      />
-    </div>
+    <InventoryHistoryReportEditor
+      listings={listings}
+      productsBySku={productsBySku}
+      initialHeader={header}
+      referenceDateIso={referenceDate.toISOString()}
+      evolution={evolution}
+    />
   );
 }
 
@@ -135,79 +137,116 @@ export default async function InventoryHistoryPage({
         )
       : null;
   const selected = requested ?? months[0] ?? null;
+  const selectedMonthLabel = selected
+    ? `${MONTH_NAMES_PT[selected.month - 1]} de ${selected.year}`
+    : null;
 
   return (
-    <div className="space-y-8">
-      <div>
-        <Breadcrumbs
-          items={[
-            { label: "Estoque", href: "/dashboard/inventory" },
-            { label: "Histórico" },
-          ]}
-        />
-        <div className="mt-3 flex items-center gap-3">
-          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[var(--primary)]/10 text-[var(--primary)]">
-            <Boxes className="size-5" aria-hidden />
-          </span>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-[var(--foreground)] sm:text-3xl">
-              Histórico de Estoque
-            </h1>
-            <p className="mt-1 max-w-3xl text-sm leading-relaxed text-[var(--muted-foreground)] sm:text-[15px]">
-              Estoque de galpão, Mercado Livre e custo{" "}
-              <strong>congelados</strong> no fechamento de cada mês.
-            </p>
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <Breadcrumbs
+            items={[
+              { label: "Estoque", href: "/dashboard/inventory" },
+              { label: "Histórico" },
+            ]}
+          />
+          <h1 className="mt-3 text-2xl font-bold tracking-tight text-[var(--foreground)] sm:text-3xl">
+            Histórico de estoque
+          </h1>
+          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-[var(--muted-foreground)]">
+            Consulte o estoque congelado no fechamento de cada mês e exporte o
+            relatório oficial.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+          <div className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
+            <span>Fecha sozinho todo início de mês</span>
+            <InventoryAutoCloseInfoTooltip />
           </div>
+          <InventoryManualSnapshotButton size="sm" />
         </div>
       </div>
 
-      <Card className="divide-y divide-[var(--border)] p-0">
-        {selected ? (
-          <div className="flex flex-wrap items-end justify-between gap-4 p-4">
-            <InventoryHistoryMonthPicker months={months} selected={selected} />
-            <p className="text-xs text-[var(--muted-foreground)]">
-              {selected.source === "manual" ? (
-                <>
-                  Snapshot{" "}
-                  <strong className="text-[var(--foreground)]">manual</strong>
-                  , gerado em {formatCompletedAt(selected.completedAt)}: será
-                  substituído pelo fechamento automático quando este mês
-                  fechar.
-                </>
-              ) : (
-                <>
-                  Fechamento{" "}
-                  <strong className="text-[var(--foreground)]">
-                    automático
-                  </strong>
-                  , gerado em {formatCompletedAt(selected.completedAt)}.
-                </>
-              )}
-            </p>
-          </div>
-        ) : null}
-
-        <div className="flex flex-wrap items-center justify-between gap-3 p-4">
-          <div className="flex items-center gap-1.5 text-sm text-[var(--foreground)]">
-            <span>Fechamento automático todo início de mês</span>
-            <InventoryAutoCloseInfoTooltip />
-          </div>
-          <InventoryManualSnapshotButton />
-        </div>
-      </Card>
-
       {selected === null ? (
-        <UserFeedback title="Ainda não há mês fechado">
-          O fechamento automático roda todo início de mês e o primeiro mês
-          completo vai aparecer aqui assim que for processado. Ou gere um
-          snapshot manual agora mesmo, acima.
-        </UserFeedback>
+        <Card className="flex flex-col items-center px-6 py-16 text-center">
+          <span className="flex size-14 items-center justify-center rounded-2xl bg-[var(--primary)]/10 text-[var(--primary)]">
+            <Camera className="size-6" aria-hidden />
+          </span>
+          <h2 className="mt-4 text-lg font-semibold text-[var(--foreground)]">
+            Nenhum mês fechado ainda
+          </h2>
+          <p className="mt-2 max-w-md text-sm leading-relaxed text-[var(--muted-foreground)]">
+            O primeiro fechamento automático aparece aqui no início do próximo
+            mês. Se precisar de um corte agora — por exemplo, para a
+            contabilidade — gere um snapshot do estoque de hoje.
+          </p>
+          <div className="mt-6">
+            <InventoryManualSnapshotButton variant="default" />
+          </div>
+        </Card>
       ) : (
-        <InventoryHistoryMonthContent
-          organizationId={organizationId}
-          months={months}
-          selected={selected}
-        />
+        <>
+          <Card className="overflow-hidden rounded-2xl p-0">
+            <div className="border-b border-[var(--border)] bg-[var(--muted)]/30 px-4 py-4 sm:px-5">
+              <InventoryHistoryMonthPicker
+                months={months}
+                selected={selected}
+              />
+            </div>
+            <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-lg font-semibold tracking-tight text-[var(--foreground)]">
+                    {selectedMonthLabel}
+                  </p>
+                  {selected.source === "manual" ? (
+                    <Badge variant="warning" dot>
+                      Snapshot manual
+                    </Badge>
+                  ) : (
+                    <Badge variant="success" dot>
+                      Fechamento oficial
+                    </Badge>
+                  )}
+                </div>
+                <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+                  {selected.source === "manual" ? (
+                    <>
+                      Gerado em {formatCompletedAt(selected.completedAt)}. Será
+                      substituído pelo fechamento automático quando este mês
+                      fechar.
+                    </>
+                  ) : (
+                    <>
+                      Congelado em {formatCompletedAt(selected.completedAt)}
+                      {selected.itemsSnapshotted > 0
+                        ? ` · ${selected.itemsSnapshotted} anúncio${selected.itemsSnapshotted !== 1 ? "s" : ""}`
+                        : null}
+                    </>
+                  )}
+                </p>
+              </div>
+              <span className="inline-flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
+                <Snowflake className="size-3.5" aria-hidden />
+                Dados congelados, ajustes abaixo não alteram o snapshot
+              </span>
+            </div>
+          </Card>
+
+          {selected.source === "manual" ? (
+            <UserFeedback tone="warning" title="Este mês ainda é provisório">
+              Use o snapshot manual só como corte temporário. No início do mês
+              seguinte o fechamento automático oficial toma o lugar dele.
+            </UserFeedback>
+          ) : null}
+
+          <InventoryHistoryMonthContent
+            organizationId={organizationId}
+            months={months}
+            selected={selected}
+          />
+        </>
       )}
     </div>
   );

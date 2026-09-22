@@ -3,13 +3,19 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/ui/button";
 
 type ManualSnapshotResponse =
   | { ok: true; year: number; month: number; itemsSnapshotted: number }
   | { ok: false; error: string };
 
-export function InventoryManualSnapshotButton() {
+export function InventoryManualSnapshotButton({
+  variant = "outline",
+  size = "default",
+}: {
+  variant?: ButtonProps["variant"];
+  size?: ButtonProps["size"];
+}) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +54,8 @@ export function InventoryManualSnapshotButton() {
     <div className="space-y-1.5">
       <Button
         type="button"
-        variant="outline"
+        variant={variant}
+        size={size}
         onClick={handleClick}
         disabled={loading}
       >
