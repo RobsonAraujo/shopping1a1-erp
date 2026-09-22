@@ -399,6 +399,12 @@ model InventoryStockMonthSnapshot {
   /// cada carregamento de página. 0 pra anúncio que não é Full.
   mlStockOnTheWay Int      @default(0) @map("ml_stock_on_the_way")
   catalogListing  Boolean  @default(false) @map("catalog_listing")
+  /// IDs de lote de estoque Full do anúncio (`item.inventory_id` +
+  /// variações), congelados no fechamento — permite ao relatório detectar
+  /// quando 2 anúncios do mesmo SKU compartilham o mesmo pool físico de
+  /// Full (não soma o mesmo estoque 2x nesse caso). Vazio pra anúncio sem
+  /// Full e para snapshot gerado antes desse campo existir.
+  inventoryIds    String[] @default([]) @map("inventory_ids")
   createdAt       DateTime @default(now()) @map("created_at")
 
   @@unique([organizationId, mlItemId, year, month])

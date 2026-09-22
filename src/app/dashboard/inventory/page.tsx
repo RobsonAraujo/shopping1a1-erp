@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { cookies } from "next/headers";
-import { AlertTriangle, Boxes } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, Boxes, Info } from "lucide-react";
 import { InventoryStockTable, type InventoryRow } from "@/components/inventory/InventoryStockTable";
 import { InventoryStockTableSkeleton } from "@/components/inventory/InventoryStockTableSkeleton";
 import { Card } from "@/components/ui/card";
 import { UserFeedback } from "@/components/ui/user-feedback";
-import { fetchOperationalListings } from "@/lib/mercadolibre/api";
+import { fetchAllUserItemIds, fetchItemsByIdsBatched } from "@/lib/mercadolibre/api";
 import { fetchUnitsSoldForItemsInWindowCached } from "@/lib/mercadolibre/sales-window-cache";
 import { isFulfillmentListing } from "@/lib/mercadolibre/fulfillment-stock";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
@@ -18,10 +19,6 @@ import {
   loadOperationalSettings,
   toStockPlanningValues,
 } from "@/lib/configuracoes/operational-settings";
-import {
-  loadInactiveProductMlItemIds,
-  loadSupplierNamesByMlItemId,
-} from "@/lib/products/product-resolver";
 import { prisma } from "@/lib/db/db";
 import { readSession } from "@/lib/mercadolibre/session";
 import { getOrganizationContext } from "@/lib/organizations/context";
@@ -41,22 +38,43 @@ async function InventoryDataSection({
   let warehouseLoadFailed = false;
   let supplierNames: Record<string, string> = {};
   let rows: InventoryRow[] = [];
+  let unregisteredCount = 0;
 
   try {
     const operationalSettings = await loadOperationalSettings(organizationId);
     const stockPlanning = toStockPlanningValues(operationalSettings);
-    const rawItems = (
-      await fetchOperationalListings(token, userId, organizationId)
-    ).filter(
-      (item) => !isKitItem(item),
+
+    // Fonte de verdade do Estoque: o cadastro em Meus Produtos (`Product`),
+    // não a busca ao vivo de anúncios do ML — evita duplicar linha quando o
+    // vendedor tem 2 `mlItemId` ativos pro mesmo produto (ex.: anúncio
+    // "espelho" de Catálogo), já que `Product` é 1 linha por produto de
+    // verdade (SKU único, checado em `PATCH /api/products/[mlItemId]`).
+    // Anúncio ativo/pausado nunca cadastrado em Meus Produtos não aparece
+    // aqui — o aviso de "não cadastrado" abaixo cobre esse caso.
+    const products = await prisma.product.findMany({
+      where: { organizationId, active: true },
+      select: { mlItemId: true, supplier: { select: { name: true } } },
+    });
+    const productMlItemIds = products.map((p) => p.mlItemId);
+    supplierNames = Object.fromEntries(
+      products
+        .filter((p): p is typeof p & { supplier: { name: string } } => p.supplier != null)
+        .map((p) => [p.mlItemId, p.supplier.name]),
     );
-    // Produto inativado pelo usuário some do Estoque (linha e Relatório de
-    // Estoque), sem afetar o cadastro nem relatórios históricos.
-    const inactiveIds = await loadInactiveProductMlItemIds(
-      organizationId,
-      rawItems.map((item) => item.id),
-    );
-    const items = rawItems.filter((item) => !inactiveIds.has(item.id));
+
+    const [rawItems, activeIds, pausedIds] = await Promise.all([
+      productMlItemIds.length > 0
+        ? fetchItemsByIdsBatched(token, productMlItemIds)
+        : Promise.resolve([]),
+      fetchAllUserItemIds(token, userId, { status: "active" }),
+      fetchAllUserItemIds(token, userId, { status: "paused" }),
+    ]);
+    const registeredIds = new Set(productMlItemIds);
+    for (const id of new Set([...activeIds, ...pausedIds])) {
+      if (!registeredIds.has(id)) unregisteredCount++;
+    }
+
+    const items = rawItems.filter((item) => !isKitItem(item));
 
     const allIds = items.map((item) => item.id);
 
@@ -167,12 +185,6 @@ async function InventoryDataSection({
 
     total = items.length;
     statusCounts = countListingsByStatus(items);
-
-    const supplierNamesMap = await loadSupplierNamesByMlItemId(
-      organizationId,
-      rows.map((row) => row.mlItemId),
-    );
-    supplierNames = Object.fromEntries(supplierNamesMap);
   } catch (e) {
     const msg = publicPageLoadMessage(
       "dashboard/inventory",
@@ -186,6 +198,40 @@ async function InventoryDataSection({
 
   return (
     <>
+      <Card className="flex items-center gap-3 rounded-2xl p-4">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--primary)]/10 text-[var(--primary)]">
+          <Boxes className="size-4" aria-hidden />
+        </span>
+        <p className="text-sm text-[var(--muted-foreground)]">
+          <span className="font-semibold tabular-nums text-[var(--foreground)]">
+            {total}
+          </span>{" "}
+          anúncio{total !== 1 ? "s" : ""} no total
+          {statusCounts.paused > 0
+            ? ` · ${statusCounts.active} ativo${statusCounts.active !== 1 ? "s" : ""} · ${statusCounts.paused} pausado${statusCounts.paused !== 1 ? "s" : ""}`
+            : null}
+        </p>
+      </Card>
+
+      {unregisteredCount > 0 ? (
+        <Card className="flex items-start gap-3 rounded-2xl border-[var(--primary)]/20 bg-[var(--primary)]/5 p-4 text-sm">
+          <Info className="mt-0.5 size-4 shrink-0 text-[var(--primary)]" aria-hidden />
+          <p className="text-[var(--foreground)]">
+            <strong>
+              {unregisteredCount} anúncio{unregisteredCount !== 1 ? "s" : ""}
+            </strong>{" "}
+            ativo{unregisteredCount !== 1 ? "s" : ""}/pausado
+            {unregisteredCount !== 1 ? "s" : ""} no Mercado Livre ainda não{" "}
+            {unregisteredCount !== 1 ? "foram cadastrados" : "foi cadastrado"} em{" "}
+            <Link href="/dashboard/produtos" className="font-medium underline underline-offset-2">
+              Meus Produtos
+            </Link>{" "}
+            — não {unregisteredCount !== 1 ? "aparecem" : "aparece"} aqui até serem
+            cadastrados.
+          </p>
+        </Card>
+      ) : null}
+
       {warehouseLoadFailed ? (
         <Card className="flex items-start gap-3 rounded-2xl border-amber-500/20 bg-amber-500/5 p-4 text-sm">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
@@ -201,21 +247,6 @@ async function InventoryDataSection({
       ) : null}
 
       <InventoryStockTable rows={rows} supplierNames={supplierNames} />
-
-      <Card className="flex items-center gap-3 rounded-2xl p-4">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--primary)]/10 text-[var(--primary)]">
-          <Boxes className="size-4" aria-hidden />
-        </span>
-        <p className="text-sm text-[var(--muted-foreground)]">
-          <span className="font-semibold tabular-nums text-[var(--foreground)]">
-            {total}
-          </span>{" "}
-          anúncio{total !== 1 ? "s" : ""} no total
-          {statusCounts.paused > 0
-            ? ` · ${statusCounts.active} ativo${statusCounts.active !== 1 ? "s" : ""} · ${statusCounts.paused} pausado${statusCounts.paused !== 1 ? "s" : ""}`
-            : null}
-        </p>
-      </Card>
     </>
   );
 }

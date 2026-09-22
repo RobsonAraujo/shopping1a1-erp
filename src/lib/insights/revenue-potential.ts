@@ -22,6 +22,7 @@ import { getItemSku, isKitItem } from "@/lib/mercadolibre/item-sku";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { loadStockReportProductsByMlItemId } from "@/lib/products/product-data";
 import { loadSupplierNamesByMlItemId } from "@/lib/products/product-resolver";
+import { skuKeyFromListing } from "@/lib/inventory/inventory-stock-report";
 import type { RevenuePotentialRow } from "@/lib/insights/types";
 
 const LOOKBACK_DAYS = 120;
@@ -32,6 +33,48 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 function dayKey(date: Date): string {
   return date.toISOString().slice(0, 10);
+}
+
+/**
+ * Junta linhas do mesmo SKU (ex.: 2 `mlItemId` pro mesmo produto, anúncio
+ * "espelho" de Catálogo) numa só — cada anúncio teve vendas reais e
+ * distintas, então os números de faturamento são sempre aditivos (ao
+ * contrário do estoque Full, aqui não existe "pool compartilhado" pra se
+ * preocupar). SKU ausente nunca agrupa (cada linha sem SKU fica sozinha).
+ */
+export function mergeRevenuePotentialRowsBySku(
+  rows: RevenuePotentialRow[],
+): RevenuePotentialRow[] {
+  const groupsBySku = new Map<string, RevenuePotentialRow[]>();
+  for (const row of rows) {
+    const skuKey = skuKeyFromListing(row.sku, row.mlItemId);
+    const group = groupsBySku.get(skuKey);
+    if (group) group.push(row);
+    else groupsBySku.set(skuKey, [row]);
+  }
+
+  return [...groupsBySku.values()].map((group) => {
+    if (group.length === 1) return group[0]!;
+
+    const canonical =
+      group.find((row) => row.status === "active") ?? group[0]!;
+    return {
+      ...canonical,
+      dailyAvgEstimate: group.reduce((sum, r) => sum + r.dailyAvgEstimate, 0),
+      potentialMonthlyRevenue: group.reduce(
+        (sum, r) => sum + r.potentialMonthlyRevenue,
+        0,
+      ),
+      currentMonthlyRevenue: group.reduce(
+        (sum, r) => sum + r.currentMonthlyRevenue,
+        0,
+      ),
+      gap: group.reduce((sum, r) => sum + r.gap, 0),
+      estimateBasis: group.some((r) => r.estimateBasis === "recent")
+        ? "recent"
+        : "historical",
+    };
+  });
 }
 
 export async function loadRevenuePotentialData(
@@ -144,11 +187,18 @@ export async function loadRevenuePotentialData(
     };
   });
 
-  rows.sort((a, b) => b.gap - a.gap);
+  const mergedRows = mergeRevenuePotentialRowsBySku(rows);
+  mergedRows.sort((a, b) => b.gap - a.gap);
 
-  const totalPotential = rows.reduce((sum, r) => sum + r.potentialMonthlyRevenue, 0);
-  const totalCurrent = rows.reduce((sum, r) => sum + r.currentMonthlyRevenue, 0);
+  const totalPotential = mergedRows.reduce(
+    (sum, r) => sum + r.potentialMonthlyRevenue,
+    0,
+  );
+  const totalCurrent = mergedRows.reduce(
+    (sum, r) => sum + r.currentMonthlyRevenue,
+    0,
+  );
   const totalGap = totalPotential - totalCurrent;
 
-  return { rows, totalPotential, totalCurrent, totalGap };
+  return { rows: mergedRows, totalPotential, totalCurrent, totalGap };
 }

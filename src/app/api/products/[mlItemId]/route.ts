@@ -183,6 +183,19 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   const { mlItemId } = await context.params;
 
   try {
+    const warehouseStock = await prisma.warehouseStock.findUnique({
+      where: { mlItemId },
+      select: { quantity: true },
+    });
+    if (warehouseStock && warehouseStock.quantity > 0) {
+      return NextResponse.json(
+        {
+          error: `Esse produto ainda tem ${warehouseStock.quantity} unidade${warehouseStock.quantity !== 1 ? "s" : ""} no galpão — zere o estoque em Estoque antes de remover o cadastro.`,
+        },
+        { status: 409 },
+      );
+    }
+
     await prisma.product.delete({ where: { mlItemId, organizationId } });
     return NextResponse.json({ ok: true });
   } catch (e) {

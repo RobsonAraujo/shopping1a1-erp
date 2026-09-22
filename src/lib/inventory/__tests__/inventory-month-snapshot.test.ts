@@ -25,6 +25,7 @@ function makeSnapshotRow(
     mlStock: 3,
     mlStockOnTheWay: 0,
     catalogListing: false,
+    inventoryIds: [],
     createdAt: new Date("2026-09-01T00:00:00Z"),
     ...overrides,
   };
@@ -75,6 +76,64 @@ describe("buildInventoryMonthSnapshotReport", () => {
     assert.equal(result.rows[0].stockValue, 110);
     assert.equal(result.totalValue, 110);
     assert.equal(result.missingCostCount, 0);
+  });
+
+  it("does not double count ml stock when 2 listings of the same sku share a fulfillment inventory_id", () => {
+    const rows = [
+      makeSnapshotRow({
+        mlItemId: "MLB7680193850",
+        sku: "Alltec - 2001 VO/GA (Catálogo)",
+        warehouseStock: 0,
+        mlStock: 100,
+        mlStockOnTheWay: 5,
+        inventoryIds: ["FULL-INV-1"],
+        unitCost: null,
+      }),
+      makeSnapshotRow({
+        mlItemId: "MLB5713296080",
+        sku: "Alltec - 2001 VO/GA (Catálogo)",
+        warehouseStock: 580,
+        mlStock: 100,
+        mlStockOnTheWay: 5,
+        inventoryIds: ["FULL-INV-1"],
+        unitCost: 10,
+      }),
+    ];
+
+    const result = buildInventoryMonthSnapshotReport(rows);
+
+    // 580 (galpão, aditivo) + 100 (Full, só 1x) + 5 (a caminho, só 1x) = 685
+    // — sem o fix somaria 790 (Full/a-caminho contados 2x).
+    assert.equal(result.rows.length, 1);
+    assert.equal(result.rows[0].units, 685);
+  });
+
+  it("still sums ml stock when 2 listings of the same sku have different fulfillment inventory_id (genuinely separate pools)", () => {
+    const rows = [
+      makeSnapshotRow({
+        mlItemId: "MLB1",
+        sku: "SKU A",
+        warehouseStock: 100,
+        mlStock: 400,
+        mlStockOnTheWay: 39,
+        inventoryIds: ["FULL-INV-1"],
+        unitCost: 42.75,
+      }),
+      makeSnapshotRow({
+        mlItemId: "MLB2",
+        sku: "SKU A",
+        warehouseStock: 0,
+        mlStock: 1000,
+        mlStockOnTheWay: 0,
+        inventoryIds: ["FULL-INV-2"],
+        unitCost: 42.75,
+      }),
+    ];
+
+    const result = buildInventoryMonthSnapshotReport(rows);
+
+    assert.equal(result.rows.length, 1);
+    assert.equal(result.rows[0].units, 1539);
   });
 
   it("flags rows without a frozen cost as missingCost and excludes them from the total", () => {

@@ -115,6 +115,42 @@ describe("inventory-stock-report", () => {
     assert.equal(rows[0]?.stockValue, 65792.25);
   });
 
+  it("does not double count ml stock when listings of the same sku share an inventory_id", () => {
+    const rows = aggregateStockReportBySku(
+      [
+        {
+          mlItemId: "MLB1",
+          sku: "TECNIFORTE - Cabo",
+          title: "Anúncio 1",
+          warehouseStock: 0,
+          mlStock: 100,
+          mlStockOnTheWay: 5,
+          inventoryIds: ["FULL-INV-1"],
+        },
+        {
+          mlItemId: "MLB2",
+          sku: "TECNIFORTE - Cabo",
+          title: "Anúncio 2",
+          warehouseStock: 580,
+          mlStock: 100,
+          mlStockOnTheWay: 5,
+          inventoryIds: ["FULL-INV-1"],
+        },
+      ],
+      {},
+      {
+        "TECNIFORTE - Cabo": {
+          ncm: "85444200",
+          unitCost: 10,
+          hasIcmsSt: false,
+        },
+      },
+    );
+
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]?.units, 685);
+  });
+
   it("merges selected sku rows into one line", () => {
     const baseRows = [
       {

@@ -5,7 +5,10 @@ import {
   enrichItemsWithFulfillmentStock,
   fetchOperationalListings,
 } from "@/lib/mercadolibre/api";
-import { isFulfillmentListing } from "@/lib/mercadolibre/fulfillment-stock";
+import {
+  collectInventoryIdsFromItem,
+  isFulfillmentListing,
+} from "@/lib/mercadolibre/fulfillment-stock";
 import { resolveSellerAccessToken } from "@/lib/mercadolibre/persist-seller-tokens";
 import { isKitItem, getItemSku } from "@/lib/mercadolibre/item-sku";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
@@ -120,6 +123,9 @@ type SnapshotListingRow = {
   mlStock: number;
   mlStockOnTheWay: number;
   catalogListing: boolean;
+  /** Ver `StockReportListingInput.inventoryIds` — congelado aqui pra
+   * detecção de pool de Full compartilhado no relatório. */
+  inventoryIds: string[];
 };
 
 /**
@@ -169,6 +175,7 @@ async function collectOrgOperationalListings(
           ? stockUnits(fulfillment?.inProcess)
           : 0,
         catalogListing: item.catalog_listing === true,
+        inventoryIds: collectInventoryIdsFromItem(item),
       });
     }
   }
@@ -218,6 +225,7 @@ export async function buildAndPersistOrgSnapshot(
       mlStock: stockUnits(listing.mlStock),
       mlStockOnTheWay: stockUnits(listing.mlStockOnTheWay),
       catalogListing: listing.catalogListing,
+      inventoryIds: listing.inventoryIds,
     };
   });
 

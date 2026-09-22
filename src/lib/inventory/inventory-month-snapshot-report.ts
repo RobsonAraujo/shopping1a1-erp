@@ -156,6 +156,7 @@ export function buildInventoryMonthSnapshotListingInputs(
       warehouseStock: row.warehouseStock,
       mlStockOnTheWay: row.mlStockOnTheWay,
       catalogListing: row.catalogListing,
+      inventoryIds: row.inventoryIds,
     });
 
     const skuKey = skuKeyFromListing(row.sku, row.mlItemId);

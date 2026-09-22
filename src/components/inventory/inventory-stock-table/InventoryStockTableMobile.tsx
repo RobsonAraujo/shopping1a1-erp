@@ -1,8 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useRef, type CSSProperties } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { useMemo, useState, type CSSProperties } from "react";
+import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import { ImageOff, Pencil, Settings } from "lucide-react";
 import {
   ListingStatusBadge,
@@ -237,15 +237,16 @@ export function InventoryStockTableMobile({
   onEdit,
   onSettings,
 }: InventoryStockTableGridProps) {
-  const parentRef = useRef<HTMLDivElement>(null);
+  const [parentEl, setParentEl] = useState<HTMLDivElement | null>(null);
+  const scrollMargin = parentEl?.offsetTop ?? 0;
   const flatItems = useMemo(() => flattenGroups(supplierGroups), [supplierGroups]);
 
-  const rowVirtualizer = useVirtualizer({
+  const rowVirtualizer = useWindowVirtualizer({
     count: flatItems.length,
-    getScrollElement: () => parentRef.current,
     estimateSize: (index) =>
       flatItems[index]?.type === "header" ? GROUP_HEADER_HEIGHT : CARD_HEIGHT,
     overscan: 6,
+    scrollMargin,
   });
 
   if (filteredRows.length === 0) {
@@ -259,7 +260,7 @@ export function InventoryStockTableMobile({
   }
 
   return (
-    <div ref={parentRef} className="max-h-[75vh] overflow-y-auto">
+    <div ref={setParentEl}>
       <div
         style={
           {
@@ -281,7 +282,9 @@ export function InventoryStockTableMobile({
               ref={rowVirtualizer.measureElement}
               data-index={virtualItem.index}
               className="absolute top-0 left-0 w-full"
-              style={{ transform: `translateY(${virtualItem.start}px)` }}
+              style={{
+                transform: `translateY(${virtualItem.start - scrollMargin}px)`,
+              }}
             >
               {item.type === "header" ? (
                 <GroupHeaderRow supplier={item.supplier} count={item.count} />

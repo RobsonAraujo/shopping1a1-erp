@@ -53,6 +53,12 @@ export type StockReportListingInput = {
   warehouseStock: number;
   mlStockOnTheWay: number;
   catalogListing?: boolean;
+  /** IDs de lote de estoque Full (`item.inventory_id` + variações) —
+   * quando 2 anúncios do mesmo SKU compartilham um id aqui, é o mesmo pool
+   * físico de Full: `aggregateStockReportBySku` não soma o Full/A-caminho
+   * duas vezes nesse caso. Ausente/vazio em snapshot antigo (pré-campo) ou
+   * anúncio sem Full — comportamento nesse caso é somar, como sempre foi. */
+  inventoryIds?: string[];
 };
 
 export type StockReportRow = {
@@ -259,19 +265,57 @@ function buildSkuRow(
   };
 }
 
+/**
+ * Zera Full/A-caminho nos membros repetidos de um grupo que compartilham
+ * `inventory_id` com outro membro — mesmo pool físico de Full reportado por
+ * 2+ anúncios do mesmo SKU (ex.: anúncio "espelho" de Catálogo). Sem
+ * `inventoryIds` (snapshot antigo, ou anúncio sem Full) o grupo passa reto:
+ * cada membro conta seu Full inteiro, como sempre foi.
+ */
+function dedupeSharedFullStock(
+  group: StockReportListingInput[],
+): StockReportListingInput[] {
+  if (group.length < 2) return group;
+
+  const seen = new Set<string>();
+  let sharesPool = false;
+  for (const listing of group) {
+    for (const id of listing.inventoryIds ?? []) {
+      if (seen.has(id)) sharesPool = true;
+      seen.add(id);
+    }
+  }
+  if (!sharesPool) return group;
+
+  // Qual membro "guarda" o valor não importa pro total: por definição de
+  // pool compartilhado, os membros envolvidos reportam o mesmo Full/A
+  // caminho — mantém só no primeiro, zera nos demais.
+  return group.map((listing, index) =>
+    index === 0 ? listing : { ...listing, mlStock: 0, mlStockOnTheWay: 0 },
+  );
+}
+
 export function aggregateStockReportBySku(
   listings: StockReportListingInput[],
   listingStatesByMlItemId: Record<string, StockReportListingState | undefined>,
   productsBySku: Record<string, StockReportProductInfo | undefined>,
 ): StockReportRow[] {
-  const unitsBySku = new Map<string, number>();
-
+  const groupsBySku = new Map<string, StockReportListingInput[]>();
   for (const listing of listings) {
     const skuKey = skuKeyFromListing(listing.sku, listing.mlItemId);
-    const state = listingStateFor(listingStatesByMlItemId, listing.mlItemId);
-    const units = listingTotalUnits(listing, state);
-    if (units <= 0) continue;
-    unitsBySku.set(skuKey, (unitsBySku.get(skuKey) ?? 0) + units);
+    const group = groupsBySku.get(skuKey);
+    if (group) group.push(listing);
+    else groupsBySku.set(skuKey, [listing]);
+  }
+
+  const unitsBySku = new Map<string, number>();
+  for (const [skuKey, group] of groupsBySku) {
+    let units = 0;
+    for (const listing of dedupeSharedFullStock(group)) {
+      const state = listingStateFor(listingStatesByMlItemId, listing.mlItemId);
+      units += listingTotalUnits(listing, state);
+    }
+    if (units > 0) unitsBySku.set(skuKey, units);
   }
 
   return [...unitsBySku.entries()]

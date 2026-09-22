@@ -1,8 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useRef, type CSSProperties, type ReactNode } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import {
   ArrowDown,
   ArrowUp,
@@ -311,15 +311,16 @@ export function InventoryStockTableDesktop({
   onEdit,
   onSettings,
 }: InventoryStockTableGridProps) {
-  const parentRef = useRef<HTMLDivElement>(null);
+  const [parentEl, setParentEl] = useState<HTMLDivElement | null>(null);
+  const scrollMargin = parentEl?.offsetTop ?? 0;
   const flatItems = useMemo(() => flattenGroups(supplierGroups), [supplierGroups]);
 
-  const rowVirtualizer = useVirtualizer({
+  const rowVirtualizer = useWindowVirtualizer({
     count: flatItems.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: (index) =>
+    estimateSize: (index: number) =>
       flatItems[index]?.type === "header" ? GROUP_HEADER_HEIGHT : DATA_ROW_HEIGHT,
     overscan: 8,
+    scrollMargin,
   });
 
   if (filteredRows.length === 0) {
@@ -451,10 +452,7 @@ export function InventoryStockTableDesktop({
             <span className={HEADER_CELL_CLASS}>Ações</span>
           </div>
 
-          <div
-            ref={parentRef}
-            className="max-h-[70vh] overflow-x-hidden overflow-y-auto"
-          >
+          <div ref={setParentEl}>
             <div
               style={
                 {
@@ -476,7 +474,9 @@ export function InventoryStockTableDesktop({
                     ref={rowVirtualizer.measureElement}
                     data-index={virtualItem.index}
                     className="absolute top-0 left-0 w-full"
-                    style={{ transform: `translateY(${virtualItem.start}px)` }}
+                    style={{
+                      transform: `translateY(${virtualItem.start - scrollMargin}px)`,
+                    }}
                   >
                     {item.type === "header" ? (
                       <GroupHeaderRow supplier={item.supplier} count={item.count} />
