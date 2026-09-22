@@ -235,7 +235,11 @@ export default async function InventoryHistoryPage({
           </Card>
 
           {selected.source === "manual" ? (
-            <UserFeedback tone="warning" title="Este mês ainda é provisório">
+            <UserFeedback
+              tone="info"
+              title="Este mês ainda é provisório"
+              className="shadow-none"
+            >
               Use o snapshot manual só como corte temporário. No início do mês
               seguinte o fechamento automático oficial toma o lugar dele.
             </UserFeedback>
