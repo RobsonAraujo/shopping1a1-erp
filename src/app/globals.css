@@ -667,3 +667,74 @@ a,
   text-decoration: underline;
   text-underline-offset: 4px;
 }
+
+/* 404 — a caixa perdida flutua e a sombra acompanha, então as duas animações
+   compartilham duração e easing. Sem JS: a página é server component. */
+.not-found-stage {
+  animation: not-found-drop-in 0.55s cubic-bezier(0.34, 1.4, 0.64, 1) both;
+}
+
+.not-found-emoji {
+  animation: not-found-float 3.2s ease-in-out infinite;
+}
+
+/* Cutucar a caixa faz ela se sacudir — easter egg, não afeta nada funcional. */
+.not-found-stage:hover .not-found-emoji {
+  animation: not-found-shake 0.5s ease-in-out infinite;
+}
+
+.not-found-shadow {
+  animation: not-found-shadow 3.2s ease-in-out infinite;
+}
+
+@keyframes not-found-drop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-18px) scale(0.86);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes not-found-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-5deg);
+  }
+  50% {
+    transform: translateY(-12px) rotate(5deg);
+  }
+}
+
+@keyframes not-found-shake {
+  0%,
+  100% {
+    transform: translateY(-4px) rotate(-9deg);
+  }
+  50% {
+    transform: translateY(-4px) rotate(9deg);
+  }
+}
+
+@keyframes not-found-shadow {
+  0%,
+  100% {
+    transform: scaleX(1);
+    opacity: 0.22;
+  }
+  50% {
+    transform: scaleX(0.7);
+    opacity: 0.1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .not-found-stage,
+  .not-found-stage:hover .not-found-emoji,
+  .not-found-emoji,
+  .not-found-shadow {
+    animation: none;
+  }
+}
