@@ -5,6 +5,10 @@ import { getMarketingCtaState } from "@/lib/mercadolibre/session";
 import { siteUrl } from "@/lib/infra/site-url";
 import { MarketingLanding } from "@/components/marketing/Landing";
 import { faqStructuredData } from "@/components/marketing/Faq";
+import {
+  organizationStructuredData,
+  softwareApplicationStructuredData,
+} from "@/lib/marketing/structured-data";
 
 const title = "Painel para vendedores Mercado Livre — margem, imposto e DRE";
 const description =
@@ -24,14 +28,12 @@ export const metadata: Metadata = {
     title: "ERP 1a1 — lucratividade e lucro real no Mercado Livre",
     description:
       "Veja se cada anúncio sobra depois da tarifa ML e do imposto. Apuração pensada para lucro real. Teste grátis, sem cartão.",
-    images: ["/logo-bg-blue.png"],
   },
   twitter: {
     card: "summary_large_image",
     title: "ERP 1a1 — lucratividade e lucro real no Mercado Livre",
     description:
       "Veja se cada anúncio sobra depois da tarifa ML e do imposto. Apuração pensada para lucro real. Teste grátis, sem cartão.",
-    images: ["/logo-bg-blue.png"],
   },
 };
 
@@ -60,7 +62,13 @@ export default async function Home({ searchParams }: PageProps) {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqStructuredData()) }}
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify([
+            softwareApplicationStructuredData(),
+            organizationStructuredData(),
+            faqStructuredData(),
+          ]),
+        }}
       />
       <MarketingLanding
         isLoggedIn={isLoggedIn}

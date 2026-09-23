@@ -1,22 +1,28 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { TrendingUp } from "lucide-react";
 import { getMarketingCtaState } from "@/lib/mercadolibre/session";
 import { siteUrl } from "@/lib/infra/site-url";
+import { CtaBand } from "@/components/marketing/CtaBand";
 import { DemoLucratividade } from "@/components/marketing/DemoLucratividade";
 import { DemoLucratividadeSummary } from "@/components/marketing/DemoLucratividadeSummary";
 import { MarketingFooter, MarketingHeader } from "@/components/marketing/MarketingChrome";
-import { OAuthCta } from "@/components/marketing/OauthCta";
+import { MarketingSection } from "@/components/marketing/MarketingSection";
+import { MarginCalculator } from "@/components/marketing/MarginCalculator";
+import { PageHero } from "@/components/marketing/PageHero";
+import { MarketingStickyCta } from "@/components/marketing/StickyCta";
 
-const title = "Margem de contribuição por anúncio no Mercado Livre";
+const title =
+  "Margem de contribuição no Mercado Livre — calcule por anúncio";
 const description =
-  "Veja se cada anúncio sobra depois da tarifa do Mercado Livre e do Product Ads. Margem por SKU, com custo, imposto e ADS descontados. Teste grátis.";
+  "Calcule a margem de contribuição de cada anúncio do Mercado Livre com tarifa, custo, imposto e Product Ads na mesma conta. Calculadora grátis e painel completo.";
 
 export const metadata: Metadata = {
   title,
   description,
-  alternates: { canonical: `${siteUrl()}/margem-de-contribuicao-mercado-livre` },
+  alternates: {
+    canonical: `${siteUrl()}/margem-de-contribuicao-mercado-livre`,
+  },
   openGraph: {
     type: "website",
     url: `${siteUrl()}/margem-de-contribuicao-mercado-livre`,
@@ -24,7 +30,6 @@ export const metadata: Metadata = {
     locale: "pt_BR",
     title,
     description,
-    images: ["/logo-bg-blue.png"],
   },
 };
 
@@ -40,100 +45,93 @@ export default async function MargemContribuicaoPage() {
         logoHref="/"
       />
 
-      <main>
-        <section className="marketing-hero relative overflow-hidden bg-gradient-to-br from-[#0a1130] via-[#141f52] to-[#1b2d6f] px-4 pb-16 text-white sm:px-6 sm:pb-24">
-          <div className="relative mx-auto max-w-3xl text-center">
-            <p className="text-sm font-semibold uppercase tracking-wide text-cyan-200">
-              Lucratividade · Margem
-            </p>
-            <h1 className="mt-3 text-[clamp(2rem,5vw,3.25rem)] font-bold leading-[1.1] tracking-tight">
-              Calcule a margem de contribuição de cada anúncio do Mercado Livre
-            </h1>
-            <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-white/80 sm:text-lg">
-              Preço, tarifa ML, custo do produto e investimento em Product Ads
-              — tudo por SKU, numa tabela só. Verde quando sobra, vermelho
-              quando o anúncio come a operação, mesmo depois do ADS.
-            </p>
-            <div className="mt-8 flex justify-center">
-              <OAuthCta
-                isLoggedIn={isLoggedIn}
-                dashboardHref={dashboardHref}
-                onDark
-              />
-            </div>
-          </div>
-        </section>
+      <main id="conteudo">
+        <PageHero
+          isLoggedIn={isLoggedIn}
+          dashboardHref={dashboardHref}
+          breadcrumb="Lucratividade"
+          eyebrow="Lucratividade · Margem"
+          title="Calcule a margem de contribuição de cada anúncio do Mercado Livre"
+          lead="Preço, tarifa ML, custo do produto e investimento em Product Ads — tudo por SKU, numa tabela só. Verde quando sobra, vermelho quando o anúncio come a operação, mesmo depois do ADS."
+          highlights={[
+            "Margem por anúncio, não só por SKU",
+            "Pós ADS na coluna ao lado da margem",
+            "O mesmo custo alimenta DRE e imposto",
+          ]}
+        />
 
-        <section className="scroll-mt-20 bg-[var(--background)] px-4 py-16 sm:px-6 sm:py-20">
-          <div className="mx-auto max-w-6xl space-y-8">
-            <div className="max-w-2xl">
-              <h2 className="text-2xl font-bold tracking-tight text-[var(--primary)] sm:text-3xl">
-                Produto, tipo, preço, margem e pós ADS
-              </h2>
-              <p className="mt-3 text-[15px] leading-relaxed text-[var(--muted-foreground)]">
-                As mesmas colunas do painel. Sem exportar nada do Mercado
-                Livre: a margem já considera a tarifa de venda e, quando o
-                anúncio tem Product Ads ativo, o resultado depois do
-                investimento em publicidade.
-              </p>
-            </div>
+        <MarketingSection
+          id="calculadora"
+          surface="tint"
+          align="center"
+          eyebrow="Calculadora grátis"
+          title="Faça a conta de um anúncio agora"
+          lead="Sem cadastro. Esta calculadora roda exatamente as mesmas funções de margem que o painel usa nas telas de Lucratividade e Precificação — o resultado aqui é o resultado lá."
+        >
+          <MarginCalculator
+            isLoggedIn={isLoggedIn}
+            dashboardHref={dashboardHref}
+          />
+        </MarketingSection>
+
+        <MarketingSection
+          surface="card"
+          eyebrow="No painel"
+          title="Produto, tipo, preço, margem e pós ADS"
+          lead="As mesmas colunas do painel, para o catálogo inteiro. Sem exportar nada do Mercado Livre: a margem já considera a tarifa de venda e, quando o anúncio tem Product Ads ativo, o resultado depois do investimento em publicidade."
+        >
+          <div className="space-y-8">
             <DemoLucratividadeSummary />
             <DemoLucratividade />
           </div>
-        </section>
+        </MarketingSection>
 
-        <section className="bg-white px-4 py-16 sm:px-6 sm:py-20">
-          <div className="mx-auto max-w-3xl space-y-6">
-            <h2 className="text-2xl font-bold tracking-tight text-[var(--primary)] sm:text-3xl">
-              Por que margem &ldquo;por anúncio&rdquo; e não só por SKU
-            </h2>
-            <p className="text-[15px] leading-relaxed text-[var(--muted-foreground)]">
+        <MarketingSection
+          surface="base"
+          width="narrow"
+          eyebrow="Por quê"
+          title="Por que margem “por anúncio” e não só por SKU"
+        >
+          <div className="legal-prose space-y-5">
+            <p>
               Um mesmo produto pode ter mais de um anúncio ativo — com preços,
               tipo de anúncio (clássico ou premium) e frete diferentes. A
               margem calculada por anúncio mostra exatamente qual publicação
               está sustentando a operação e qual está vendendo no prejuízo,
               mesmo quando o SKU por trás é o mesmo.
             </p>
-            <p className="text-[15px] leading-relaxed text-[var(--muted-foreground)]">
+            <p>
+              É também onde o Product Ads muda o jogo: o investimento não é
+              distribuído igualmente entre as publicações. Um anúncio premium
+              com TACOS alto pode ter margem de contribuição saudável e{" "}
+              <strong>resultado negativo depois do ADS</strong> — e a conta por
+              SKU esconde exatamente esse caso.
+            </p>
+            <p>
               O custo cadastrado por SKU aqui também alimenta o{" "}
-              <Link href="/dre-mercado-livre" className="text-[var(--primary)] underline underline-offset-2">
-                DRE do mês
-              </Link>{" "}
-              e a apuração fiscal do{" "}
-              <Link href="/simples-nacional-mercado-livre" className="text-[var(--primary)] underline underline-offset-2">
+              <Link href="/dre-mercado-livre">DRE do mês</Link> e a apuração
+              fiscal do{" "}
+              <Link href="/simples-nacional-mercado-livre">
                 seu regime tributário
               </Link>
               — cadastra uma vez, usa nos três lugares.
             </p>
           </div>
-        </section>
+        </MarketingSection>
 
-        <section className="bg-gradient-to-br from-[#1b2d6f] to-[#0f1a45] px-4 py-16 text-center text-white sm:px-6">
-          <div className="mx-auto max-w-xl">
-            <TrendingUp className="mx-auto size-8 text-cyan-300" aria-hidden />
-            <h2 className="mt-4 text-2xl font-bold sm:text-3xl">
-              Descubra quais anúncios realmente sobram.
-            </h2>
-            <p className="mt-3 text-white/75">
-              Conecte sua loja e veja a margem real, anúncio por anúncio.
-            </p>
-            <div className="mt-8 flex flex-col items-center gap-3">
-              <OAuthCta
-                isLoggedIn={isLoggedIn}
-                dashboardHref={dashboardHref}
-                onDark
-              />
-              {!isLoggedIn ? (
-                <p className="text-sm text-white/60">
-                  Sem cartão · sem senha nova
-                </p>
-              ) : null}
-            </div>
-          </div>
-        </section>
+        <CtaBand
+          isLoggedIn={isLoggedIn}
+          dashboardHref={dashboardHref}
+          title="Descubra quais anúncios realmente sobram."
+          lead="Conecte sua loja e veja a margem real, anúncio por anúncio, com a tarifa e o ADS que o Mercado Livre cobrou de fato."
+        />
       </main>
 
       <MarketingFooter />
+      <MarketingStickyCta
+        isLoggedIn={isLoggedIn}
+        dashboardHref={dashboardHref}
+      />
     </div>
   );
 }

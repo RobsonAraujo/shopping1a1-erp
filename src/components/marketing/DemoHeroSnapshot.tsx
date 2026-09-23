@@ -300,17 +300,27 @@ export function DemoHeroSnapshot() {
     () => true,
   );
   const [active, setActive] = useState<Tab>("dre");
+  /** Passar o mouse/foco sobre o painel pausa; clicar numa aba encerra o giro. */
+  const [paused, setPaused] = useState(false);
+  const [pinned, setPinned] = useState(false);
+
+  const autoRotating = !reduced && !paused && !pinned;
 
   useEffect(() => {
-    if (reduced) return;
+    if (!autoRotating) return;
     const id = window.setInterval(() => {
       setActive((current) => {
         const i = TABS.indexOf(current);
         return TABS[(i + 1) % TABS.length];
       });
-    }, 4500);
+    }, 5500);
     return () => window.clearInterval(id);
-  }, [reduced]);
+  }, [autoRotating]);
+
+  const selectTab = (tab: Tab) => {
+    setActive(tab);
+    setPinned(true);
+  };
 
   return (
     <div className="relative mx-auto w-full max-w-lg lg:max-w-none">
@@ -318,33 +328,66 @@ export function DemoHeroSnapshot() {
         className="marketing-hero-glow pointer-events-none absolute -inset-8 rounded-[2rem] bg-cyan-400/15 blur-2xl"
         aria-hidden
       />
-      <div className="relative overflow-hidden rounded-3xl border border-white/15 bg-white shadow-2xl shadow-black/40">
+      <div
+        className="relative overflow-hidden rounded-3xl border border-white/15 bg-white shadow-2xl shadow-black/40"
+        onMouseEnter={() => setPaused(true)}
+        onMouseLeave={() => setPaused(false)}
+        onFocusCapture={() => setPaused(true)}
+        onBlurCapture={() => setPaused(false)}
+      >
         <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2.5 sm:px-4">
-          <div className="inline-flex rounded-full bg-[var(--muted)] p-1">
-            {TABS.map((tab) => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setActive(tab)}
-                className={cn(
-                  "cursor-pointer rounded-full px-2.5 py-1.5 text-[11px] font-semibold transition-colors sm:px-3 sm:text-xs",
-                  active === tab
-                    ? "bg-white text-[var(--foreground)] shadow-sm"
-                    : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
-                )}
-              >
-                {TAB_LABEL[tab]}
-              </button>
-            ))}
+          <div
+            role="tablist"
+            aria-label="Telas do painel"
+            className="inline-flex rounded-full bg-[var(--muted)] p-1"
+          >
+            {TABS.map((tab) => {
+              const selected = active === tab;
+              return (
+                <button
+                  key={tab}
+                  type="button"
+                  role="tab"
+                  id={`hero-tab-${tab}`}
+                  aria-selected={selected}
+                  aria-controls={`hero-panel-${tab}`}
+                  tabIndex={selected ? 0 : -1}
+                  onClick={() => selectTab(tab)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft")
+                      return;
+                    event.preventDefault();
+                    const step = event.key === "ArrowRight" ? 1 : -1;
+                    const next =
+                      TABS[
+                        (TABS.indexOf(active) + step + TABS.length) % TABS.length
+                      ];
+                    selectTab(next);
+                    document.getElementById(`hero-tab-${next}`)?.focus();
+                  }}
+                  className={cn(
+                    "cursor-pointer rounded-full px-2.5 py-1.5 text-[11px] font-semibold transition-colors sm:px-3 sm:text-xs",
+                    selected
+                      ? "bg-white text-[var(--foreground)] shadow-sm"
+                      : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
+                  )}
+                >
+                  {TAB_LABEL[tab]}
+                </button>
+              );
+            })}
           </div>
           <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
             <span className="marketing-hero-live size-1.5 rounded-full bg-emerald-500" />
-            Ao vivo
+            Demonstração
           </span>
         </div>
 
         <div
           key={active}
+          role="tabpanel"
+          id={`hero-panel-${active}`}
+          aria-labelledby={`hero-tab-${active}`}
           className="marketing-hero-panel flex min-h-[22rem] flex-col justify-center p-6 sm:min-h-[26rem] sm:p-8"
         >
           {active === "dre" ? <DrePanel /> : null}

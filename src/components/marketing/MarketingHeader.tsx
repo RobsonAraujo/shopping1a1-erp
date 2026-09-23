@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { MARKETING_NAV_LINKS } from "@/components/marketing/marketing-nav-links";
+import { MarketingNavMenu } from "@/components/marketing/MarketingNavMenu";
 import { MarketingMobileNav } from "@/components/marketing/MarketingMobileNav";
 import { MarketingNavLink } from "@/components/marketing/MarketingNavLink";
 import { OAuthCta } from "@/components/marketing/OauthCta";
@@ -22,7 +22,7 @@ function readScrolled(): boolean {
 export function MarketingHeader({
   isLoggedIn,
   dashboardHref,
-  logoHref = "#topo",
+  logoHref = "#conteudo",
 }: {
   isLoggedIn: boolean;
   dashboardHref: string;
@@ -68,6 +68,12 @@ export function MarketingHeader({
 
   return (
     <>
+      <a
+        href="#conteudo"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[200] focus:rounded-lg focus:bg-white focus:px-4 focus:py-2.5 focus:text-sm focus:font-semibold focus:text-[var(--primary)] focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+      >
+        Pular para o conteúdo
+      </a>
       <div
         ref={sentinelRef}
         className="pointer-events-none h-px -mb-px"
@@ -107,16 +113,18 @@ export function MarketingHeader({
             </a>
 
             <nav
-              aria-label="Funcionalidades"
-              className="hidden min-w-0 flex-1 items-center gap-6 lg:flex xl:gap-8"
+              aria-label="Principal"
+              className="hidden min-w-0 flex-1 items-center gap-7 lg:flex"
             >
-              {MARKETING_NAV_LINKS.map((link) => (
-                <MarketingNavLink key={link.href} href={link.href} onDark={!solid}>
-                  {link.label}
-                </MarketingNavLink>
-              ))}
+              <MarketingNavMenu onDark={!solid} />
+              <MarketingNavLink href="/#calculadora" onDark={!solid}>
+                Calculadora
+              </MarketingNavLink>
               <MarketingNavLink href="/precos" onDark={!solid}>
                 Preços
+              </MarketingNavLink>
+              <MarketingNavLink href="/sobre" onDark={!solid}>
+                Sobre
               </MarketingNavLink>
             </nav>
 

@@ -1,5 +1,6 @@
-import { Lightbulb, ShoppingCart, Truck } from "lucide-react";
+import { ArrowUpRight, Lightbulb, ShoppingCart, Truck } from "lucide-react";
 import Link from "next/link";
+import { MarketingSection } from "@/components/marketing/MarketingSection";
 import { cn } from "@/lib/utils";
 
 const FEATURES = [
@@ -60,90 +61,82 @@ const FEATURES = [
 
 export function MarketingMoreInPanel() {
   return (
-    <section
+    <MarketingSection
       id="mais"
-      className="scroll-mt-20 bg-white px-4 py-16 sm:px-6 sm:py-20"
+      surface="base"
+      eyebrow="Operação no dia a dia"
+      eyebrowTone="amber"
+      title="Full, compras e insights — o que vem depois da margem"
+      lead="Lucratividade e tributário mostram se o anúncio paga. Esta parte do painel mostra se a operação consegue entregar: coletar no Full, pedir na hora certa e enxergar SKU parado ou ruptura."
     >
-      <div className="mx-auto max-w-6xl">
-        <p className="text-sm font-semibold uppercase tracking-wide text-amber-700">
-          Operação no dia a dia
-        </p>
-        <h2 className="mt-2 max-w-2xl text-2xl font-bold tracking-tight text-[var(--primary)] sm:text-3xl">
-          Full, compras e insights — o que sobra depois da margem
-        </h2>
-        <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-[var(--muted-foreground)]">
-          Lucratividade e tributário mostram se o anúncio paga. Esta parte do
-          painel mostra se a operação consegue entregar: coletar no Full, pedir
-          na hora certa e enxergar SKU parado ou ruptura.
-        </p>
-        <div className="mt-10 grid gap-6 lg:grid-cols-3">
-          {FEATURES.map((item) => {
-            const Icon = item.icon;
-            return (
-              <article
-                key={item.title}
-                className={cn(
-                  "flex flex-col overflow-hidden rounded-2xl border shadow-sm",
-                  item.accent.wrap,
-                )}
-              >
-                <div className={cn("h-1.5 w-full", item.accent.bar)} />
-                <div className="flex flex-1 flex-col p-5 sm:p-6">
-                  <span
-                    className={cn(
-                      "inline-flex size-11 items-center justify-center rounded-xl",
-                      item.accent.icon,
-                    )}
-                  >
-                    <Icon className="size-5" aria-hidden />
-                  </span>
-                  <h3 className="mt-4 text-lg font-semibold text-[var(--primary)]">
-                    {item.title}
-                  </h3>
-                  <p className="mt-2 text-sm leading-relaxed text-[var(--foreground)]">
-                    {item.lead}
-                  </p>
-                  <ul className="mt-4 space-y-2.5 text-sm text-[var(--muted-foreground)]">
-                    {item.points.map((point) => (
-                      <li key={point} className="flex gap-2">
-                        <span
-                          className={cn(
-                            "mt-2 size-1.5 shrink-0 rounded-full",
-                            item.accent.bar,
-                          )}
-                          aria-hidden
-                        />
-                        <span>{point}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  {"href" in item ? (
-                    <Link
-                      href={item.href}
-                      className="mt-4 text-sm font-semibold text-[var(--primary)] underline underline-offset-2"
-                    >
-                      Ver o kanban
-                    </Link>
-                  ) : null}
-                  <div className="mt-5 flex flex-wrap gap-1.5">
-                    {item.chips.map((chip) => (
+      <div className="grid gap-6 lg:grid-cols-3">
+        {FEATURES.map((item) => {
+          const Icon = item.icon;
+          return (
+            <article
+              key={item.title}
+              className={cn(
+                "flex flex-col overflow-hidden rounded-2xl border shadow-sm transition-shadow hover:shadow-md",
+                item.accent.wrap,
+              )}
+            >
+              <div className={cn("h-1.5 w-full", item.accent.bar)} />
+              <div className="flex flex-1 flex-col p-6">
+                <span
+                  className={cn(
+                    "inline-flex size-11 items-center justify-center rounded-xl",
+                    item.accent.icon,
+                  )}
+                >
+                  <Icon className="size-5" aria-hidden />
+                </span>
+                <h3 className="mt-4 text-lg font-semibold text-[var(--primary)]">
+                  {item.title}
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-[var(--foreground)]">
+                  {item.lead}
+                </p>
+                <ul className="mt-4 flex-1 space-y-2.5 text-sm text-[var(--muted-foreground)]">
+                  {item.points.map((point) => (
+                    <li key={point} className="flex gap-2">
                       <span
-                        key={chip}
                         className={cn(
-                          "rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
-                          item.accent.chip,
+                          "mt-2 size-1.5 shrink-0 rounded-full",
+                          item.accent.bar,
                         )}
-                      >
-                        {chip}
-                      </span>
-                    ))}
-                  </div>
+                        aria-hidden
+                      />
+                      <span>{point}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-5 flex flex-wrap items-center gap-1.5">
+                  {item.chips.map((chip) => (
+                    <span
+                      key={chip}
+                      className={cn(
+                        "rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
+                        item.accent.chip,
+                      )}
+                    >
+                      {chip}
+                    </span>
+                  ))}
                 </div>
-              </article>
-            );
-          })}
-        </div>
+                {"href" in item ? (
+                  <Link
+                    href={item.href}
+                    className="mt-5 inline-flex items-center gap-1 border-t border-[var(--border)]/60 pt-4 text-sm font-semibold text-[var(--primary)] transition-colors hover:text-[#152456]"
+                  >
+                    Ver o kanban
+                    <ArrowUpRight className="size-4" aria-hidden />
+                  </Link>
+                ) : null}
+              </div>
+            </article>
+          );
+        })}
       </div>
-    </section>
+    </MarketingSection>
   );
 }

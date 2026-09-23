@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { Layers, Lock, ShieldCheck, TrendingUp } from "lucide-react";
+import { Layers, Lock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { UserFeedback } from "@/components/ui/user-feedback";
+import { CtaBand, CtaReassurance } from "@/components/marketing/CtaBand";
 import { DemoCatalog } from "@/components/marketing/DemoCatalog";
 import { DemoDre } from "@/components/marketing/DemoDre";
 import { DemoHeroSnapshot } from "@/components/marketing/DemoHeroSnapshot";
@@ -11,14 +12,30 @@ import { DemoTributario } from "@/components/marketing/DemoTributario";
 import { MarketingFaq } from "@/components/marketing/Faq";
 import { MarketingFooter, MarketingHeader } from "@/components/marketing/MarketingChrome";
 import { MarketingHowItStarts } from "@/components/marketing/HowItStarts";
+import { MarginCalculator } from "@/components/marketing/MarginCalculator";
 import { MarketingMoreInPanel } from "@/components/marketing/MoreInPanel";
+import { MarketingProblem } from "@/components/marketing/ProblemSection";
+import { MarketingSection } from "@/components/marketing/MarketingSection";
+import { MarketingStickyCta } from "@/components/marketing/StickyCta";
+import { MarketingTrust } from "@/components/marketing/TrustSection";
 import { OAuthCta } from "@/components/marketing/OauthCta";
 
+/** O OAuth já aparece na reassurance logo abaixo do CTA — aqui só o que ela não diz. */
 const TRUST_ITEMS = [
-  { icon: ShieldCheck, label: "OAuth oficial Mercado Livre" },
   { icon: Lock, label: "Tokens criptografados no servidor" },
   { icon: Layers, label: "Dados isolados por loja" },
 ] as const;
+
+function InlineLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="font-medium text-[var(--primary)] underline decoration-[var(--primary)]/30 underline-offset-4 transition-colors hover:decoration-[var(--primary)]"
+    >
+      {children}
+    </Link>
+  );
+}
 
 export function MarketingLanding({
   isLoggedIn,
@@ -33,8 +50,9 @@ export function MarketingLanding({
     <div className="marketing-landing flex min-h-full flex-1 flex-col">
       <MarketingHeader isLoggedIn={isLoggedIn} dashboardHref={dashboardHref} />
 
-      <main id="topo">
-        <section className="marketing-hero relative overflow-hidden bg-gradient-to-br from-[#0a1130] via-[#141f52] to-[#1b2d6f] px-4 pb-16 text-white sm:px-6 sm:pb-24">
+      <main id="conteudo">
+        {/* ---------------------------------------------------------------- Hero */}
+        <section className="marketing-hero relative overflow-hidden bg-gradient-to-br from-[#0a1130] via-[#141f52] to-[#1b2d6f] px-4 pb-20 text-white sm:px-6 sm:pb-28">
           <div
             className="marketing-hero-grid pointer-events-none absolute inset-0"
             aria-hidden
@@ -51,41 +69,42 @@ export function MarketingLanding({
             className="pointer-events-none absolute -bottom-32 -right-10 size-72 rounded-full bg-indigo-500/10 blur-3xl"
             aria-hidden
           />
-          <div className="relative mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-2">
+
+          <div className="relative mx-auto grid max-w-6xl items-center gap-14 lg:grid-cols-[1fr_1.05fr]">
             <div>
-              <div className="mb-4 flex flex-wrap gap-2">
+              <div className="mb-5 flex flex-wrap gap-2">
                 <Badge className="border-cyan-300/30 bg-cyan-400/10 text-cyan-100">
                   Mercado Livre
                 </Badge>
-                <Badge className="border-white/20 bg-white/10 text-white">
-                  Lucratividade
-                </Badge>
-                <Badge className="border-emerald-300/40 bg-emerald-400/20 text-emerald-100">
-                  Lucro real e Simples
+                <Badge className="border-emerald-300/40 bg-emerald-400/15 text-emerald-100">
+                  Grátis durante o beta
                 </Badge>
                 <Badge className="border-white/20 bg-white/10 text-white">
-                  Catálogo · DRE · Kanban
+                  Lucro Real · Simples Nacional
                 </Badge>
               </div>
-              <h1 className="text-[clamp(2.5rem,6vw,4.75rem)] font-bold leading-[1.06] tracking-tight">
-                <span className="block text-white">O painel do vendedor</span>
+
+              <h1 className="text-balance text-[clamp(2.5rem,6vw,4.5rem)] font-bold leading-[1.04] tracking-tight">
+                <span className="block text-white">Descubra quanto sobra</span>
                 <span className="mt-1 inline-block bg-gradient-to-r from-cyan-200 via-sky-300 to-indigo-200 bg-clip-text text-transparent">
-                  Mercado Livre
+                  de cada venda
                 </span>
                 <span
-                  className="mt-1 block h-1.5 w-[min(100%,12rem)] rounded-full bg-gradient-to-r from-cyan-400 to-indigo-400 sm:h-2 sm:w-[16rem]"
+                  className="mt-3 block h-1.5 w-[min(100%,12rem)] rounded-full bg-gradient-to-r from-cyan-400 to-indigo-400 sm:h-2 sm:w-[16rem]"
                   aria-hidden
                 />
-                <span className="mt-4 block text-[clamp(1.15rem,2.4vw,1.65rem)] font-semibold leading-snug tracking-tight text-white/75">
-                  Da margem ao fechamento do mês.
-                </span>
               </h1>
-              <p className="mt-4 max-w-xl text-base leading-relaxed text-white/80 sm:text-lg">
-                Lucratividade por anúncio depois do ADS, apuração de lucro real
-                por SKU e DRE que fecha sozinho com a fatura do Mercado Livre —
-                kanban de compras e Full no mesmo painel. Um login: a conta que
-                você já usa na ML.
+
+              <p className="mt-6 max-w-xl text-pretty text-base leading-relaxed text-white/80 sm:text-lg">
+                O painel de lucratividade, imposto e DRE para quem vende no
+                Mercado Livre. Margem por anúncio{" "}
+                <strong className="font-semibold text-white">
+                  depois do Product Ads
+                </strong>
+                , apuração fiscal por SKU e o resultado do mês fechando com a
+                sua fatura — sem planilha paralela.
               </p>
+
               {error ? (
                 <UserFeedback
                   tone="error"
@@ -95,181 +114,173 @@ export function MarketingLanding({
                   {error}
                 </UserFeedback>
               ) : null}
-              <div className="mt-8 flex flex-col items-start gap-3">
-                <OAuthCta
-                  isLoggedIn={isLoggedIn}
-                  dashboardHref={dashboardHref}
-                  onDark
-                />
+
+              <div className="mt-9 flex flex-col items-start gap-4">
+                <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
+                  <OAuthCta
+                    isLoggedIn={isLoggedIn}
+                    dashboardHref={dashboardHref}
+                    onDark
+                    className="w-full sm:w-auto"
+                  />
+                  <Link
+                    href="#calculadora"
+                    className="inline-flex h-12 w-full items-center justify-center rounded-full border border-white/25 px-6 text-[15px] font-semibold text-white/90 transition-colors hover:border-white/50 hover:text-white sm:w-auto"
+                  >
+                    Fazer a conta agora
+                  </Link>
+                </div>
                 {!isLoggedIn ? (
-                  <p className="text-sm text-white/65">
-                    Entra com sua conta do Mercado Livre · sem cartão · sem
-                    senha nova
-                  </p>
+                  <CtaReassurance onDark className="justify-start" />
                 ) : null}
               </div>
-              <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2">
+
+              <ul className="mt-10 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-white/10 pt-6">
                 {TRUST_ITEMS.map(({ icon: Icon, label }) => (
-                  <span
+                  <li
                     key={label}
-                    className="inline-flex items-center gap-1.5 text-xs text-white/55"
+                    className="inline-flex items-center gap-1.5 text-xs text-white/50"
                   >
                     <Icon className="size-3.5 text-emerald-300" aria-hidden />
                     {label}
-                  </span>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
+
             <DemoHeroSnapshot />
           </div>
         </section>
 
-        <section
+        {/* ------------------------------------------------------------ Problema */}
+        <MarketingProblem />
+
+        {/* --------------------------------------------------------- Calculadora */}
+        <MarketingSection
+          id="calculadora"
+          surface="tint"
+          eyebrow="Faça a conta agora"
+          title="Coloque um anúncio seu e veja o que sobra"
+          lead="Preço, custo, comissão, imposto e ADS numa conta só. Não é uma simulação de marketing: esta calculadora roda exatamente as mesmas funções de margem que o painel usa nas telas de Lucratividade e Precificação."
+          align="center"
+        >
+          <MarginCalculator
+            isLoggedIn={isLoggedIn}
+            dashboardHref={dashboardHref}
+          />
+        </MarketingSection>
+
+        {/* ------------------------------------------------------- Lucratividade */}
+        <MarketingSection
           id="lucratividade"
-          className="scroll-mt-20 bg-[var(--background)] px-4 py-16 sm:px-6 sm:py-20"
+          surface="card"
+          eyebrow="Lucratividade"
+          title="A mesma conta, para o catálogo inteiro"
+          lead={
+            <>
+              Produto, tipo, preço, margem e pós ADS — as colunas do painel.
+              Verde quando sobra, vermelho quando o anúncio come a operação,
+              inclusive depois do Product Ads.{" "}
+              <InlineLink href="/margem-de-contribuicao-mercado-livre">
+                Saiba mais sobre margem de contribuição
+              </InlineLink>
+              .
+            </>
+          }
         >
-          <div className="mx-auto max-w-6xl space-y-8">
-            <div className="max-w-2xl">
-              <h2 className="text-2xl font-bold tracking-tight text-[var(--primary)] sm:text-3xl">
-                Lucratividade por anúncio
-              </h2>
-              <p className="mt-3 text-[15px] leading-relaxed text-[var(--muted-foreground)]">
-                As mesmas colunas do painel: produto, tipo, preço, margem e pós
-                ADS. Verde quando sobra, vermelho quando o anúncio come a
-                operação — inclusive depois do Product Ads.{" "}
-                <Link
-                  href="/margem-de-contribuicao-mercado-livre"
-                  className="text-[var(--primary)] underline underline-offset-2"
-                >
-                  Saiba mais sobre margem de contribuição
-                </Link>
-                .
-              </p>
-            </div>
-            <DemoLucratividade />
-          </div>
-        </section>
+          <DemoLucratividade />
+        </MarketingSection>
 
-        <section
+        {/* ----------------------------------------------------------- Tributário */}
+        <MarketingSection
           id="tributario"
-          className="scroll-mt-20 bg-white px-4 py-16 sm:px-6 sm:py-20"
+          surface="base"
+          eyebrow="Tributário"
+          title="O peso fiscal de cada produto"
+          lead={
+            <>
+              A visão Por SKU do relatório: vendas, unidades, receita, imposto
+              operacional médio e % operacional — quanto cada produto leva do
+              resultado.{" "}
+              <InlineLink href="/lucro-real-mercado-livre">
+                Veja a apuração completa de Lucro Real
+              </InlineLink>
+              .
+            </>
+          }
+          headingExtra={
+            <p className="mt-4 text-sm leading-relaxed text-[var(--muted-foreground)]">
+              Apoio à apuração — não substitui contador nem emite nota fiscal.
+              Empresas do Simples configuram regime e alíquota efetiva do DAS
+              em Configurações; margem e precificação já usam esse número.{" "}
+              <InlineLink href="/simples-nacional-mercado-livre">
+                Como funciona no Simples Nacional
+              </InlineLink>
+              .
+            </p>
+          }
         >
-          <div className="mx-auto max-w-6xl space-y-8">
-            <div className="max-w-2xl">
-              <h2 className="text-2xl font-bold tracking-tight text-[var(--primary)] sm:text-3xl">
-                Tributário para lucro real
-              </h2>
-              <p className="mt-3 text-[15px] leading-relaxed text-[var(--muted-foreground)]">
-                A visão Por SKU do relatório: vendas, unidades, receita, imposto
-                operacional médio e % operacional — o peso fiscal de cada
-                produto no lucro real.{" "}
-                <Link
-                  href="/lucro-real-mercado-livre"
-                  className="text-[var(--primary)] underline underline-offset-2"
-                >
-                  Veja a apuração completa de Lucro Real
-                </Link>
-                .
-              </p>
-              <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-                Apoio à apuração: não substitui contador nem emite nota fiscal.
-                Empresas do Simples Nacional configuram o regime e a alíquota
-                efetiva do DAS em Configurações — a margem e a precificação já
-                usam esse número; a apuração por SKU acima é específica do
-                Lucro Real.{" "}
-                <Link
-                  href="/simples-nacional-mercado-livre"
-                  className="text-[var(--primary)] underline underline-offset-2"
-                >
-                  Veja como funciona no Simples Nacional
-                </Link>
-                .
-              </p>
-            </div>
-            <DemoTributario />
-          </div>
-        </section>
+          <DemoTributario />
+        </MarketingSection>
 
-        <section
+        {/* ------------------------------------------------------------------ DRE */}
+        <MarketingSection
           id="dre"
-          className="scroll-mt-20 bg-[var(--background)] px-4 py-16 sm:px-6 sm:py-20"
+          surface="card"
+          eyebrow="Financeiro"
+          title="O DRE fecha sozinho com a fatura"
+          lead={
+            <>
+              Receita, custos e resultado numa leitura vertical. Tarifa, CMV e
+              ADS vêm da fatura do Mercado Livre — sem exportar planilha para
+              bater o número que já apareceu na lucratividade.{" "}
+              <InlineLink href="/dre-mercado-livre">
+                Saiba mais sobre o DRE
+              </InlineLink>
+              .
+            </>
+          }
         >
-          <div className="mx-auto max-w-6xl space-y-8">
-            <div className="max-w-2xl">
-              <h2 className="text-2xl font-bold tracking-tight text-[var(--primary)] sm:text-3xl">
-                DRE que fecha sozinho
-              </h2>
-              <p className="mt-3 text-[15px] leading-relaxed text-[var(--muted-foreground)]">
-                Demonstrativo do mês: receita, custos e resultado numa leitura
-                vertical. Tarifa, CMV e ADS vêm da fatura do Mercado Livre —
-                sem exportar planilha para bater o número que já apareceu na
-                lucratividade e no tributário.{" "}
-                <Link
-                  href="/dre-mercado-livre"
-                  className="text-[var(--primary)] underline underline-offset-2"
-                >
-                  Saiba mais sobre o DRE
-                </Link>
-                .
-              </p>
-            </div>
-            <DemoDre />
-          </div>
-        </section>
+          <DemoDre />
+        </MarketingSection>
 
-        <section
+        {/* ------------------------------------------------------------- Catálogo */}
+        <MarketingSection
           id="catalogo"
-          className="scroll-mt-20 bg-white px-4 py-16 sm:px-6 sm:py-20"
+          surface="base"
+          eyebrow="Concorrência"
+          eyebrowTone="amber"
+          title="Lançou um produto novo? Veja se ele vende de verdade"
+          lead="Timeline do dia: quando o anúncio estava ganhando, perdendo ou compartilhando o buybox — e quantas vendas saíram em cada trecho. Vender mesmo perdendo é sinal de demanda própria, não só de preço vencedor."
         >
-          <div className="mx-auto max-w-6xl space-y-8">
-            <div className="max-w-2xl">
-              <p className="text-sm font-semibold uppercase tracking-wide text-amber-700">
-                Concorrência
-              </p>
-              <h2 className="mt-2 text-2xl font-bold tracking-tight text-[var(--primary)] sm:text-3xl">
-                Lançou um produto novo? Veja se ele vende de verdade
-              </h2>
-              <p className="mt-3 text-[15px] leading-relaxed text-[var(--muted-foreground)]">
-                Timeline do dia: quando o anúncio estava ganhando, perdendo ou
-                compartilhando o buybox — e quantas vendas saíram em cada
-                trecho. Vender mesmo perdendo ou dividindo a compra é sinal de
-                que o produto tem demanda própria, não só preço vencedor.
-              </p>
-            </div>
-            <DemoCatalog />
-          </div>
-        </section>
+          <DemoCatalog />
+        </MarketingSection>
 
-        <section
+        {/* --------------------------------------------------------------- Kanban */}
+        <MarketingSection
           id="kanban"
-          className="scroll-mt-20 bg-[var(--background)] px-4 py-16 sm:px-6 sm:py-20"
+          surface="card"
+          eyebrow="Operação"
+          eyebrowTone="sky"
+          title="Kanban de compras e Full"
+          lead={
+            <>
+              O card nasce quando o estoque vai faltar. Arraste o fornecedor da
+              entrada até a compra — ou o anúncio até a coleta Full. Colunas,
+              cores e tela cheia iguais para toda a equipe.{" "}
+              <InlineLink href="/kanban-compras-mercado-livre">
+                Saiba mais sobre o kanban
+              </InlineLink>
+              .
+            </>
+          }
         >
-          <div className="mx-auto max-w-6xl space-y-8">
-            <div className="max-w-2xl">
-              <p className="text-sm font-semibold uppercase tracking-wide text-sky-700">
-                Operação
-              </p>
-              <h2 className="mt-2 text-2xl font-bold tracking-tight text-[var(--primary)] sm:text-3xl">
-                Kanban de compras e Full
-              </h2>
-              <p className="mt-3 text-[15px] leading-relaxed text-[var(--muted-foreground)]">
-                O card nasce quando o estoque vai faltar. Arraste o fornecedor
-                da entrada até a compra — ou o anúncio até a coleta Full.
-                Colunas, cores e tela cheia iguais para toda a equipe.{" "}
-                <Link
-                  href="/kanban-compras-mercado-livre"
-                  className="text-[var(--primary)] underline underline-offset-2"
-                >
-                  Saiba mais sobre o kanban
-                </Link>
-                .
-              </p>
-            </div>
-            <DemoKanban />
-          </div>
-        </section>
+          <DemoKanban />
+        </MarketingSection>
 
         <MarketingMoreInPanel />
+
+        <MarketingTrust />
 
         <MarketingHowItStarts
           isLoggedIn={isLoggedIn}
@@ -278,32 +289,19 @@ export function MarketingLanding({
 
         <MarketingFaq />
 
-        <section className="bg-gradient-to-br from-[#1b2d6f] to-[#0f1a45] px-4 py-16 text-center text-white sm:px-6">
-          <div className="mx-auto max-w-xl">
-            <TrendingUp className="mx-auto size-8 text-cyan-300" aria-hidden />
-            <h2 className="mt-4 text-2xl font-bold sm:text-3xl">
-              Teste com a sua loja de verdade.
-            </h2>
-            <p className="mt-3 text-white/75">
-              Lucratividade, tributário, kanban e DRE no mesmo lugar.
-            </p>
-            <div className="mt-8 flex flex-col items-center gap-3">
-              <OAuthCta
-                isLoggedIn={isLoggedIn}
-                dashboardHref={dashboardHref}
-                onDark
-              />
-              {!isLoggedIn ? (
-                <p className="text-sm text-white/60">
-                  Sem cartão · sem senha nova
-                </p>
-              ) : null}
-            </div>
-          </div>
-        </section>
+        <CtaBand
+          isLoggedIn={isLoggedIn}
+          dashboardHref={dashboardHref}
+          title="Teste com a sua loja de verdade."
+          lead="Conecte a conta do Mercado Livre e veja a margem real dos seus anúncios em minutos — lucratividade, tributário, kanban e DRE no mesmo painel."
+        />
       </main>
 
       <MarketingFooter />
+      <MarketingStickyCta
+        isLoggedIn={isLoggedIn}
+        dashboardHref={dashboardHref}
+      />
     </div>
   );
 }

@@ -145,6 +145,14 @@ a,
   }
 }
 
+/* Barra de CTA fixa no mobile — entra/sai deslizando, some perto do rodapé. */
+.marketing-sticky-cta {
+  transition:
+    transform 0.28s cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 0.2s ease-out;
+  box-shadow: 0 -8px 24px -18px rgba(15, 18, 31, 0.5);
+}
+
 .marketing-landing .marketing-hero {
   padding-top: calc(8rem + env(safe-area-inset-top, 0px));
 }
@@ -160,6 +168,10 @@ a,
   .marketing-landing .marketing-hero-live,
   .marketing-landing .marketing-hero-panel {
     animation: none;
+  }
+
+  .marketing-sticky-cta {
+    transition: none;
   }
 
   .marketing-nav-drawer,
@@ -592,4 +604,50 @@ a,
     animation: none !important;
     opacity: 0 !important;
   }
+}
+
+/* Texto corrido das páginas legais — parágrafo/lista com o mesmo ritmo, sem
+   precisar repetir classes em cada <p> dos documentos. */
+.legal-prose p {
+  font-size: 0.9375rem;
+  line-height: 1.75;
+  color: var(--muted-foreground);
+  text-wrap: pretty;
+}
+
+.legal-prose strong {
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.legal-prose ul {
+  display: grid;
+  gap: 0.625rem;
+  padding-left: 0.25rem;
+}
+
+.legal-prose li {
+  position: relative;
+  padding-left: 1.125rem;
+  font-size: 0.9375rem;
+  line-height: 1.7;
+  color: var(--muted-foreground);
+}
+
+.legal-prose li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.7em;
+  width: 0.3125rem;
+  height: 0.3125rem;
+  border-radius: 9999px;
+  background-color: var(--primary);
+  opacity: 0.35;
+}
+
+.legal-prose a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }

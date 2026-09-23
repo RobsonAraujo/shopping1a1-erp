@@ -11,12 +11,15 @@ export function OAuthCta({
   size = "lg",
   onDark = false,
   className,
+  tabIndex,
 }: {
   isLoggedIn: boolean;
   dashboardHref: string;
   size?: "sm" | "lg";
   onDark?: boolean;
   className?: string;
+  /** -1 quando o CTA está visualmente escondido (barra fixa fora de tela). */
+  tabIndex?: number;
 }) {
   const shape =
     size === "sm"
@@ -37,12 +40,12 @@ export function OAuthCta({
       className={cn(shape, appearance, "whitespace-nowrap", className)}
     >
       {isLoggedIn ? (
-        <Link href={href}>
+        <Link href={href} tabIndex={tabIndex}>
           {label}
           <ArrowRight />
         </Link>
       ) : (
-        <a href={href}>
+        <a href={href} tabIndex={tabIndex}>
           {label}
           <ArrowRight />
         </a>

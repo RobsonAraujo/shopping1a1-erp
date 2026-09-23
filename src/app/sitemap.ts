@@ -40,5 +40,20 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "monthly",
       priority: 0.8,
     },
+    {
+      url: `${base}/sobre`,
+      changeFrequency: "yearly",
+      priority: 0.5,
+    },
+    {
+      url: `${base}/privacidade`,
+      changeFrequency: "yearly",
+      priority: 0.3,
+    },
+    {
+      url: `${base}/termos`,
+      changeFrequency: "yearly",
+      priority: 0.3,
+    },
   ];
 }

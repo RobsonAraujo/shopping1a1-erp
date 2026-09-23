@@ -10,6 +10,12 @@ import { MARKETING_NAV_LINKS } from "@/components/marketing/marketing-nav-links"
 import { OAuthCta } from "@/components/marketing/OauthCta";
 import { cn } from "@/lib/utils";
 
+const SECONDARY_LINKS = [
+  { href: "/#calculadora", label: "Calculadora de margem" },
+  { href: "/precos", label: "Preços" },
+  { href: "/sobre", label: "Sobre" },
+] as const;
+
 export function MarketingMobileNav({
   onDark = false,
   isLoggedIn,
@@ -60,7 +66,10 @@ export function MarketingMobileNav({
             </DialogPrimitive.Close>
           </div>
 
-          <nav aria-label="Funcionalidades" className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-3">
+          <nav aria-label="Principal" className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-3">
+            <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
+              Recursos
+            </p>
             {MARKETING_NAV_LINKS.map((link) => {
               const active = pathname === link.href;
               return (
@@ -83,17 +92,23 @@ export function MarketingMobileNav({
                 </Link>
               );
             })}
-            <Link
-              href="/precos"
-              onClick={() => setOpen(false)}
-              aria-current={pathname === "/precos" ? "page" : undefined}
-              className={cn(
-                "marketing-nav-item rounded-2xl px-3 py-3.5 text-[15px] font-semibold transition-colors hover:bg-[var(--muted)]",
-                pathname === "/precos" && "bg-[var(--muted)]",
-              )}
-            >
-              Preços
-            </Link>
+            <p className="px-3 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
+              Mais
+            </p>
+            {SECONDARY_LINKS.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={() => setOpen(false)}
+                aria-current={pathname === link.href ? "page" : undefined}
+                className={cn(
+                  "marketing-nav-item rounded-2xl px-3 py-3.5 text-[15px] font-semibold transition-colors hover:bg-[var(--muted)]",
+                  pathname === link.href && "bg-[var(--muted)]",
+                )}
+              >
+                {link.label}
+              </Link>
+            ))}
           </nav>
 
           <div className="marketing-nav-item border-t border-[var(--border)] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
