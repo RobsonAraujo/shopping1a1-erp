@@ -2,7 +2,7 @@ import { CreditCard, KeyRound, ShieldCheck } from "lucide-react";
 import { OAuthCta } from "@/components/marketing/OauthCta";
 import { cn } from "@/lib/utils";
 
-/** Reforço de confiança colado no botão — o ponto da página onde a objeção aparece. */
+/** Reforço de confiança colado no botão, o ponto da página onde a objeção aparece. */
 const REASSURANCE = [
   { icon: ShieldCheck, label: "OAuth oficial do Mercado Livre" },
   { icon: CreditCard, label: "Sem cartão de crédito" },

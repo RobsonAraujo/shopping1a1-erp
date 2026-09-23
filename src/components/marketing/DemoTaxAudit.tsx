@@ -6,7 +6,7 @@ import type { DetalhamentoTributario } from "@/lib/tax-report/types";
 /**
  * Uma venda fictícia (SKU, pedido e valores inventados) processada pela
  * mesma "Memória de cálculo" usada de verdade no relatório tributário
- * (src/components/relatorio-tributario/TaxReportCalculationPanel.tsx) — não
+ * (src/components/relatorio-tributario/TaxReportCalculationPanel.tsx), não
  * é uma versão simplificada, é o componente real com dados de demonstração.
  */
 const DEMO_ROW: DetalhamentoTributario = {

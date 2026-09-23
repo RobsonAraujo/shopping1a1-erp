@@ -9,7 +9,7 @@ import type { DreComputedTotals } from "@/lib/dre/dre-calculations";
 import { cn } from "@/lib/utils";
 
 /**
- * Números ilustrativos de uma loja fictícia — o mesmo gráfico de rosca e o
+ * Números ilustrativos de uma loja fictícia, com o mesmo gráfico de rosca e o
  * mesmo componente de conector "waterfall" usados de verdade no DRE do
  * painel (src/components/dre/DreRevenuePie.tsx), só com dados de demonstração.
  */

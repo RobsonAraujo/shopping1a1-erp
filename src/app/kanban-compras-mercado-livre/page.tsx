@@ -35,14 +35,14 @@ const PILLARS = [
   {
     icon: Columns3,
     title: "Etapas do seu jeito",
-    body: "Renomeie, acrescente, recolha ou pinte a coluna. O visual colorido deixa óbvio o que está na entrada e o que já foi comprado — sem planilha paralela.",
+    body: "Renomeie, acrescente, recolha ou pinte a coluna. O visual colorido deixa óbvio o que está na entrada e o que já foi comprado, sem planilha paralela.",
     wrap: "border-sky-200/80 bg-gradient-to-br from-sky-50 via-white to-white",
     icon_bg: "bg-sky-100 text-sky-700",
   },
   {
     icon: Share2,
     title: "Compartilhado com a loja",
-    body: "Fundo, tela cheia e aparência das colunas ficam na organização. Quem entra no painel vê o mesmo quadro — compras e Full alinhados.",
+    body: "Fundo, tela cheia e aparência das colunas ficam na organização. Quem entra no painel vê o mesmo quadro: compras e Full alinhados.",
     wrap: "border-amber-200/80 bg-gradient-to-br from-amber-50 via-white to-white",
     icon_bg: "bg-amber-100 text-amber-800",
   },
@@ -102,7 +102,7 @@ export default async function KanbanComprasPage() {
           breadcrumb="Kanban"
           eyebrow="Operação · Kanban"
           title="Compras e Full no mesmo estilo Trello, com os números da sua loja"
-          lead="O card nasce quando o estoque vai faltar. Você arrasta do fornecedor até a compra, ou do alerta até a coleta Full. Colunas, cores e tela cheia ficam iguais para toda a equipe — não é um quadro só no seu navegador."
+          lead="O card nasce quando o estoque vai faltar. Você arrasta do fornecedor até a compra, ou do alerta até a coleta Full. Colunas, cores e tela cheia ficam iguais para toda a equipe, e não é um quadro só no seu navegador."
           highlights={[
             "Os cards vêm do giro real, não do seu palpite",
             "Quadro compartilhado com a organização",
@@ -115,7 +115,7 @@ export default async function KanbanComprasPage() {
           eyebrow="Dois quadros"
           eyebrowTone="sky"
           title="Um quadro para pedir, outro para enviar ao Full"
-          lead="Em Compras o card é o fornecedor: SKUs, quantidade sugerida e urgência no mesmo lugar. Em Operações Full o card é o anúncio — estoque ML, galpão e data para agendar a coleta."
+          lead="Em Compras o card é o fornecedor: SKUs, quantidade sugerida e urgência no mesmo lugar. Em Operações Full o card é o anúncio: estoque ML, galpão e data para agendar a coleta."
         >
           <DemoKanban />
         </MarketingSection>
@@ -153,7 +153,7 @@ export default async function KanbanComprasPage() {
                         >
                           DRE
                         </Link>{" "}
-                        sem digitação duplicada. A reposição olha giro — não só
+                        sem digitação duplicada. A reposição olha giro, não só
                         o estoque de ontem.
                       </>
                     )}

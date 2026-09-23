@@ -2,7 +2,7 @@ import { MarketingFooter, MarketingHeader } from "@/components/marketing/Marketi
 import { legalUpdatedLabel } from "@/lib/marketing/legal";
 
 /**
- * Casca das páginas de texto corrido (privacidade, termos). Sem CTA no meio —
+ * Casca das páginas de texto corrido (privacidade, termos). Sem CTA no meio:
  * quem chega aqui está checando um detalhe, não sendo convencido.
  */
 export function LegalPage({

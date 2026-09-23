@@ -4,13 +4,13 @@ import { MarketingSection } from "@/components/marketing/MarketingSection";
 const PAIRS = [
   {
     problem: "A planilha só sabe o que você digitou.",
-    detail: "Tarifa, desconto de tarifa, devolução e ADS chegam depois — na fatura.",
+    detail: "Tarifa, desconto de tarifa, devolução e ADS chegam depois, na fatura.",
     solution: "Tarifa, ADS e devolução entram da própria fatura ML.",
   },
   {
     problem: "A margem do produto não é a margem do anúncio.",
     detail: "O mesmo SKU roda em clássico e premium, com preços e fretes diferentes.",
-    solution: "Margem calculada por anúncio — e também consolidada por SKU.",
+    solution: "Margem calculada por anúncio, e também consolidada por SKU.",
   },
   {
     problem: "O anúncio parece lucrativo até o Product Ads entrar.",
@@ -37,7 +37,7 @@ export function MarketingProblem() {
       eyebrow="O buraco na conta"
       eyebrowTone="amber"
       title="Vender bem no Mercado Livre não é o mesmo que sobrar dinheiro"
-      lead="Faturamento alto com margem negativa é a situação mais comum — e a mais difícil de enxergar, porque os custos que comem o resultado só aparecem depois da venda."
+      lead="Faturamento alto com margem negativa é a situação mais comum, e a mais difícil de enxergar, porque os custos que comem o resultado só aparecem depois da venda."
     >
       <ol className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm">
         {PAIRS.map((pair, index) => (

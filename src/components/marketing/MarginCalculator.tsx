@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { FormInput } from "@/components/ui/form-input";
+import { COST_COLOR, PROFIT_COLOR } from "@/components/marketing/cost-palette";
 import { OAuthCta } from "@/components/marketing/OauthCta";
 import {
   computeFinancialMargin,
@@ -16,7 +17,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Calculadora pública de margem. Importa `computeFinancialMargin` /
- * `computeMarginAfterAds` — exatamente as funções que o painel usa nas telas
+ * `computeMarginAfterAds`, exatamente as funções que o painel usa nas telas
  * de Lucratividade e Precificação. O número que o visitante vê aqui é o mesmo
  * que ele veria logado, só que com dados digitados em vez de vindos da ML.
  */
@@ -35,19 +36,9 @@ const LISTING: Record<
   premium: {
     label: "Premium",
     feePercent: 17,
-    note: "Mais exposição e parcelamento sem juros — a comissão sobe.",
+    note: "Mais exposição e parcelamento sem juros. Em troca, a comissão sobe.",
   },
 };
-
-const COST_COLORS = {
-  productCost: "#be123c",
-  mlFee: "#e11d48",
-  shipping: "#fb7185",
-  tax: "#fda4af",
-  ads: "#fecdd3",
-} as const;
-
-const PROFIT_COLOR = "#10b981";
 
 type FieldKey =
   | "salePrice"
@@ -66,7 +57,7 @@ const DEFAULTS: Record<FieldKey, string> = {
   monthlyUnits: "120",
 };
 
-/** Aceita "1.234,56" e "1234.56" — o vendedor digita do jeito que está acostumado. */
+/** Aceita "1.234,56" e "1234.56": o vendedor digita do jeito que está acostumado. */
 function parseNumber(raw: string): number {
   const normalized = raw
     .replace(/\s/g, "")
@@ -244,7 +235,7 @@ export function MarginCalculator({
             <strong className="font-semibold text-[var(--foreground)]">
               {result.feePercent}%
             </strong>
-            {" "}— ajuste os demais campos com os dados da sua loja.
+            . Ajuste os demais campos com os dados da sua loja.
           </p>
 
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
@@ -297,7 +288,7 @@ export function MarginCalculator({
             a tarifa fixa cobrada em itens de valor baixo, descontos de tarifa
             e campanhas, devoluções e o rateio de custos fixos da operação.
             Conectado, o painel puxa cada um desses itens da fatura e do seu
-            cadastro — por isso o número de lá costuma ser mais duro que o
+            cadastro, por isso o número de lá costuma ser mais duro que o
             daqui.
           </p>
         </div>
@@ -342,7 +333,7 @@ export function MarginCalculator({
                   key={segment.key}
                   style={{
                     width: widthOf(segment.value),
-                    backgroundColor: COST_COLORS[segment.key],
+                    backgroundColor: COST_COLOR[segment.key],
                   }}
                   className="transition-[width] duration-300"
                 />
@@ -367,7 +358,7 @@ export function MarginCalculator({
                   <dt className="flex min-w-0 items-center gap-2 text-[var(--muted-foreground)]">
                     <span
                       className="size-2 shrink-0 rounded-full"
-                      style={{ backgroundColor: COST_COLORS[segment.key] }}
+                      style={{ backgroundColor: COST_COLOR[segment.key] }}
                       aria-hidden
                     />
                     <span className="truncate">{segment.label}</span>
@@ -444,7 +435,7 @@ export function MarginCalculator({
               <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
               <span>
                 Um anúncio de cada vez, com números digitados. Conectado, o
-                painel faz essa conta para o catálogo inteiro — com a tarifa e o
+                painel faz essa conta para o catálogo inteiro, com a tarifa e o
                 ADS reais da sua fatura.
               </span>
             </p>

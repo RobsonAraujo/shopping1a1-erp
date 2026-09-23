@@ -35,7 +35,7 @@ const SOURCES = [
     term: "Receita e tarifas ML",
     body: (
       <>
-        Sincronizadas direto da fatura, sem digitação manual — inclusive
+        Sincronizadas direto da fatura, sem digitação manual, inclusive
         desconto de tarifa e devolução parcial.
       </>
     ),
@@ -86,7 +86,7 @@ export default async function DreMercadoLivrePage() {
           breadcrumb="DRE"
           eyebrow="DRE · Financeiro"
           title="O DRE da sua loja Mercado Livre, sem exportar planilha"
-          lead="Receita, tarifa ML, CMV, impostos e investimento em ADS entram automaticamente a partir da fatura do Mercado Livre. O resultado do mês fecha numa leitura vertical — igual ao número que já apareceu na lucratividade e no tributário."
+          lead="Receita, tarifa ML, CMV, impostos e investimento em ADS entram automaticamente a partir da fatura do Mercado Livre. O resultado do mês fecha numa leitura vertical, igual ao número que já apareceu na lucratividade e no tributário."
           highlights={[
             "Fecha com a fatura, não com estimativa",
             "Cada linha abre a auditoria do cálculo",
@@ -98,7 +98,7 @@ export default async function DreMercadoLivrePage() {
           surface="base"
           eyebrow="Demonstrativo"
           title="O mês inteiro, linha a linha"
-          lead="Cada linha do DRE tem um modal de auditoria mostrando como o número foi calculado — vendas canceladas, devoluções parciais, tarifas especiais, custo do produto e imposto operacional. Sem caixa-preta no resultado do mês."
+          lead="Cada linha do DRE tem um modal de auditoria mostrando como o número foi calculado: vendas canceladas, devoluções parciais, tarifas especiais, custo do produto e imposto operacional. Sem caixa-preta no resultado do mês."
         >
           <DemoDre />
         </MarketingSection>
@@ -108,7 +108,7 @@ export default async function DreMercadoLivrePage() {
           eyebrow="Tendência"
           eyebrowTone="sky"
           title="Evolução mensal e visão em cascata"
-          lead="Faturamento, margem de contribuição e lucro operacional mês a mês, mais o mesmo gráfico de rosca e a cascata do resultado que você vê dentro do painel — não uma versão simplificada."
+          lead="Faturamento, margem de contribuição e lucro operacional mês a mês, mais o mesmo gráfico de rosca e a cascata do resultado que você vê dentro do painel, não uma versão simplificada."
         >
           <DemoDreCharts />
         </MarketingSection>
@@ -118,11 +118,11 @@ export default async function DreMercadoLivrePage() {
           width="narrow"
           eyebrow="Fontes"
           title="O que alimenta o DRE"
-          lead="Quatro entradas, todas já existentes em outro ponto do painel — nada é digitado duas vezes."
+          lead="Quatro entradas, todas já existentes em outro ponto do painel: nada é digitado duas vezes."
         >
           <DefinitionList items={SOURCES} />
           <p className="mt-6 text-sm leading-relaxed text-[var(--muted-foreground)]">
-            O DRE não substitui o contador nem emite nota fiscal — ele apoia o
+            O DRE não substitui o contador nem emite nota fiscal; ele apoia o
             fechamento mensal com números já reconciliados com a fatura do
             Mercado Livre.
           </p>

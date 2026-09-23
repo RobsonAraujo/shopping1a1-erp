@@ -45,7 +45,7 @@ export default async function TermosPage() {
 
       <LegalSection n={2} title="Cadastro e acesso">
         <p>
-          O acesso é feito exclusivamente pelo OAuth do Mercado Livre — não
+          O acesso é feito exclusivamente pelo OAuth do Mercado Livre: não
           existe senha própria do ERP. Cada conta ML conectada pertence a uma
           única organização dentro do sistema.
         </p>
@@ -132,8 +132,8 @@ export default async function TermosPage() {
       <LegalSection n={7} title="Propriedade e seus dados">
         <p>
           O software, a marca e a interface do ERP 1a1 são de titularidade de{" "}
-          {LEGAL.legalName}. <strong>Os dados da sua loja continuam seus</strong> —
-          nós apenas os tratamos para prestar o serviço, conforme a{" "}
+          {LEGAL.legalName}. <strong>Os dados da sua loja continuam seus</strong>.
+          Nós apenas os tratamos para prestar o serviço, conforme a{" "}
           <Link href="/privacidade">Política de privacidade</Link>.
         </p>
       </LegalSection>

@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 
 /**
  * Cartão Open Graph compartilhado pelas páginas de marketing. Satori só
- * suporta flexbox e um subconjunto de CSS — sem grid, e todo container
+ * suporta flexbox e um subconjunto de CSS: sem grid, e todo container
  * precisa de `display: flex` explícito.
  */
 export const OG_SIZE = { width: 1200, height: 630 } as const;

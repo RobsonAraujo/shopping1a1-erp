@@ -112,6 +112,21 @@ a,
   animation: marketing-hero-panel-in 0.35s ease-out both;
 }
 
+/* Preenche sob a aba ativa enquanto o snapshot gira sozinho — a duração vem
+   do componente (ROTATE_MS) via `animation-duration` inline. */
+.marketing-landing .marketing-hero-progress {
+  animation: marketing-hero-progress linear both;
+}
+
+@keyframes marketing-hero-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
 @keyframes marketing-hero-panel-in {
   from {
     opacity: 0;
@@ -166,7 +181,8 @@ a,
 @media (prefers-reduced-motion: reduce) {
   .marketing-landing .marketing-hero-glow,
   .marketing-landing .marketing-hero-live,
-  .marketing-landing .marketing-hero-panel {
+  .marketing-landing .marketing-hero-panel,
+  .marketing-landing .marketing-hero-progress {
     animation: none;
   }
 

@@ -68,7 +68,7 @@ export default async function LucroRealPage() {
           breadcrumb="Lucro Real"
           eyebrow="Tributário · Lucro Real"
           title="Lucro Real de verdade: débito e crédito, venda a venda"
-          lead="A maioria dos painéis de vendedor Mercado Livre para no Simples Nacional. O ERP 1a1 apura PIS/COFINS não cumulativo, ICMS e DIFAL por SKU — a dinâmica real de quem está no Lucro Real."
+          lead="A maioria dos painéis de vendedor Mercado Livre para no Simples Nacional. O ERP 1a1 apura PIS/COFINS não cumulativo, ICMS e DIFAL por SKU, a dinâmica real de quem está no Lucro Real."
           highlights={[
             "Crédito de entrada, não só débito de saída",
             "DIFAL pela UF do comprador, venda a venda",
@@ -80,7 +80,7 @@ export default async function LucroRealPage() {
           surface="base"
           eyebrow="Relatório"
           title="A visão por SKU do relatório mensal"
-          lead="Vendas, unidades, receita, imposto operacional médio e % sobre o faturamento — o peso fiscal real de cada produto, não uma média genérica da empresa toda."
+          lead="Vendas, unidades, receita, imposto operacional médio e % sobre o faturamento: o peso fiscal real de cada produto, não uma média genérica da empresa toda."
         >
           <DemoTributario />
         </MarketingSection>
@@ -109,7 +109,7 @@ export default async function LucroRealPage() {
               .
             </p>
             <p>
-              A apuração apoia o fechamento — não substitui contador nem emite
+              A apuração apoia o fechamento, mas não substitui contador nem emite
               nota fiscal. A responsabilidade fiscal permanece com você e o
               escritório contábil.
             </p>
@@ -122,7 +122,7 @@ export default async function LucroRealPage() {
           eyebrow="Auditoria"
           eyebrowTone="emerald"
           title="A memória de cálculo, aberta"
-          lead="Clique em qualquer venda no relatório e veja exatamente de onde saiu cada número — débito e crédito de ICMS, DIFAL, PIS/COFINS não cumulativo e até os créditos sobre tarifa do Mercado Livre, ADS, frete e custos fixos. Este é o mesmo painel de auditoria do produto, com uma venda de exemplo."
+          lead="Clique em qualquer venda no relatório e veja exatamente de onde saiu cada número: débito e crédito de ICMS, DIFAL, PIS/COFINS não cumulativo e até os créditos sobre tarifa do Mercado Livre, ADS, frete e custos fixos. Este é o mesmo painel de auditoria do produto, com uma venda de exemplo."
         >
           <DemoTaxAudit />
         </MarketingSection>

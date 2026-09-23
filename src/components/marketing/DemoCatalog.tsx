@@ -157,7 +157,7 @@ export function DemoCatalog() {
                   key={`${entry.from}-${entry.status}`}
                   className={segmentClass(entry.status)}
                   style={{ width: `${(entry.minutes / DAY_MINUTES) * 100}%` }}
-                  title={`${statusLabel(entry.status)}: ${entry.from} – ${entry.to} (${fmtMinutes(entry.minutes)}) — ${formatUnitsSold(entry.unitsSold)}`}
+                  title={`${statusLabel(entry.status)}: ${entry.from} – ${entry.to} (${fmtMinutes(entry.minutes)}) · ${formatUnitsSold(entry.unitsSold)}`}
                 />
               ))}
             </div>

@@ -5,14 +5,14 @@ import { OAuthCta } from "@/components/marketing/OauthCta";
 /**
  * Antes: um card de beta + dois cards borrados com "R$ ––,––". O placeholder
  * borrado lia como site inacabado. Agora é o que existe de fato (beta) ao lado
- * dos compromissos para quando houver preço — que é o que o visitante quer
+ * dos compromissos para quando houver preço, que é o que o visitante quer
  * saber antes de conectar a loja.
  */
 const BETA_FEATURES = [
   "Lucratividade por anúncio, com margem pós ADS",
   "DRE mensal com auditoria linha a linha",
   "Apuração de Lucro Real por SKU (PIS/COFINS, ICMS, DIFAL)",
-  "Simples Nacional — RBT12, faixa do Anexo I e DAS",
+  "Simples Nacional: RBT12, faixa do Anexo I e DAS",
   "Catálogo e concorrência de buybox",
   "Estoque, reposição e relatório de envios Full",
   "Kanban de compras e Full compartilhado com a equipe",

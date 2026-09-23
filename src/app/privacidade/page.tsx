@@ -51,7 +51,7 @@ export default async function PrivacidadePage() {
           <strong>armazenados criptografados no servidor</strong> e usados
           apenas para as chamadas de API descritas abaixo. Você pode revogar a
           autorização a qualquer momento nas configurações da sua conta do
-          Mercado Livre — a partir daí o painel deixa de conseguir sincronizar
+          Mercado Livre. A partir daí o painel deixa de conseguir sincronizar
           novos dados.
         </p>
         <p>
@@ -66,24 +66,24 @@ export default async function PrivacidadePage() {
         <p>Ao conectar sua loja, o painel sincroniza da API do Mercado Livre:</p>
         <ul>
           <li>
-            <strong>Identificação do vendedor</strong> — id da conta ML, nome e
+            <strong>Identificação do vendedor</strong>: id da conta ML, nome e
             e-mail (quando o Mercado Livre o disponibiliza).
           </li>
           <li>
-            <strong>Anúncios e catálogo</strong> — títulos, SKU, preços, tipo de
+            <strong>Anúncios e catálogo</strong>: títulos, SKU, preços, tipo de
             anúncio, estoque e situação de concorrência.
           </li>
           <li>
-            <strong>Vendas e faturamento</strong> — pedidos, unidades, tarifas
+            <strong>Vendas e faturamento</strong>: pedidos, unidades, tarifas
             cobradas, descontos de tarifa, devoluções, fretes e valores da
             fatura do Mercado Livre.
           </li>
           <li>
-            <strong>Publicidade</strong> — investimento em Product Ads, usado no
+            <strong>Publicidade</strong>: investimento em Product Ads, usado no
             cálculo de margem pós ADS.
           </li>
           <li>
-            <strong>Operações Full</strong> — envios, coletas e custos
+            <strong>Operações Full</strong>: envios, coletas e custos
             associados.
           </li>
         </ul>
@@ -94,8 +94,8 @@ export default async function PrivacidadePage() {
           custos fixos, estoque de armazém e configurações do kanban.
         </p>
         <p>
-          Registramos ainda dados técnicos mínimos de operação — registros de
-          acesso e erros da aplicação — para manter o serviço no ar e
+          Registramos ainda dados técnicos mínimos de operação (registros de
+          acesso e erros da aplicação) para manter o serviço no ar e
           investigar falhas.
         </p>
       </LegalSection>
@@ -136,14 +136,14 @@ export default async function PrivacidadePage() {
         </p>
         <ul>
           <li>
-            <strong>Mercado Livre</strong> — origem dos dados e autenticação.
+            <strong>Mercado Livre</strong>: origem dos dados e autenticação.
           </li>
           <li>
-            <strong>Hospedagem e banco de dados</strong> — infraestrutura em
+            <strong>Hospedagem e banco de dados</strong>: infraestrutura em
             nuvem onde a aplicação e os dados residem.
           </li>
           <li>
-            <strong>Monitoramento de erros</strong> — captura de falhas da
+            <strong>Monitoramento de erros</strong>: captura de falhas da
             aplicação para diagnóstico técnico.
           </li>
         </ul>

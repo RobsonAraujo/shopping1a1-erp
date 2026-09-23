@@ -7,12 +7,12 @@ const STEPS = [
   {
     n: "01",
     title: "Conecte a conta do Mercado Livre",
-    body: "Testar grátis abre o OAuth oficial — sem senha nova, sem cartão. A organização da sua loja é criada na hora; os tokens ficam criptografados no servidor.",
+    body: "Testar grátis abre o OAuth oficial, sem senha nova e sem cartão. A organização da sua loja é criada na hora; os tokens ficam criptografados no servidor.",
   },
   {
     n: "02",
     title: "Cadastre o que a ML não sabe",
-    body: "Custo de nota, ST e regime (lucro real ou simples nacional) no cadastro. Lucratividade e tributário passam a usar o mesmo número — sem planilha paralela.",
+    body: "Custo de nota, ST e regime (lucro real ou simples nacional) no cadastro. Lucratividade e tributário passam a usar o mesmo número, sem planilha paralela.",
   },
   {
     n: "03",
@@ -36,7 +36,7 @@ export function MarketingHowItStarts({
       align="center"
       eyebrow="Começar"
       title="Três passos. Sem onboarding de planilha."
-      lead="Autoriza a loja, informa custo e regime — o resto o painel calcula."
+      lead="Autoriza a loja, informa custo e regime. O resto o painel calcula."
     >
       <ol className="overflow-hidden rounded-2xl border border-[var(--border)] bg-white shadow-sm">
         {STEPS.map((step, i) => (

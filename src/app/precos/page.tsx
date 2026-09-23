@@ -31,11 +31,11 @@ export const metadata: Metadata = {
 const PRICING_FAQ = [
   {
     q: "Preciso cadastrar cartão?",
-    a: "Não. Você só conecta sua conta do Mercado Livre — nenhum cartão, nenhum dado de pagamento.",
+    a: "Não. Você só conecta sua conta do Mercado Livre: nenhum cartão, nenhum dado de pagamento.",
   },
   {
     q: "Por quanto tempo é gratuito?",
-    a: "Enquanto estivermos em beta. Ainda não temos uma data definida para lançar planos pagos, e quando tivermos, avisamos com antecedência — nada muda sem aviso.",
+    a: "Enquanto estivermos em beta. Ainda não temos uma data definida para lançar planos pagos, e quando tivermos, avisamos com antecedência. Nada muda sem aviso.",
   },
   {
     q: "Vou ser cobrado de surpresa?",
@@ -43,7 +43,7 @@ const PRICING_FAQ = [
   },
   {
     q: "O que acontece com meus dados se eu parar de usar?",
-    a: "Você revoga a autorização do aplicativo direto na sua conta do Mercado Livre — a partir daí não há mais sincronização. Para apagar o histórico já armazenado, basta pedir a exclusão da organização por e-mail.",
+    a: "Você revoga a autorização do aplicativo direto na sua conta do Mercado Livre. A partir daí não há mais sincronização. Para apagar o histórico já armazenado, basta pedir a exclusão da organização por e-mail.",
   },
   {
     q: "Existe limite de anúncios ou de vendas no beta?",
@@ -51,7 +51,7 @@ const PRICING_FAQ = [
   },
 ] as const;
 
-/** FAQPage desta página — específico de preço, separado do FAQ da home. */
+/** FAQPage desta página: específico de preço, separado do FAQ da home. */
 function pricingFaqStructuredData() {
   return {
     "@context": "https://schema.org",
@@ -89,7 +89,7 @@ export default async function PrecosPage() {
           breadcrumb="Preços"
           eyebrow="Beta aberto"
           title="Grátis durante o beta. Sem cartão, sem pegadinha."
-          lead="Estamos em fase beta e liberamos acesso completo ao painel sem cobrança. Quando chegar a hora de cobrar, avisamos antes — com tempo de sobra para você decidir."
+          lead="Estamos em fase beta e liberamos acesso completo ao painel sem cobrança. Quando chegar a hora de cobrar, avisamos antes, com tempo de sobra para você decidir."
         />
 
         <MarketingSection
@@ -114,7 +114,7 @@ export default async function PrecosPage() {
         >
           <div className="legal-prose space-y-5">
             <p>
-              Ainda estamos validando o produto com quem usa de verdade —
+              Ainda estamos validando o produto com quem usa de verdade,
               inclusive com quem está entrando agora. Fixar um preço antes
               disso seria chutar o valor entregue, e é justamente esse tipo de
               chute que o painel existe para evitar.
@@ -123,7 +123,7 @@ export default async function PrecosPage() {
               Quando os planos pagos forem definidos, avisamos por e-mail e
               dentro do próprio painel, com antecedência. Nada muda de uma hora
               para outra, e nenhuma cobrança acontece sem contratação expressa
-              sua — está escrito nos{" "}
+              sua. Está escrito nos{" "}
               <Link href="/termos">Termos de uso</Link>.
             </p>
           </div>
@@ -151,7 +151,7 @@ export default async function PrecosPage() {
           isLoggedIn={isLoggedIn}
           dashboardHref={dashboardHref}
           title="Teste com a sua loja de verdade, sem custo."
-          lead="Lucratividade, tributário, catálogo, kanban e DRE no mesmo lugar — conectando só a conta que você já usa na ML."
+          lead="Lucratividade, tributário, catálogo, kanban e DRE no mesmo lugar, conectando só a conta que você já usa na ML."
         />
       </main>
 

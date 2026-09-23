@@ -10,14 +10,14 @@ import { cn } from "@/lib/utils";
 
 /**
  * Substituto honesto de "prova social" enquanto o produto está em beta: em vez
- * de depoimento, o que dá pra verificar — de onde vem o número, onde o dado
+ * de depoimento, o que dá pra verificar: de onde vem o número, onde o dado
  * fica e o que o painel explicitamente não faz.
  */
 const CARDS = [
   {
     icon: KeyRound,
     title: "Você nunca cria uma senha aqui",
-    body: "O acesso é o OAuth oficial do Mercado Livre. O ERP recebe um token de autorização, guardado criptografado no servidor — nunca o seu usuário e senha da ML. Revogar o acesso é um clique, do lado deles.",
+    body: "O acesso é o OAuth oficial do Mercado Livre. O ERP recebe um token de autorização, guardado criptografado no servidor, nunca o seu usuário e senha da ML. Revogar o acesso é um clique, do lado deles.",
     span: "lg:col-span-3",
   },
   {
@@ -29,7 +29,7 @@ const CARDS = [
   {
     icon: Receipt,
     title: "O número vem da fatura",
-    body: "Tarifa, desconto de tarifa, devolução e ADS são lidos do que o Mercado Livre cobrou — não estimados por uma tabela nossa.",
+    body: "Tarifa, desconto de tarifa, devolução e ADS são lidos do que o Mercado Livre cobrou, não estimados por uma tabela nossa.",
     span: "lg:col-span-2",
   },
   {
@@ -41,7 +41,7 @@ const CARDS = [
   {
     icon: ShieldAlert,
     title: "O que o painel não faz",
-    body: "Não emite nota fiscal e não substitui o seu contador. A apuração é apoio ao fechamento — a responsabilidade fiscal continua sua e do escritório.",
+    body: "Não emite nota fiscal e não substitui o seu contador. A apuração é apoio ao fechamento: a responsabilidade fiscal continua sua e do escritório.",
     span: "lg:col-span-2",
     muted: true,
   },

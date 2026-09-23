@@ -13,7 +13,7 @@ export const LEGAL = {
   cnpj: "[CNPJ]",
   address: "[ENDEREÇO COMPLETO]",
   supportEmail: "contato.shop1a1@gmail.com",
-  /** Data da última revisão dos textos legais — atualizar a cada alteração. */
+  /** Data da última revisão dos textos legais; atualizar a cada alteração. */
   updatedAt: "22 de setembro de 2026",
 } as const;
 

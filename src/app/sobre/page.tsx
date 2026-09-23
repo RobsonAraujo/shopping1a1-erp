@@ -11,7 +11,7 @@ import { LEGAL } from "@/lib/marketing/legal";
 
 const title = "Sobre o ERP 1a1";
 const description =
-  "Por que construímos um painel de lucratividade, imposto e DRE para vendedores do Mercado Livre — e os princípios que guiam cada número que aparece na tela.";
+  "Por que construímos um painel de lucratividade, imposto e DRE para vendedores do Mercado Livre, e os princípios que guiam cada número que aparece na tela.";
 
 export const metadata: Metadata = {
   title,
@@ -31,7 +31,7 @@ const PRINCIPLES = [
   {
     icon: ScanSearch,
     title: "Nenhum número sem origem",
-    body: "Toda linha de resultado abre a conta que a gerou — venda a venda, tarifa a tarifa. Se o painel não consegue mostrar de onde veio, o número não deveria estar lá.",
+    body: "Toda linha de resultado abre a conta que a gerou: venda a venda, tarifa a tarifa. Se o painel não consegue mostrar de onde veio, o número não deveria estar lá.",
   },
   {
     icon: Split,
@@ -61,7 +61,7 @@ const STATUS = [
   },
   {
     label: "Quando houver preço",
-    body: "Os planos pagos ainda estão sendo desenhados. Serão anunciados por e-mail e dentro do painel, com antecedência — nunca como cobrança surpresa.",
+    body: "Os planos pagos ainda estão sendo desenhados. Serão anunciados por e-mail e dentro do painel, com antecedência, nunca como cobrança surpresa.",
   },
 ] as const;
 
@@ -84,7 +84,7 @@ export default async function SobrePage() {
           breadcrumb="Sobre"
           eyebrow="Sobre"
           title="O painel que a gente queria ter para fechar o mês"
-          lead="Quem vende no Mercado Livre não sofre por falta de dado — sofre por dado espalhado. Faturamento numa tela, tarifa na fatura, ADS em outro relatório, custo numa planilha que alguém esqueceu de atualizar. O ERP 1a1 nasceu para juntar isso numa conta só, que fecha."
+          lead="Quem vende no Mercado Livre não sofre por falta de dado, e sim por dado espalhado. Faturamento numa tela, tarifa na fatura, ADS em outro relatório, custo numa planilha que alguém esqueceu de atualizar. O ERP 1a1 nasceu para juntar isso numa conta só, que fecha."
         />
 
         <MarketingSection
@@ -95,8 +95,8 @@ export default async function SobrePage() {
         >
           <div className="legal-prose space-y-5">
             <p>
-              A conta que a maioria dos vendedores faz — preço menos custo do
-              produto menos comissão — dá um número bonito e errado. Ela ignora
+              A conta que a maioria dos vendedores faz (preço menos custo do
+              produto menos comissão) dá um número bonito e errado. Ela ignora
               o que só aparece depois: o desconto de tarifa que veio ou não
               veio, a devolução parcial, o frete subsidiado, o imposto do
               regime e o Product Ads que consumiu parte da margem daquele
@@ -106,7 +106,7 @@ export default async function SobrePage() {
               O resultado é conhecido: a loja cresce em faturamento, o caixa não
               acompanha, e quando alguém finalmente senta para reconciliar,
               descobre que <strong>alguns anúncios estavam vendendo no
-              prejuízo há meses</strong> — geralmente os que mais vendiam,
+              prejuízo há meses</strong>, geralmente os que mais vendiam,
               porque eram os que mais recebiam investimento em ads.
             </p>
             <p>
@@ -122,7 +122,7 @@ export default async function SobrePage() {
           eyebrow="Princípios"
           eyebrowTone="emerald"
           title="Quatro regras que valem mais que a lista de recursos"
-          lead="Elas decidem o que entra e o que não entra no produto — inclusive quando entrar seria mais fácil de vender."
+          lead="Elas decidem o que entra e o que não entra no produto, inclusive quando entrar seria mais fácil de vender."
         >
           <div className="grid gap-5 sm:grid-cols-2">
             {PRINCIPLES.map((item) => {
@@ -182,7 +182,7 @@ export default async function SobrePage() {
               </h3>
               <p className="mt-1.5 text-sm text-[var(--muted-foreground)]">
                 Dúvida, bug, sugestão de recurso ou pedido de exclusão de
-                dados — a mesma caixa de entrada.
+                dados: a mesma caixa de entrada.
               </p>
             </div>
             <a
@@ -198,7 +198,7 @@ export default async function SobrePage() {
           isLoggedIn={isLoggedIn}
           dashboardHref={dashboardHref}
           title="A melhor forma de avaliar é com a sua loja."
-          lead="Conecte a conta do Mercado Livre e veja a margem real dos seus anúncios — leva alguns minutos e não pede cartão."
+          lead="Conecte a conta do Mercado Livre e veja a margem real dos seus anúncios. Leva alguns minutos e não pede cartão."
         />
       </main>
 

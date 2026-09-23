@@ -20,7 +20,7 @@ import { MarketingStickyCta } from "@/components/marketing/StickyCta";
 import { MarketingTrust } from "@/components/marketing/TrustSection";
 import { OAuthCta } from "@/components/marketing/OauthCta";
 
-/** O OAuth já aparece na reassurance logo abaixo do CTA — aqui só o que ela não diz. */
+/** O OAuth já aparece na reassurance logo abaixo do CTA; aqui só o que ela não diz. */
 const TRUST_ITEMS = [
   { icon: Lock, label: "Tokens criptografados no servidor" },
   { icon: Layers, label: "Dados isolados por loja" },
@@ -102,7 +102,7 @@ export function MarketingLanding({
                   depois do Product Ads
                 </strong>
                 , apuração fiscal por SKU e o resultado do mês fechando com a
-                sua fatura — sem planilha paralela.
+                sua fatura, sem planilha paralela.
               </p>
 
               {error ? (
@@ -178,7 +178,7 @@ export function MarketingLanding({
           title="A mesma conta, para o catálogo inteiro"
           lead={
             <>
-              Produto, tipo, preço, margem e pós ADS — as colunas do painel.
+              Produto, tipo, preço, margem e pós ADS: as colunas do painel.
               Verde quando sobra, vermelho quando o anúncio come a operação,
               inclusive depois do Product Ads.{" "}
               <InlineLink href="/margem-de-contribuicao-mercado-livre">
@@ -200,7 +200,7 @@ export function MarketingLanding({
           lead={
             <>
               A visão Por SKU do relatório: vendas, unidades, receita, imposto
-              operacional médio e % operacional — quanto cada produto leva do
+              operacional médio e % operacional: quanto cada produto leva do
               resultado.{" "}
               <InlineLink href="/lucro-real-mercado-livre">
                 Veja a apuração completa de Lucro Real
@@ -210,7 +210,7 @@ export function MarketingLanding({
           }
           headingExtra={
             <p className="mt-4 text-sm leading-relaxed text-[var(--muted-foreground)]">
-              Apoio à apuração — não substitui contador nem emite nota fiscal.
+              Apoio à apuração: não substitui contador nem emite nota fiscal.
               Empresas do Simples configuram regime e alíquota efetiva do DAS
               em Configurações; margem e precificação já usam esse número.{" "}
               <InlineLink href="/simples-nacional-mercado-livre">
@@ -232,7 +232,7 @@ export function MarketingLanding({
           lead={
             <>
               Receita, custos e resultado numa leitura vertical. Tarifa, CMV e
-              ADS vêm da fatura do Mercado Livre — sem exportar planilha para
+              ADS vêm da fatura do Mercado Livre, sem exportar planilha para
               bater o número que já apareceu na lucratividade.{" "}
               <InlineLink href="/dre-mercado-livre">
                 Saiba mais sobre o DRE
@@ -251,7 +251,7 @@ export function MarketingLanding({
           eyebrow="Concorrência"
           eyebrowTone="amber"
           title="Lançou um produto novo? Veja se ele vende de verdade"
-          lead="Timeline do dia: quando o anúncio estava ganhando, perdendo ou compartilhando o buybox — e quantas vendas saíram em cada trecho. Vender mesmo perdendo é sinal de demanda própria, não só de preço vencedor."
+          lead="Timeline do dia: quando o anúncio estava ganhando, perdendo ou compartilhando o buybox, e quantas vendas saíram em cada trecho. Vender mesmo perdendo é sinal de demanda própria, não só de preço vencedor."
         >
           <DemoCatalog />
         </MarketingSection>
@@ -266,7 +266,7 @@ export function MarketingLanding({
           lead={
             <>
               O card nasce quando o estoque vai faltar. Arraste o fornecedor da
-              entrada até a compra — ou o anúncio até a coleta Full. Colunas,
+              entrada até a compra, ou o anúncio até a coleta Full. Colunas,
               cores e tela cheia iguais para toda a equipe.{" "}
               <InlineLink href="/kanban-compras-mercado-livre">
                 Saiba mais sobre o kanban
@@ -293,7 +293,7 @@ export function MarketingLanding({
           isLoggedIn={isLoggedIn}
           dashboardHref={dashboardHref}
           title="Teste com a sua loja de verdade."
-          lead="Conecte a conta do Mercado Livre e veja a margem real dos seus anúncios em minutos — lucratividade, tributário, kanban e DRE no mesmo painel."
+          lead="Conecte a conta do Mercado Livre e veja a margem real dos seus anúncios em minutos: lucratividade, tributário, kanban e DRE no mesmo painel."
         />
       </main>
 

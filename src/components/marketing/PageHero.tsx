@@ -22,7 +22,7 @@ export function PageHero({
   eyebrow: string;
   title: React.ReactNode;
   lead: React.ReactNode;
-  /** Trilha para a home — ajuda navegação e dá contexto ao crawler. */
+  /** Trilha para a home: ajuda navegação e dá contexto ao crawler. */
   breadcrumb?: string;
   /** Até 3 fatos curtos, logo abaixo do CTA. */
   highlights?: readonly string[];

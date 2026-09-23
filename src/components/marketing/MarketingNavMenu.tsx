@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Desktop: as cinco páginas de funcionalidade cabiam na barra, mas espremidas
- * e sem contexto. Aqui elas viram um painel com o `hint` de cada uma — o mesmo
+ * e sem contexto. Aqui elas viram um painel com o `hint` de cada uma, o mesmo
  * texto que o drawer mobile já mostrava.
  */
 const CLOSE_DELAY_MS = 120;

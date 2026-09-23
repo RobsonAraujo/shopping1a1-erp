@@ -52,7 +52,7 @@ export default async function MargemContribuicaoPage() {
           breadcrumb="Lucratividade"
           eyebrow="Lucratividade · Margem"
           title="Calcule a margem de contribuição de cada anúncio do Mercado Livre"
-          lead="Preço, tarifa ML, custo do produto e investimento em Product Ads — tudo por SKU, numa tabela só. Verde quando sobra, vermelho quando o anúncio come a operação, mesmo depois do ADS."
+          lead="Preço, tarifa ML, custo do produto e investimento em Product Ads: tudo por SKU, numa tabela só. Verde quando sobra, vermelho quando o anúncio come a operação, mesmo depois do ADS."
           highlights={[
             "Margem por anúncio, não só por SKU",
             "Pós ADS na coluna ao lado da margem",
@@ -66,7 +66,7 @@ export default async function MargemContribuicaoPage() {
           align="center"
           eyebrow="Calculadora grátis"
           title="Faça a conta de um anúncio agora"
-          lead="Sem cadastro. Esta calculadora roda exatamente as mesmas funções de margem que o painel usa nas telas de Lucratividade e Precificação — o resultado aqui é o resultado lá."
+          lead="Sem cadastro. Esta calculadora roda exatamente as mesmas funções de margem que o painel usa nas telas de Lucratividade e Precificação. O resultado aqui é o resultado lá."
         >
           <MarginCalculator
             isLoggedIn={isLoggedIn}
@@ -94,7 +94,7 @@ export default async function MargemContribuicaoPage() {
         >
           <div className="legal-prose space-y-5">
             <p>
-              Um mesmo produto pode ter mais de um anúncio ativo — com preços,
+              Um mesmo produto pode ter mais de um anúncio ativo, com preços,
               tipo de anúncio (clássico ou premium) e frete diferentes. A
               margem calculada por anúncio mostra exatamente qual publicação
               está sustentando a operação e qual está vendendo no prejuízo,
@@ -104,7 +104,7 @@ export default async function MargemContribuicaoPage() {
               É também onde o Product Ads muda o jogo: o investimento não é
               distribuído igualmente entre as publicações. Um anúncio premium
               com TACOS alto pode ter margem de contribuição saudável e{" "}
-              <strong>resultado negativo depois do ADS</strong> — e a conta por
+              <strong>resultado negativo depois do ADS</strong>, e a conta por
               SKU esconde exatamente esse caso.
             </p>
             <p>
@@ -114,7 +114,7 @@ export default async function MargemContribuicaoPage() {
               <Link href="/simples-nacional-mercado-livre">
                 seu regime tributário
               </Link>
-              — cadastra uma vez, usa nos três lugares.
+              . Cadastra uma vez, usa nos três lugares.
             </p>
           </div>
         </MarketingSection>

@@ -5,7 +5,7 @@ import { ANEXO_I_FAIXAS } from "@/lib/simples-nacional/anexo-i-table";
 import { SimplesDasComposicaoPanel } from "@/components/simples-nacional/SimplesDasComposicaoPanel";
 
 /**
- * Faixa 3 é dado real da tabela oficial do Anexo I (LC 123/2006) — só o
+ * Faixa 3 é dado real da tabela oficial do Anexo I (LC 123/2006); só o
  * faturamento (RBT12) e o DAS do mês são fictícios, pra ilustrar uma loja
  * de exemplo.
  */
@@ -38,7 +38,7 @@ function Rbt12Card() {
         </div>
         <p className="mt-2 text-xs text-[var(--muted-foreground)]">
           Faltam {formatFinancialMoney(FALTAM_PARA_PROXIMA_FAIXA)} para entrar na Faixa{" "}
-          {FAIXA.faixa + 1} — o painel avisa antes de você cruzar a linha.
+          {FAIXA.faixa + 1}. O painel avisa antes de você cruzar a linha.
         </p>
       </div>
 

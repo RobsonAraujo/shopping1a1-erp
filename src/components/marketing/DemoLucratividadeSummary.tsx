@@ -74,7 +74,7 @@ export function DemoLucratividadeSummary() {
       </div>
       <p className="mt-2 text-xs text-[var(--muted-foreground)]">
         Descubra em segundos onde está o prejuízo e quais anúncios ainda
-        precisam de custo cadastrado — antes que isso vire uma surpresa no DRE.
+        precisam de custo cadastrado, antes que isso vire uma surpresa no DRE.
       </p>
     </div>
   );

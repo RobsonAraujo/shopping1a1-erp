@@ -16,7 +16,7 @@ const FEATURES = [
     title: "Operações Full",
     lead: "O Full deixa de ser planilha paralela. Você vê o fluxo de envio e o custo real de cada coleta.",
     points: [
-      "Kanban de agendamento e coleta — o que falta enviar e o que já saiu",
+      "Kanban de agendamento e coleta: o que falta enviar e o que já saiu",
       "Relatório de envios com custo de coleta por unidade",
       "Esses custos entram no DRE, sem digitação duplicada",
     ],
@@ -32,7 +32,7 @@ const FEATURES = [
       chip: "bg-amber-100 text-amber-900",
     },
     title: "Compras e reposição",
-    lead: "Decidir o pedido com o fornecedor olhando giro e ruptura — não só o estoque de ontem.",
+    lead: "Decidir o pedido com o fornecedor olhando giro e ruptura, não só o estoque de ontem.",
     points: [
       "Resumo por fornecedor: o que está em falta e o que está parado",
       "Ciclos de reposição no kanban, do pedido à chegada",
@@ -51,7 +51,7 @@ const FEATURES = [
     title: "Insights",
     lead: "Onde o dinheiro trava: SKU parado, receita concentrada em poucos anúncios, ads e faturamento perdido por falta de estoque.",
     points: [
-      "Rotação baixa — capital preso em produto que não sai",
+      "Rotação baixa: capital preso em produto que não sai",
       "Concentração de receita (Pareto) para não depender de um anúncio",
       "Potencial de faturamento se não houvesse ruptura de estoque",
     ],
