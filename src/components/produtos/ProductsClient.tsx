@@ -983,68 +983,45 @@ export function ProductsClient() {
 
   return (
     <div className="space-y-6">
-      <Card className="rounded-2xl">
-        <CardHeader className="flex flex-row items-center gap-3 space-y-0 pb-2 sm:pb-2">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--primary)]/10 text-[var(--primary)]">
-            <Percent className="size-4" aria-hidden />
-          </span>
-          <CardTitle className="text-base">
-            {data?.taxRegime === "SIMPLES"
-              ? "Alíquota efetiva do Simples Nacional"
-              : "PIS/COFINS da empresa"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {data?.taxRegime === "SIMPLES" ? (
-            <div>
-              <p className="text-sm text-[var(--muted-foreground)]">
-                Alíquota efetiva do DAS
-              </p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums text-[var(--foreground)]">
-                {loading && data === null
-                  ? "—"
-                  : formatFinancialPercent(data.simplesAliquotaEfetivaPercent)}
-              </p>
-              <p className="mt-3 text-xs text-[var(--muted-foreground)]">
-                {data.simplesAliquotaEfetivaPercent == null
-                  ? "Ainda não configurada — Imposto e margem ficam indisponíveis até configurar. "
-                  : ""}
-                Edite em{" "}
-                <Link
-                  href="/dashboard/configuracoes/empresa"
-                  className="font-medium text-[var(--primary)] underline underline-offset-2"
-                >
-                  Configurações &gt; Empresa
-                </Link>
-                .
-              </p>
-            </div>
-          ) : (
-            <div>
-              <p className="text-sm text-[var(--muted-foreground)]">
-                Alíquota PIS/COFINS
-              </p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums text-[var(--foreground)]">
-                {loading && data === null
-                  ? "—"
-                  : formatFinancialPercent(data?.pisCofinsPercent ?? null)}
-              </p>
-              <p className="mt-3 text-xs text-[var(--muted-foreground)]">
-                Usada no cálculo de crédito na compra e no imposto para
-                precificar, exceto em produtos monofásicos. Edite PIS e COFINS
-                em{" "}
-                <Link
-                  href="/dashboard/configuracoes/tributario"
-                  className="font-medium text-[var(--primary)] underline underline-offset-2"
-                >
-                  Configurações &gt; Config. tributária
-                </Link>
-                .
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Só o Simples tem cartão de alíquota aqui: é o único número que
+          governa Imposto e margem no regime (e o aviso de "não configurada"
+          explica a coluna vazia). A alíquota de PIS/COFINS do Lucro Real saiu
+          — ela já é mostrada e editada em Config. tributária. */}
+      {data?.taxRegime === "SIMPLES" ? (
+        <Card className="rounded-2xl">
+          <CardHeader className="flex flex-row items-center gap-3 space-y-0 pb-2 sm:pb-2">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--primary)]/10 text-[var(--primary)]">
+              <Percent className="size-4" aria-hidden />
+            </span>
+            <CardTitle className="text-base">
+              Alíquota efetiva do Simples Nacional
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-[var(--muted-foreground)]">
+              Alíquota efetiva do DAS
+            </p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums text-[var(--foreground)]">
+              {loading && data === null
+                ? "—"
+                : formatFinancialPercent(data.simplesAliquotaEfetivaPercent)}
+            </p>
+            <p className="mt-3 text-xs text-[var(--muted-foreground)]">
+              {data.simplesAliquotaEfetivaPercent == null
+                ? "Ainda não configurada — Imposto e margem ficam indisponíveis até configurar. "
+                : ""}
+              Edite em{" "}
+              <Link
+                href="/dashboard/configuracoes/empresa"
+                className="font-medium text-[var(--primary)] underline underline-offset-2"
+              >
+                Configurações &gt; Empresa
+              </Link>
+              .
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {data?.taxRegime !== "SIMPLES" && data?.taxReportGeneratedAt ? (
         <p className="text-xs text-[var(--muted-foreground)]">
