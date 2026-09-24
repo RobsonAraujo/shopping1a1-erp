@@ -51,6 +51,15 @@ export async function POST(_request: NextRequest, context: RouteContext) {
         { status: 404 },
       );
     }
+    const [duplicate] = result.skippedDuplicate;
+    if (duplicate) {
+      return NextResponse.json(
+        {
+          error: `O SKU "${duplicate.sku}" deste anúncio já pertence a outro produto (${duplicate.conflictsWith}). Sincronizar deixaria os dois com o mesmo SKU, e um deles ficaria inalcançável nas telas que selecionam produto por SKU. Ajuste o SKU no Mercado Livre antes de sincronizar.`,
+        },
+        { status: 409 },
+      );
+    }
 
     const [settings, product] = await Promise.all([
       ensureCompanySettings(organizationId),

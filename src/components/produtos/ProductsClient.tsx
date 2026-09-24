@@ -573,12 +573,8 @@ export function ProductsClient() {
   >(null);
   const [importing, setImporting] = useState(false);
   const [syncingSkuId, setSyncingSkuId] = useState<string | null>(null);
-  // Sync em massa ("Sincronizar SKUs") está fora da UI de propósito até o
-  // guard-rail de SKU duplicado entrar: `Product.sku` não tem unique
-  // constraint, e um dealer que use o mesmo seller_custom_field no anúncio de
-  // catálogo e no próprio veria os dois produtos colapsarem no mesmo texto de
-  // uma vez só. A rota POST /api/products/sync-skus e o serviço continuam
-  // implementados; o sync individual por linha segue disponível.
+  const [syncingAllSkus, setSyncingAllSkus] = useState(false);
+  const [confirmSyncAll, setConfirmSyncAll] = useState(false);
   const [kitsModalOpen, setKitsModalOpen] = useState(false);
   const [importAllOpen, setImportAllOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -703,6 +699,58 @@ export function ProductsClient() {
         : [...prev.products, product];
       return { ...prev, products };
     });
+  }
+
+  async function syncAllSkus() {
+    setConfirmSyncAll(false);
+    setSyncingAllSkus(true);
+    try {
+      const res = await fetch("/api/products/sync-skus", { method: "POST" });
+      if (!res.ok) {
+        toastError(await readApiError(res, "products_sku_sync_failed"));
+        return;
+      }
+      const json = (await res.json()) as {
+        total: number;
+        updated: number;
+        unchanged: number;
+        withoutSku: number;
+        notFound: number;
+        skippedDuplicate: number;
+        failedBatches: number;
+      };
+
+      const parts = [
+        `${json.updated} ${json.updated === 1 ? "SKU atualizado" : "SKUs atualizados"}`,
+        `${json.unchanged} sem mudança`,
+      ];
+      if (json.withoutSku > 0) parts.push(`${json.withoutSku} sem SKU no anúncio`);
+      if (json.notFound > 0) {
+        parts.push(`${json.notFound} não encontrado(s) no Mercado Livre`);
+      }
+      if (json.skippedDuplicate > 0) {
+        parts.push(
+          `${json.skippedDuplicate} pulado(s) porque o SKU do anúncio já pertence a outro produto`,
+        );
+      }
+      if (json.failedBatches > 0) {
+        parts.push(`${json.failedBatches} lote(s) falharam — rode de novo para completar`);
+      }
+      const summary = `${parts.join(", ")}.`;
+
+      // Pulo por duplicata ou lote falho pede ação sua, então não pode passar
+      // como sucesso comum.
+      if (json.skippedDuplicate > 0 || json.failedBatches > 0) {
+        toast.warning(summary, { duration: 12000 });
+      } else {
+        toast.success(summary);
+      }
+      if (json.updated > 0) await load();
+    } catch {
+      toastError("Falha de rede ao sincronizar os SKUs.");
+    } finally {
+      setSyncingAllSkus(false);
+    }
   }
 
   async function syncProductSku(mlItemId: string) {
@@ -909,6 +957,20 @@ export function ProductsClient() {
             variant="outline"
             size="sm"
             className="gap-2"
+            disabled={loading || syncingAllSkus}
+            onClick={() => setConfirmSyncAll(true)}
+          >
+            <RefreshCw
+              className={cn("size-4", syncingAllSkus && "animate-spin")}
+              aria-hidden
+            />
+            Sincronizar SKUs
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-2"
             onClick={() => setImportAllOpen(true)}
           >
             <Download className="size-4" aria-hidden />
@@ -1066,6 +1128,26 @@ export function ProductsClient() {
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={() => void confirmDelete()}>
               Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={confirmSyncAll}
+        onOpenChange={(next) => !next && setConfirmSyncAll(false)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sincronizar SKUs de todos os produtos?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`Vamos ler os ${sortedProducts.length} anúncios no Mercado Livre e regravar o SKU dos que mudaram. Custo, imposto e nivelamentos do DRE não são alterados. Produtos cujo SKU colidiria com outro produto são pulados e aparecem no resumo. Pode levar alguns minutos.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void syncAllSkus()}>
+              Sincronizar
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

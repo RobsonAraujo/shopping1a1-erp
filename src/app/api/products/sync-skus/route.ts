@@ -39,6 +39,7 @@ export async function POST() {
       unchanged: result.unchanged,
       withoutSku: result.withoutSku.length,
       notFound: result.notFound.length,
+      skippedDuplicate: result.skippedDuplicate.length,
       failedBatches: result.failedBatches,
     });
   } catch (e) {

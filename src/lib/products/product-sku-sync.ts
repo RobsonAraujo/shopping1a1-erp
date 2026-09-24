@@ -19,6 +19,14 @@ export type SkuSyncUpdate = {
   to: string;
 };
 
+export type SkuSyncSkip = {
+  mlItemId: string;
+  /** SKU que o anúncio tem no ML e que não pôde ser gravado. */
+  sku: string;
+  /** Produto que já ocupa esse texto de SKU. */
+  conflictsWith: string;
+};
+
 export type SkuSyncResult = {
   /** Produtos cujo `sku` foi reescrito com o valor atual do anúncio. */
   updated: SkuSyncUpdate[];
@@ -28,6 +36,8 @@ export type SkuSyncResult = {
   withoutSku: string[];
   /** Anúncio não voltou no multiget (deletado/sem acesso) — valor gravado preservado. */
   notFound: string[];
+  /** Atualizações recusadas porque criariam SKU duplicado na organização. */
+  skippedDuplicate: SkuSyncSkip[];
   /** Lotes que falharam na chamada ao ML; os produtos deles não foram avaliados. */
   failedBatches: number;
 };
@@ -38,8 +48,64 @@ function emptyResult(): SkuSyncResult {
     unchanged: 0,
     withoutSku: [],
     notFound: [],
+    skippedDuplicate: [],
     failedBatches: 0,
   };
+}
+
+/**
+ * Decide quais atualizações de SKU podem ser gravadas sem criar texto
+ * duplicado dentro da organização.
+ *
+ * `Product.sku` não tem unique constraint, e o texto ainda é usado para
+ * resolver produto em alguns caminhos (o seletor de "Nivelar custos" no DRE,
+ * por exemplo, é montado por SKU). Dois produtos com o mesmo texto deixam um
+ * deles inalcançável na tela. O ERP não pode criar essa situação sozinho.
+ *
+ * Isso não é hipotético em multi-tenant: um vendedor que use o mesmo
+ * `seller_custom_field` no anúncio de catálogo e no próprio — padrão comum —
+ * teria os dois produtos colapsando no mesmo texto de uma vez só.
+ *
+ * Duplicatas que **já existem** não são tocadas: o objetivo é não piorar, não
+ * arrumar o passado. E a decisão é deliberadamente conservadora — se A quer o
+ * texto que B só vai liberar mais adiante no mesmo lote, A é recusado em vez
+ * de arriscar. Como o resultado é reportado, basta rodar de novo.
+ */
+export function planSkuUpdates(
+  currentSkuByMlItemId: Map<string, string | null>,
+  updates: SkuSyncUpdate[],
+): { applied: SkuSyncUpdate[]; skippedDuplicate: SkuSyncSkip[] } {
+  const skuOwner = new Map<string, string>();
+  for (const [mlItemId, sku] of currentSkuByMlItemId) {
+    const key = sku ? normalizeProductSku(sku) : "";
+    // Duplicata pré-existente: o primeiro dono responde pelo texto.
+    if (key && !skuOwner.has(key)) skuOwner.set(key, mlItemId);
+  }
+
+  const applied: SkuSyncUpdate[] = [];
+  const skippedDuplicate: SkuSyncSkip[] = [];
+
+  for (const update of updates) {
+    const owner = skuOwner.get(update.to);
+    if (owner && owner !== update.mlItemId) {
+      skippedDuplicate.push({
+        mlItemId: update.mlItemId,
+        sku: update.to,
+        conflictsWith: owner,
+      });
+      continue;
+    }
+    // Este produto larga o texto antigo ao assumir o novo, liberando-o para
+    // outro produto do mesmo lote (caso de troca de SKU entre anúncios).
+    const previousKey = update.from ? normalizeProductSku(update.from) : "";
+    if (previousKey && skuOwner.get(previousKey) === update.mlItemId) {
+      skuOwner.delete(previousKey);
+    }
+    skuOwner.set(update.to, update.mlItemId);
+    applied.push(update);
+  }
+
+  return { applied, skippedDuplicate };
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -132,7 +198,20 @@ export async function syncProductSkusFromMl(
     updates.push({ mlItemId, from: current, to: nextSku });
   }
 
-  for (const writeChunk of chunk(updates, WRITE_CHUNK_SIZE)) {
+  // Colisão precisa ser avaliada contra a organização inteira, não só contra
+  // os produtos deste lote: o texto novo pode já pertencer a um produto que
+  // nem entrou no sync.
+  const orgProducts = await prisma.product.findMany({
+    where: { organizationId },
+    select: { mlItemId: true, sku: true },
+  });
+  const { applied, skippedDuplicate } = planSkuUpdates(
+    new Map(orgProducts.map((p) => [p.mlItemId, p.sku])),
+    updates,
+  );
+  result.skippedDuplicate = skippedDuplicate;
+
+  for (const writeChunk of chunk(applied, WRITE_CHUNK_SIZE)) {
     await Promise.all(
       writeChunk.map((update) =>
         prisma.product.update({
@@ -142,7 +221,7 @@ export async function syncProductSkusFromMl(
       ),
     );
   }
-  result.updated = updates;
+  result.updated = applied;
 
   // Os `ItemBody` já estão em mãos e `upsertListingsFromItems` só escreve o que
   // mudou — título/imagem/status do anúncio saem de graça nesta mesma passada.
