@@ -360,6 +360,13 @@ function ProductFormModal({
           <SheetTitle>{title}</SheetTitle>
         </SheetHeader>
         <SheetBody>
+          {/* Topo do corpo, não o rodapé: o formulário é longo e rola, e um
+              aviso no fim ficaria fora da vista justamente quando aparece. */}
+          {error ? (
+            <UserFeedback className="mb-4" onDismiss={() => setError(null)}>
+              {error}
+            </UserFeedback>
+          ) : null}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <FormInput
@@ -514,14 +521,14 @@ function ProductFormModal({
                   }
                   className="sm:col-span-2"
                 />
-                <MaskedPercentField
-                  id="sale-icms"
-                  label="Imposto venda ICMS"
-                  value={form.saleIcmsPercent}
-                  onValueChange={(v) =>
-                    setForm((f) => ({ ...f, saleIcmsPercent: v }))
-                  }
-                />
+                {/* "Imposto venda ICMS" (`saleIcmsPercent`) saiu da tela: só
+                    alimentava `computePricingTaxPercent`, cujo resultado não é
+                    lido por ninguém — DRE, kits, Lucratividade e Meus Produtos
+                    tiram o imposto do relatório tributário, e o cálculo de
+                    ICMS/DIFAL usa a tabela por UF de propósito (ver
+                    `icms-difal.ts`). O campo continua no banco e no payload
+                    (default 0) porque `repair-snapshot-apuracao` usa a
+                    presença dele para detectar snapshot antigo. */}
               </>
             )}
             <MaskedMoneyField
@@ -531,7 +538,6 @@ function ProductFormModal({
               onValueChange={(v) => setForm((f) => ({ ...f, pmaPrice: v }))}
             />
           </div>
-          {error ? <UserFeedback className="mt-4">{error}</UserFeedback> : null}
         </SheetBody>
         <SheetFooter>
           <Button type="button" variant="outline" onClick={onClose}>

@@ -161,13 +161,10 @@ export function DreProductCostLevelingFields({
               Produto importado
             </label>
           </div>
-          <MaskedPercentField
-            id={`${idPrefix}-sale-icms`}
-            label="Imposto venda ICMS"
-            value={form.saleIcmsPercent}
-            onValueChange={(v) => onChange({ saleIcmsPercent: v })}
-            readOnly={busy}
-          />
+          {/* "Imposto venda ICMS" (`saleIcmsPercent`) saiu da tela junto com o
+              cadastro de produto — nenhum cálculo lê o valor. O campo segue
+              sendo gravado (preenchido a partir do produto ao selecionar um
+              SKU), então nivelamentos antigos preservam o que já tinham. */}
           <MaskedMoneyField
             id={`${idPrefix}-pma`}
             label="PMA (preço mínimo anunciável)"
