@@ -129,7 +129,10 @@ export function Combobox({
           {label}
         </label>
       ) : null}
-      <Popover open={open} onOpenChange={handleOpenChange}>
+      {/* `modal` é o que faz a lista rolar dentro de um Sheet: o scroll-lock
+          do modal bloqueia a roda fora do conteúdo dele, e só uma trava
+          aninhada (a que o popover modal cria) devolve o scroll ao painel. */}
+      <Popover open={open} onOpenChange={handleOpenChange} modal>
         <PopoverTrigger asChild>
           <button
             id={triggerId}

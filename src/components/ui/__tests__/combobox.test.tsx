@@ -129,6 +129,38 @@ describe("Combobox", () => {
     unmount();
   });
 
+  /**
+   * Regressão: sem `modal` no Popover, o scroll-lock do Sheet bloqueia a roda
+   * do mouse fora do conteúdo dele — a lista abria mas não rolava. O popover
+   * modal cria a própria trava aninhada, que passa a valer no painel.
+   *
+   * O jsdom não tem layout (tudo mede zero), então a roda do mouse não é
+   * testável aqui; o que dá para afirmar é que o ramo modal do Radix montou —
+   * ele é quem instala essa trava, e marca `aria-hidden` em todo o resto.
+   */
+  it("abre no modo modal, que é o que devolve o scroll ao painel", async () => {
+    const { unmount } = renderIntoDocument(<ComboboxInSheet onValueChange={() => {}} />);
+    try {
+      const trigger = openPanel();
+      await waitFor(() => {
+        assert.ok(panelContent());
+      });
+
+      // `hideOthers` (ramo modal) marca a árvore do Sheet como aria-hidden.
+      let sheetRoot = trigger;
+      while (sheetRoot.parentElement && sheetRoot.parentElement !== document.body) {
+        sheetRoot = sheetRoot.parentElement;
+      }
+      assert.equal(
+        sheetRoot.getAttribute("aria-hidden"),
+        "true",
+        "popover não montou no modo modal — sem a trava aninhada a lista não rola dentro do Sheet",
+      );
+    } finally {
+      unmount();
+    }
+  });
+
   it("seleciona a opção clicada", async () => {
     let selected: string | null = null;
     const { unmount } = renderIntoDocument(
