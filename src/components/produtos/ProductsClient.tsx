@@ -462,7 +462,7 @@ function ProductFormModal({
             )}
             <MaskedMoneyField
               id="pma-price"
-              label="PMA (preço máximo autorizado de venda)"
+              label="PMA (preço mínimo anunciável)"
               value={form.pmaPrice}
               onValueChange={(v) => setForm((f) => ({ ...f, pmaPrice: v }))}
             />

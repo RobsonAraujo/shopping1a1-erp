@@ -1,4 +1,5 @@
 import { getMercadoLibreConfig } from "./config";
+import { fetchWithRetry, MlApiFetchError } from "./fetch-with-retry";
 
 export type ItemPromotionRecord = {
   id?: string;
@@ -148,20 +149,16 @@ export async function fetchItemPromotions(
   const u = new URL(`${apiBase}/seller-promotions/items/${itemId}`);
   u.searchParams.set("app_version", "v2");
 
-  const res = await fetch(u.toString(), {
-    headers: { Authorization: `Bearer ${accessToken}` },
-    cache: "no-store",
-  });
-
-  if (res.status === 404) {
-    return [];
-  }
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(
-      `seller-promotions/items/${itemId} failed: ${res.status} ${text}`,
-    );
+  let res: Response;
+  try {
+    res = await fetchWithRetry(u.toString(), {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    });
+  } catch (error) {
+    // 404 aqui é anúncio sem nenhuma promoção, não falha.
+    if (error instanceof MlApiFetchError && error.status === 404) return [];
+    throw error;
   }
 
   const data: unknown = await res.json();

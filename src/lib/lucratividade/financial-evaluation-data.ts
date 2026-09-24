@@ -267,6 +267,56 @@ type FastRowFields = Omit<
 >;
 
 /**
+ * PMA indexado por identidade do anúncio (`mlItemId`, 1:1) com fallback por
+ * texto de SKU — mesma convenção do custo (ver `indexProductPricingLookup` em
+ * src/lib/products/product-data.ts). `Product.sku` não é único, então casar só
+ * por SKU fazia o PMA de um anúncio vazar para todo anúncio que
+ * compartilhasse o mesmo texto de SKU (inclusive componentes de kit).
+ */
+export type PmaLookup = {
+  byMlItemId: Map<string, number>;
+  bySku: Map<string, number>;
+  /** Anúncios que têm cadastro próprio em Meus Produtos, com ou sem PMA. */
+  linkedMlItemIds: Set<string>;
+};
+
+export function indexPmaLookup(
+  products: { mlItemId: string; sku: string | null; pmaPrice: unknown }[],
+): PmaLookup {
+  const byMlItemId = new Map<string, number>();
+  const bySku = new Map<string, number>();
+  const linkedMlItemIds = new Set<string>();
+  for (const product of products) {
+    linkedMlItemIds.add(product.mlItemId);
+    if (product.pmaPrice == null) continue;
+    const pmaPrice = Number(product.pmaPrice);
+    if (!Number.isFinite(pmaPrice)) continue;
+    byMlItemId.set(product.mlItemId, pmaPrice);
+    const sku = product.sku ? normalizeProductSku(product.sku) : null;
+    // "primeiro que chega" vence no fallback por sku-texto, igual a todo
+    // fallback por SKU do projeto.
+    if (sku && !bySku.has(sku)) bySku.set(sku, pmaPrice);
+  }
+  return { byMlItemId, bySku, linkedMlItemIds };
+}
+
+export function resolvePmaPrice(
+  lookup: PmaLookup | undefined,
+  mlItemId: string,
+  sku: string | null | undefined,
+): number | null {
+  if (!lookup) return null;
+  const own = lookup.byMlItemId.get(mlItemId);
+  if (own !== undefined) return own;
+  // Anúncio com cadastro próprio e sem PMA não herda o PMA de um irmão de
+  // mesmo texto de SKU — era assim que o selo "Abaixo do PMA" aparecia em
+  // produto que não está no PMA. O fallback por SKU só vale para anúncio sem
+  // vínculo nenhum (tem vendedor que nem SKU cadastra).
+  if (lookup.linkedMlItemIds.has(mlItemId)) return null;
+  return sku ? (lookup.bySku.get(normalizeProductSku(sku)) ?? null) : null;
+}
+
+/**
  * Só a parte síncrona de `buildRowForItem` (sem chamada ao ML) — usada pra
  * emitir uma pré-visualização imediata de cada linha no modo streaming
  * (`loadFinancialEvaluationRows({ onRow })`), antes de preço/taxa ML/
@@ -285,7 +335,7 @@ function buildFastRowPreview(
         kitsByMlItemId: Map<string, KitComponent[]>;
       }
     | undefined,
-  pmaBySku: Map<string, number> | undefined,
+  pmaLookup: PmaLookup | undefined,
   effectiveSku: string | null | undefined,
 ): FastRowFields {
   const warnings: string[] = [];
@@ -365,7 +415,7 @@ function buildFastRowPreview(
     isKit: isKitItem(item),
     isKitComposition,
     kitComponents,
-    pmaPrice: sku ? (pmaBySku?.get(normalizeProductSku(sku)) ?? null) : null,
+    pmaPrice: resolvePmaPrice(pmaLookup, item.id, sku),
     pending: true,
   };
 }
@@ -381,7 +431,7 @@ async function buildRowForItem(
     pricingBySku: Map<string, ResolvedProductPricing>;
     kitsByMlItemId: Map<string, KitComponent[]>;
   },
-  pmaBySku?: Map<string, number>,
+  pmaLookup?: PmaLookup,
   /** SKU cadastrado no Product vinculado por mlItemId, quando existe — sobrepõe o SKU ao vivo do anúncio (ver src/lib/product-resolver.ts). */
   effectiveSku?: string | null,
 ): Promise<
@@ -596,7 +646,7 @@ async function buildRowForItem(
     isKit: isKitItem(item),
     isKitComposition,
     kitComponents,
-    pmaPrice: sku ? (pmaBySku?.get(normalizeProductSku(sku)) ?? null) : null,
+    pmaPrice: resolvePmaPrice(pmaLookup, item.id, sku),
   };
 }
 
@@ -720,7 +770,7 @@ async function buildRowForPeriodItem(
     pricingBySku: Map<string, ResolvedProductPricing>;
     kitsByMlItemId: Map<string, KitComponent[]>;
   },
-  pmaBySku?: Map<string, number>,
+  pmaLookup?: PmaLookup,
   /** SKU cadastrado no Product vinculado por mlItemId, quando existe — sobrepõe o SKU ao vivo do anúncio (ver src/lib/product-resolver.ts). */
   effectiveSku?: string | null,
 ): Promise<
@@ -906,7 +956,7 @@ async function buildRowForPeriodItem(
     isKit: isKitItem(item),
     isKitComposition,
     kitComponents,
-    pmaPrice: sku ? (pmaBySku?.get(normalizeProductSku(sku)) ?? null) : null,
+    pmaPrice: resolvePmaPrice(pmaLookup, item.id, sku),
   };
 }
 
@@ -1038,7 +1088,7 @@ export async function loadFinancialEvaluationRows(
   const skus = [...effectiveSkuByItemId.values()]
     .filter((sku): sku is string => Boolean(sku))
     .concat(kitComponentSkus);
-  const [pricingLookup, taxFromReport, productsWithPma, companySettings] =
+  const [pricingLookup, taxFromReport, productsForPma, companySettings] =
     await Promise.all([
       loadProductsMapBySku(
         organizationId,
@@ -1047,8 +1097,14 @@ export async function loadFinancialEvaluationRows(
       ),
       loadProductTaxFromLatestReport(userId),
       prisma.product.findMany({
-        where: { organizationId, sku: { in: skus }, pmaPrice: { not: null } },
-        select: { sku: true, pmaPrice: true },
+        where: {
+          organizationId,
+          OR: [
+            { mlItemId: { in: operationalItems.map((item) => item.id) } },
+            { sku: { in: skus } },
+          ],
+        },
+        select: { mlItemId: true, sku: true, pmaPrice: true },
       }),
       getCompanySettings(organizationId),
     ]);
@@ -1075,11 +1131,7 @@ export async function loadFinancialEvaluationRows(
             entry.taxPercent,
           ]),
         );
-  const pmaBySku = new Map<string, number>();
-  for (const product of productsWithPma) {
-    if (product.pmaPrice == null || !product.sku) continue;
-    pmaBySku.set(normalizeProductSku(product.sku), Number(product.pmaPrice));
-  }
+  const pmaLookup = indexPmaLookup(productsForPma);
 
   // Modo streaming: emite uma pré-visualização de TODAS as linhas na hora
   // (título/imagem/custo/PMA já disponíveis, sem chamada ao ML) — antes do
@@ -1098,7 +1150,7 @@ export async function loadFinancialEvaluationRows(
         taxBySku,
         taxByMlItemId,
         { pricingBySku, kitsByMlItemId },
-        pmaBySku,
+        pmaLookup,
         sku,
       );
       const withAds = applyAdsToRow(preview, adsLoad.map.get(item.id), adsLoad.available);
@@ -1130,7 +1182,7 @@ export async function loadFinancialEvaluationRows(
           pricingBySku,
           kitsByMlItemId,
         },
-        pmaBySku,
+        pmaLookup,
         sku,
       );
     },
@@ -1269,7 +1321,7 @@ export async function loadFinancialEvaluationRowsForPeriod(
   const skus = [...effectiveSkuByItemId.values()]
     .filter((sku): sku is string => Boolean(sku))
     .concat(kitComponentSkus);
-  const [pricingLookup, taxFromReport, productsWithPma, companySettings] =
+  const [pricingLookup, taxFromReport, productsForPma, companySettings] =
     await Promise.all([
       loadProductsMapBySku(
         organizationId,
@@ -1278,8 +1330,14 @@ export async function loadFinancialEvaluationRowsForPeriod(
       ),
       loadProductTaxFromLatestReport(userId),
       prisma.product.findMany({
-        where: { organizationId, sku: { in: skus }, pmaPrice: { not: null } },
-        select: { sku: true, pmaPrice: true },
+        where: {
+          organizationId,
+          OR: [
+            { mlItemId: { in: items.map((item) => item.id) } },
+            { sku: { in: skus } },
+          ],
+        },
+        select: { mlItemId: true, sku: true, pmaPrice: true },
       }),
       getCompanySettings(organizationId),
     ]);
@@ -1306,11 +1364,7 @@ export async function loadFinancialEvaluationRowsForPeriod(
             entry.taxPercent,
           ]),
         );
-  const pmaBySku = new Map<string, number>();
-  for (const product of productsWithPma) {
-    if (product.pmaPrice == null || !product.sku) continue;
-    pmaBySku.set(normalizeProductSku(product.sku), Number(product.pmaPrice));
-  }
+  const pmaLookup = indexPmaLookup(productsForPma);
 
   const orderedAggs = itemIds
     .map((id) => {
@@ -1341,7 +1395,7 @@ export async function loadFinancialEvaluationRowsForPeriod(
           pricingBySku,
           kitsByMlItemId,
         },
-        pmaBySku,
+        pmaLookup,
         sku,
       );
     },

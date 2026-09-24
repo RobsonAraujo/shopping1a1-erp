@@ -4,21 +4,16 @@ import { formatFinancialMoney } from "@/lib/pricing/financial-margin";
 import { sellerListingModifyUrl } from "@/lib/mercadolibre/seller-listing-url";
 import type { PmaAlertRow } from "@/lib/home/pma-alert-data";
 
+/**
+ * Lista dos anúncios abaixo do PMA. O cabeçalho e o estado vazio ficam com
+ * quem renderiza (ver `DashboardSection`) — a seção existe na home mesmo sem
+ * nenhuma linha.
+ */
 export function DashboardPmaAlertPanel({ rows }: { rows: PmaAlertRow[] }) {
-  if (rows.length === 0) return null;
-
   const visible = rows.slice(0, 8);
 
   return (
-    <section>
-      <div className="mb-3 flex items-baseline justify-between gap-3">
-        <h2 className="text-sm font-medium text-[var(--muted-foreground)]">
-          Abaixo do PMA
-        </h2>
-        <span className="text-sm tabular-nums text-rose-700">
-          {rows.length}
-        </span>
-      </div>
+    <>
       <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-3xl bg-[var(--card)]">
         {visible.map((row) => (
           <li key={row.mlItemId}>
@@ -73,6 +68,6 @@ export function DashboardPmaAlertPanel({ rows }: { rows: PmaAlertRow[] }) {
           + {rows.length - 8} anúncio(s)
         </p>
       ) : null}
-    </section>
+    </>
   );
 }

@@ -2,6 +2,10 @@ import Image from "next/image";
 import { ImageOff } from "lucide-react";
 import { formatFinancialMoney } from "@/lib/pricing/financial-margin";
 import { sellerListingModifyUrl } from "@/lib/mercadolibre/seller-listing-url";
+import {
+  DashboardSection,
+  DashboardSectionClear,
+} from "@/components/home/DashboardHomeSection";
 import type { CatalogLosingRow } from "@/lib/home/catalog-losing-data";
 
 export function DashboardCatalogLosingPanel({
@@ -9,16 +13,16 @@ export function DashboardCatalogLosingPanel({
 }: {
   rows: CatalogLosingRow[];
 }) {
-  if (rows.length === 0) return null;
+  if (rows.length === 0) {
+    return (
+      <DashboardSection title="Catálogo perdendo">
+        <DashboardSectionClear message="Nenhum anúncio de catálogo perdendo a compra." />
+      </DashboardSection>
+    );
+  }
 
   return (
-    <section>
-      <div className="mb-3 flex items-baseline justify-between gap-3">
-        <h2 className="text-sm font-medium text-[var(--muted-foreground)]">
-          Catálogo perdendo
-        </h2>
-        <span className="text-sm tabular-nums text-rose-700">{rows.length}</span>
-      </div>
+    <DashboardSection title="Catálogo perdendo" count={rows.length}>
       <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-3xl bg-[var(--card)]">
         {rows.map((row) => (
           <li key={row.mlItemId}>
@@ -64,6 +68,6 @@ export function DashboardCatalogLosingPanel({
           </li>
         ))}
       </ul>
-    </section>
+    </DashboardSection>
   );
 }

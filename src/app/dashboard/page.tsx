@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 import { DashboardCatalogLosingPanel } from "@/components/home/DashboardCatalogLosingPanel";
+import { DashboardSection } from "@/components/home/DashboardHomeSection";
 import { DashboardDailyChecklist } from "@/components/home/DashboardDailyChecklist";
 import { DashboardFocusTimer } from "@/components/home/DashboardFocusTimer";
 import { DashboardOnboardingChecklist } from "@/components/home/DashboardOnboardingChecklist";
@@ -27,19 +28,12 @@ import { cn } from "@/lib/utils";
 async function AttentionSection({
   token,
   organizationId,
-  hasCatalogLosing,
 }: {
   token: string;
   organizationId: string;
-  hasCatalogLosing: boolean;
 }) {
   const rows = await loadPmaAlerts(token, organizationId).catch(() => []);
-  return (
-    <DashboardSummaryClient
-      pmaRows={rows}
-      hasCatalogLosing={hasCatalogLosing}
-    />
-  );
+  return <DashboardSummaryClient pmaRows={rows} />;
 }
 
 function SellerIdentitySkeleton() {
@@ -52,7 +46,20 @@ function SellerIdentitySkeleton() {
 }
 
 function AttentionSkeleton() {
-  return <div className="h-24 animate-pulse rounded-3xl bg-[var(--card)]" />;
+  // Mostra os títulos já no fallback: mesmo enquanto o PMA carrega, o usuário
+  // vê que as duas seções existem.
+  return (
+    <div className="space-y-8">
+      {["Abaixo do PMA", "Promoções terminando"].map((title) => (
+        <DashboardSection key={title} title={title}>
+          <div
+            className="h-24 animate-pulse rounded-3xl bg-[var(--card)]"
+            aria-hidden
+          />
+        </DashboardSection>
+      ))}
+    </div>
+  );
 }
 
 function SalesCardSkeleton() {
@@ -191,16 +198,10 @@ export default async function DashboardPage() {
         ) : null}
       </div>
 
-      {catalogLosing.length > 0 ? (
-        <DashboardCatalogLosingPanel rows={catalogLosing} />
-      ) : null}
+      <DashboardCatalogLosingPanel rows={catalogLosing} />
 
       <Suspense fallback={<AttentionSkeleton />}>
-        <AttentionSection
-          token={token}
-          organizationId={organizationId}
-          hasCatalogLosing={catalogLosing.length > 0}
-        />
+        <AttentionSection token={token} organizationId={organizationId} />
       </Suspense>
     </div>
   );

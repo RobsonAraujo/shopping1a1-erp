@@ -4,6 +4,10 @@ import { loadOperationalSettings } from "@/lib/configuracoes/operational-setting
 import { requireOrganization } from "@/lib/api/api-auth";
 import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 
+// Varre todos os anúncios ativos com 1-2 chamadas ao ML por anúncio — sem isso
+// estourava o timeout padrão do host e a home ficava sem o bloco de promoções.
+export const maxDuration = 300;
+
 function parseExpiringSoonDays(
   value: string | null,
   defaultDays: number,

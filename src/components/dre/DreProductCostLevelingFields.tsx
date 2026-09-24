@@ -170,7 +170,7 @@ export function DreProductCostLevelingFields({
           />
           <MaskedMoneyField
             id={`${idPrefix}-pma`}
-            label="PMA (preço máximo autorizado)"
+            label="PMA (preço mínimo anunciável)"
             value={form.pmaPrice}
             onValueChange={(v) => onChange({ pmaPrice: v })}
             readOnly={busy}

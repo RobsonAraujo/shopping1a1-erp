@@ -102,11 +102,10 @@ async function scanItemPromotion(
   let hasPromotion = false;
 
   try {
-    const salePriceInfo = await fetchItemSalePrice(
-      accessToken,
-      item.id,
-      item.price,
-    );
+    // Sem `fallbackPrice` de propósito: com fallback, uma falha do ML (429,
+    // escopo) voltava `hasPromotion: false` em silêncio e o painel dizia
+    // "nenhuma promoção vencendo". Agora lança e vira warning visível.
+    const salePriceInfo = await fetchItemSalePrice(accessToken, item.id);
     salePrice = salePriceInfo.amount;
     regularPrice = salePriceInfo.regularAmount;
     hasPromotion = salePriceInfo.hasPromotion;
