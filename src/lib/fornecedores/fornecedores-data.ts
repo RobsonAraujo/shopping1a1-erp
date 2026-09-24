@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db/db";
-import { loadListingImageUrlsBySku } from "@/lib/products/product-data";
+import { loadListingImageUrlsByMlItemId } from "@/lib/products/product-data";
 
 export type SupplierRow = {
   id: string;
@@ -37,7 +37,7 @@ export async function loadSuppliers(
 
 /** Lista enxuta (sem custo/imposto) dos produtos sem fornecedor vinculado —
  * usada só pra popular o quadro de "arrastar pro fornecedor" em Fornecedores.
- * Miniatura via `loadListingImageUrlsBySku`, mesma busca em lote de Meus Produtos. */
+ * Miniatura via `loadListingImageUrlsByMlItemId`, mesma busca em lote de Meus Produtos. */
 export async function loadUnassignedProducts(
   organizationId: string,
 ): Promise<UnassignedProduct[]> {
@@ -46,12 +46,14 @@ export async function loadUnassignedProducts(
     orderBy: { sku: "asc" },
     select: { mlItemId: true, sku: true },
   });
-  const skus = rows.map((p) => p.sku).filter((s): s is string => s !== null);
-  const imageUrlsBySku = await loadListingImageUrlsBySku(organizationId, skus);
+  const imageUrlsByMlItemId = await loadListingImageUrlsByMlItemId(
+    organizationId,
+    rows.map((p) => p.mlItemId),
+  );
   return rows.map((p) => ({
     mlItemId: p.mlItemId,
     sku: p.sku,
-    imageUrl: p.sku ? (imageUrlsBySku.get(p.sku) ?? null) : null,
+    imageUrl: imageUrlsByMlItemId.get(p.mlItemId) ?? null,
   }));
 }
 

@@ -6,7 +6,7 @@ import {
   buildProductView,
   diffLevelableProductFields,
   ensureCompanySettings,
-  listingImageUrlForSku,
+  listingImageUrlForMlItemId,
   productPatchToPrismaData,
   validateProductInput,
 } from "@/lib/products/product-data";
@@ -16,8 +16,9 @@ import { parseJsonBody } from "@/lib/api/api-validation";
 
 type RouteContext = { params: Promise<{ mlItemId: string }> };
 
+// `sku` não entra: é espelho do anúncio no ML, escrito só pela criação e pelo
+// sync (`POST /api/products/[mlItemId]/sync-sku`) — nunca pelo formulário.
 const productPatchBodySchema = z.object({
-  sku: z.string().trim().nullable().optional(),
   ncm: z.string().nullable().optional(),
   unitCostNf: z.coerce.number().finite(),
   purchaseIcmsPercent: z.coerce.number().finite().optional(),
@@ -54,9 +55,10 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       taxRegime: settings.taxRegime,
       simplesAliquotaEfetivaPercent: settings.simplesAliquotaEfetivaPercent,
     };
-    const imageUrl = product.sku
-      ? await listingImageUrlForSku(organizationId, product.sku)
-      : null;
+    const imageUrl = await listingImageUrlForMlItemId(
+      organizationId,
+      product.mlItemId,
+    );
     return NextResponse.json({
       product: buildProductView(
         product,
@@ -100,26 +102,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const parsed = {
       ...parsedBody.data,
       mlItemId,
-      sku: parsedBody.data.sku?.trim() || before.sku || "",
+      // Valor já gravado — só alimenta `validateProductInput`, não é reescrito.
+      sku: before.sku ?? "",
     };
     const validationError = validateProductInput(parsed);
     if (validationError) {
       return NextResponse.json({ error: validationError }, { status: 400 });
-    }
-
-    if (parsed.sku && parsed.sku !== before.sku) {
-      const skuInUse = await prisma.product.findFirst({
-        where: { organizationId, sku: parsed.sku, mlItemId: { not: mlItemId } },
-        select: { mlItemId: true },
-      });
-      if (skuInUse) {
-        return NextResponse.json(
-          {
-            error: `Este SKU já está em uso por outro produto (${skuInUse.mlItemId}). SKU é só exibição, mas usar o mesmo texto em dois produtos mistura os dois num relatório só.`,
-          },
-          { status: 409 },
-        );
-      }
     }
 
     const settings = await ensureCompanySettings(organizationId);
@@ -135,9 +123,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       parsed,
     );
 
-    const imageUrl = product.sku
-      ? await listingImageUrlForSku(organizationId, product.sku)
-      : null;
+    const imageUrl = await listingImageUrlForMlItemId(
+      organizationId,
+      product.mlItemId,
+    );
     return NextResponse.json({
       product: buildProductView(
         product,

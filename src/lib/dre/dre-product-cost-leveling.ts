@@ -118,16 +118,32 @@ function toView(row: {
   };
 }
 
+/**
+ * Filtro dos nivelamentos de um produto.
+ *
+ * `DreProductCostLeveling.sku` é snapshot congelado do texto no momento do
+ * nivelamento, enquanto `Product.sku` é espelho do anúncio e pode ser
+ * ressincronizado. Casar por `productMlItemId` mantém visíveis os
+ * nivelamentos gravados sob um SKU antigo; o texto só cobre linhas legadas,
+ * anteriores ao backfill de identidade.
+ */
+function levelingScope(productMlItemId: string, sku: string) {
+  return {
+    OR: [{ productMlItemId }, { productMlItemId: null, sku }],
+  };
+}
+
 async function assertNoOverlap(
   organizationId: string,
   sku: string,
+  productMlItemId: string,
   period: { startDate: string; endDate: string },
   excludeId?: string,
 ) {
   const existing = await prisma.dreProductCostLeveling.findMany({
     where: {
       organizationId,
-      sku,
+      ...levelingScope(productMlItemId, sku),
       ...(excludeId ? { id: { not: excludeId } } : {}),
     },
     select: {
@@ -155,10 +171,20 @@ export async function listDreProductCostLevelings(
   organizationId: string,
   sku?: string,
 ): Promise<DreProductCostLevelingView[]> {
+  let scope: Record<string, unknown> = {};
+  if (sku) {
+    const key = normalizeProductSku(sku);
+    const product = await prisma.product.findFirst({
+      where: { organizationId, sku: key },
+      select: { mlItemId: true },
+    });
+    scope = product ? levelingScope(product.mlItemId, key) : { sku: key };
+  }
+
   const rows = await prisma.dreProductCostLeveling.findMany({
     where: {
       organizationId,
-      ...(sku ? { sku: normalizeProductSku(sku) } : {}),
+      ...scope,
     },
     orderBy: [{ sku: "asc" }, { startDate: "asc" }],
   });
@@ -184,7 +210,7 @@ export async function createDreProductCostLeveling(
     );
   }
 
-  await assertNoOverlap(organizationId, sku, input);
+  await assertNoOverlap(organizationId, sku, product.mlItemId, input);
 
   const row = await prisma.dreProductCostLeveling.create({
     data: {
@@ -239,7 +265,7 @@ export async function updateDreProductCostLeveling(
     );
   }
 
-  await assertNoOverlap(organizationId, sku, input, id);
+  await assertNoOverlap(organizationId, sku, product.mlItemId, input, id);
 
   const row = await prisma.dreProductCostLeveling.update({
     where: { id },
@@ -300,12 +326,13 @@ export async function loadLevelingsOverlappingMonth(
   });
 
   return rows
-    .map(toView)
-    .filter((view) =>
+    .map((row) => ({ productMlItemId: row.productMlItemId, view: toView(row) }))
+    .filter(({ view }) =>
       dateRangeOverlapsMonth(view.startDate, view.endDate, year, month),
     )
-    .map((view) => ({
+    .map(({ productMlItemId, view }) => ({
       sku: normalizeProductSku(view.sku),
+      productMlItemId,
       startDate: view.startDate,
       endDate: view.endDate,
       pricingCost: view.pricingCost,

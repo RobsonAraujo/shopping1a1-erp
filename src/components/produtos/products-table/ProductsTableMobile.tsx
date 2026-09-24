@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, Power, PowerOff, Trash2 } from "lucide-react";
+import { Pencil, Power, PowerOff, RefreshCw, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -32,6 +32,8 @@ export function ProductsTableMobile({
   onEdit,
   onDelete,
   onToggleActive,
+  onSyncSku,
+  syncingSkuId,
 }: ProductsTableProps) {
   if (loading) {
     return (
@@ -117,6 +119,23 @@ export function ProductsTableMobile({
                   ) : (
                     <PowerOff className="size-4" aria-hidden />
                   )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon-sm"
+                  disabled={syncingSkuId === product.mlItemId}
+                  aria-label={`Sincronizar SKU de ${product.sku ?? product.mlItemId}`}
+                  title="Sincronizar SKU com o anúncio no Mercado Livre"
+                  onClick={() => onSyncSku(product.mlItemId)}
+                >
+                  <RefreshCw
+                    className={cn(
+                      "size-4",
+                      syncingSkuId === product.mlItemId && "animate-spin",
+                    )}
+                    aria-hidden
+                  />
                 </Button>
                 <Button
                   type="button"

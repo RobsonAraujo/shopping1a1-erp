@@ -17,4 +17,8 @@ export type ProductsTableProps = {
   onEdit: (product: ProductView) => void;
   onDelete: (mlItemId: string) => void;
   onToggleActive: (mlItemId: string, nextActive: boolean) => void;
+  /** Re-lê o SKU do anúncio no ML e grava. */
+  onSyncSku: (mlItemId: string) => void;
+  /** mlItemId com sync de SKU em andamento — desabilita o botão e gira o ícone. */
+  syncingSkuId: string | null;
 };

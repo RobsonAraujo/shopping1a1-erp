@@ -221,6 +221,7 @@ function ProductFormModal({
 }) {
   const [form, setForm] = useState(initial);
   const [saving, setSaving] = useState(false);
+  const [fetchingSku, setFetchingSku] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isEdit = Boolean(initial.mlItemId && initial.unitCostNf !== null);
   const isSimples = taxRegime === "SIMPLES";
@@ -247,6 +248,52 @@ function ProductFormModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  /** Busca o SKU atual do anúncio e mostra no campo.
+   *
+   * No cadastro o produto ainda não existe, então é só leitura — o POST
+   * rebusca o SKU ao salvar de qualquer forma. Na edição usa o endpoint de
+   * sync, que persiste. */
+  async function fetchSkuFromMl() {
+    const mlItemId = form.mlItemId.trim();
+    if (!mlItemId) return;
+    setFetchingSku(true);
+    setError(null);
+    try {
+      const res = isEdit
+        ? await fetch(`/api/products/${encodeURIComponent(mlItemId)}/sync-sku`, {
+            method: "POST",
+          })
+        : await fetch(`/api/ml/items/${encodeURIComponent(mlItemId)}/sku`);
+      if (!res.ok) {
+        setError(
+          await readApiError(
+            res,
+            isEdit ? "product_sku_sync_failed" : "ml_item_sku_failed",
+          ),
+        );
+        return;
+      }
+      const json = (await res.json()) as {
+        sku?: string | null;
+        product?: ProductView;
+      };
+      const sku = isEdit ? (json.product?.sku ?? null) : (json.sku ?? null);
+      if (!sku) {
+        setError(
+          "Este anúncio está sem SKU no Mercado Livre. Preencha o SKU no anúncio e busque de novo.",
+        );
+        return;
+      }
+      setForm((f) => ({ ...f, sku }));
+      if (json.product) onSaved(json.product);
+      toast.success(`SKU do anúncio: ${sku}`);
+    } catch {
+      setError("Falha de rede ao buscar o SKU do anúncio.");
+    } finally {
+      setFetchingSku(false);
+    }
+  }
+
   async function submit() {
     setSaving(true);
     setError(null);
@@ -255,6 +302,9 @@ function ProductFormModal({
         ? `/api/products/${encodeURIComponent(form.mlItemId)}`
         : "/api/products";
       const payload: Record<string, unknown> = { ...form };
+      // `sku` é espelho do anúncio: escrito só pela criação e pelo sync, nunca
+      // pelo formulário. O servidor já o ignora nas duas rotas.
+      delete payload.sku;
       if (isSimples) {
         for (const key of SIMPLES_HIDDEN_FIELD_KEYS) delete payload[key];
       }
@@ -319,31 +369,43 @@ function ProductFormModal({
                   setForm((f) => ({ ...f, mlItemId: e.target.value.trim() }))
                 }
               />
-              {!isEdit && !form.sku ? (
+              {!isEdit ? (
                 <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                  O custo é vinculado a este anúncio específico — buscamos o
-                  SKU atual dele automaticamente ao salvar.
+                  O custo é vinculado a este anúncio específico.
                 </p>
               ) : null}
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <FormInput
-                label="SKU"
-                value={form.sku}
-                disabled={!isEdit}
-                placeholder={
-                  !isEdit && !form.sku
-                    ? "Será buscado automaticamente ao salvar"
-                    : undefined
-                }
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, sku: e.target.value }))
-                }
-              />
+              <div className="flex items-end gap-2">
+                <FormInput
+                  label="SKU"
+                  value={form.sku}
+                  disabled
+                  placeholder={
+                    form.sku ? undefined : "Busque o SKU do anúncio"
+                  }
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0"
+                  disabled={!form.mlItemId.trim() || fetchingSku}
+                  aria-label="Buscar SKU do anúncio"
+                  title="Buscar SKU do anúncio no Mercado Livre"
+                  onClick={() => void fetchSkuFromMl()}
+                >
+                  <RefreshCw
+                    className={cn("size-4", fetchingSku && "animate-spin")}
+                    aria-hidden
+                  />
+                </Button>
+              </div>
               <p className="text-xs text-[var(--muted-foreground)]">
-                {isEdit
-                  ? "Só exibição/filtro — pode ficar desatualizado em relação ao anúncio, não afeta relatórios."
-                  : "Capturado automaticamente do anúncio selecionado — não é editável na criação."}
+                Espelho do anúncio no Mercado Livre — não editável à mão. Use o
+                botão ao lado para buscar o SKU atual
+                {isEdit ? " e atualizar o cadastro." : "."}
               </p>
             </div>
             <FormInput
@@ -492,6 +554,8 @@ export function ProductsClient() {
     | null
   >(null);
   const [importing, setImporting] = useState(false);
+  const [syncingSkuId, setSyncingSkuId] = useState<string | null>(null);
+  const [syncingAllSkus, setSyncingAllSkus] = useState(false);
   const [kitsModalOpen, setKitsModalOpen] = useState(false);
   const [importAllOpen, setImportAllOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -614,6 +678,79 @@ export function ProductsClient() {
         : [...prev.products, product];
       return { ...prev, products };
     });
+  }
+
+  async function syncProductSku(mlItemId: string) {
+    setSyncingSkuId(mlItemId);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/products/${encodeURIComponent(mlItemId)}/sync-sku`,
+        { method: "POST" },
+      );
+      if (!res.ok) {
+        setError(await readApiError(res, "product_sku_sync_failed"));
+        return;
+      }
+      const json = (await res.json()) as {
+        product: ProductView;
+        changed: boolean;
+        withoutSku: boolean;
+      };
+      upsertProductLocally(json.product);
+      if (json.changed) {
+        toast.success(`SKU atualizado para ${json.product.sku}.`);
+      } else if (json.withoutSku) {
+        toast.info("Este anúncio está sem SKU no Mercado Livre.");
+      } else {
+        toast.success("SKU já estava em dia.");
+      }
+    } catch {
+      setError("Falha de rede ao sincronizar o SKU.");
+    } finally {
+      setSyncingSkuId(null);
+    }
+  }
+
+  async function syncAllSkus() {
+    setSyncingAllSkus(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/products/sync-skus", { method: "POST" });
+      if (!res.ok) {
+        setError(await readApiError(res, "products_sku_sync_failed"));
+        return;
+      }
+      const json = (await res.json()) as {
+        total: number;
+        updated: number;
+        unchanged: number;
+        withoutSku: number;
+        notFound: number;
+        failedBatches: number;
+      };
+      const parts = [
+        `${json.updated} ${json.updated === 1 ? "SKU atualizado" : "SKUs atualizados"}`,
+        `${json.unchanged} sem mudança`,
+      ];
+      if (json.withoutSku > 0) parts.push(`${json.withoutSku} sem SKU no anúncio`);
+      if (json.notFound > 0) {
+        parts.push(`${json.notFound} não encontrado(s) no Mercado Livre`);
+      }
+      const summary = `${parts.join(", ")}.`;
+      if (json.failedBatches > 0) {
+        toast.warning(
+          `${summary} ${json.failedBatches} lote(s) falharam — rode de novo para completar.`,
+        );
+      } else {
+        toast.success(summary);
+      }
+      if (json.updated > 0) await load();
+    } catch {
+      setError("Falha de rede ao sincronizar os SKUs.");
+    } finally {
+      setSyncingAllSkus(false);
+    }
   }
 
   async function setProductActive(mlItemId: string, active: boolean) {
@@ -798,6 +935,20 @@ export function ProductsClient() {
             variant="outline"
             size="sm"
             className="gap-2"
+            disabled={loading || syncingAllSkus}
+            onClick={() => void syncAllSkus()}
+          >
+            <RefreshCw
+              className={cn("size-4", syncingAllSkus && "animate-spin")}
+              aria-hidden
+            />
+            Sincronizar SKUs
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-2"
             onClick={() => setKitsModalOpen(true)}
           >
             <Boxes className="size-4" aria-hidden />
@@ -855,6 +1006,8 @@ export function ProductsClient() {
         sort={productsSort}
         onSortChange={onProductsSortChange}
         formatPricingCostExplainer={formatPricingCostExplainer}
+        onSyncSku={(mlItemId) => void syncProductSku(mlItemId)}
+        syncingSkuId={syncingSkuId}
         showFiscalFlags={data?.taxRegime !== "SIMPLES"}
         taxPercentExplainer={(product) =>
           data?.taxRegime === "SIMPLES"

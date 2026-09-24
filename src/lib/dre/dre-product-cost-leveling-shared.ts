@@ -34,7 +34,10 @@ export type DreProductCostLevelingView = DreProductCostLevelingInput & {
 };
 
 export type DreProductCostLevelingPricing = {
+  /** Snapshot congelado do texto de SKU — só desempata linhas legadas. */
   sku: string;
+  /** Identidade do produto nivelado; null em linhas anteriores ao backfill. */
+  productMlItemId: string | null;
   startDate: string;
   endDate: string;
   pricingCost: number;
@@ -158,27 +161,44 @@ export function computeLevelingPricingCost(input: {
   });
 }
 
-/** Resolve custo nivelado para um SKU na data do pedido (ou no mês, se a data faltar). */
+/**
+ * Resolve o custo nivelado de um produto na data do pedido (ou no mês, se a
+ * data faltar).
+ *
+ * Casa por `mlItemId` sempre que os dois lados têm identidade: o texto de SKU
+ * do nivelamento é snapshot congelado, e `Product.sku` é ressincronizado com o
+ * anúncio — comparar texto fazia o nivelamento parar de aplicar em silêncio
+ * assim que o vendedor trocasse o SKU no Mercado Livre, mudando o resultado de
+ * um mês já fechado do DRE.
+ *
+ * `mlItemId` null = chamador sem identidade (componente de kit, que só tem
+ * texto): mantém o casamento por SKU.
+ */
 export function resolveLevelingCostForOrderDate(
   levelings: DreProductCostLevelingPricing[],
+  mlItemId: string | null,
   sku: string,
   orderDateYmd: string | null,
   year: number,
   month: number,
 ): number | null {
   const key = normalizeProductSku(sku);
-  const forSku = levelings.filter((row) => row.sku === key);
-  if (forSku.length === 0) return null;
+  const matches = levelings.filter((row) =>
+    mlItemId && row.productMlItemId
+      ? row.productMlItemId === mlItemId
+      : row.sku === key,
+  );
+  if (matches.length === 0) return null;
 
   if (orderDateYmd && isValidYmd(orderDateYmd)) {
-    const hit = forSku.find(
+    const hit = matches.find(
       (row) => orderDateYmd >= row.startDate && orderDateYmd <= row.endDate,
     );
     return hit?.pricingCost ?? null;
   }
 
   const monthBounds = civilMonthBounds(year, month);
-  const hit = forSku.find((row) =>
+  const hit = matches.find((row) =>
     dateRangesOverlap(row, monthBounds),
   );
   return hit?.pricingCost ?? null;
@@ -202,6 +222,9 @@ export function applyLevelingsForOrderDate(
   for (const sku of skus) {
     const cost = resolveLevelingCostForOrderDate(
       levelings,
+      // Base por texto (componentes de kit só têm SKU) — a linha do item em si
+      // é resolvida por identidade em `dre-month-data`.
+      null,
       sku,
       orderDateYmd,
       year,

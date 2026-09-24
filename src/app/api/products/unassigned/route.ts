@@ -8,7 +8,7 @@ import { requireOrganization } from "@/lib/api/api-auth";
  * usada só pra popular o quadro de "arrastar pro fornecedor" em
  * Fornecedores. Evita reaproveitar `GET /api/products`, que já carrega
  * imposto/custo (desnecessário aqui). A miniatura reaproveita a mesma busca
- * em lote (`loadListingImageUrlsBySku`) já usada em Meus Produtos — uma
+ * em lote (`loadListingImageUrlsByMlItemId`) já usada em Meus Produtos — uma
  * query extra e barata, indexada por SKU, nesta tela de baixo tráfego.
  */
 export async function GET() {

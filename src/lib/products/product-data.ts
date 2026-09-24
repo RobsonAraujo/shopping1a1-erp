@@ -57,7 +57,7 @@ export type ProductView = ProductRecordForPricing & {
   pmaPrice: number | null;
   createdAt: string;
   updatedAt: string;
-  /** Thumbnail do anúncio ML (snapshot em `Listing.imageUrlSnapshot`) — null se nenhum anúncio com esse SKU foi sincronizado ainda. */
+  /** Thumbnail do anúncio ML (snapshot em `Listing.imageUrlSnapshot`) — null se o anúncio ainda não foi sincronizado. */
   imageUrl: string | null;
   supplierId: string | null;
   supplierName: string | null;
@@ -112,44 +112,47 @@ export function buildProductView(
 }
 
 /**
- * Uma imagem por SKU — a do anúncio sincronizado mais recentemente entre os
- * que compartilham esse `skuSnapshot`. Sem resolução de alias por ora (mesma
- * regra simples já usada no relatório de concorrência de catálogo).
+ * Uma imagem por produto, resolvida pela identidade do anúncio
+ * (`Listing.mlItemId` é PK — join exato, sem desempate).
+ *
+ * Antes o join era pelo texto de SKU (`Listing.skuSnapshot == Product.sku`):
+ * como `skuSnapshot` é ressincronizado a cada varredura do catálogo e
+ * `Product.sku` não, trocar o SKU no anúncio fazia a miniatura simplesmente
+ * sumir da tela.
  */
-export async function loadListingImageUrlsBySku(
+export async function loadListingImageUrlsByMlItemId(
   organizationId: string,
-  skus?: string[],
+  mlItemIds: string[],
 ): Promise<Map<string, string>> {
-  const normalized = skus
-    ? [...new Set(skus.map((s) => s.trim()).filter(Boolean))]
-    : undefined;
-  if (normalized && normalized.length === 0) return new Map();
+  const unique = [...new Set(mlItemIds.filter(Boolean))];
+  if (unique.length === 0) return new Map();
 
   const listings = await prisma.listing.findMany({
     where: {
       organizationId,
-      ...(normalized ? { skuSnapshot: { in: normalized } } : {}),
+      mlItemId: { in: unique },
       imageUrlSnapshot: { not: null },
     },
-    select: { skuSnapshot: true, imageUrlSnapshot: true },
-    orderBy: { lastSyncedAt: { sort: "desc", nulls: "last" } },
+    select: { mlItemId: true, imageUrlSnapshot: true },
   });
 
-  const bySku = new Map<string, string>();
+  const byMlItemId = new Map<string, string>();
   for (const listing of listings) {
-    if (!listing.skuSnapshot || !listing.imageUrlSnapshot) continue;
-    if (bySku.has(listing.skuSnapshot)) continue;
-    bySku.set(listing.skuSnapshot, toMlListingThumbnailUrl(listing.imageUrlSnapshot));
+    if (!listing.imageUrlSnapshot) continue;
+    byMlItemId.set(
+      listing.mlItemId,
+      toMlListingThumbnailUrl(listing.imageUrlSnapshot),
+    );
   }
-  return bySku;
+  return byMlItemId;
 }
 
-export async function listingImageUrlForSku(
+export async function listingImageUrlForMlItemId(
   organizationId: string,
-  sku: string,
+  mlItemId: string,
 ): Promise<string | null> {
-  const bySku = await loadListingImageUrlsBySku(organizationId, [sku]);
-  return bySku.get(sku) ?? null;
+  const byMlItemId = await loadListingImageUrlsByMlItemId(organizationId, [mlItemId]);
+  return byMlItemId.get(mlItemId) ?? null;
 }
 
 export type CompanySettings = {

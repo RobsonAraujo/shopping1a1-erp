@@ -72,21 +72,112 @@ describe("dre-product-cost-leveling helpers", () => {
     const levelings = [
       {
         sku: "SKU-A",
+        productMlItemId: "MLB1",
         startDate: "2026-01-15",
         endDate: "2026-03-10",
         pricingCost: 41,
       },
     ];
     assert.equal(
-      resolveLevelingCostForOrderDate(levelings, "SKU-A", "2026-02-01", 2026, 2),
+      resolveLevelingCostForOrderDate(
+        levelings,
+        "MLB1",
+        "SKU-A",
+        "2026-02-01",
+        2026,
+        2,
+      ),
       41,
     );
     assert.equal(
-      resolveLevelingCostForOrderDate(levelings, "SKU-A", "2026-01-10", 2026, 1),
+      resolveLevelingCostForOrderDate(
+        levelings,
+        "MLB1",
+        "SKU-A",
+        "2026-01-10",
+        2026,
+        1,
+      ),
       null,
     );
     assert.equal(
-      resolveLevelingCostForOrderDate(levelings, "SKU-A", null, 2026, 2),
+      resolveLevelingCostForOrderDate(levelings, "MLB1", "SKU-A", null, 2026, 2),
+      41,
+    );
+  });
+
+  it("keeps applying the leveling after the SKU text is resynced from the ML", () => {
+    // Nivelamento gravado sob o texto antigo; `Product.sku` já foi
+    // ressincronizado para "SKU-NOVO". Casar por texto perderia o
+    // nivelamento em silêncio e mudaria o DRE de um mês fechado.
+    const levelings = [
+      {
+        sku: "SKU-ANTIGO",
+        productMlItemId: "MLB1",
+        startDate: "2026-01-01",
+        endDate: "2026-01-31",
+        pricingCost: 41,
+      },
+    ];
+    assert.equal(
+      resolveLevelingCostForOrderDate(
+        levelings,
+        "MLB1",
+        "SKU-NOVO",
+        "2026-01-20",
+        2026,
+        1,
+      ),
+      41,
+    );
+    // Produto diferente com o mesmo texto de SKU não herda o nivelamento.
+    assert.equal(
+      resolveLevelingCostForOrderDate(
+        levelings,
+        "MLB2",
+        "SKU-ANTIGO",
+        "2026-01-20",
+        2026,
+        1,
+      ),
+      null,
+    );
+  });
+
+  it("falls back to SKU text for legacy rows and for kit components", () => {
+    const legacy = [
+      {
+        sku: "SKU-A",
+        productMlItemId: null,
+        startDate: "2026-01-01",
+        endDate: "2026-01-31",
+        pricingCost: 41,
+      },
+    ];
+    // Linha anterior ao backfill de identidade: só tem texto.
+    assert.equal(
+      resolveLevelingCostForOrderDate(
+        legacy,
+        "MLB1",
+        "SKU-A",
+        "2026-01-20",
+        2026,
+        1,
+      ),
+      41,
+    );
+    // Componente de kit: chamador sem identidade, casa por texto mesmo contra
+    // uma linha que tem productMlItemId.
+    const withIdentity = [{ ...legacy[0], productMlItemId: "MLB1" }];
+    assert.equal(
+      resolveLevelingCostForOrderDate(
+        withIdentity,
+        null,
+        "SKU-A",
+        "2026-01-20",
+        2026,
+        1,
+      ),
       41,
     );
   });
@@ -101,6 +192,7 @@ describe("dre-product-cost-leveling helpers", () => {
       [
         {
           sku: "SKU-A",
+          productMlItemId: "MLB1",
           startDate: "2026-01-01",
           endDate: "2026-01-31",
           pricingCost: 41,

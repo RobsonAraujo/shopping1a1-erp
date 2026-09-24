@@ -264,18 +264,19 @@ async function computeErpCostsFromOrderLines(
     // Preferir a base resolvida por identidade (mlItemId) — sku-texto não é
     // mais único, `pricingBySku` (por sku) só serve de fallback pra linha
     // sem Product resolvido e de base pro componente de kit (que só tem
-    // sku). O nivelamento em si continua sendo por sku (histórico
-    // congelado, ver DreProductCostLeveling.sku), reaplicado aqui pro item.
+    // sku). O nivelamento também casa por identidade: `Product.sku` é
+    // ressincronizado com o anúncio, então comparar com o texto congelado em
+    // DreProductCostLeveling.sku fazia o nivelamento sumir sem aviso quando o
+    // vendedor trocava o SKU no ML.
     const pricingBaseForItem = pricingByMlItemIdBase.get(line.itemId);
-    const leveledCostForItem = normalizedSku
-      ? resolveLevelingCostForOrderDate(
-          levelings,
-          normalizedSku,
-          line.orderDateYmd ?? null,
-          year,
-          month,
-        )
-      : null;
+    const leveledCostForItem = resolveLevelingCostForOrderDate(
+      levelings,
+      line.itemId,
+      normalizedSku,
+      line.orderDateYmd ?? null,
+      year,
+      month,
+    );
     const isLeveledForItem = leveledCostForItem !== null;
     const pricing: ResolvedProductPricing | undefined = isLeveledForItem
       ? {

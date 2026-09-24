@@ -5,8 +5,8 @@ import { prisma } from "@/lib/db/db";
 import {
   buildProductView,
   ensureCompanySettings,
-  listingImageUrlForSku,
-  loadListingImageUrlsBySku,
+  listingImageUrlForMlItemId,
+  loadListingImageUrlsByMlItemId,
   productWriteToPrismaData,
   validateProductInput,
 } from "@/lib/products/product-data";
@@ -50,10 +50,10 @@ export async function GET() {
       }),
       loadProductTaxFromLatestReport(userId),
     ]);
-    const skus = products
-      .map((p) => p.sku)
-      .filter((s): s is string => s !== null);
-    const imageUrlsBySku = await loadListingImageUrlsBySku(organizationId, skus);
+    const imageUrlsByMlItemId = await loadListingImageUrlsByMlItemId(
+      organizationId,
+      products.map((p) => p.mlItemId),
+    );
     const companyTaxContext = {
       taxRegime: settings.taxRegime,
       simplesAliquotaEfetivaPercent: settings.simplesAliquotaEfetivaPercent,
@@ -69,7 +69,7 @@ export async function GET() {
           settings.pisCofinsPercent,
           taxFromReport,
           companyTaxContext,
-          p.sku ? (imageUrlsBySku.get(p.sku) ?? null) : null,
+          imageUrlsByMlItemId.get(p.mlItemId) ?? null,
           p.supplier,
         ),
       ),
@@ -115,9 +115,10 @@ export async function POST(request: NextRequest) {
       include: { supplier: { select: { id: true, name: true } } },
     });
 
-    const imageUrl = product.sku
-      ? await listingImageUrlForSku(organizationId, product.sku)
-      : null;
+    const imageUrl = await listingImageUrlForMlItemId(
+      organizationId,
+      product.mlItemId,
+    );
     return NextResponse.json({
       product: buildProductView(
         product,
