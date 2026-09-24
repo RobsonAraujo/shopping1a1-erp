@@ -11,6 +11,9 @@ import {
 
 const levelingBodySchema = z.object({
   sku: z.string().trim().min(1, "SKU is required"),
+  /** Identidade do produto. Preferida sobre `sku`, que é ambíguo quando dois
+   * anúncios do mesmo item carregam o mesmo texto de SKU. */
+  productMlItemId: z.string().trim().min(1).optional(),
   startDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid startDate"),
@@ -45,13 +48,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
 
+  const mlItemId =
+    request.nextUrl.searchParams.get("mlItemId")?.trim() || undefined;
   const sku = request.nextUrl.searchParams.get("sku")?.trim() || undefined;
 
   try {
-    const items = await listDreProductCostLevelings(
-      auth.ctx.organizationId,
+    const items = await listDreProductCostLevelings(auth.ctx.organizationId, {
+      mlItemId,
       sku,
-    );
+    });
     return NextResponse.json({ items });
   } catch (e) {
     logServerError("api/dre/product-cost-leveling GET", e);

@@ -5,7 +5,17 @@ import {
 } from "@/lib/pricing/product-pricing";
 
 export type DreProductCostLevelingInput = {
+  /**
+   * Texto do SKU. Snapshot de exibição — nunca decide a qual produto o
+   * nivelamento pertence quando `productMlItemId` vem preenchido.
+   */
   sku: string;
+  /**
+   * Identidade do produto nivelado. Preferido sobre `sku` na resolução:
+   * dois produtos podem compartilhar o mesmo texto de SKU (anúncio de
+   * catálogo + anúncio próprio do mesmo item), e aí o texto é ambíguo.
+   */
+  productMlItemId?: string | null;
   /** YYYY-MM-DD (inclusivo). */
   startDate: string;
   /** YYYY-MM-DD (inclusivo). */
@@ -31,6 +41,13 @@ export type DreProductCostLevelingView = DreProductCostLevelingInput & {
   pricingCost: number;
   createdAt: string;
   updatedAt: string;
+  /**
+   * `Product.sku` atual, resolvido por `productMlItemId`. Difere de `sku`
+   * quando o SKU do anúncio foi ressincronizado depois do nivelamento —
+   * `sku` continua sendo o texto congelado na época. null quando a linha não
+   * tem identidade ou o produto não existe mais.
+   */
+  currentSku: string | null;
 };
 
 export type DreProductCostLevelingPricing = {
@@ -42,6 +59,26 @@ export type DreProductCostLevelingPricing = {
   endDate: string;
   pricingCost: number;
 };
+
+/**
+ * Filtro dos nivelamentos de um produto.
+ *
+ * `DreProductCostLeveling.sku` é snapshot congelado do texto no momento do
+ * nivelamento, enquanto `Product.sku` é espelho do anúncio e pode ser
+ * ressincronizado. Casar por `productMlItemId` mantém visíveis os
+ * nivelamentos gravados sob um SKU antigo.
+ *
+ * O ramo por texto cobre **só** linhas legadas (`productMlItemId: null`,
+ * anteriores ao backfill de identidade) — nunca linhas que já têm identidade,
+ * senão dois produtos com o mesmo SKU voltariam a se misturar. Omitido quando
+ * não há texto conhecido.
+ */
+export function levelingScope(productMlItemId: string, sku?: string | null) {
+  if (!sku) return { productMlItemId };
+  return {
+    OR: [{ productMlItemId }, { productMlItemId: null, sku }],
+  };
+}
 
 export class DreProductCostLevelingError extends Error {
   constructor(

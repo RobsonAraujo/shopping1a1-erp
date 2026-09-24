@@ -58,6 +58,9 @@ type DreProductCostLevelingModalProps = {
 
 type FormState = DreProductCostLevelingFormValues & {
   sku: string;
+  /** Identidade do produto selecionado — é ela que resolve o nivelamento no
+   * servidor; `sku` é só o texto exibido. */
+  productMlItemId: string | null;
   startDate: string;
   endDate: string;
 };
@@ -65,6 +68,7 @@ type FormState = DreProductCostLevelingFormValues & {
 function emptyForm(year: number): FormState {
   return {
     sku: "",
+    productMlItemId: null,
     startDate: `${year}-01-01`,
     endDate: `${year}-03-31`,
     hasIcmsSt: false,
@@ -82,7 +86,11 @@ function emptyForm(year: number): FormState {
 
 function formFromItem(item: DreProductCostLevelingView): FormState {
   return {
-    sku: item.sku,
+    // SKU atual, não o texto congelado: o congelado pode não corresponder a
+    // nenhum produto depois de um sync, e como o seletor abaixo filtra a
+    // lista por este campo, usá-lo faria a lista saltar e o save falhar.
+    sku: item.currentSku ?? item.sku,
+    productMlItemId: item.productMlItemId ?? null,
     startDate: item.startDate,
     endDate: item.endDate,
     hasIcmsSt: item.hasIcmsSt,
@@ -260,6 +268,7 @@ export function DreProductCostLevelingModal({
   } | null>(null);
 
   type ProductSummary = {
+    mlItemId: string;
     sku: string | null;
     unitCostNf: number;
     hasIcmsSt: boolean;
@@ -297,6 +306,7 @@ export function DreProductCostLevelingModal({
     setForm((f) => ({
       ...f,
       sku,
+      productMlItemId: product?.mlItemId ?? null,
       ...(product
         ? {
             hasIcmsSt: product.hasIcmsSt,
@@ -315,16 +325,19 @@ export function DreProductCostLevelingModal({
   }
 
   const loadItems = useCallback(
-    async (sku: string) => {
-      if (!sku) {
+    async (mlItemId: string | null, sku: string) => {
+      if (!mlItemId && !sku) {
         setItems([]);
         return;
       }
       setLoading(true);
       try {
-        const res = await fetch(
-          `/api/dre/product-cost-leveling?sku=${encodeURIComponent(sku)}`,
-        );
+        // Por identidade sempre que houver: o texto é ambíguo quando dois
+        // anúncios do mesmo item carregam o mesmo SKU.
+        const query = mlItemId
+          ? `mlItemId=${encodeURIComponent(mlItemId)}`
+          : `sku=${encodeURIComponent(sku)}`;
+        const res = await fetch(`/api/dre/product-cost-leveling?${query}`);
         if (!res.ok) {
           onError(await readApiError(res, "dre_product_cost_leveling_failed"));
           return;
@@ -353,15 +366,19 @@ export function DreProductCostLevelingModal({
 
   useEffect(() => {
     if (!open) return;
-    void loadItems(form.sku);
-  }, [open, form.sku, loadItems]);
+    void loadItems(form.productMlItemId, form.sku);
+  }, [open, form.productMlItemId, form.sku, loadItems]);
 
   // Mantém o SKU selecionado (só reseta os outros campos) — é o mesmo
   // seletor que também filtra "Nivelamentos cadastrados" abaixo, então
   // depois de salvar dá pra continuar cadastrando outro período do mesmo SKU.
   function resetForm() {
     setEditingId(null);
-    setForm((f) => ({ ...emptyForm(year), sku: f.sku }));
+    setForm((f) => ({
+      ...emptyForm(year),
+      sku: f.sku,
+      productMlItemId: f.productMlItemId,
+    }));
   }
 
   async function save() {
@@ -382,6 +399,7 @@ export function DreProductCostLevelingModal({
 
     const body = {
       sku,
+      productMlItemId: form.productMlItemId ?? undefined,
       startDate: form.startDate,
       endDate: form.endDate,
       hasIcmsSt: form.hasIcmsSt,
@@ -418,7 +436,7 @@ export function DreProductCostLevelingModal({
         endDate: body.endDate,
       });
       resetForm();
-      await loadItems(sku);
+      await loadItems(form.productMlItemId, sku);
       toast.success("Nivelamento de custo salvo.");
     } catch {
       onError("Falha de rede ao salvar nivelamento.");
@@ -446,7 +464,7 @@ export function DreProductCostLevelingModal({
       });
       if (editingId === pendingDelete.id) resetForm();
       setPendingDelete(null);
-      await loadItems(form.sku);
+      await loadItems(form.productMlItemId, form.sku);
       toast.success("Nivelamento de custo removido.");
     } catch {
       onError("Falha de rede ao excluir nivelamento.");
@@ -601,7 +619,14 @@ export function DreProductCostLevelingModal({
                       className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div className="min-w-0">
-                        <p className="truncate font-medium">{item.sku}</p>
+                        <p className="truncate font-medium">
+                          {item.currentSku ?? item.sku}
+                        </p>
+                        {item.currentSku && item.currentSku !== item.sku ? (
+                          <p className="truncate text-xs text-[var(--muted-foreground)]">
+                            cadastrado como &quot;{item.sku}&quot;
+                          </p>
+                        ) : null}
                         <p className="text-xs text-[var(--muted-foreground)]">
                           {periodLabel(item.startDate, item.endDate)} ·{" "}
                           {formatFinancialMoney(item.pricingCost)}
@@ -659,7 +684,7 @@ export function DreProductCostLevelingModal({
             <AlertDialogTitle>Excluir nivelamento?</AlertDialogTitle>
             <AlertDialogDescription>
               {pendingDelete
-                ? `Remover o nivelamento de ${pendingDelete.sku} (${periodLabel(
+                ? `Remover o nivelamento de ${pendingDelete.currentSku ?? pendingDelete.sku} (${periodLabel(
                     pendingDelete.startDate,
                     pendingDelete.endDate,
                   )})? O DRE voltará a usar o cadastro de Meus produtos após re-sincronizar.`

@@ -215,6 +215,7 @@ function ProductFormModal({
   onSaved: (product: ProductView) => void;
   onLevelingSuggested?: (suggestion: {
     sku: string;
+    mlItemId: string;
     previousValues: DreProductCostLevelingFormValues;
     productCreatedAt: string;
   }) => void;
@@ -332,6 +333,7 @@ function ProductFormModal({
       if (isEdit && json.levelingSuggestion) {
         onLevelingSuggested?.({
           sku: form.sku,
+          mlItemId: form.mlItemId,
           previousValues: json.levelingSuggestion.previousValues,
           productCreatedAt: json.levelingSuggestion.productCreatedAt,
         });
@@ -544,6 +546,22 @@ function ProductFormModal({
   );
 }
 
+/**
+ * Erro de ação vira toast.
+ *
+ * O gatilho costuma ser um botão dentro de uma linha da tabela, que pode
+ * estar bem abaixo da dobra — um aviso inline no topo da página passaria
+ * despercebido justamente quando mais importa (ex.: a explicação de por que
+ * um produto não pode ser removido). Duração folgada porque essas mensagens
+ * são longas; o `closeButton` do Toaster permite dispensar antes.
+ *
+ * Erro de *carregamento* não usa isto: ali a página fica sem conteúdo, e um
+ * toast que some deixaria a tela vazia sem explicação nenhuma.
+ */
+function toastError(message: string) {
+  toast.error(message, { duration: 8000 });
+}
+
 export function ProductsClient() {
   const [data, setData] = useState<ProductsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -555,14 +573,21 @@ export function ProductsClient() {
   >(null);
   const [importing, setImporting] = useState(false);
   const [syncingSkuId, setSyncingSkuId] = useState<string | null>(null);
-  const [syncingAllSkus, setSyncingAllSkus] = useState(false);
+  // Sync em massa ("Sincronizar SKUs") está fora da UI de propósito até o
+  // guard-rail de SKU duplicado entrar: `Product.sku` não tem unique
+  // constraint, e um dealer que use o mesmo seller_custom_field no anúncio de
+  // catálogo e no próprio veria os dois produtos colapsarem no mesmo texto de
+  // uma vez só. A rota POST /api/products/sync-skus e o serviço continuam
+  // implementados; o sync individual por linha segue disponível.
   const [kitsModalOpen, setKitsModalOpen] = useState(false);
   const [importAllOpen, setImportAllOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showInactive, setShowInactive] = useState(false);
   const [pendingDeactivate, setPendingDeactivate] = useState<ProductView | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<ProductView | null>(null);
   const [levelingSuggestion, setLevelingSuggestion] = useState<{
     sku: string;
+    mlItemId: string;
     previousValues: DreProductCostLevelingFormValues;
     productCreatedAt: string;
   } | null>(null);
@@ -639,18 +664,18 @@ export function ProductsClient() {
 
   async function importSkus() {
     setImporting(true);
-    setError(null);
     try {
       const res = await fetch("/api/products/suggestions");
       if (!res.ok) {
-        setError(await readApiError(res, "products_suggestions_failed"));
+        toastError(await readApiError(res, "products_suggestions_failed"));
         return;
       }
       const json = (await res.json()) as {
         suggestions: { mlItemId: string; sku: string | null }[];
       };
       if (json.suggestions.length === 0) {
-        setError("Nenhum anúncio novo encontrado.");
+        // Não é falha: é resposta válida a "importar anúncio".
+        toast.info("Nenhum anúncio novo encontrado.");
         return;
       }
       const first = json.suggestions[0];
@@ -659,7 +684,7 @@ export function ProductsClient() {
         form: emptyForm(first.mlItemId, first.sku ?? ""),
       });
     } catch {
-      setError("Falha de rede ao importar anúncios.");
+      toastError("Falha de rede ao importar anúncios.");
     } finally {
       setImporting(false);
     }
@@ -682,14 +707,13 @@ export function ProductsClient() {
 
   async function syncProductSku(mlItemId: string) {
     setSyncingSkuId(mlItemId);
-    setError(null);
     try {
       const res = await fetch(
         `/api/products/${encodeURIComponent(mlItemId)}/sync-sku`,
         { method: "POST" },
       );
       if (!res.ok) {
-        setError(await readApiError(res, "product_sku_sync_failed"));
+        toastError(await readApiError(res, "product_sku_sync_failed"));
         return;
       }
       const json = (await res.json()) as {
@@ -706,50 +730,9 @@ export function ProductsClient() {
         toast.success("SKU já estava em dia.");
       }
     } catch {
-      setError("Falha de rede ao sincronizar o SKU.");
+      toastError("Falha de rede ao sincronizar o SKU.");
     } finally {
       setSyncingSkuId(null);
-    }
-  }
-
-  async function syncAllSkus() {
-    setSyncingAllSkus(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/products/sync-skus", { method: "POST" });
-      if (!res.ok) {
-        setError(await readApiError(res, "products_sku_sync_failed"));
-        return;
-      }
-      const json = (await res.json()) as {
-        total: number;
-        updated: number;
-        unchanged: number;
-        withoutSku: number;
-        notFound: number;
-        failedBatches: number;
-      };
-      const parts = [
-        `${json.updated} ${json.updated === 1 ? "SKU atualizado" : "SKUs atualizados"}`,
-        `${json.unchanged} sem mudança`,
-      ];
-      if (json.withoutSku > 0) parts.push(`${json.withoutSku} sem SKU no anúncio`);
-      if (json.notFound > 0) {
-        parts.push(`${json.notFound} não encontrado(s) no Mercado Livre`);
-      }
-      const summary = `${parts.join(", ")}.`;
-      if (json.failedBatches > 0) {
-        toast.warning(
-          `${summary} ${json.failedBatches} lote(s) falharam — rode de novo para completar.`,
-        );
-      } else {
-        toast.success(summary);
-      }
-      if (json.updated > 0) await load();
-    } catch {
-      setError("Falha de rede ao sincronizar os SKUs.");
-    } finally {
-      setSyncingAllSkus(false);
     }
   }
 
@@ -761,7 +744,7 @@ export function ProductsClient() {
         body: JSON.stringify({ active }),
       });
       if (!res.ok) {
-        setError(await readApiError(res, "product_status_update_failed"));
+        toastError(await readApiError(res, "product_status_update_failed"));
         return;
       }
       const { product } = (await res.json()) as { product: { mlItemId: string; active: boolean } };
@@ -777,7 +760,7 @@ export function ProductsClient() {
       );
       toast.success(active ? "Produto ativado." : "Produto desativado.");
     } catch {
-      setError("Falha de rede ao atualizar o status do produto.");
+      toastError("Falha de rede ao atualizar o status do produto.");
     }
   }
 
@@ -796,15 +779,16 @@ export function ProductsClient() {
     setPendingDeactivate(null);
   }
 
-  async function deleteProduct(mlItemId: string) {
-    const product = sortedProducts.find((p) => p.mlItemId === mlItemId);
-    if (!confirm(`Remover cadastro de ${product?.sku ?? mlItemId}?`)) return;
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    const { mlItemId } = pendingDelete;
+    setPendingDelete(null);
     try {
       const res = await fetch(`/api/products/${encodeURIComponent(mlItemId)}`, {
         method: "DELETE",
       });
       if (!res.ok) {
-        setError(await readApiError(res, "product_delete_failed"));
+        toastError(await readApiError(res, "product_delete_failed"));
         return;
       }
       setData((prev) =>
@@ -814,7 +798,7 @@ export function ProductsClient() {
       );
       toast.success("Produto removido.");
     } catch {
-      setError("Falha de rede ao remover produto.");
+      toastError("Falha de rede ao remover produto.");
     }
   }
 
@@ -935,20 +919,6 @@ export function ProductsClient() {
             variant="outline"
             size="sm"
             className="gap-2"
-            disabled={loading || syncingAllSkus}
-            onClick={() => void syncAllSkus()}
-          >
-            <RefreshCw
-              className={cn("size-4", syncingAllSkus && "animate-spin")}
-              aria-hidden
-            />
-            Sincronizar SKUs
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-2"
             onClick={() => setKitsModalOpen(true)}
           >
             <Boxes className="size-4" aria-hidden />
@@ -996,6 +966,8 @@ export function ProductsClient() {
         ) : null}
       </div>
 
+      {/* Só falha de carregamento: sem dados na tela, o aviso precisa ficar
+          fixo. Erros de ação vão por toast (ver `toastError`). */}
       {error ? <UserFeedback>{error}</UserFeedback> : null}
 
       <ProductsTable
@@ -1022,7 +994,11 @@ export function ProductsClient() {
         onEdit={(product) =>
           setModal({ mode: "edit", form: formFromProduct(product) })
         }
-        onDelete={(mlItemId) => void deleteProduct(mlItemId)}
+        onDelete={(mlItemId) =>
+          setPendingDelete(
+            sortedProducts.find((p) => p.mlItemId === mlItemId) ?? null,
+          )
+        }
         onToggleActive={onToggleActive}
       />
 
@@ -1044,6 +1020,7 @@ export function ProductsClient() {
       {levelingSuggestion ? (
         <ProductLevelingSuggestionSheet
           sku={levelingSuggestion.sku}
+          mlItemId={levelingSuggestion.mlItemId}
           previousValues={levelingSuggestion.previousValues}
           productCreatedAt={levelingSuggestion.productCreatedAt}
           onClose={() => setLevelingSuggestion(null)}
@@ -1067,6 +1044,28 @@ export function ProductsClient() {
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={() => void confirmDeactivate()}>
               Desativar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={pendingDelete != null}
+        onOpenChange={(next) => !next && setPendingDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover cadastro?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDelete
+                ? `"${pendingDelete.sku ?? pendingDelete.mlItemId}" sai de Meus Produtos permanentemente. O anúncio no Mercado Livre não é afetado. Se você apenas parou de vender, prefira desativar — o cadastro some das telas operacionais e o histórico de custo continua valendo nos relatórios.`
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => void confirmDelete()}>
+              Remover
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

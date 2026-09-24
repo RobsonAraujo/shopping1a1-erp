@@ -7,6 +7,7 @@ import {
   dateRangesOverlap,
   enumerateMonthsOverlappingDateRange,
   isValidDatePeriod,
+  levelingScope,
   resolveLevelingCostForOrderDate,
   type DreProductCostLevelingInput,
 } from "../dre-product-cost-leveling-shared";
@@ -180,6 +181,25 @@ describe("dre-product-cost-leveling helpers", () => {
       ),
       41,
     );
+  });
+
+  it("scopes a product's levelings by identity, with text only for legacy rows", () => {
+    // Dois anúncios do mesmo item podem carregar o mesmo texto de SKU. O ramo
+    // por texto precisa exigir productMlItemId null, senão os nivelamentos de
+    // um produto apareceriam sob o outro.
+    assert.deepEqual(levelingScope("MLB1", "SKU-A"), {
+      OR: [
+        { productMlItemId: "MLB1" },
+        { productMlItemId: null, sku: "SKU-A" },
+      ],
+    });
+  });
+
+  it("scopes by identity alone when the product has no SKU text", () => {
+    // Sem texto conhecido, um ramo `sku: ""` casaria linhas indevidas.
+    assert.deepEqual(levelingScope("MLB1", null), { productMlItemId: "MLB1" });
+    assert.deepEqual(levelingScope("MLB1"), { productMlItemId: "MLB1" });
+    assert.deepEqual(levelingScope("MLB1", ""), { productMlItemId: "MLB1" });
   });
 
   it("applies leveling for a specific order date on the pricing map", () => {

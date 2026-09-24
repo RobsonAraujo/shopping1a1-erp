@@ -7,6 +7,7 @@ import {
   dateRangesOverlap,
   DreProductCostLevelingError,
   isValidDatePeriod,
+  levelingScope,
   type DreProductCostLevelingInput,
   type DreProductCostLevelingPricing,
   type DreProductCostLevelingView,
@@ -22,6 +23,7 @@ export {
   enumerateMonthsOverlappingDateRange,
   isValidDatePeriod,
   isValidYmd,
+  levelingScope,
   resolveLevelingCostForOrderDate,
   type DreProductCostLevelingInput,
   type DreProductCostLevelingPricing,
@@ -68,9 +70,11 @@ function toYmd(value: Date | string): string {
   return `${y}-${m}-${d}`;
 }
 
-function toView(row: {
+function toView(
+  row: {
   id: string;
   sku: string;
+  productMlItemId: string | null;
   startDate: Date;
   endDate: Date;
   hasIcmsSt: boolean;
@@ -85,7 +89,9 @@ function toView(row: {
   pmaPrice: unknown;
   createdAt: Date;
   updatedAt: Date;
-}): DreProductCostLevelingView {
+  },
+  currentSku: string | null = null,
+): DreProductCostLevelingView {
   const unitCostNf = decimalToNumber(row.unitCostNf) ?? 0;
   const purchaseCostWithSt = decimalToNumber(row.purchaseCostWithSt);
   const ipiPercent = decimalToNumber(row.ipiPercent) ?? 0;
@@ -100,6 +106,8 @@ function toView(row: {
   return {
     id: row.id,
     sku: row.sku,
+    productMlItemId: row.productMlItemId,
+    currentSku,
     startDate: toYmd(row.startDate),
     endDate: toYmd(row.endDate),
     hasIcmsSt: row.hasIcmsSt,
@@ -118,19 +126,47 @@ function toView(row: {
   };
 }
 
-/**
- * Filtro dos nivelamentos de um produto.
- *
- * `DreProductCostLeveling.sku` é snapshot congelado do texto no momento do
- * nivelamento, enquanto `Product.sku` é espelho do anúncio e pode ser
- * ressincronizado. Casar por `productMlItemId` mantém visíveis os
- * nivelamentos gravados sob um SKU antigo; o texto só cobre linhas legadas,
- * anteriores ao backfill de identidade.
- */
-function levelingScope(productMlItemId: string, sku: string) {
-  return {
-    OR: [{ productMlItemId }, { productMlItemId: null, sku }],
-  };
+async function resolveLevelingProduct(
+  organizationId: string,
+  input: { productMlItemId?: string | null; sku: string },
+): Promise<{ mlItemId: string }> {
+  if (input.productMlItemId) {
+    const byIdentity = await prisma.product.findFirst({
+      where: { organizationId, mlItemId: input.productMlItemId },
+      select: { mlItemId: true },
+    });
+    if (byIdentity) return byIdentity;
+    throw new DreProductCostLevelingError(
+      `Anúncio ${input.productMlItemId} não encontrado em Meus produtos.`,
+      "sku_not_found",
+    );
+  }
+
+  const byText = await prisma.product.findFirst({
+    where: { organizationId, sku: input.sku },
+    select: { mlItemId: true },
+  });
+  if (!byText) {
+    throw new DreProductCostLevelingError(
+      `SKU ${input.sku} não encontrado em Meus produtos.`,
+      "sku_not_found",
+    );
+  }
+  return byText;
+}
+
+/** `Product.sku` atual de cada identidade, para preencher `currentSku`. */
+async function loadCurrentSkusByMlItemId(
+  organizationId: string,
+  mlItemIds: string[],
+): Promise<Map<string, string | null>> {
+  const unique = [...new Set(mlItemIds.filter(Boolean))];
+  if (unique.length === 0) return new Map();
+  const products = await prisma.product.findMany({
+    where: { organizationId, mlItemId: { in: unique } },
+    select: { mlItemId: true, sku: true },
+  });
+  return new Map(products.map((p) => [p.mlItemId, p.sku]));
 }
 
 async function assertNoOverlap(
@@ -167,13 +203,28 @@ async function assertNoOverlap(
   }
 }
 
+/**
+ * Nivelamentos de um produto — filtrado por identidade (`mlItemId`) quando
+ * disponível, ou pelo texto de SKU (compatibilidade). Sem filtro, devolve
+ * todos os da organização.
+ */
 export async function listDreProductCostLevelings(
   organizationId: string,
-  sku?: string,
+  filter?: { mlItemId?: string; sku?: string },
 ): Promise<DreProductCostLevelingView[]> {
   let scope: Record<string, unknown> = {};
-  if (sku) {
-    const key = normalizeProductSku(sku);
+  if (filter?.mlItemId) {
+    const product = await prisma.product.findFirst({
+      where: { organizationId, mlItemId: filter.mlItemId },
+      select: { mlItemId: true, sku: true },
+    });
+    // O texto do produto cobre as linhas legadas sem `productMlItemId`.
+    scope = levelingScope(
+      filter.mlItemId,
+      product?.sku ? normalizeProductSku(product.sku) : null,
+    );
+  } else if (filter?.sku) {
+    const key = normalizeProductSku(filter.sku);
     const product = await prisma.product.findFirst({
       where: { organizationId, sku: key },
       select: { mlItemId: true },
@@ -188,7 +239,14 @@ export async function listDreProductCostLevelings(
     },
     orderBy: [{ sku: "asc" }, { startDate: "asc" }],
   });
-  return rows.map(toView);
+
+  const currentSkus = await loadCurrentSkusByMlItemId(
+    organizationId,
+    rows.map((row) => row.productMlItemId).filter((id): id is string => Boolean(id)),
+  );
+  return rows.map((row) =>
+    toView(row, row.productMlItemId ? (currentSkus.get(row.productMlItemId) ?? null) : null),
+  );
 }
 
 export async function createDreProductCostLeveling(
@@ -199,16 +257,7 @@ export async function createDreProductCostLeveling(
   const input: DreProductCostLevelingInput = { ...raw, sku };
   assertCostInput(input);
 
-  const product = await prisma.product.findFirst({
-    where: { organizationId, sku },
-    select: { mlItemId: true },
-  });
-  if (!product) {
-    throw new DreProductCostLevelingError(
-      `SKU ${sku} não encontrado em Meus produtos.`,
-      "sku_not_found",
-    );
-  }
+  const product = await resolveLevelingProduct(organizationId, input);
 
   await assertNoOverlap(organizationId, sku, product.mlItemId, input);
 
@@ -231,7 +280,7 @@ export async function createDreProductCostLeveling(
       pmaPrice: input.pmaPrice,
     },
   });
-  return toView(row);
+  return toView(row, sku);
 }
 
 export async function updateDreProductCostLeveling(
@@ -254,16 +303,7 @@ export async function updateDreProductCostLeveling(
   const input: DreProductCostLevelingInput = { ...raw, sku };
   assertCostInput(input);
 
-  const product = await prisma.product.findFirst({
-    where: { organizationId, sku },
-    select: { mlItemId: true },
-  });
-  if (!product) {
-    throw new DreProductCostLevelingError(
-      `SKU ${sku} não encontrado em Meus produtos.`,
-      "sku_not_found",
-    );
-  }
+  const product = await resolveLevelingProduct(organizationId, input);
 
   await assertNoOverlap(organizationId, sku, product.mlItemId, input, id);
 
@@ -286,7 +326,7 @@ export async function updateDreProductCostLeveling(
       pmaPrice: input.pmaPrice,
     },
   });
-  return toView(row);
+  return toView(row, sku);
 }
 
 export async function deleteDreProductCostLeveling(

@@ -34,11 +34,14 @@ function shiftYmd(ymd: string, days: number): string {
 
 export function ProductLevelingSuggestionSheet({
   sku,
+  mlItemId,
   previousValues,
   productCreatedAt,
   onClose,
 }: {
   sku: string;
+  /** Identidade do produto — resolve o nivelamento no servidor; `sku` é só exibição. */
+  mlItemId: string;
   previousValues: DreProductCostLevelingFormValues;
   /** ISO date string (Product.createdAt). */
   productCreatedAt: string;
@@ -60,7 +63,7 @@ export function ProductLevelingSuggestionSheet({
       setLoadingRange(true);
       try {
         const res = await fetch(
-          `/api/dre/product-cost-leveling?sku=${encodeURIComponent(sku)}`,
+          `/api/dre/product-cost-leveling?mlItemId=${encodeURIComponent(mlItemId)}`,
         );
         if (!res.ok) {
           if (!cancelled) {
@@ -96,7 +99,7 @@ export function ProductLevelingSuggestionSheet({
     return () => {
       cancelled = true;
     };
-  }, [sku, productCreatedAt]);
+  }, [mlItemId, productCreatedAt]);
 
   async function save() {
     if (!period) return;
@@ -117,6 +120,7 @@ export function ProductLevelingSuggestionSheet({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sku,
+          productMlItemId: mlItemId,
           startDate: period.startDate,
           endDate: period.endDate,
           hasIcmsSt: form.hasIcmsSt,

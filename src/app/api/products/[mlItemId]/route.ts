@@ -10,6 +10,7 @@ import {
   productPatchToPrismaData,
   validateProductInput,
 } from "@/lib/products/product-data";
+import { productDeleteBlockedMessage } from "@/lib/products/product-delete-guard";
 import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 import { requireOrganization } from "@/lib/api/api-auth";
 import { parseJsonBody } from "@/lib/api/api-validation";
@@ -172,17 +173,29 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   const { mlItemId } = await context.params;
 
   try {
-    const warehouseStock = await prisma.warehouseStock.findFirst({
-      where: { mlItemId, organizationId },
-      select: { quantity: true },
+    // Cada dependência reage de um jeito silencioso ao delete (KitItem em
+    // cascade apaga o componente do kit; o nivelamento do DRE perde a
+    // identidade) — por isso são checadas antes, e não deixadas para o banco.
+    const [warehouseStock, levelingCount, kitCount] = await Promise.all([
+      prisma.warehouseStock.findFirst({
+        where: { mlItemId, organizationId },
+        select: { quantity: true },
+      }),
+      prisma.dreProductCostLeveling.count({
+        where: { organizationId, productMlItemId: mlItemId },
+      }),
+      prisma.kitItem.count({
+        where: { organizationId, productMlItemId: mlItemId },
+      }),
+    ]);
+
+    const blockedMessage = productDeleteBlockedMessage({
+      warehouseQuantity: warehouseStock?.quantity ?? 0,
+      levelingCount,
+      kitCount,
     });
-    if (warehouseStock && warehouseStock.quantity > 0) {
-      return NextResponse.json(
-        {
-          error: `Esse produto ainda tem ${warehouseStock.quantity} unidade${warehouseStock.quantity !== 1 ? "s" : ""} no galpão — zere o estoque em Estoque antes de remover o cadastro.`,
-        },
-        { status: 409 },
-      );
+    if (blockedMessage) {
+      return NextResponse.json({ error: blockedMessage }, { status: 409 });
     }
 
     await prisma.product.delete({ where: { mlItemId, organizationId } });
