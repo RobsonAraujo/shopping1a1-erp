@@ -1,7 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Boxes, Download, Percent, Plus, RefreshCw } from "lucide-react";
+import {
+  Barcode,
+  Boxes,
+  Coins,
+  Download,
+  Landmark,
+  Percent,
+  Plus,
+  RefreshCw,
+  Tag,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { KitsModal } from "@/components/produtos/KitsModal";
 import { ImportAllProductsModal } from "@/components/produtos/ImportAllProductsModal";
@@ -9,15 +20,16 @@ import { ItemListSearch } from "@/components/shared/ItemListSearch";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Combobox } from "@/components/ui/combobox";
 import { Switch } from "@/components/ui/switch";
 import { FormInput } from "@/components/ui/form-input";
-import { FormSelect } from "@/components/ui/form-select";
 import { useApiResource } from "@/hooks/use-api-resource";
 import type { SupplierRow } from "@/components/fornecedores/FornecedoresClient";
 import {
   Sheet,
   SheetBody,
   SheetContent,
+  SheetDescription,
   SheetFooter,
   SheetHeader,
   SheetTitle,
@@ -49,6 +61,7 @@ import {
   formatFinancialMoney,
   formatFinancialPercent,
 } from "@/lib/pricing/financial-margin";
+import { computeEffectivePricingCost } from "@/lib/pricing/product-pricing";
 import { TAX_REPORT_MONTH_NAMES } from "@/lib/tax-report/routes";
 import { cn } from "@/lib/utils";
 
@@ -150,6 +163,44 @@ function formFromProduct(product: ProductView): ProductFormState {
   };
 }
 
+/** Bloco de um grupo do formulário: título discreto + régua, e uma grade de
+ *  duas colunas para os campos. Sem isso o modal vira uma lista única de
+ *  campos heterogêneos (identificação, custo, fiscal, regra comercial). */
+function FormSection({
+  icon: Icon,
+  title,
+  description,
+  children,
+}: {
+  icon: LucideIcon;
+  title: string;
+  description?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Icon
+          className="size-3.5 shrink-0 text-[var(--muted-foreground)]"
+          aria-hidden
+        />
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
+          {title}
+        </h3>
+        <span className="h-px flex-1 bg-[var(--border)]" aria-hidden />
+      </div>
+      {description ? (
+        <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
+          {description}
+        </p>
+      ) : null}
+      {children ? (
+        <div className="grid items-start gap-3 sm:grid-cols-2">{children}</div>
+      ) : null}
+    </section>
+  );
+}
+
 function FormSwitchRow({
   id,
   label,
@@ -168,14 +219,14 @@ function FormSwitchRow({
   return (
     <div
       className={cn(
-        "flex items-center justify-between gap-4 rounded-lg border border-[var(--border)] bg-[var(--card)] px-4 py-3 shadow-sm",
+        "flex h-full items-start justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--muted)]/30 px-3.5 py-3",
         className,
       )}
     >
       <label htmlFor={id} className="min-w-0 cursor-pointer">
         <p className="text-sm font-medium text-[var(--foreground)]">{label}</p>
         {description ? (
-          <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+          <p className="mt-0.5 text-xs leading-relaxed text-[var(--muted-foreground)]">
             {description}
           </p>
         ) : null}
@@ -185,6 +236,7 @@ function FormSwitchRow({
         checked={checked}
         onCheckedChange={onCheckedChange}
         aria-label={label}
+        className="mt-0.5 shrink-0"
       />
     </div>
   );
@@ -261,9 +313,12 @@ function ProductFormModal({
     setError(null);
     try {
       const res = isEdit
-        ? await fetch(`/api/products/${encodeURIComponent(mlItemId)}/sync-sku`, {
-            method: "POST",
-          })
+        ? await fetch(
+            `/api/products/${encodeURIComponent(mlItemId)}/sync-sku`,
+            {
+              method: "POST",
+            },
+          )
         : await fetch(`/api/ml/items/${encodeURIComponent(mlItemId)}/sku`);
       if (!res.ok) {
         setError(
@@ -348,6 +403,42 @@ function ProductFormModal({
     }
   }
 
+  const previewBaseLabel = form.hasIcmsSt
+    ? "Custo de compra com ICMS-ST"
+    : "Custo unitário NF";
+  const pricingCostPreview = computeEffectivePricingCost({
+    unitCostNf: form.unitCostNf ?? Number.NaN,
+    purchaseIcmsPercent: form.purchaseIcmsPercent ?? 0,
+    hasIcmsSt: form.hasIcmsSt,
+    purchaseCostWithSt: form.purchaseCostWithSt,
+    ipiPercent: form.ipiPercent ?? 0,
+    isMonophasic: form.isMonophasic,
+    pisCofinsPercent: 0,
+  });
+
+  /** Mesma conta que a coluna "Custo" da tabela mostra depois de salvar —
+   *  ver aqui evita o vaivém de salvar só para conferir o efeito do IPI/ST. */
+  const pricingCostPreviewBlock = (
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-xl border border-dashed border-[var(--border)] px-3.5 py-3 sm:col-span-2">
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
+          Custo de precificação
+        </p>
+        <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+          {previewBaseLabel}
+          {isSimples
+            ? ""
+            : ` + IPI ${formatFinancialPercent(form.ipiPercent ?? 0)}`}
+        </p>
+      </div>
+      <p className="text-lg font-semibold tabular-nums text-[var(--foreground)]">
+        {pricingCostPreview === null
+          ? "—"
+          : formatFinancialMoney(pricingCostPreview)}
+      </p>
+    </div>
+  );
+
   return (
     <Sheet
       open
@@ -358,19 +449,25 @@ function ProductFormModal({
       <SheetContent className="sm:max-w-2xl">
         <SheetHeader>
           <SheetTitle>{title}</SheetTitle>
+          <SheetDescription>
+            {isEdit
+              ? "Custos de compra, marcadores fiscais e o piso de preço deste anúncio."
+              : "Vincule um anúncio do Mercado Livre e informe o custo de compra."}
+          </SheetDescription>
         </SheetHeader>
-        <SheetBody>
+        <SheetBody className="space-y-6">
           {/* Topo do corpo, não o rodapé: o formulário é longo e rola, e um
               aviso no fim ficaria fora da vista justamente quando aparece. */}
           {error ? (
-            <UserFeedback className="mb-4" onDismiss={() => setError(null)}>
+            <UserFeedback onDismiss={() => setError(null)}>
               {error}
             </UserFeedback>
           ) : null}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="sm:col-span-2">
+
+          <FormSection icon={Barcode} title="Identificação">
+            <div className="space-y-1.5">
               <FormInput
-                label="ID do anúncio no Mercado Livre (MLB...)"
+                label="ID do anúncio (MLB...)"
                 value={form.mlItemId}
                 disabled={isEdit}
                 placeholder="MLB1234567890"
@@ -379,20 +476,18 @@ function ProductFormModal({
                 }
               />
               {!isEdit ? (
-                <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
                   O custo é vinculado a este anúncio específico.
                 </p>
               ) : null}
             </div>
-            <div className="space-y-1.5 sm:col-span-2">
+            <div className="space-y-1.5">
               <div className="flex items-end gap-2">
                 <FormInput
                   label="SKU"
                   value={form.sku}
                   disabled
-                  placeholder={
-                    form.sku ? undefined : "Busque o SKU do anúncio"
-                  }
+                  placeholder={form.sku ? undefined : "Busque o SKU do anúncio"}
                   className="flex-1"
                 />
                 <Button
@@ -411,29 +506,33 @@ function ProductFormModal({
                   />
                 </Button>
               </div>
-              <p className="text-xs text-[var(--muted-foreground)]">
-                Espelho do anúncio no Mercado Livre — não editável à mão. Use o
-                botão ao lado para buscar o SKU atual
+              <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
+                Espelho do Mercado Livre, use o botão para buscar o SKU atual
                 {isEdit ? " e atualizar o cadastro." : "."}
               </p>
             </div>
             <FormInput
               label="NCM"
               value={form.ncm}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, ncm: e.target.value }))
-              }
-              className="sm:col-span-2"
+              placeholder="0000.00.00"
+              onChange={(e) => setForm((f) => ({ ...f, ncm: e.target.value }))}
             />
-            <FormSelect
+            <Combobox
+              id="supplier"
               label="Fornecedor"
               value={form.supplierId ?? ""}
               onValueChange={(value) =>
                 setForm((f) => ({ ...f, supplierId: value || null }))
               }
               options={supplierOptions}
-              className="sm:col-span-2"
+              loading={suppliersResource.loading}
+              loadingMessage="Carregando fornecedores…"
+              searchPlaceholder="Buscar fornecedor…"
+              emptyMessage="Nenhum fornecedor com esse nome."
             />
+          </FormSection>
+
+          <FormSection icon={Coins} title="Custos de compra">
             <MaskedMoneyField
               id="unit-cost-nf"
               label="Custo unitário NF"
@@ -446,53 +545,21 @@ function ProductFormModal({
               value={form.extraCosts}
               onValueChange={(v) => setForm((f) => ({ ...f, extraCosts: v }))}
             />
-            {isSimples ? (
-              <p className="text-xs leading-relaxed text-[var(--muted-foreground)] sm:col-span-2">
-                Campos fiscais de Lucro Real (ICMS compra/venda, ICMS-ST, IPI,
-                monofásico, importado) não se aplicam ao Simples Nacional e
-                ficam ocultos. Se este produto já teve esses dados cadastrados
-                antes (ex.: empresa migrou de Lucro Real), eles continuam salvos
-                e voltam a aparecer se o regime mudar de novo.
-              </p>
-            ) : (
+            {isSimples ? null : (
               <>
-                <div>
-                  <MaskedPercentField
-                    id="purchase-icms"
-                    label="ICMS da compra"
-                    value={form.purchaseIcmsPercent}
-                    onValueChange={(v) =>
-                      setForm((f) => ({ ...f, purchaseIcmsPercent: v }))
-                    }
-                  />
-                  {form.hasIcmsSt ? (
-                    <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                      Para produtos com ICMS-ST, esse valor só vira crédito nas
-                      vendas interestaduais em que o ICMS-ST for tratado como
-                      recuperável (config. tributária).
-                    </p>
-                  ) : null}
-                </div>
-                <FormSwitchRow
-                  id="has-icms-st"
-                  label="ICMS-ST"
-                  description="Substituição tributária na compra — usa o custo com ST no cálculo."
-                  checked={form.hasIcmsSt}
-                  onCheckedChange={(checked) =>
-                    setForm((f) => ({ ...f, hasIcmsSt: checked }))
+                <MaskedPercentField
+                  id="purchase-icms"
+                  label="ICMS da compra"
+                  value={form.purchaseIcmsPercent}
+                  onValueChange={(v) =>
+                    setForm((f) => ({ ...f, purchaseIcmsPercent: v }))
                   }
-                  className="sm:col-span-2"
+                  hint={
+                    form.hasIcmsSt
+                      ? "Com ICMS-ST, só vira crédito nas vendas interestaduais em que o ST for recuperável (config. tributária)."
+                      : undefined
+                  }
                 />
-                {form.hasIcmsSt ? (
-                  <MaskedMoneyField
-                    id="purchase-cost-st"
-                    label="Custo de compra somado ICMS-ST"
-                    value={form.purchaseCostWithSt}
-                    onValueChange={(v) =>
-                      setForm((f) => ({ ...f, purchaseCostWithSt: v }))
-                    }
-                  />
-                ) : null}
                 <MaskedPercentField
                   id="ipi"
                   label="IPI"
@@ -501,43 +568,87 @@ function ProductFormModal({
                     setForm((f) => ({ ...f, ipiPercent: v }))
                   }
                 />
-                <FormSwitchRow
-                  id="is-monophasic"
-                  label="Monofásico"
-                  description="Sem PIS/COFINS no crédito de compra nem na precificação."
-                  checked={form.isMonophasic}
-                  onCheckedChange={(checked) =>
-                    setForm((f) => ({ ...f, isMonophasic: checked }))
-                  }
-                  className="sm:col-span-2"
-                />
-                <FormSwitchRow
-                  id="is-imported"
-                  label="Produto importado"
-                  description="Em vendas interestaduais, usa alíquota de ICMS interestadual de 4% (Resolução do Senado 13/2012)."
-                  checked={form.isImported}
-                  onCheckedChange={(checked) =>
-                    setForm((f) => ({ ...f, isImported: checked }))
-                  }
-                  className="sm:col-span-2"
-                />
-                {/* "Imposto venda ICMS" (`saleIcmsPercent`) saiu da tela: só
-                    alimentava `computePricingTaxPercent`, cujo resultado não é
-                    lido por ninguém — DRE, kits, Lucratividade e Meus Produtos
-                    tiram o imposto do relatório tributário, e o cálculo de
-                    ICMS/DIFAL usa a tabela por UF de propósito (ver
-                    `icms-difal.ts`). O campo continua no banco e no payload
-                    (default 0) porque `repair-snapshot-apuracao` usa a
-                    presença dele para detectar snapshot antigo. */}
+                {/* Switch e campo dependente no mesmo cartão: ligar o ST não
+                    reflui a grade nem empurra o IPI para outra linha. */}
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/30 sm:col-span-2">
+                  <FormSwitchRow
+                    id="has-icms-st"
+                    label="ICMS-ST"
+                    description="Substituição tributária na compra."
+                    checked={form.hasIcmsSt}
+                    onCheckedChange={(checked) =>
+                      setForm((f) => ({ ...f, hasIcmsSt: checked }))
+                    }
+                    className="border-0 bg-transparent"
+                  />
+                  {form.hasIcmsSt ? (
+                    <div className="border-t border-[var(--border)] px-3.5 py-3">
+                      <MaskedMoneyField
+                        id="purchase-cost-st"
+                        label="Custo de compra somado ICMS-ST"
+                        value={form.purchaseCostWithSt}
+                        onValueChange={(v) =>
+                          setForm((f) => ({ ...f, purchaseCostWithSt: v }))
+                        }
+                        hint="Substitui o custo unitário NF como base do custo de precificação."
+                      />
+                    </div>
+                  ) : null}
+                </div>
               </>
             )}
+            {pricingCostPreviewBlock}
+          </FormSection>
+
+          {isSimples ? (
+            <FormSection
+              icon={Landmark}
+              title="Classificação fiscal"
+              description="Campos de Lucro Real (ICMS compra/venda, ICMS-ST, IPI, monofásico, importado) não se aplicam ao Simples Nacional e ficam ocultos. Se este produto já teve esses dados cadastrados antes (ex.: empresa migrou de Lucro Real), eles continuam salvos e voltam a aparecer se o regime mudar de novo."
+            />
+          ) : (
+            <FormSection icon={Landmark} title="Classificação fiscal">
+              <FormSwitchRow
+                id="is-monophasic"
+                label="Monofásico"
+                description="Sem PIS/COFINS no crédito de compra nem na precificação."
+                checked={form.isMonophasic}
+                onCheckedChange={(checked) =>
+                  setForm((f) => ({ ...f, isMonophasic: checked }))
+                }
+              />
+              <FormSwitchRow
+                id="is-imported"
+                label="Produto importado"
+                description="ICMS interestadual de 4% na venda (Res. Senado 13/2012)."
+                checked={form.isImported}
+                onCheckedChange={(checked) =>
+                  setForm((f) => ({ ...f, isImported: checked }))
+                }
+              />
+              {/* "Imposto venda ICMS" (`saleIcmsPercent`) saiu da tela: só
+                  alimentava `computePricingTaxPercent`, cujo resultado não é
+                  lido por ninguém — DRE, kits, Lucratividade e Meus Produtos
+                  tiram o imposto do relatório tributário, e o cálculo de
+                  ICMS/DIFAL usa a tabela por UF de propósito (ver
+                  `icms-difal.ts`). O campo continua no banco e no payload
+                  (default 0) porque `repair-snapshot-apuracao` usa a
+                  presença dele para detectar snapshot antigo. */}
+            </FormSection>
+          )}
+
+          <FormSection
+            icon={Tag}
+            title="Regra comercial"
+            description="Não entra no custo do produto: é o piso de preço usado nos alertas do painel e na Lucratividade."
+          >
             <MaskedMoneyField
               id="pma-price"
-              label="PMA (preço mínimo anunciável)"
+              label="PMA — preço mínimo anunciável"
               value={form.pmaPrice}
               onValueChange={(v) => setForm((f) => ({ ...f, pmaPrice: v }))}
             />
-          </div>
+          </FormSection>
         </SheetBody>
         <SheetFooter>
           <Button type="button" variant="outline" onClick={onClose}>
@@ -585,7 +696,8 @@ export function ProductsClient() {
   const [importAllOpen, setImportAllOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showInactive, setShowInactive] = useState(false);
-  const [pendingDeactivate, setPendingDeactivate] = useState<ProductView | null>(null);
+  const [pendingDeactivate, setPendingDeactivate] =
+    useState<ProductView | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ProductView | null>(null);
   const [levelingSuggestion, setLevelingSuggestion] = useState<{
     sku: string;
@@ -701,7 +813,9 @@ export function ProductsClient() {
       if (!prev) return prev;
       const exists = prev.products.some((p) => p.mlItemId === product.mlItemId);
       const products = exists
-        ? prev.products.map((p) => (p.mlItemId === product.mlItemId ? product : p))
+        ? prev.products.map((p) =>
+            p.mlItemId === product.mlItemId ? product : p,
+          )
         : [...prev.products, product];
       return { ...prev, products };
     });
@@ -730,7 +844,8 @@ export function ProductsClient() {
         `${json.updated} ${json.updated === 1 ? "SKU atualizado" : "SKUs atualizados"}`,
         `${json.unchanged} sem mudança`,
       ];
-      if (json.withoutSku > 0) parts.push(`${json.withoutSku} sem SKU no anúncio`);
+      if (json.withoutSku > 0)
+        parts.push(`${json.withoutSku} sem SKU no anúncio`);
       if (json.notFound > 0) {
         parts.push(`${json.notFound} não encontrado(s) no Mercado Livre`);
       }
@@ -740,7 +855,9 @@ export function ProductsClient() {
         );
       }
       if (json.failedBatches > 0) {
-        parts.push(`${json.failedBatches} lote(s) falharam — rode de novo para completar`);
+        parts.push(
+          `${json.failedBatches} lote(s) falharam — rode de novo para completar`,
+        );
       }
       const summary = `${parts.join(", ")}.`;
 
@@ -792,16 +909,21 @@ export function ProductsClient() {
 
   async function setProductActive(mlItemId: string, active: boolean) {
     try {
-      const res = await fetch(`/api/products/${encodeURIComponent(mlItemId)}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ active }),
-      });
+      const res = await fetch(
+        `/api/products/${encodeURIComponent(mlItemId)}/status`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ active }),
+        },
+      );
       if (!res.ok) {
         toastError(await readApiError(res, "product_status_update_failed"));
         return;
       }
-      const { product } = (await res.json()) as { product: { mlItemId: string; active: boolean } };
+      const { product } = (await res.json()) as {
+        product: { mlItemId: string; active: boolean };
+      };
       setData((prev) =>
         prev
           ? {
@@ -847,7 +969,10 @@ export function ProductsClient() {
       }
       setData((prev) =>
         prev
-          ? { ...prev, products: prev.products.filter((p) => p.mlItemId !== mlItemId) }
+          ? {
+              ...prev,
+              products: prev.products.filter((p) => p.mlItemId !== mlItemId),
+            }
           : prev,
       );
       toast.success("Produto removido.");
@@ -923,11 +1048,11 @@ export function ProductsClient() {
 
       {data?.taxRegime !== "SIMPLES" && data?.taxReportGeneratedAt ? (
         <p className="text-xs text-[var(--muted-foreground)]">
-          Coluna Imposto calculada com base no último mês fechado do
-          relatório tributário (gerado em{" "}
+          Coluna Imposto calculada com base no último mês fechado do relatório
+          tributário (gerado em{" "}
           {DATE_TIME_FORMATTER.format(new Date(data.taxReportGeneratedAt))},{" "}
-          {daysSince(data.taxReportGeneratedAt)} dia(s) atrás). Se houve
-          vendas ou mudanças fiscais recentes,{" "}
+          {daysSince(data.taxReportGeneratedAt)} dia(s) atrás). Se houve vendas
+          ou mudanças fiscais recentes,{" "}
           <Link
             href="/dashboard/relatorio-tributario"
             className="font-medium text-[var(--primary)] underline underline-offset-2"
@@ -1023,13 +1148,18 @@ export function ProductsClient() {
           entityPlural="produtos"
         />
         {inactiveCount > 0 ? (
-          <label htmlFor="show-inactive-products" className="flex shrink-0 items-center gap-2 text-sm text-[var(--muted-foreground)]">
+          <label
+            htmlFor="show-inactive-products"
+            className="flex shrink-0 items-center gap-2 text-sm text-[var(--muted-foreground)]"
+          >
             <Switch
               id="show-inactive-products"
               checked={showInactive}
               onCheckedChange={setShowInactive}
             />
-            {showInactive ? "Mostrando inativos" : `${inactiveCount} inativo${inactiveCount === 1 ? "" : "s"} oculto${inactiveCount === 1 ? "" : "s"}`}
+            {showInactive
+              ? "Mostrando inativos"
+              : `${inactiveCount} inativo${inactiveCount === 1 ? "" : "s"} oculto${inactiveCount === 1 ? "" : "s"}`}
           </label>
         ) : null}
       </div>
@@ -1110,7 +1240,10 @@ export function ProductsClient() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => void confirmDeactivate()}>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => void confirmDeactivate()}
+            >
               Desativar
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -1132,7 +1265,10 @@ export function ProductsClient() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => void confirmDelete()}>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => void confirmDelete()}
+            >
               Remover
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -1145,7 +1281,9 @@ export function ProductsClient() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Sincronizar SKUs de todos os produtos?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Sincronizar SKUs de todos os produtos?
+            </AlertDialogTitle>
             <AlertDialogDescription>
               {`Vamos ler os ${sortedProducts.length} anúncios no Mercado Livre e regravar o SKU dos que mudaram. Custo, imposto e nivelamentos do DRE não são alterados. Produtos cujo SKU colidiria com outro produto são pulados e aparecem no resumo. Pode levar alguns minutos.`}
             </AlertDialogDescription>
