@@ -8,121 +8,8 @@ import {
 } from "@/lib/pricing/financial-margin";
 import { dreMonthShortLabel } from "@/lib/dre/dre-table-rows";
 import type { DreMonthView, DreYearView } from "@/lib/dre/dre-year-data";
+import { Sparkline, type SparklineTone } from "@/components/shared/Sparkline";
 import { cn } from "@/lib/utils";
-
-type SparkTone = "primary" | "sky" | "emerald";
-
-const SPARK_COLORS: Record<SparkTone, string> = {
-  primary: "#1b2d6f",
-  sky: "#0284c7",
-  emerald: "#059669",
-};
-
-function Sparkline({
-  values,
-  selectedMonth,
-  tone = "primary",
-}: {
-  values: Array<number | null>;
-  selectedMonth: number | null;
-  tone?: SparkTone;
-}) {
-  const width = 240;
-  const height = 56;
-  const pad = 4;
-  const finite = values.filter(
-    (v): v is number => v != null && Number.isFinite(v),
-  );
-
-  if (finite.length < 2) {
-    return <div className="h-14 w-full" aria-hidden />;
-  }
-
-  const min = Math.min(0, ...finite);
-  const max = Math.max(0.01, ...finite);
-  const range = max - min || 1;
-  const stepX = (width - pad * 2) / (values.length - 1);
-
-  const points = values.map((v, index) => {
-    if (v == null || !Number.isFinite(v)) return null;
-    return {
-      x: pad + index * stepX,
-      y: pad + (1 - (v - min) / range) * (height - pad * 2),
-      month: index + 1,
-    };
-  });
-
-  const segments: Array<Array<{ x: number; y: number }>> = [];
-  let current: Array<{ x: number; y: number }> = [];
-  for (const point of points) {
-    if (point == null) {
-      if (current.length > 1) segments.push(current);
-      current = [];
-      continue;
-    }
-    current.push(point);
-  }
-  if (current.length > 1) segments.push(current);
-
-  const linePath = segments
-    .map(
-      (seg) =>
-        "M " + seg.map((p) => `${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" L "),
-    )
-    .join(" ");
-
-  const zeroY = pad + (1 - (0 - min) / range) * (height - pad * 2);
-  const areaPath = segments
-    .map((seg) => {
-      const start = seg[0];
-      const end = seg[seg.length - 1];
-      return `M ${start.x.toFixed(1)} ${zeroY.toFixed(1)} L ${seg
-        .map((p) => `${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
-        .join(" L ")} L ${end.x.toFixed(1)} ${zeroY.toFixed(1)} Z`;
-    })
-    .join(" ");
-
-  const color = SPARK_COLORS[tone];
-  const gradientId = `dre-spark-${tone}`;
-
-  return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      preserveAspectRatio="none"
-      className="h-14 w-full"
-      aria-hidden
-    >
-      <defs>
-        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.22" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={areaPath} fill={`url(#${gradientId})`} stroke="none" />
-      <path
-        d={linePath}
-        fill="none"
-        stroke={color}
-        strokeWidth={1.75}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      {points.map((p) =>
-        p && p.month === selectedMonth ? (
-          <circle
-            key={p.month}
-            cx={p.x}
-            cy={p.y}
-            r={3.25}
-            fill={color}
-            stroke="white"
-            strokeWidth={1.5}
-          />
-        ) : null,
-      )}
-    </svg>
-  );
-}
 
 function trendPercent(
   series: Array<number | null>,
@@ -163,7 +50,10 @@ function TrendBadge({ delta }: { delta: number | null }) {
   );
 }
 
-const ICON_TONE_CLASS: Record<SparkTone, string> = {
+/** Subconjunto dos tons de sparkline que os KPIs do DRE usam. */
+type DreKpiTone = Extract<SparklineTone, "primary" | "sky" | "emerald">;
+
+const ICON_TONE_CLASS: Record<DreKpiTone, string> = {
   primary: "bg-[var(--primary)]/10 text-[var(--primary)]",
   sky: "bg-sky-50 text-sky-600",
   emerald: "bg-emerald-50 text-emerald-600",
@@ -181,7 +71,7 @@ function KpiCard({
   footer,
 }: {
   icon: ReactNode;
-  tone: SparkTone;
+  tone: DreKpiTone;
   label: string;
   value: string;
   hint?: string;
@@ -289,7 +179,7 @@ export function DreOverview({
           spark={
             <Sparkline
               values={revenueSeries}
-              selectedMonth={selectedMonth}
+              highlightIndex={selectedMonth != null ? selectedMonth - 1 : null}
               tone="primary"
             />
           }
@@ -305,7 +195,7 @@ export function DreOverview({
           spark={
             <Sparkline
               values={marginSeries}
-              selectedMonth={selectedMonth}
+              highlightIndex={selectedMonth != null ? selectedMonth - 1 : null}
               tone="sky"
             />
           }
@@ -321,7 +211,7 @@ export function DreOverview({
           spark={
             <Sparkline
               values={profitSeries}
-              selectedMonth={selectedMonth}
+              highlightIndex={selectedMonth != null ? selectedMonth - 1 : null}
               tone="emerald"
             />
           }

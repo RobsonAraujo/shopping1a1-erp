@@ -512,6 +512,69 @@ export type DreComputedTotals = {
   resultadoLiquidoPercent: number | null;
 };
 
+/**
+ * Quais campos do `payload` o carregamento "lean" traz do banco.
+ *
+ * O mapa é **exaustivo por tipo** (`Record<keyof DreMonthSnapshotPayload, …>`):
+ * quando alguém adicionar um campo novo ao payload, o TypeScript exige a
+ * classificação aqui. Sem isso, um campo escalar novo entraria em produção
+ * valendo 0 na Home, silenciosamente — o pior tipo de bug, porque o número
+ * aparece plausível.
+ *
+ * `"keep"` = entra na projeção. `"omit"` = fica no banco; são os arrays de
+ * auditoria linha a linha (centenas a milhares de itens por mês) que só a tela
+ * do DRE abre.
+ */
+const LEAN_SNAPSHOT_FIELDS = {
+  // Linhas que formam os totais.
+  revenueMl: "keep",
+  cancelledSalesMl: "keep",
+  saleFeeMl: "keep",
+  partialReturnsMl: "keep",
+  returnFeeMl: "keep",
+  specialFeesMl: "keep",
+  productCostErp: "keep",
+  taxErp: "keep",
+  sellerShippingMl: "keep",
+  fullShippingMl: "keep",
+  fullStorageMl: "keep",
+  fullNonComplianceMl: "keep",
+  minhaPaginaMl: "keep",
+  affiliateFeeMl: "keep",
+  adsCost: "keep",
+  // Escalares pequenos que mudam totais ou estado exibido.
+  billingSource: "keep",
+  isPartial: "keep",
+  incompleteProductCostCount: "keep",
+  syncWarnings: "keep",
+  cancelledIncludeOverlay: "keep",
+  fullReportSourced: "keep",
+  syncedLineBaseline: "keep",
+  manuallyEditedLineKeys: "keep",
+  hasRealSyncBaseline: "keep",
+  // Auditoria por SKU/linha — o peso da coluna.
+  productCostBreakdown: "omit",
+  taxBreakdown: "omit",
+  revenueBreakdown: "omit",
+  cancelledSalesBreakdown: "omit",
+  saleFeeBreakdown: "omit",
+  sellerShippingBreakdown: "omit",
+  adsCostBreakdown: "omit",
+  partialReturnsBreakdown: "omit",
+  returnFeeBreakdown: "omit",
+  specialFeesBreakdown: "omit",
+  fullShippingBreakdown: "omit",
+  fullStorageBreakdown: "omit",
+  fullNonComplianceBreakdown: "omit",
+  minhaPaginaBreakdown: "omit",
+  affiliateFeeBreakdown: "omit",
+  syncedBreakdownBaseline: "omit",
+} satisfies Record<keyof DreMonthSnapshotPayload, "keep" | "omit">;
+
+export const LEAN_SNAPSHOT_PAYLOAD_KEYS = Object.entries(LEAN_SNAPSHOT_FIELDS)
+  .filter(([, mode]) => mode === "keep")
+  .map(([key]) => key);
+
 const OPERATIONAL_LINE_KEYS: (keyof DreLineAmounts)[] = [
   "cancelledSalesMl",
   "saleFeeMl",

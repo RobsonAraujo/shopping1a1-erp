@@ -45,6 +45,12 @@ const globals: Record<string, unknown> = {
   FocusEvent: window.FocusEvent,
   InputEvent: window.InputEvent,
   NodeFilter: window.NodeFilter,
+  // Radix (Dialog/Sheet/Popover) monta em portal e checa `DocumentFragment`
+  // ao resolver o container; sem isso todo teste de Sheet quebra com
+  // "DocumentFragment is not defined".
+  DocumentFragment: window.DocumentFragment,
+  DOMParser: window.DOMParser,
+  Range: window.Range,
   HTMLInputElement: window.HTMLInputElement,
   HTMLTextAreaElement: window.HTMLTextAreaElement,
   HTMLSelectElement: window.HTMLSelectElement,

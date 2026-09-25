@@ -6,6 +6,7 @@ import { formatFinancialMoney } from "@/lib/pricing/financial-margin";
 import { DreRevenuePie, WaterfallConnector } from "@/components/dre/DreRevenuePie";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { DreComputedTotals } from "@/lib/dre/dre-calculations";
+import { Sparkline, type SparklineTone } from "@/components/shared/Sparkline";
 import { cn } from "@/lib/utils";
 
 /**
@@ -90,13 +91,7 @@ function WaterfallCard({
   );
 }
 
-type SparkTone = "primary" | "sky" | "emerald";
-
-const SPARK_COLORS: Record<SparkTone, string> = {
-  primary: "#1b2d6f",
-  sky: "#0284c7",
-  emerald: "#059669",
-};
+type SparkTone = Extract<SparklineTone, "primary" | "sky" | "emerald">;
 
 const ICON_TONE_CLASS: Record<SparkTone, string> = {
   primary: "bg-[var(--primary)]/10 text-[var(--primary)]",
@@ -105,45 +100,6 @@ const ICON_TONE_CLASS: Record<SparkTone, string> = {
 };
 
 /** Mesma técnica do sparkline real do DRE (área + linha em SVG), com uma série fixa de 12 meses. */
-function MiniSparkline({ values, tone }: { values: number[]; tone: SparkTone }) {
-  const width = 240;
-  const height = 56;
-  const pad = 4;
-  const min = Math.min(0, ...values);
-  const max = Math.max(0.01, ...values);
-  const range = max - min || 1;
-  const stepX = (width - pad * 2) / (values.length - 1);
-
-  const points = values.map((v, index) => ({
-    x: pad + index * stepX,
-    y: pad + (1 - (v - min) / range) * (height - pad * 2),
-  }));
-
-  const linePath = "M " + points.map((p) => `${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" L ");
-  const zeroY = pad + (1 - (0 - min) / range) * (height - pad * 2);
-  const areaPath =
-    `M ${points[0].x.toFixed(1)} ${zeroY.toFixed(1)} L ` +
-    points.map((p) => `${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" L ") +
-    ` L ${points[points.length - 1].x.toFixed(1)} ${zeroY.toFixed(1)} Z`;
-
-  const color = SPARK_COLORS[tone];
-  const gradientId = `marketing-dre-spark-${tone}`;
-
-  return (
-    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="h-14 w-full" aria-hidden>
-      <defs>
-        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.22" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={areaPath} fill={`url(#${gradientId})`} stroke="none" />
-      <path d={linePath} fill="none" stroke={color} strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={points[points.length - 1].x} cy={points[points.length - 1].y} r={3.25} fill={color} stroke="white" strokeWidth={1.5} />
-    </svg>
-  );
-}
-
 function MiniKpiCard({
   icon,
   tone,
@@ -182,7 +138,11 @@ function MiniKpiCard({
       </div>
       {hint ? <p className="mt-1.5 text-xs text-[var(--muted-foreground)]">{hint}</p> : null}
       <div className="mt-4 -mb-1">
-        <MiniSparkline values={spark} tone={tone} />
+        <Sparkline
+          values={spark}
+          tone={tone}
+          highlightIndex={spark.length - 1}
+        />
       </div>
     </div>
   );

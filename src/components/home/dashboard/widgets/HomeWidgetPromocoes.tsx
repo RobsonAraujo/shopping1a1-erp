@@ -1,17 +1,16 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { ImageOff } from "lucide-react";
-import { DashboardPmaAlertPanel } from "@/components/home/DashboardPmaAlertPanel";
 import {
   DashboardSection,
   DashboardSectionClear,
 } from "@/components/home/DashboardHomeSection";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserFeedback } from "@/components/ui/user-feedback";
+import { useInView } from "@/hooks/use-in-view";
 import { formatFinancialMoney } from "@/lib/pricing/financial-margin";
-import type { PmaAlertRow } from "@/lib/home/pma-alert-data";
 import type {
   PromotionSummaryPayload,
   PromotionSummaryRow,
@@ -96,70 +95,62 @@ function PromotionList({ rows }: { rows: PromotionSummaryRow[] }) {
 }
 
 /**
- * Seções "Abaixo do PMA" e "Promoções terminando". As duas ficam sempre na
- * tela: sem linha vira "tudo ok", falha vira o erro dentro da própria seção e
- * carregamento vira skeleton sob o título. Esconder a seção fazia o usuário
- * achar que o recurso não existe.
+ * Promoções terminando. É o widget mais lento da Home (varre todo anúncio
+ * ativo com 1-2 chamadas ao ML, `maxDuration = 300` na rota), então tem
+ * request próprio, disparado só quando o card entra na viewport.
+ *
+ * Como no PMA, a seção nunca desaparece — vazia vira "tudo ok", falha vira
+ * erro dentro da seção, e avisos de dado parcial aparecem ao lado.
  */
-export function DashboardSummaryClient({ pmaRows }: { pmaRows: PmaAlertRow[] }) {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export function HomeWidgetPromocoes() {
+  const [setRef, inView] = useInView<HTMLDivElement>();
   const [data, setData] = useState<PromotionSummaryPayload | null>(null);
-
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/dashboard/summary/promotions", {
-        cache: "no-store",
-      });
-      const json = (await res.json()) as
-        | PromotionSummaryPayload
-        | { error?: string };
-      if (!res.ok) {
-        setError(
-          (json as { error?: string }).error ??
-            "Falha ao carregar promoções.",
-        );
-        return;
-      }
-      setData(json as PromotionSummaryPayload);
-    } catch {
-      setError("Falha de rede ao carregar promoções.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    void loadData();
-  }, [loadData]);
+    if (!inView) return;
+    const controller = new AbortController();
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const res = await fetch("/api/dashboard/summary/promotions", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const json = (await res.json()) as
+          | PromotionSummaryPayload
+          | { error?: string };
+        if (cancelled) return;
+        if (!res.ok) {
+          setError(
+            (json as { error?: string }).error ?? "Falha ao carregar promoções.",
+          );
+          return;
+        }
+        setData(json as PromotionSummaryPayload);
+      } catch (e) {
+        if (cancelled || (e instanceof Error && e.name === "AbortError")) return;
+        setError("Falha de rede ao carregar promoções.");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [inView]);
 
   const expiringSoon = data?.expiringSoon ?? [];
-  const promoPending = loading && !data;
-  const promoCount =
-    !promoPending && !error && expiringSoon.length > 0
+  const pending = data === null && error === null;
+  const count =
+    !pending && !error && expiringSoon.length > 0
       ? expiringSoon.length
       : undefined;
 
   return (
-    <div className="space-y-8">
-      <DashboardSection
-        title="Abaixo do PMA"
-        count={pmaRows.length > 0 ? pmaRows.length : undefined}
-      >
-        {pmaRows.length > 0 ? (
-          <DashboardPmaAlertPanel rows={pmaRows} />
-        ) : (
-          <DashboardSectionClear message="Nenhum anúncio abaixo do preço mínimo anunciável." />
-        )}
-      </DashboardSection>
-
-      <DashboardSection
-        title="Promoções terminando"
-        count={promoCount}
-        tone="warning"
-      >
+    <div ref={setRef}>
+      <DashboardSection title="Promoções terminando" count={count} tone="warning">
         {data?.warnings?.length ? (
           <div className="mb-3">
             <UserFeedback tone="warning" title="Alguns dados não chegaram">
@@ -175,7 +166,7 @@ export function DashboardSummaryClient({ pmaRows }: { pmaRows: PmaAlertRow[] }) 
           </div>
         ) : null}
 
-        {promoPending ? (
+        {pending ? (
           <Skeleton className="h-24 rounded-3xl" />
         ) : error ? (
           <UserFeedback>{error}</UserFeedback>

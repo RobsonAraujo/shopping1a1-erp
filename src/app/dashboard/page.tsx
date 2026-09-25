@@ -3,38 +3,40 @@ import { cache, Suspense } from "react";
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
-import { DashboardCatalogLosingPanel } from "@/components/home/DashboardCatalogLosingPanel";
-import { DashboardSection } from "@/components/home/DashboardHomeSection";
-import { DashboardDailyChecklist } from "@/components/home/DashboardDailyChecklist";
-import { DashboardFocusTimer } from "@/components/home/DashboardFocusTimer";
-import { DashboardOnboardingChecklist } from "@/components/home/DashboardOnboardingChecklist";
-import { DashboardQuickNotes } from "@/components/home/DashboardQuickNotes";
-import { DashboardOperationsSummary } from "@/components/home/DashboardOperationsSummary";
-import { DashboardSalesCard } from "@/components/home/DashboardSalesCard";
-import { DashboardSummaryClient } from "@/components/home/DashboardSummaryClient";
-import { UserFeedback } from "@/components/ui/user-feedback";
+import { HomeDashboardHeader } from "@/components/home/dashboard/HomeDashboardHeader";
+import { HomeDashboardProvider } from "@/components/home/dashboard/HomeDashboardProvider";
+import { HomeWidgetGrid } from "@/components/home/dashboard/HomeWidgetGrid";
 import { fetchMe } from "@/lib/mercadolibre/api";
 import { readSession } from "@/lib/mercadolibre/session";
 import { getOrganizationContext } from "@/lib/organizations/context";
 import { buildSellerReputationBadge } from "@/lib/mercadolibre/seller-reputation";
-import { loadOperationsSummaryFromDb } from "@/lib/compras/replenishment-cycle-data";
-import { getOnboardingChecklistState } from "@/lib/onboarding/onboarding-checklist";
-import { loadCatalogLosingAlerts } from "@/lib/home/catalog-losing-data";
+import { DashboardSalesCard } from "@/components/home/DashboardSalesCard";
 import { buildDashboardSalesSnapshot } from "@/lib/home/sales-card-data";
-import { loadPmaAlerts } from "@/lib/home/pma-alert-data";
-import { publicPageLoadMessage } from "@/lib/infra/server-public-error";
+import { loadHomeCoreSnapshot } from "@/lib/home/dashboard/home-core-snapshot";
 import { cn } from "@/lib/utils";
 
-async function AttentionSection({
-  token,
-  organizationId,
-}: {
-  token: string;
-  organizationId: string;
-}) {
-  const rows = await loadPmaAlerts(token, organizationId).catch(() => []);
-  return <DashboardSummaryClient pmaRows={rows} />;
-}
+/**
+ * A Home é um **workspace configurável**: a grade de widgets sai do registry
+ * (`src/lib/home/dashboard/widget-registry.ts`) e a seleção/ordem/tamanho
+ * saem das preferências do usuário. Adicionar um card não passa mais por
+ * aqui — é uma entrada no registry mais um componente no mapa do renderer.
+ *
+ * O que esta página faz, e só isto:
+ *
+ * 1. resolve sessão e tenant;
+ * 2. carrega o snapshot barato de servidor (`loadHomeCoreSnapshot`), que é o
+ *    que garante conteúdo real na primeira pintura;
+ * 3. mantém `fetchMe` como ilha de servidor — o header precisa do perfil de
+ *    qualquer forma, então o KPI de vendas sai de graça do mesmo `cache()`;
+ * 4. entrega tudo ao provider e sai da frente.
+ *
+ * Dado caro (DRE, apuração fiscal, estoque) vai por
+ * `/api/dashboard/widgets` num request só, e só para os widgets visíveis.
+ */
+
+const loadSellerProfile = cache(async (token: string) =>
+  fetchMe(token).catch(() => null),
+);
 
 function SellerIdentitySkeleton() {
   return (
@@ -43,38 +45,6 @@ function SellerIdentitySkeleton() {
       <div className="mt-1.5 h-4 w-36 animate-pulse rounded bg-[var(--muted)]" />
     </div>
   );
-}
-
-function AttentionSkeleton() {
-  // Mostra os títulos já no fallback: mesmo enquanto o PMA carrega, o usuário
-  // vê que as duas seções existem.
-  return (
-    <div className="space-y-8">
-      {["Abaixo do PMA", "Promoções terminando"].map((title) => (
-        <DashboardSection key={title} title={title}>
-          <div
-            className="h-24 animate-pulse rounded-3xl bg-[var(--card)]"
-            aria-hidden
-          />
-        </DashboardSection>
-      ))}
-    </div>
-  );
-}
-
-function SalesCardSkeleton() {
-  return <DashboardSalesCard pending />;
-}
-
-const loadSellerProfile = cache(async (token: string) =>
-  fetchMe(token).catch(() => null),
-);
-
-async function SalesCardSection({ token }: { token: string }) {
-  const me = await loadSellerProfile(token);
-  const snapshot = buildDashboardSalesSnapshot(me);
-  if (!snapshot) return null;
-  return <DashboardSalesCard snapshot={snapshot} />;
 }
 
 function sellerCaptionFacts(
@@ -126,6 +96,12 @@ async function SellerIdentity({ token }: { token: string }) {
   );
 }
 
+async function SalesCardSection({ token }: { token: string }) {
+  const snapshot = buildDashboardSalesSnapshot(await loadSellerProfile(token));
+  if (!snapshot) return null;
+  return <DashboardSalesCard snapshot={snapshot} />;
+}
+
 export const metadata: Metadata = {
   title: "Início",
 };
@@ -145,64 +121,29 @@ export default async function DashboardPage() {
 
   const organizationId = orgContext.organization.id;
 
-  const [onboardingState, operationsResult, catalogLosing] = await Promise.all([
-    getOnboardingChecklistState(organizationId).catch(() => null),
-    loadOperationsSummaryFromDb(organizationId)
-      .then((summary) => ({ summary, error: null as string | null }))
-      .catch((e) => ({
-        summary: null,
-        error: publicPageLoadMessage(
-          "dashboard/home",
-          e,
-          "Não foi possível carregar o início agora. Tente de novo em instantes.",
-        ),
-      })),
-    loadCatalogLosingAlerts(organizationId).catch(() => []),
-  ]);
-
-  if (operationsResult.error) {
-    return (
-      <UserFeedback title="Não foi possível carregar o início">
-        {operationsResult.error}
-      </UserFeedback>
-    );
-  }
+  // Uma slice que falha vira aviso dentro do widget dela (ver `failedSlices`) —
+  // antes uma falha de operações devolvia erro de página inteira e derrubava a
+  // Home junto.
+  const core = await loadHomeCoreSnapshot(organizationId);
 
   return (
-    <div className="space-y-8 sm:space-y-10">
-      <header>
-        <Suspense fallback={<SellerIdentitySkeleton />}>
-          <SellerIdentity token={token} />
-        </Suspense>
-      </header>
-
-      {onboardingState ? (
-        <DashboardOnboardingChecklist state={onboardingState} />
-      ) : null}
-
-      <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-3 sm:gap-4">
-        <DashboardDailyChecklist />
-        <DashboardQuickNotes />
-        <DashboardFocusTimer />
-      </div>
-
-      <div
-        id="prioridades"
-        className="grid scroll-mt-24 grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4"
-      >
-        <Suspense fallback={<SalesCardSkeleton />}>
+    <HomeDashboardProvider
+      core={core}
+      sellerCard={
+        <Suspense fallback={<DashboardSalesCard pending />}>
           <SalesCardSection token={token} />
         </Suspense>
-        {operationsResult.summary ? (
-          <DashboardOperationsSummary summary={operationsResult.summary} />
-        ) : null}
+      }
+    >
+      <div className="space-y-6 sm:space-y-8">
+        <HomeDashboardHeader>
+          <Suspense fallback={<SellerIdentitySkeleton />}>
+            <SellerIdentity token={token} />
+          </Suspense>
+        </HomeDashboardHeader>
+
+        <HomeWidgetGrid />
       </div>
-
-      <DashboardCatalogLosingPanel rows={catalogLosing} />
-
-      <Suspense fallback={<AttentionSkeleton />}>
-        <AttentionSection token={token} organizationId={organizationId} />
-      </Suspense>
-    </div>
+    </HomeDashboardProvider>
   );
 }

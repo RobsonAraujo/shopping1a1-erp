@@ -112,3 +112,17 @@ export function getPersistedJsonValue<T>(storageKey: string, defaultValue: T): T
 export function setPersistedJsonValue<T>(storageKey: string, value: T): void {
   getJsonStore(storageKey, value).set(value);
 }
+
+/**
+ * Assina mudanças de um valor persistido (inclusive de outra aba) sem estar
+ * dentro de um componente React. Existe pro repositório de preferências do
+ * dashboard poder ser um objeto simples — requisito pra trocar `localStorage`
+ * por API sem mexer na UI — reaproveitando esta mesma store (cache
+ * compartilhado + sincronização entre abas) em vez de montar outra.
+ */
+export function subscribeToPersistedJson(
+  storageKey: string,
+  listener: () => void,
+): () => void {
+  return getJsonStore<unknown>(storageKey, null).subscribe(listener);
+}

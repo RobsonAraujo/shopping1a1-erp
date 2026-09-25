@@ -8,6 +8,7 @@ import {
   type DreLineAmounts,
   type DreLineBreakdownItem,
   type DreMonthSnapshotPayload,
+  LEAN_SNAPSHOT_PAYLOAD_KEYS,
   type DreProductCostBreakdownItem,
   type DreTaxBreakdownItem,
 } from "@/lib/dre/dre-calculations";
@@ -226,9 +227,62 @@ export function buildEffectiveCostMaps(
   return { valuesByMonth, overridesByMonth };
 }
 
+type DreSnapshotRow = {
+  month: number;
+  syncedAt: Date;
+  payload: unknown;
+};
+
+export { LEAN_SNAPSHOT_PAYLOAD_KEYS };
+
+/**
+ * Snapshots do ano com o `payload` **projetado** nos campos de
+ * `LEAN_SNAPSHOT_PAYLOAD_KEYS`.
+ *
+ * Por que existe: o payload completo de um mês passa de 300 KB em texto — o
+ * `pg_column_size` engana, porque mostra o valor comprimido em disco, não o que
+ * atravessa a rede. Ler o ano inteiro custava ~3 MB de egress por requisição:
+ * tolerável numa tela aberta de vez em quando, caro demais na Home, que é
+ * aberta toda hora.
+ *
+ * `parseSnapshotPayload` trata todo breakdown como opcional, então o payload
+ * projetado atravessa o mesmo pipeline e produz **os mesmos totais** (há
+ * verificação disso em `__tests__/dre-year-data-lean.test.ts`) — só não
+ * alimenta os drill-downs de auditoria, que a Home não mostra.
+ */
+async function loadLeanDreSnapshots(
+  organizationId: string,
+  year: number,
+): Promise<DreSnapshotRow[]> {
+  // Os nomes vêm de `LEAN_SNAPSHOT_FIELDS` (constante do próprio módulo, não de
+  // entrada do usuário); `organizationId`/`year` vão como parâmetros.
+  const projection = LEAN_SNAPSHOT_PAYLOAD_KEYS.map(
+    (key) => `'${key}', payload -> '${key}'`,
+  ).join(", ");
+
+  // `$queryRaw*` NÃO passa pelo tenant guard (ele cobre findMany/count/…), então
+  // o filtro por organization_id aqui é obrigatório e não tem rede de proteção.
+  return prisma.$queryRawUnsafe<DreSnapshotRow[]>(
+    `select month, synced_at as "syncedAt",
+            jsonb_build_object(${projection}) as payload
+     from dre_month_snapshots
+     where organization_id = $1 and year = $2`,
+    organizationId,
+    year,
+  );
+}
+
 export async function loadDreYearView(
   organizationId: string,
   year: number,
+  options?: {
+    /**
+     * Lê os snapshots sem os arrays de breakdown (~390× menos egress). Para
+     * quem só precisa dos totais — a Home. A tela do DRE precisa dos
+     * breakdowns e não passa esta opção.
+     */
+    leanSnapshots?: boolean;
+  },
 ): Promise<DreYearView> {
   const [
     allCostItems,
@@ -249,9 +303,11 @@ export async function loadDreYearView(
         recurring: true,
       },
     }),
-    prisma.dreMonthSnapshot.findMany({
-      where: { organizationId, year },
-    }),
+    options?.leanSnapshots
+      ? loadLeanDreSnapshots(organizationId, year)
+      : prisma.dreMonthSnapshot.findMany({
+          where: { organizationId, year },
+        }),
     prisma.dreCostMonthValue.findMany({
       where: { organizationId, year: { in: [year, year - 1] } },
       select: { costItemId: true, year: true, month: true, amount: true },
