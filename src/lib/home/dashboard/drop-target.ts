@@ -1,5 +1,9 @@
 import type { Edge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/types";
 import type { DashboardWidgetPreference } from "@/lib/home/dashboard/dashboard-preferences";
+import {
+  HOME_WIDGET_DEFINITIONS,
+  type HomeWidgetDefinition,
+} from "@/lib/home/dashboard/widget-registry";
 
 /**
  * A parte pura do arrasto da Home.
@@ -61,6 +65,30 @@ export function parseColumnDropData(
 }
 
 /**
+ * Os cards de uma coluna, **sem as faixas e sem o card que está sendo movido**.
+ *
+ * Excluir as faixas não é detalhe: `atencao` e `onboarding` são faixas e ficam
+ * com `column: 0`, então incluí-las inflava em 2 todo índice da coluna da
+ * esquerda. O `moveWidgetToColumn` já as excluía, e a divergência entre as duas
+ * convenções fazia o card cair no fim da coluna em vez de onde a linha indicava —
+ * só na esquerda, porque é lá que as faixas moram.
+ */
+function cardsInColumn(
+  widgets: readonly DashboardWidgetPreference[],
+  column: number,
+  excludeId: string,
+  definitions: readonly HomeWidgetDefinition[],
+): DashboardWidgetPreference[] {
+  const byId = new Map(definitions.map((d) => [d.id, d]));
+  return widgets.filter(
+    (w) =>
+      w.id !== excludeId &&
+      w.column === column &&
+      byId.get(w.id)?.layout !== "banner",
+  );
+}
+
+/**
  * Soltou sobre outro card: a borda (vinda do `attachClosestEdge`) decide antes
  * ou depois.
  *
@@ -73,15 +101,14 @@ export function resolveDropOnWidget(
   activeId: string,
   overWidgetId: string,
   edge: Edge | null,
+  definitions: readonly HomeWidgetDefinition[] = HOME_WIDGET_DEFINITIONS,
 ): HomeDropTarget | null {
   if (activeId === overWidgetId) return null;
   const active = widgets.find((w) => w.id === activeId);
   const over = widgets.find((w) => w.id === overWidgetId);
   if (!active || !over) return null;
 
-  const others = widgets.filter(
-    (w) => w.column === over.column && w.id !== activeId,
-  );
+  const others = cardsInColumn(widgets, over.column, activeId, definitions);
   const position = others.findIndex((w) => w.id === overWidgetId);
   if (position === -1) return null;
 
@@ -98,13 +125,14 @@ export function resolveDropOnColumn(
   widgets: readonly DashboardWidgetPreference[],
   activeId: string,
   column: number,
+  definitions: readonly HomeWidgetDefinition[] = HOME_WIDGET_DEFINITIONS,
 ): HomeDropTarget | null {
   if (!widgets.some((w) => w.id === activeId)) return null;
   if (!Number.isInteger(column) || column < 0) return null;
-  const index = widgets.filter(
-    (w) => w.column === column && w.id !== activeId,
-  ).length;
-  return { column, index };
+  return {
+    column,
+    index: cardsInColumn(widgets, column, activeId, definitions).length,
+  };
 }
 
 /**
@@ -118,6 +146,7 @@ export function resolveDropFromTargets(
   activeId: string,
   targets: readonly { data: UnknownData }[],
   extractEdge: (data: UnknownData) => Edge | null,
+  definitions: readonly HomeWidgetDefinition[] = HOME_WIDGET_DEFINITIONS,
 ): HomeDropTarget | null {
   for (const target of targets) {
     const widget = parseWidgetDragData(target.data);
@@ -127,11 +156,17 @@ export function resolveDropFromTargets(
         activeId,
         widget.widgetId,
         extractEdge(target.data),
+        definitions,
       );
     }
     const column = parseColumnDropData(target.data);
     if (column) {
-      return resolveDropOnColumn(widgets, activeId, column.column);
+      return resolveDropOnColumn(
+        widgets,
+        activeId,
+        column.column,
+        definitions,
+      );
     }
   }
   return null;

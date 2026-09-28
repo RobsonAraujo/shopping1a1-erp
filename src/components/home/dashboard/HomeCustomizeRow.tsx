@@ -108,12 +108,21 @@ export function HomeCustomizeRow({
       ref={rowRef}
       data-customize-row={definition.id}
       className={cn(
-        "flex items-start gap-2 rounded-xl border border-transparent px-1 py-2.5",
+        "relative flex items-start gap-2 rounded-xl px-1 py-2.5",
         isDragging && "opacity-40",
-        edge === "top" && "border-t-[var(--primary)]",
-        edge === "bottom" && "border-b-[var(--primary)]",
       )}
     >
+      {/* Absoluto, como no slot: borda no próprio item mudaria a altura da linha
+          e empurraria a lista a cada movimento do ponteiro. */}
+      {edge ? (
+        <span
+          aria-hidden
+          className={cn(
+            "pointer-events-none absolute inset-x-1 z-10 h-0.5 rounded-full bg-[var(--primary)]",
+            edge === "top" ? "-top-px" : "-bottom-px",
+          )}
+        />
+      ) : null}
       {isBanner ? (
         <Tooltip>
           <TooltipTrigger asChild>

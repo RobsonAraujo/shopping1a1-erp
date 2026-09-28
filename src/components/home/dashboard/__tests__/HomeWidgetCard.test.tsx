@@ -132,7 +132,7 @@ describe("HomeWidgetCard", () => {
         core={coreSnapshot()}
         repository={createMemoryDashboardPreferences()}
       >
-        <HomeWidgetDragProvider value={{ draggable: true }}>
+        <HomeWidgetDragProvider value={{ draggable: true, setDragElementRef: () => {}, setDragHandleRef: () => {} }}>
           <HomeWidgetCard definitionId="kpi-compras">
             <p>corpo</p>
           </HomeWidgetCard>

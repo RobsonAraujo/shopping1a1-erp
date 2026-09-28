@@ -50,18 +50,26 @@ import { cn } from "@/lib/utils";
  * não-persistido nem disparar request não-cacheado no mount.
  */
 
-/**
- * Atributos que marcam, no DOM, o elemento arrastável e a zona de agarrar. O
- * Pragmatic drag and drop é imperativo e recebe **elementos**, então o slot acha
- * os dois por `querySelector` dentro do effect em vez de receber refs por
- * contexto — menos encanamento e uma superfície a menos para o erro
- * "Cannot access refs during render" do React Compiler.
- */
+/** Atributos de dados dos dois elementos do arrasto. Ficam no DOM para os testes
+ * (e para inspeção) poderem apontar neles; quem registra usa os refs abaixo. */
 export const HOME_DRAG_ELEMENT_ATTR = "data-home-drag-element";
 export const HOME_DRAG_HANDLE_ATTR = "data-home-drag-handle";
 
 export type HomeWidgetDragProps = {
-  /** Este card participa do arrasto (faixa não participa). */
+  /**
+   * `ref` do header (o elemento que o pdnd arrasta) e da zona de agarrar.
+   *
+   * São **refs de callback**, não `querySelector` no effect do slot: quatro
+   * widgets da Home entram por `next/dynamic` e renderizam um skeleton no
+   * primeiro paint, então procurar o elemento no mount não achava nada e o card
+   * nunca era registrado — mostrava mãozinha e, ao arrastar, selecionava o texto.
+   * Com o elemento em estado, o effect roda de novo quando ele aparece.
+   */
+  setDragElementRef?: (element: HTMLElement | null) => void;
+  setDragHandleRef?: (element: HTMLElement | null) => void;
+  /** Booleano explícito, e não `Boolean(setDragElementRef)`: o React Compiler
+   * trata a função de ref como ref e proíbe **ler** ela durante o render
+   * ("Cannot access refs during render"). Passar para `ref=` é permitido. */
   draggable?: boolean;
   isDragging?: boolean;
   /** Há algum arrasto em curso na grade. */
@@ -135,6 +143,8 @@ export function HomeWidgetCard({
   // JSX faz o React Compiler reclamar de "Cannot access refs during render" — o
   // mesmo aviso que `use-drop-highlight.ts` documenta.
   const {
+    setDragElementRef,
+    setDragHandleRef,
     draggable: isDraggable,
     isDragging,
     dragging: dragInProgress,
@@ -144,7 +154,7 @@ export function HomeWidgetCard({
   if (!definition) return null;
 
   const Icon = definition.icon;
-  const draggable = Boolean(isDraggable);
+  const draggable = isDraggable === true;
   // Colapsar durante um arrasto animaria a altura no meio da medição do dnd-kit.
   const toggle = dragInProgress ? undefined : onToggle;
 
@@ -173,12 +183,14 @@ export function HomeWidgetCard({
       )}
     >
       <div
+        ref={setDragElementRef}
         {...(draggable ? { [HOME_DRAG_ELEMENT_ATTR]: true } : {})}
         className="flex items-center gap-2"
       >
         {/* A zona de agarrar é só ícone + título: link, ações e menu de mover
             ficam FORA dela, senão clicar neles iniciaria um arrasto. */}
         <div
+          ref={setDragHandleRef}
           {...(draggable ? { [HOME_DRAG_HANDLE_ATTR]: true } : {})}
           className={cn(
             "flex min-w-0 flex-1 items-center gap-2",

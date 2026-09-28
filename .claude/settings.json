@@ -24,7 +24,8 @@
       "Bash(node --env-file=.env --import tsx --test src/lib/tax-report/aggregation/tests/agregador-por-sku.test.ts)",
       "Bash(cd \"/Users/robsonaraujocarmo/Documents/Robson - Repos/shopping Um a Um/shopping1a1-erp\" && rm src/components/home/DashboardAttentionPanel.tsx src/components/home/DashboardAttentionPurchasePanel.tsx src/components/home/AttentionPanelCollapseToggle.tsx src/components/compras/SupplierGroupHeader.tsx && git status --short | head -20)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/dre-mercado-livre)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/dre-mercado-livre)",
+      "Bash(npm run *)"
     ],
     "additionalDirectories": [
       "/Users/robsonaraujocarmo/Documents/Robson - Repos/shopping Um a Um/shopping1a1-erp/src/components/home"

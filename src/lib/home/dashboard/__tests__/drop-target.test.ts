@@ -11,7 +11,11 @@ import {
   resolveDropOnColumn,
   resolveDropOnWidget,
 } from "@/lib/home/dashboard/drop-target";
-import type { DashboardWidgetPreference } from "@/lib/home/dashboard/dashboard-preferences";
+import {
+  moveWidgetToColumn,
+  type DashboardWidgetPreference,
+} from "@/lib/home/dashboard/dashboard-preferences";
+import type { HomeWidgetDefinition } from "@/lib/home/dashboard/widget-registry";
 
 function w(id: string, column: number, order: number): DashboardWidgetPreference {
   return { id, visible: true, column, order };
@@ -183,5 +187,90 @@ describe("resolveDropFromTargets", () => {
       resolveDropFromTargets(WIDGETS, "a", [{ data: { type: "nada" } }], edgeOf),
       null,
     );
+  });
+});
+
+
+/**
+ * Registry sintético com uma **faixa na coluna 0** — que é a situação real da
+ * Home (`atencao` e `onboarding` são faixas e ficam na coluna 0).
+ */
+function def(
+  id: string,
+  layout: "banner" | "card",
+  defaultColumn: number,
+  defaultOrder: number,
+): HomeWidgetDefinition {
+  return {
+    id,
+    title: id,
+    description: "",
+    category: "operacao",
+    icon: (() => null) as unknown as HomeWidgetDefinition["icon"],
+    tone: "primary",
+    defaultVisible: true,
+    defaultOrder,
+    layout,
+    defaultColumn,
+    source: { kind: "core" },
+    priority: "p1",
+  };
+}
+
+const DEFS_COM_FAIXA: readonly HomeWidgetDefinition[] = [
+  def("faixa", "banner", 0, 10),
+  def("a", "card", 0, 20),
+  def("b", "card", 0, 30),
+  def("c", "card", 0, 40),
+  def("x", "card", 1, 50),
+];
+
+/** Faixa em column 0, como no normalizador real, seguida dos cards. */
+const COM_FAIXA: DashboardWidgetPreference[] = [
+  w("faixa", 0, 0),
+  w("a", 0, 0),
+  w("b", 0, 1),
+  w("c", 0, 2),
+  w("x", 1, 0),
+];
+
+describe("faixas não contam no índice (bug da coluna esquerda)", () => {
+  it("o índice da coluna 0 ignora as faixas", () => {
+    // Era o bug: `others` incluía a faixa, então o índice saía inflado, o
+    // `moveWidgetToColumn` clampava e o card caía no fim da coluna. Só acontecia
+    // na coluna da esquerda, porque é lá que as faixas moram.
+    assert.deepEqual(
+      resolveDropOnWidget(COM_FAIXA, "c", "a", "top", DEFS_COM_FAIXA),
+      { column: 0, index: 0 },
+    );
+    assert.deepEqual(
+      resolveDropOnWidget(COM_FAIXA, "c", "b", "bottom", DEFS_COM_FAIXA),
+      { column: 0, index: 2 },
+    );
+  });
+
+  it("a área vazia da coluna 0 também ignora as faixas", () => {
+    assert.deepEqual(
+      resolveDropOnColumn(COM_FAIXA, "x", 0, DEFS_COM_FAIXA),
+      { column: 0, index: 3 },
+    );
+  });
+
+  it("o índice resolvido casa com o que moveWidgetToColumn faz", () => {
+    // O teste que realmente importa: as duas funções precisam ter a MESMA
+    // convenção de índice, senão o card não cai onde a linha indicou.
+    const target = resolveDropOnWidget(COM_FAIXA, "c", "a", "top", DEFS_COM_FAIXA);
+    assert.ok(target);
+    const next = moveWidgetToColumn(
+      COM_FAIXA,
+      "c",
+      target.column,
+      target.index,
+      DEFS_COM_FAIXA,
+    );
+    const col0 = next
+      .filter((x) => x.id !== "faixa" && x.column === 0)
+      .map((x) => x.id);
+    assert.deepEqual(col0, ["c", "a", "b"], "o card cai onde a linha indicou");
   });
 });
