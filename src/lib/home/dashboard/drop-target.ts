@@ -15,12 +15,33 @@ import {
  */
 
 export const HOME_WIDGET_DRAG_TYPE = "home-widget";
+/**
+ * O tipo do arrasto **dentro do sheet de personalizar**, separado do da grade.
+ *
+ * Os dois vivem na mesma página e cada um registra seu `monitorForElements`. Com
+ * um tipo só, arrastar uma linha do sheet também acordava o monitor da grade:
+ * ele resolvia o mesmo destino a partir dos mesmos alvos e gravava **uma segunda
+ * vez** (duas escritas no `localStorage` por arrasto), acendia o visual de
+ * arrasto atrás do overlay e ainda ligava o autoscroll da janela. Tipos distintos
+ * fazem cada `canMonitor` só ver o arrasto da própria superfície.
+ */
+export const HOME_SHEET_DRAG_TYPE = "home-sheet-widget";
 export const HOME_COLUMN_DROP_TYPE = "home-column";
 
+type HomeDragKind = typeof HOME_WIDGET_DRAG_TYPE | typeof HOME_SHEET_DRAG_TYPE;
+
 export type HomeWidgetDragData = {
-  type: typeof HOME_WIDGET_DRAG_TYPE;
+  type: HomeDragKind;
   widgetId: string;
   column: number;
+  /**
+   * Altura do card em pixels, medida no início do arrasto.
+   *
+   * Vai no dado do arrasto porque quem desenha a sombra de destino é **outro**
+   * card, e ele precisa saber o tamanho do buraco a abrir. Opcional: o sheet não
+   * usa sombra (linhas de altura uniforme não ganham nada com ela).
+   */
+  height?: number;
 };
 
 export type HomeColumnDropData = {
@@ -32,26 +53,68 @@ export type HomeDropTarget = { column: number; index: number };
 
 type UnknownData = Record<string | symbol, unknown>;
 
+function dragData(
+  type: HomeDragKind,
+  widgetId: string,
+  column: number,
+  height?: number,
+): HomeWidgetDragData {
+  return {
+    type,
+    widgetId,
+    column,
+    ...(typeof height === "number" && Number.isFinite(height) && height > 0
+      ? { height }
+      : {}),
+  };
+}
+
+/** Card da grade. */
 export function homeWidgetDragData(
   widgetId: string,
   column: number,
+  height?: number,
 ): HomeWidgetDragData {
-  return { type: HOME_WIDGET_DRAG_TYPE, widgetId, column };
+  return dragData(HOME_WIDGET_DRAG_TYPE, widgetId, column, height);
+}
+
+/** Linha do sheet de personalizar. Sem altura: a sombra é só da grade. */
+export function homeSheetDragData(
+  widgetId: string,
+  column: number,
+): HomeWidgetDragData {
+  return dragData(HOME_SHEET_DRAG_TYPE, widgetId, column);
 }
 
 export function homeColumnDropData(column: number): HomeColumnDropData {
   return { type: HOME_COLUMN_DROP_TYPE, column };
 }
 
-/** Lê os dados de um card arrastado/alvo, devolvendo `null` se não for nosso. */
+function parseDragData(
+  data: UnknownData | undefined | null,
+  kinds: readonly HomeDragKind[],
+): HomeWidgetDragData | null {
+  if (!data) return null;
+  const type = data.type as HomeDragKind;
+  if (!kinds.includes(type)) return null;
+  const { widgetId, column, height } = data as Partial<HomeWidgetDragData>;
+  if (typeof widgetId !== "string" || widgetId.length === 0) return null;
+  if (typeof column !== "number" || !Number.isInteger(column)) return null;
+  return dragData(type, widgetId, column, height);
+}
+
+/** Lê os dados de um card **da grade**, devolvendo `null` se não for nosso. */
 export function parseWidgetDragData(
   data: UnknownData | undefined | null,
 ): HomeWidgetDragData | null {
-  if (!data || data.type !== HOME_WIDGET_DRAG_TYPE) return null;
-  const { widgetId, column } = data as Partial<HomeWidgetDragData>;
-  if (typeof widgetId !== "string" || widgetId.length === 0) return null;
-  if (typeof column !== "number" || !Number.isInteger(column)) return null;
-  return { type: HOME_WIDGET_DRAG_TYPE, widgetId, column };
+  return parseDragData(data, [HOME_WIDGET_DRAG_TYPE]);
+}
+
+/** Lê os dados de uma linha **do sheet**, devolvendo `null` se não for nossa. */
+export function parseSheetDragData(
+  data: UnknownData | undefined | null,
+): HomeWidgetDragData | null {
+  return parseDragData(data, [HOME_SHEET_DRAG_TYPE]);
 }
 
 /** Lê os dados de uma coluna alvo, devolvendo `null` se não for nossa. */
@@ -149,7 +212,14 @@ export function resolveDropFromTargets(
   definitions: readonly HomeWidgetDefinition[] = HOME_WIDGET_DEFINITIONS,
 ): HomeDropTarget | null {
   for (const target of targets) {
-    const widget = parseWidgetDragData(target.data);
+    // Aqui vale card de qualquer superfície: o alvo é lido a partir de um monitor
+    // que já aceitou a origem pelo tipo, e dentro de um arrasto os alvos sob o
+    // cursor são todos da mesma superfície (a grade fica atrás do overlay do
+    // sheet, e o sheet vive num portal).
+    const widget = parseDragData(target.data, [
+      HOME_WIDGET_DRAG_TYPE,
+      HOME_SHEET_DRAG_TYPE,
+    ]);
     if (widget) {
       return resolveDropOnWidget(
         widgets,

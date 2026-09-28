@@ -26,7 +26,10 @@ function LateCard() {
   );
 }
 
-function renderSlot(children: React.ReactNode) {
+function renderSlot(
+  children: React.ReactNode,
+  props: { isDragging?: boolean; collapsed?: boolean } = {},
+) {
   return renderIntoDocument(
     <HomeDashboardProvider
       core={coreSnapshot()}
@@ -36,13 +39,22 @@ function renderSlot(children: React.ReactNode) {
         definition={DEFINITION}
         column={0}
         visible
-        dragging={false}
-        isDragging={false}
+        dragging={props.isDragging ?? false}
+        isDragging={props.isDragging ?? false}
+        collapsed={props.collapsed ?? false}
       >
         {children}
       </HomeWidgetSlot>
     </HomeDashboardProvider>,
   );
+}
+
+function slotOf(view: { container: HTMLElement }): HTMLElement {
+  const slot = view.container.querySelector<HTMLElement>(
+    `[data-widget-id="${DEFINITION.id}"]`,
+  );
+  assert.ok(slot, "o slot precisa estar no DOM");
+  return slot;
 }
 
 describe("HomeWidgetSlot", () => {
@@ -104,6 +116,7 @@ describe("HomeWidgetSlot", () => {
           visible={false}
           dragging={false}
           isDragging={false}
+          collapsed={false}
         >
           <HomeWidgetCard definitionId="pendencias">
             <p>corpo</p>
@@ -118,6 +131,54 @@ describe("HomeWidgetSlot", () => {
     // Rect zero poderia ganhar uma colisão em 0,0 e dar preview em branco.
     const header = view.container.querySelector("[data-home-drag-element]");
     assert.equal(header, null, "sem alça: o contexto diz que não é arrastável");
+    view.unmount();
+  });
+
+  // As duas asserções abaixo olham classe, não layout, porque é só o que o jsdom
+  // dá (ele não calcula altura). O que elas guardam é a regra da sombra: quem
+  // ocupa o espaço da origem em cada momento.
+  it("origem sem sombra em outro card guarda o próprio espaço", async () => {
+    const view = renderSlot(
+      <HomeWidgetCard definitionId="pendencias">
+        <p>corpo</p>
+      </HomeWidgetCard>,
+      { isDragging: true, collapsed: false },
+    );
+    await act(async () => {
+      await flush();
+    });
+
+    const slot = slotOf(view);
+    // Se colapsasse já ao pegar o card, tudo abaixo subiria de uma vez — era
+    // exatamente o pulo que a sombra existe pra evitar.
+    assert.ok(!slot.classList.contains("h-0"), "não cede o espaço ainda");
+    assert.ok(
+      slot.classList.contains("bg-[var(--muted)]/60"),
+      "o próprio lugar vira a sombra",
+    );
+    view.unmount();
+  });
+
+  it("origem cede o espaço quando a sombra abre em outro card", async () => {
+    const view = renderSlot(
+      <HomeWidgetCard definitionId="pendencias">
+        <p>corpo</p>
+      </HomeWidgetCard>,
+      { isDragging: true, collapsed: true },
+    );
+    await act(async () => {
+      await flush();
+    });
+
+    const slot = slotOf(view);
+    assert.ok(slot.classList.contains("h-0"), "colapsa");
+    // Desmontar/`display:none` a origem no meio de um arrasto nativo pode
+    // abortá-lo — o card continua no DOM, só sem altura.
+    assert.ok(!slot.classList.contains("hidden"), "segue no fluxo, sem altura");
+    assert.ok(
+      view.container.querySelector("[data-home-drag-element]"),
+      "a alça continua registrada durante o arrasto",
+    );
     view.unmount();
   });
 });

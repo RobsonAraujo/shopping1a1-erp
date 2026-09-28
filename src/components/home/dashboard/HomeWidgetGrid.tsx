@@ -37,11 +37,14 @@ function HomeWidgetColumn({
   entries,
   dragging,
   draggingId,
+  shadowElsewhere,
 }: {
   index: number;
   entries: Entry[];
   dragging: boolean;
   draggingId: string | null;
+  /** Já existe sombra de destino em outro card — a origem pode ceder o espaço. */
+  shadowElsewhere: boolean;
 }) {
   const [columnEl, setColumnEl] = useState<HTMLDivElement | null>(null);
   const [isOver, setIsOver] = useState(false);
@@ -81,6 +84,7 @@ function HomeWidgetColumn({
           visible={entry.widget.visible}
           dragging={dragging}
           isDragging={draggingId === entry.widget.id}
+          collapsed={draggingId === entry.widget.id && shadowElsewhere}
         >
           <HomeWidgetRenderer id={entry.widget.id} />
         </HomeWidgetSlot>
@@ -93,12 +97,13 @@ function HomeWidgetColumn({
  * A grade: faixas de largura cheia no topo, depois as colunas.
  *
  * Usa **Pragmatic drag and drop**, não dnd-kit (que segue nos kanbans). Ela é
- * construída sobre o drag-and-drop nativo do HTML5, então nenhum card se
- * desloca — o destino é mostrado por uma linha que cada card desenha a partir da
- * própria borda (`attachClosestEdge` no slot). Era essa mecânica que a gente
- * vinha tentando forçar no dnd-kit: `verticalListSortingStrategy` supõe itens de
- * altura uniforme e aqui elas variam de ~90px a ~340px, o que fazia os itens se
- * moverem sob o cursor e o alvo mudar por consequência do próprio movimento.
+ * construída sobre o drag-and-drop nativo do HTML5, então nenhum card se desloca
+ * sozinho — o destino é uma **sombra** do tamanho do card arrastado, que cada
+ * card abre na própria borda (`attachClosestEdge` no slot). Era essa mecânica que
+ * a gente vinha tentando forçar no dnd-kit: `verticalListSortingStrategy` supõe
+ * itens de altura uniforme e aqui elas variam de ~90px a ~340px, o que fazia os
+ * itens se moverem sob o cursor e o alvo mudar por consequência do próprio
+ * movimento.
  *
  * A grade não guarda mais o destino: só quem está sendo arrastado (para o
  * visual) e **um** `monitorForElements` que comita no `onDrop`, uma vez.
@@ -107,6 +112,17 @@ export function HomeWidgetGrid() {
   const { widgets, update, activeViewId } = useHomeLayout();
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const dragging = draggingId !== null;
+
+  /**
+   * Existe sombra de destino em algum card?
+   *
+   * Vive aqui, e não no slot, porque é a **origem** que precisa saber: enquanto
+   * ninguém mostra sombra (acabou de pegar o card, ou o cursor está na área vazia
+   * de uma coluna), a origem guarda o próprio espaço como sombra no lugar — é o
+   * que faz pegar o card não empurrar nada. Quando outro card assume a sombra, a
+   * origem colapsa e a altura total da grade se mantém.
+   */
+  const [shadowElsewhere, setShadowElsewhere] = useState(false);
 
   // O commit precisa do estado mais recente SEM re-registrar o monitor: o pdnd
   // não entrega eventos a um monitor registrado no meio de um arrasto, então
@@ -170,9 +186,19 @@ export function HomeWidgetGrid() {
       canMonitor: ({ source }) => parseWidgetDragData(source.data) !== null,
       onDragStart: ({ source }) => {
         setDraggingId(parseWidgetDragData(source.data)?.widgetId ?? null);
+        setShadowElsewhere(false);
+      },
+      onDropTargetChange: ({ source, location }) => {
+        const dragged = parseWidgetDragData(source.data);
+        const innermost = location.current.dropTargets[0];
+        const over = innermost ? parseWidgetDragData(innermost.data) : null;
+        // Só card abre sombra. Sobre a área vazia da coluna quem responde é o
+        // contorno tracejado, e aí a origem segue ocupando o próprio lugar.
+        setShadowElsewhere(over !== null && over.widgetId !== dragged?.widgetId);
       },
       onDrop: ({ source, location }) => {
         setDraggingId(null);
+        setShadowElsewhere(false);
         const dragged = parseWidgetDragData(source.data);
         if (!dragged) return;
         commit(dragged.widgetId, location.current.dropTargets);
@@ -216,6 +242,7 @@ export function HomeWidgetGrid() {
             entries={entries}
             dragging={dragging}
             draggingId={draggingId}
+            shadowElsewhere={shadowElsewhere}
           />
         ))}
       </div>

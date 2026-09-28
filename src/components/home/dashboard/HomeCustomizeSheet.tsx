@@ -40,7 +40,7 @@ import {
   type DashboardWidgetPreference,
 } from "@/lib/home/dashboard/dashboard-preferences";
 import {
-  parseWidgetDragData,
+  parseSheetDragData,
   resolveDropFromTargets,
 } from "@/lib/home/dashboard/drop-target";
 import { getHomeWidgetDefinition } from "@/lib/home/dashboard/widget-registry";
@@ -114,9 +114,9 @@ export function HomeCustomizeSheet({
   useEffect(() => {
     if (!open) return;
     return monitorForElements({
-      canMonitor: ({ source }) => parseWidgetDragData(source.data) !== null,
+      canMonitor: ({ source }) => parseSheetDragData(source.data) !== null,
       onDrop: ({ source, location }) => {
-        const dragged = parseWidgetDragData(source.data);
+        const dragged = parseSheetDragData(source.data);
         // `onDrop` também é o evento de cancelamento (Esc / soltar no vazio): sem
         // alvo, não comita nada.
         if (!dragged || location.current.dropTargets.length === 0) return;

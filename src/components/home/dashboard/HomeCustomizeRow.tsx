@@ -23,8 +23,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { HomeWidgetDefinition } from "@/lib/home/dashboard/widget-registry";
 import type { DashboardWidgetPreference } from "@/lib/home/dashboard/dashboard-preferences";
 import {
-  homeWidgetDragData,
-  parseWidgetDragData,
+  homeSheetDragData,
+  parseSheetDragData,
 } from "@/lib/home/dashboard/drop-target";
 import { CATEGORY_BADGE_CLASS } from "@/lib/ui/tone";
 import { cn } from "@/lib/utils";
@@ -67,7 +67,7 @@ export function HomeCustomizeRow({
     const element = rowRef.current;
     const handle = handleRef.current;
     if (isBanner || !element || !handle) return;
-    const data = homeWidgetDragData(definition.id, preference.column);
+    const data = homeSheetDragData(definition.id, preference.column);
 
     return combine(
       draggable({
@@ -82,7 +82,7 @@ export function HomeCustomizeRow({
       }),
       dropTargetForElements({
         element,
-        canDrop: ({ source }) => parseWidgetDragData(source.data) !== null,
+        canDrop: ({ source }) => parseSheetDragData(source.data) !== null,
         getIsSticky: () => true,
         getData: ({ input, element: el }) =>
           attachClosestEdge(
@@ -90,7 +90,7 @@ export function HomeCustomizeRow({
             { input, element: el, allowedEdges: ["top", "bottom"] },
           ),
         onDrag: ({ self, source }) => {
-          const from = parseWidgetDragData(source.data);
+          const from = parseSheetDragData(source.data);
           setEdge(
             from?.widgetId === definition.id ? null : extractClosestEdge(self.data),
           );

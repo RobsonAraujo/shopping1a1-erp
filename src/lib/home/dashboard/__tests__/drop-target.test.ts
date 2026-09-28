@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   HOME_COLUMN_DROP_TYPE,
+  HOME_SHEET_DRAG_TYPE,
   HOME_WIDGET_DRAG_TYPE,
   homeColumnDropData,
+  homeSheetDragData,
   homeWidgetDragData,
   parseColumnDropData,
+  parseSheetDragData,
   parseWidgetDragData,
   resolveDropFromTargets,
   resolveDropOnColumn,
@@ -69,6 +72,44 @@ describe("leitura dos dados do pdnd", () => {
   it("não confunde card com coluna", () => {
     assert.equal(parseColumnDropData(homeWidgetDragData("a", 0)), null);
     assert.equal(parseWidgetDragData(homeColumnDropData(0)), null);
+  });
+});
+
+describe("grade e sheet são superfícies separadas", () => {
+  // Regressão: os dois registram `monitorForElements` na mesma página. Com um
+  // tipo só, arrastar uma linha do sheet acordava o monitor da grade, que gravava
+  // o mesmo movimento uma segunda vez — duas escritas por arrasto — além de
+  // acender o visual de arrasto atrás do overlay e o autoscroll da janela.
+  it("o monitor da grade não vê um arrasto do sheet", () => {
+    assert.equal(parseWidgetDragData(homeSheetDragData("a", 0)), null);
+  });
+
+  it("o monitor do sheet não vê um arrasto da grade", () => {
+    assert.equal(parseSheetDragData(homeWidgetDragData("a", 0)), null);
+  });
+
+  it("cada um lê o próprio", () => {
+    assert.deepEqual(parseSheetDragData(homeSheetDragData("a", 1)), {
+      type: HOME_SHEET_DRAG_TYPE,
+      widgetId: "a",
+      column: 1,
+    });
+    assert.equal(
+      parseWidgetDragData(homeWidgetDragData("a", 1))?.type,
+      HOME_WIDGET_DRAG_TYPE,
+    );
+  });
+
+  it("a linha do sheet resolve destino igual ao card da grade", () => {
+    // O sheet reaproveita `resolveDropFromTargets`: o tipo separa quem escuta, não
+    // a conta de índice.
+    const fromSheet = resolveDropFromTargets(
+      WIDGETS,
+      "c",
+      [{ data: { ...homeSheetDragData("a", 0) } }],
+      () => "top",
+    );
+    assert.deepEqual(fromSheet, { column: 0, index: 0 });
   });
 });
 
