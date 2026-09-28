@@ -13,6 +13,7 @@ import type { Edge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/types";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { HomeWidgetDefinition } from "@/lib/home/dashboard/widget-registry";
 import { HomeWidgetDragProvider } from "@/components/home/dashboard/HomeWidgetCard";
+import { renderCardDragPreview } from "@/lib/home/dashboard/drag-preview";
 import {
   homeWidgetDragData,
   parseWidgetDragData,
@@ -112,7 +113,6 @@ export function HomeWidgetSlot({
 
   useEffect(() => {
     if (!visible || !wrapperEl) return;
-    const title = definition.title;
     // O que este card manda quando é a origem. Medido na hora do arrasto, e do
     // WRAPPER: o elemento arrastável é o header, então medi-lo daria ~40px em vez
     // da altura do card.
@@ -157,30 +157,29 @@ export function HomeWidgetSlot({
               dragHandle: handleEl ?? undefined,
               getInitialData: () => ({ ...sourceData() }),
               onGenerateDragPreview: ({ location, nativeSetDragImage }) => {
+                const width = wrapperEl.getBoundingClientRect().width;
                 setCustomNativeDragPreview({
                   nativeSetDragImage,
-                  // Mantém o ponto onde a pessoa pegou: o fantasma acompanha o
-                  // cursor como se estivesse carregando o card, que é o que os
-                  // exemplos do Pragmatic fazem.
+                  // Medido no WRAPPER, não na alça: o fantasma é o card inteiro,
+                  // então ele nasce exatamente sobre o original e o ponto onde a
+                  // pessoa pegou é mantido — a sensação de carregar o card.
                   getOffset: preserveOffsetOnSource({
-                    element: dragEl,
+                    element: wrapperEl,
                     input: location.current.input,
                   }),
-                  // DOM puro, sem `createRoot`: assim não existe uma segunda
-                  // árvore React do widget, então é impossível duplicar effect ou
-                  // request ao Mercado Livre.
-                  render: ({ container }) => {
-                    container.className =
-                      "flex max-w-[240px] items-center gap-2 rounded-2xl bg-[var(--card)] px-3 py-2 text-sm font-medium text-[var(--foreground)] shadow-lg ring-1 ring-[var(--primary)]";
-                    container.textContent = title;
-                  },
+                  render: ({ container }) =>
+                    renderCardDragPreview({
+                      source: wrapperEl,
+                      container,
+                      width,
+                    }),
                 });
               },
             }),
           ]
         : []),
     );
-  }, [visible, wrapperEl, dragEl, handleEl, definition.id, definition.title, column]);
+  }, [visible, wrapperEl, dragEl, handleEl, definition.id, column]);
 
   const drag = useMemo(
     () => ({
