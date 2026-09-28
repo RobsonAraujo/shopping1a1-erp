@@ -6,7 +6,10 @@ import {
   logServerError,
   oauthRedirectErrorParam,
 } from "@/lib/infra/server-public-error";
-import { upsertSellerCredentials } from "@/lib/mercadolibre/persist-seller-tokens";
+import {
+  upsertSellerCredentials,
+  type PersistSellerCredentialsFailure,
+} from "@/lib/mercadolibre/persist-seller-tokens";
 import {
   clearOAuthStateCookie,
   mergeTokensWithExistingRefresh,
@@ -14,6 +17,23 @@ import {
   setSessionCookies,
 } from "@/lib/mercadolibre/session";
 import { ensureOrganizationForMlSeller } from "@/lib/organizations/ensure-organization";
+
+/**
+ * Sem credencial gravada o vendedor até navega (os cookies de sessão bastam pro
+ * browser), mas cron de catálogo e snapshot de inventário não conseguem token e
+ * falham só pra ele — conta meio quebrada, difícil de diagnosticar depois.
+ * Melhor recusar o login com um código próprio.
+ *
+ * Única exceção: fora de produção o ambiente roda sem `ENCRYPTION_KEY`.
+ */
+function credentialFailureBlocksLogin(
+  reason: PersistSellerCredentialsFailure,
+): boolean {
+  if (reason === "encryption_key_missing") {
+    return process.env.NODE_ENV === "production";
+  }
+  return true;
+}
 
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
@@ -48,7 +68,15 @@ export async function GET(request: NextRequest) {
     const tokensForSession = mergeTokensWithExistingRefresh(tokens, cookieStore);
     const me = await fetchMe(tokensForSession.access_token);
 
-    await upsertSellerCredentials(me.id, tokensForSession);
+    const persisted = await upsertSellerCredentials(me.id, tokensForSession);
+    if (!persisted.ok && credentialFailureBlocksLogin(persisted.reason)) {
+      const failed = NextResponse.redirect(
+        new URL(`/?error=credentials_not_persisted`, request.url),
+      );
+      clearOAuthStateCookie(failed.cookies);
+      return failed;
+    }
+
     await ensureOrganizationForMlSeller(me.id, {
       email: me.email,
       nickname: me.nickname,

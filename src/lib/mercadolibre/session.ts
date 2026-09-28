@@ -1,5 +1,6 @@
 import { upsertSellerCredentials } from "./persist-seller-tokens";
 import { refreshAccessToken } from "./oauth";
+import { parseSellerId } from "./seller-id";
 import type { TokenResponse } from "./types";
 
 export const ML_COOKIE = {
@@ -62,7 +63,9 @@ export function readSession(store: MlCookieReader) {
     accessToken: access,
     refreshToken: refresh,
     expiresAtMs: expiresAt ? parseInt(expiresAt, 10) : undefined,
-    userId: userId ? parseInt(userId, 10) : undefined,
+    // `parseSellerId` em vez de `parseInt`: cookie corrompido vira `undefined`
+    // (=> 401 limpo) em vez de `NaN` descendo até o Prisma.
+    userId: parseSellerId(userId),
   };
 }
 

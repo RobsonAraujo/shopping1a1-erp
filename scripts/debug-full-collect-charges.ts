@@ -10,6 +10,7 @@ import { prisma } from "../src/lib/db/db";
 import { fetchFullCollectChargesForPeriod } from "../src/lib/mercadolibre/billing-full-collect";
 import { billingPeriodKey } from "../src/lib/mercadolibre/billing-shared";
 import { resolveSellerAccessToken } from "../src/lib/mercadolibre/persist-seller-tokens";
+import { fromDbSellerId } from "../src/lib/mercadolibre/seller-id";
 
 async function resolveMlUserId(explicit?: string): Promise<number> {
   if (explicit) {
@@ -32,7 +33,7 @@ async function resolveMlUserId(explicit?: string): Promise<number> {
   if (!row) {
     throw new Error("No ml_seller_credentials row found.");
   }
-  return row.mlUserId;
+  return fromDbSellerId(row.mlUserId);
 }
 
 async function main() {

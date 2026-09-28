@@ -40,7 +40,7 @@ model OrganizationMember {
 
 model OrganizationMlSeller {
   organizationId          String
-  mlUserId                Int
+  mlUserId                BigInt // BIGINT: ids de seller do ML passam de 2^31
   isPrimary               Boolean   @default(true)
   lastCatalogCronPolledAt DateTime? // cursor de rotação do cron de catálogo
   @@id([organizationId, mlUserId])
@@ -49,6 +49,8 @@ model OrganizationMlSeller {
 ```
 
 `MlSellerCredentials` (tokens OAuth criptografados, AES-256-GCM) permanece `@id mlUserId` — não é dado de tenant, é storage de credencial por seller.
+
+**Todo id de vendedor do ML é `BigInt`, nunca `Int`** (`mlUserId` em `OrganizationMlSeller`/`MlSellerCredentials`, `sellerId` nos snapshots de tributário e simulações). Ids de conta nova do Mercado Livre passaram de 2^31 e não cabem em `INTEGER` — em 09/2026 isso bloqueou o signup de toda conta nova (`value out of range for the type integer` no callback OAuth). O domínio da aplicação continua em `number`; a conversão fica na fronteira do Prisma, em `src/lib/mercadolibre/seller-id.ts`. Um `bigint` nunca pode vazar para JSON ou props de Client Component — `JSON.stringify` lança e o `tsc` não pega. O guard-rail é `src/lib/db/__tests__/schema-seller-id-bigint.test.ts`.
 
 ## Gate de pagamento
 

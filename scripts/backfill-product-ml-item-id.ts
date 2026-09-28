@@ -51,6 +51,7 @@ import { prisma } from "../src/lib/db/db";
 import { Prisma } from "../src/generated/prisma/client";
 import { fetchOperationalListings, fetchAllUserItemIds, fetchItemsByIdsBatched } from "../src/lib/mercadolibre/api";
 import { resolveSellerAccessToken } from "../src/lib/mercadolibre/persist-seller-tokens";
+import { fromDbSellerId } from "../src/lib/mercadolibre/seller-id";
 import { getItemSku } from "../src/lib/mercadolibre/item-sku";
 import { normalizeProductSku } from "../src/lib/pricing/product-pricing";
 import type { ItemBody } from "../src/lib/mercadolibre/types";
@@ -99,11 +100,20 @@ async function main() {
       : "MODO DRY-RUN — nada será gravado (use --apply para gravar de fato).\n",
   );
 
-  const sellers = await prisma.$queryRaw<{ organization_id: string; ml_user_id: number }[]>(
+  // `ml_user_id` é BIGINT: o driver devolve `bigint`. O tipo do $queryRaw é
+  // escrito à mão e o `tsc` não valida contra o banco — tipar como `number`
+  // aqui passaria despercebido até quebrar em runtime.
+  const sellerRows = await prisma.$queryRaw<
+    { organization_id: string; ml_user_id: bigint }[]
+  >(
     orgId
       ? Prisma.sql`SELECT organization_id, ml_user_id FROM organization_ml_sellers WHERE organization_id = ${orgId}`
       : Prisma.sql`SELECT organization_id, ml_user_id FROM organization_ml_sellers`,
   );
+  const sellers = sellerRows.map((row) => ({
+    organization_id: row.organization_id,
+    ml_user_id: fromDbSellerId(row.ml_user_id),
+  }));
   if (sellers.length === 0) {
     console.error("Nenhuma organização com vendedor ML vinculado encontrada.");
     process.exit(1);

@@ -13,6 +13,7 @@ import {
   fetchItemsByIdsBatched,
 } from "@/lib/mercadolibre/api";
 import { upsertListingFromItem } from "@/lib/mercadolibre/listing-sync";
+import { fromDbSellerId } from "@/lib/mercadolibre/seller-id";
 import { logServerError } from "@/lib/infra/server-public-error";
 import type { CatalogCompetitionSource } from "@/generated/prisma/client";
 
@@ -195,5 +196,11 @@ export async function resolvePayingOrgSellersForCronBatch(
     orderBy: [{ lastCatalogCronPolledAt: { sort: "asc", nulls: "first" } }],
     take: limit,
   });
-  return rows;
+  // `mlUserId` vem como `bigint` (coluna BIGINT). Converte aqui, na borda do
+  // repositório: a rota do cron serializa esse valor em JSON, e `bigint` ali
+  // seria TypeError em runtime que o `tsc` não pega.
+  return rows.map((row) => ({
+    organizationId: row.organizationId,
+    mlUserId: fromDbSellerId(row.mlUserId),
+  }));
 }

@@ -16,6 +16,7 @@ import { billingPeriodKey } from "../src/lib/mercadolibre/billing-shared";
 import { getMercadoLibreConfig } from "../src/lib/mercadolibre/config";
 import { fetchInboundReceptionsForActivityMonth } from "../src/lib/mercadolibre/fulfillment-inbound-operations";
 import { resolveSellerAccessToken } from "../src/lib/mercadolibre/persist-seller-tokens";
+import { fromDbSellerId } from "../src/lib/mercadolibre/seller-id";
 
 const EXPECTED_JUNE_2026 = [
   "69719031",
@@ -56,7 +57,7 @@ async function resolveMlUserId(): Promise<number> {
     orderBy: { updatedAt: "desc" },
   });
   if (!row) throw new Error("No ml_seller_credentials row found.");
-  return row.mlUserId;
+  return fromDbSellerId(row.mlUserId);
 }
 
 async function resolveOrganizationId(mlUserId: number): Promise<string> {

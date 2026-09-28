@@ -6,6 +6,7 @@ import "dotenv/config";
 import { prisma } from "../src/lib/db/db";
 import { getMercadoLibreConfig } from "../src/lib/mercadolibre/config";
 import { resolveSellerAccessToken } from "../src/lib/mercadolibre/persist-seller-tokens";
+import { fromDbSellerId } from "../src/lib/mercadolibre/seller-id";
 import { fetchItemSalePrice } from "../src/lib/mercadolibre/item-sale-price";
 import { fetchSellerShippingCost } from "../src/lib/mercadolibre/seller-shipping-cost";
 import type { ItemBody } from "../src/lib/mercadolibre/types";
@@ -36,14 +37,14 @@ async function main() {
     process.exit(1);
   }
 
-  const accessToken = await resolveSellerAccessToken(cred.mlUserId);
+  const sellerId = fromDbSellerId(cred.mlUserId);
+  const accessToken = await resolveSellerAccessToken(sellerId);
   if (!accessToken) {
-    console.error("Could not resolve access token for seller", cred.mlUserId);
+    console.error("Could not resolve access token for seller", sellerId);
     process.exit(1);
   }
 
   const { apiBase } = getMercadoLibreConfig();
-  const sellerId = cred.mlUserId;
 
   console.log("=== Item", itemId, "seller", sellerId, "===\n");
 

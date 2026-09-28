@@ -79,7 +79,7 @@ model OrganizationMember {
 /// ML pertence a no máximo 1 organização.
 model OrganizationMlSeller {
   organizationId          String    @map("organization_id")
-  mlUserId                Int       @map("ml_user_id")
+  mlUserId                BigInt    @map("ml_user_id")
   isPrimary               Boolean   @default(true) @map("is_primary")
   linkedAt                DateTime  @default(now()) @map("linked_at")
   /// Última vez que o cron de catálogo processou este seller — usado pra
@@ -611,7 +611,7 @@ model CbsIbsVigencia {
 model TaxReportMonthSnapshot {
   id             String   @id @default(cuid())
   organizationId String   @map("organization_id")
-  sellerId       Int      @map("seller_id")
+  sellerId       BigInt   @map("seller_id")
   year           Int
   month          Int
   generatedAt    DateTime @map("generated_at")
@@ -636,7 +636,7 @@ model TaxReportMonthSnapshot {
 model TaxReportSimulationSnapshot {
   id             String   @id @default(cuid())
   organizationId String   @map("organization_id")
-  sellerId       Int      @map("seller_id")
+  sellerId       BigInt   @map("seller_id")
   year           Int
   month          Int
   /// Reservado para cenários futuros além de "LUCRO_REAL" (ex.: outro Anexo).
@@ -657,7 +657,7 @@ model TaxReportSimulationSnapshot {
 model SimplesRevenueMonthSnapshot {
   id             String   @id @default(cuid())
   organizationId String   @map("organization_id")
-  sellerId       Int      @map("seller_id")
+  sellerId       BigInt   @map("seller_id")
   year           Int
   month          Int
   revenue        Decimal  @db.Decimal(18, 2)
@@ -675,7 +675,7 @@ model SimplesRevenueMonthSnapshot {
 model RevenueSimulation {
   id             String   @id @default(cuid())
   organizationId String   @map("organization_id")
-  sellerId       Int      @map("seller_id")
+  sellerId       BigInt   @map("seller_id")
   name           String
   payload        Json
   createdAt      DateTime @default(now()) @map("created_at")
@@ -704,7 +704,7 @@ model TaxpayerVerificationCache {
 /// Global por design — storage de token por conta ML, não por org;
 /// `OrganizationMlSeller` é a ponte entre esta tabela e a organização.
 model MlSellerCredentials {
-  mlUserId        Int       @id @map("ml_user_id")
+  mlUserId        BigInt    @id @map("ml_user_id")
   refreshEnc      String    @map("refresh_enc") @db.Text
   accessEnc       String?   @map("access_enc") @db.Text
   accessExpiresAt DateTime? @map("access_expires_at")

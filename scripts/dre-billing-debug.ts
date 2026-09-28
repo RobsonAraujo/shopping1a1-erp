@@ -21,6 +21,7 @@ import {
   mapBillingSummaryToDreLines,
 } from "../src/lib/mercadolibre/billing-summary";
 import { resolveSellerAccessToken } from "../src/lib/mercadolibre/persist-seller-tokens";
+import { fromDbSellerId } from "../src/lib/mercadolibre/seller-id";
 import { getMercadoLibreConfig } from "../src/lib/mercadolibre/config";
 
 function money(value: number | null | undefined): string {
@@ -56,7 +57,7 @@ async function resolveMlUserId(explicit?: string): Promise<number> {
   if (!row) {
     throw new Error("No ml_seller_credentials row found.");
   }
-  return row.mlUserId;
+  return fromDbSellerId(row.mlUserId);
 }
 
 async function fetchMonthlyPeriods(accessToken: string) {

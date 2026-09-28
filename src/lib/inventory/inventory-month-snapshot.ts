@@ -10,6 +10,7 @@ import {
   isFulfillmentListing,
 } from "@/lib/mercadolibre/fulfillment-stock";
 import { resolveSellerAccessToken } from "@/lib/mercadolibre/persist-seller-tokens";
+import { fromDbSellerId } from "@/lib/mercadolibre/seller-id";
 import { isKitItem, getItemSku } from "@/lib/mercadolibre/item-sku";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
 import { loadStockReportProductsByMlItemId } from "@/lib/products/product-data";
@@ -142,14 +143,16 @@ type SnapshotListingRow = {
 async function collectOrgOperationalListings(
   organizationId: string,
 ): Promise<SnapshotListingRow[]> {
-  const sellers = await prisma.organizationMlSeller.findMany({
+  const sellerRows = await prisma.organizationMlSeller.findMany({
     where: { organizationId },
     select: { mlUserId: true },
   });
-  if (sellers.length === 0) return [];
+  if (sellerRows.length === 0) return [];
+  // Coluna BIGINT -> `bigint`; o domínio trabalha com `number`.
+  const sellers = sellerRows.map((row) => fromDbSellerId(row.mlUserId));
 
   const byItemId = new Map<string, SnapshotListingRow>();
-  for (const { mlUserId } of sellers) {
+  for (const mlUserId of sellers) {
     const token = await resolveSellerAccessToken(mlUserId);
     if (!token) {
       throw new Error(`no_valid_token:${mlUserId}`);
