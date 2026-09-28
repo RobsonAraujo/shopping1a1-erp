@@ -1,15 +1,16 @@
 "use client";
 
-import Image from "next/image";
-import { useEffect, useState } from "react";
-import { ImageOff } from "lucide-react";
-import {
-  DashboardSection,
-  DashboardSectionClear,
-} from "@/components/home/DashboardHomeSection";
-import { Skeleton } from "@/components/ui/skeleton";
-import { UserFeedback } from "@/components/ui/user-feedback";
 import { useInView } from "@/hooks/use-in-view";
+import { useWidgetFetch } from "@/hooks/use-widget-fetch";
+import {
+  HOME_WIDGET_LIST_CAP,
+  HomeWidgetCard,
+  HomeWidgetEmpty,
+  HomeWidgetList,
+  HomeWidgetListRow,
+} from "@/components/home/dashboard/HomeWidgetCard";
+import { UserFeedback } from "@/components/ui/user-feedback";
+import { formatApiErrorMessage, readApiError } from "@/lib/api/api-client-error";
 import { formatFinancialMoney } from "@/lib/pricing/financial-margin";
 import type {
   PromotionSummaryPayload,
@@ -23,74 +24,25 @@ function daysUntilLabel(days: number | null): string {
   return `${days} dias`;
 }
 
-function PromotionRow({ row }: { row: PromotionSummaryRow }) {
-  const urgent = row.daysUntilEnd !== null && row.daysUntilEnd <= 1;
-
-  return (
-    <li>
-      <a
-        href={row.permalink}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-[var(--muted)]/40 sm:px-5"
-        title={`${row.title} · abrir no Mercado Livre`}
-      >
-        <span className="relative size-11 shrink-0 overflow-hidden rounded-xl bg-[var(--muted)] sm:size-12">
-          {row.imageUrl ? (
-            <Image
-              src={row.imageUrl}
-              alt=""
-              width={48}
-              height={48}
-              className="size-full object-contain"
-              sizes="48px"
-            />
-          ) : (
-            <span className="flex size-full items-center justify-center">
-              <ImageOff
-                className="size-4 text-[var(--muted-foreground)]/70"
-                aria-hidden
-              />
-            </span>
-          )}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium text-[var(--foreground)]">
-            {row.sku ?? "Sem SKU"}
-          </span>
-          <span className="mt-0.5 block truncate text-xs text-[var(--muted-foreground)]">
-            {formatFinancialMoney(row.salePrice)}
-            {row.promotionName ? ` · ${row.promotionName}` : ""}
-          </span>
-        </span>
-        <span
-          className={
-            urgent
-              ? "shrink-0 text-sm font-semibold tabular-nums text-rose-700"
-              : "shrink-0 text-sm font-medium tabular-nums text-amber-800"
-          }
-        >
-          {daysUntilLabel(row.daysUntilEnd)}
-        </span>
-      </a>
-    </li>
-  );
-}
-
 function PromotionList({ rows }: { rows: PromotionSummaryRow[] }) {
   return (
-    <>
-      <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-3xl bg-[var(--card)]">
-        {rows.slice(0, 8).map((row) => (
-          <PromotionRow key={row.mlItemId} row={row} />
-        ))}
-      </ul>
-      {rows.length > 8 ? (
-        <p className="mt-2 text-xs text-[var(--muted-foreground)]">
-          + {rows.length - 8} promoção(ões)
-        </p>
-      ) : null}
-    </>
+    <HomeWidgetList hiddenCount={Math.max(0, rows.length - HOME_WIDGET_LIST_CAP)}>
+      {rows.slice(0, HOME_WIDGET_LIST_CAP).map((row) => {
+        const urgent = row.daysUntilEnd !== null && row.daysUntilEnd <= 1;
+        return (
+          <HomeWidgetListRow
+            key={row.mlItemId}
+            href={row.permalink}
+            imageUrl={row.imageUrl}
+            title={row.sku ?? "Sem SKU"}
+            subtitle={`${formatFinancialMoney(row.salePrice)}${row.promotionName ? ` · ${row.promotionName}` : ""}`}
+            trailing={daysUntilLabel(row.daysUntilEnd)}
+            trailingClassName={urgent ? "text-rose-700" : "text-amber-800"}
+            hint={`${row.title} · abrir no Mercado Livre`}
+          />
+        );
+      })}
+    </HomeWidgetList>
   );
 }
 
@@ -102,55 +54,40 @@ function PromotionList({ rows }: { rows: PromotionSummaryRow[] }) {
  * Como no PMA, a seção nunca desaparece — vazia vira "tudo ok", falha vira
  * erro dentro da seção, e avisos de dado parcial aparecem ao lado.
  */
+const ENDPOINT = "/api/dashboard/summary/promotions";
+
+async function loadPromocoes(): Promise<PromotionSummaryPayload> {
+  const res = await fetch(ENDPOINT, { cache: "no-store" });
+  // Checa `ok` ANTES de ler o corpo: um 502 com corpo não-JSON (o host devolvendo
+  // texto, por exemplo) fazia o `res.json()` estourar e a mensagem crua do parser
+  // ("Unexpected token…") aparecer no card.
+  if (!res.ok) {
+    throw new Error(
+      formatApiErrorMessage(await readApiError(res, "promotion_summary_failed")),
+    );
+  }
+  return (await res.json()) as PromotionSummaryPayload;
+}
+
 export function HomeWidgetPromocoes() {
   const [setRef, inView] = useInView<HTMLDivElement>();
-  const [data, setData] = useState<PromotionSummaryPayload | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const entry = useWidgetFetch<PromotionSummaryPayload>(
+    ENDPOINT,
+    loadPromocoes,
+    inView,
+  );
 
-  useEffect(() => {
-    if (!inView) return;
-    const controller = new AbortController();
-    let cancelled = false;
-
-    void (async () => {
-      try {
-        const res = await fetch("/api/dashboard/summary/promotions", {
-          cache: "no-store",
-          signal: controller.signal,
-        });
-        const json = (await res.json()) as
-          | PromotionSummaryPayload
-          | { error?: string };
-        if (cancelled) return;
-        if (!res.ok) {
-          setError(
-            (json as { error?: string }).error ?? "Falha ao carregar promoções.",
-          );
-          return;
-        }
-        setData(json as PromotionSummaryPayload);
-      } catch (e) {
-        if (cancelled || (e instanceof Error && e.name === "AbortError")) return;
-        setError("Falha de rede ao carregar promoções.");
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [inView]);
-
+  const data = entry.status === "ok" ? entry.value : null;
   const expiringSoon = data?.expiringSoon ?? [];
-  const pending = data === null && error === null;
-  const count =
-    !pending && !error && expiringSoon.length > 0
-      ? expiringSoon.length
-      : undefined;
 
   return (
     <div ref={setRef}>
-      <DashboardSection title="Promoções terminando" count={count} tone="warning">
+      <HomeWidgetCard
+        definitionId="promocoes"
+        pending={entry.status === "loading"}
+        error={entry.status === "error" ? entry.error : null}
+        count={expiringSoon.length}
+      >
         {data?.warnings?.length ? (
           <div className="mb-3">
             <UserFeedback tone="warning" title="Alguns dados não chegaram">
@@ -166,16 +103,16 @@ export function HomeWidgetPromocoes() {
           </div>
         ) : null}
 
-        {pending ? (
-          <Skeleton className="h-24 rounded-3xl" />
-        ) : error ? (
-          <UserFeedback>{error}</UserFeedback>
-        ) : expiringSoon.length > 0 ? (
+        {expiringSoon.length > 0 ? (
           <PromotionList rows={expiringSoon} />
         ) : (
-          <DashboardSectionClear message="Nenhuma promoção vencendo nos próximos dias." />
+          <HomeWidgetEmpty
+            tone="ok"
+            title="Nenhuma promoção vencendo"
+            description="Nada termina nos próximos dias."
+          />
         )}
-      </DashboardSection>
+      </HomeWidgetCard>
     </div>
   );
 }

@@ -7,20 +7,17 @@ import {
   HomeWidgetMetric,
 } from "@/components/home/dashboard/HomeWidgetCard";
 import { useHomeCore } from "@/components/home/dashboard/HomeDashboardProvider";
-import { getHomeWidgetDefinition } from "@/lib/home/dashboard/widget-registry";
 
-const DEFINITION = getHomeWidgetDefinition("produtos-saude");
 
 /** Quantos produtos existem, quantos anúncios estão ativos e quantos custos
  * pedem revisão — o "está tudo cadastrado?" num olhar. */
 export function HomeWidgetCatalogHealth() {
   const { catalog } = useHomeCore();
-  if (!DEFINITION) return null;
 
   if (!catalog) {
     return (
       <HomeWidgetCard
-        definition={DEFINITION}
+        definitionId="produtos-saude"
         error="Não foi possível carregar o catálogo agora."
       />
     );
@@ -28,7 +25,7 @@ export function HomeWidgetCatalogHealth() {
 
   if (catalog.productCount === 0) {
     return (
-      <HomeWidgetCard definition={DEFINITION}>
+      <HomeWidgetCard definitionId="produtos-saude">
         <HomeWidgetEmpty
           title="Nenhum produto cadastrado"
           description="Cadastre custo, ICMS e NCM por SKU — é a base da margem e do DRE."
@@ -42,7 +39,7 @@ export function HomeWidgetCatalogHealth() {
   const needsReview = catalog.needsCostReviewCount;
 
   return (
-    <HomeWidgetCard definition={DEFINITION}>
+    <HomeWidgetCard definitionId="produtos-saude">
       <HomeWidgetMetric
         value={catalog.productCount.toLocaleString("pt-BR")}
         label={

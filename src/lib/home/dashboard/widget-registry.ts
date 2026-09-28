@@ -33,7 +33,24 @@ import type { HomeWidgetDataKey } from "@/lib/home/dashboard/widget-data-keys";
  * `HomeWidgetRenderer`. Nada mais.
  */
 
-export type HomeWidgetSize = "sm" | "md" | "lg";
+/**
+ * Quantas colunas o layout tem. **Fixo, não varia por viewport** — e a razão é
+ * perda de dado, não estética: `column` é persistido, então se a contagem
+ * mudasse por breakpoint o normalizador teria que clampar para a contagem da
+ * tela atual, e o primeiro arrasto no celular gravaria o layout colapsado de
+ * volta, destruindo o layout do desktop.
+ *
+ * Crescer (2 → 3) é seguro: nenhum `column` já gravado fica inválido.
+ */
+export const HOME_DASHBOARD_COLUMN_COUNT = 2;
+
+/** Literal porque o Tailwind v4 varre o texto do fonte e este projeto não tem
+ * arquivo de config pra safelist. Tem que casar com
+ * `HOME_DASHBOARD_COLUMN_COUNT` — há teste. */
+export const HOME_DASHBOARD_GRID_CLASS = "grid-cols-1 md:grid-cols-2";
+
+/** Faixa de largura cheia acima das colunas, ou card de uma coluna. */
+export type HomeWidgetLayout = "banner" | "card";
 
 export type HomeWidgetCategory =
   | "atencao"
@@ -76,8 +93,10 @@ export type HomeWidgetDefinition = {
   /** Único e esparso (10, 20, 30…) pra caber inserção de widget novo entre
    * dois existentes sem renumerar o registry inteiro. */
   defaultOrder: number;
-  supportedSizes: readonly [HomeWidgetSize, ...HomeWidgetSize[]];
-  defaultSize: HomeWidgetSize;
+  layout: HomeWidgetLayout;
+  /** Coluna inicial do card (0..DASHBOARD_COLUMN_COUNT-1). Irrelevante para
+   * `banner`. */
+  defaultColumn: number;
   source: HomeWidgetSource;
   priority: HomeWidgetPriority;
   /** Página de detalhe. Precisa ser rota real (o teste do registry valida
@@ -87,10 +106,6 @@ export type HomeWidgetDefinition = {
   pinned?: boolean;
 };
 
-const SIZES_FIXED_SM = ["sm"] as const;
-const SIZES_SM_MD = ["sm", "md"] as const;
-const SIZES_MD_LG = ["md", "lg"] as const;
-const SIZES_ALL = ["sm", "md", "lg"] as const;
 
 export const HOME_WIDGET_DEFINITIONS: readonly HomeWidgetDefinition[] = [
   {
@@ -103,8 +118,8 @@ export const HOME_WIDGET_DEFINITIONS: readonly HomeWidgetDefinition[] = [
     tone: "rose",
     defaultVisible: true,
     defaultOrder: 10,
-    supportedSizes: SIZES_MD_LG,
-    defaultSize: "lg",
+    layout: "banner",
+    defaultColumn: 0,
     source: { kind: "core" },
     priority: "p0",
     pinned: true,
@@ -119,8 +134,8 @@ export const HOME_WIDGET_DEFINITIONS: readonly HomeWidgetDefinition[] = [
     tone: "primary",
     defaultVisible: true,
     defaultOrder: 20,
-    supportedSizes: SIZES_MD_LG,
-    defaultSize: "lg",
+    layout: "banner",
+    defaultColumn: 0,
     source: { kind: "core" },
     priority: "p0",
     pinned: true,
@@ -135,8 +150,8 @@ export const HOME_WIDGET_DEFINITIONS: readonly HomeWidgetDefinition[] = [
     tone: "emerald",
     defaultVisible: true,
     defaultOrder: 30,
-    supportedSizes: SIZES_SM_MD,
-    defaultSize: "sm",
+    layout: "card",
+    defaultColumn: 0,
     source: { kind: "server-island" },
     priority: "p0",
   },
@@ -150,8 +165,8 @@ export const HOME_WIDGET_DEFINITIONS: readonly HomeWidgetDefinition[] = [
     tone: "primary",
     defaultVisible: true,
     defaultOrder: 40,
-    supportedSizes: SIZES_SM_MD,
-    defaultSize: "sm",
+    layout: "card",
+    defaultColumn: 0,
     source: { kind: "core" },
     priority: "p0",
     href: "/dashboard/compras?tab=kanban",
@@ -166,8 +181,8 @@ export const HOME_WIDGET_DEFINITIONS: readonly HomeWidgetDefinition[] = [
     tone: "violet",
     defaultVisible: true,
     defaultOrder: 50,
-    supportedSizes: SIZES_SM_MD,
-    defaultSize: "sm",
+    layout: "card",
+    defaultColumn: 0,
     source: { kind: "core" },
     priority: "p0",
     href: "/dashboard/operacoes-full",
@@ -181,9 +196,9 @@ export const HOME_WIDGET_DEFINITIONS: readonly HomeWidgetDefinition[] = [
     icon: Boxes,
     tone: "primary",
     defaultVisible: true,
-    defaultOrder: 60,
-    supportedSizes: SIZES_SM_MD,
-    defaultSize: "sm",
+    defaultOrder: 70,
+    layout: "card",
+    defaultColumn: 0,
     source: { kind: "core" },
     priority: "p1",
     href: "/dashboard/produtos",
@@ -197,9 +212,9 @@ export const HOME_WIDGET_DEFINITIONS: readonly HomeWidgetDefinition[] = [
     icon: CheckSquare,
     tone: "primary",
     defaultVisible: true,
-    defaultOrder: 70,
-    supportedSizes: SIZES_FIXED_SM,
-    defaultSize: "sm",
+    defaultOrder: 120,
+    layout: "card",
+    defaultColumn: 1,
     source: { kind: "local" },
     priority: "p1",
   },
@@ -211,9 +226,9 @@ export const HOME_WIDGET_DEFINITIONS: readonly HomeWidgetDefinition[] = [
     icon: NotebookPen,
     tone: "amber",
     defaultVisible: true,
-    defaultOrder: 80,
-    supportedSizes: SIZES_FIXED_SM,
-    defaultSize: "sm",
+    defaultOrder: 130,
+    layout: "card",
+    defaultColumn: 1,
     source: { kind: "local" },
     priority: "p1",
   },
@@ -225,9 +240,9 @@ export const HOME_WIDGET_DEFINITIONS: readonly HomeWidgetDefinition[] = [
     icon: Timer,
     tone: "violet",
     defaultVisible: true,
-    defaultOrder: 90,
-    supportedSizes: SIZES_FIXED_SM,
-    defaultSize: "sm",
+    defaultOrder: 140,
+    layout: "card",
+    defaultColumn: 1,
     source: { kind: "local" },
     priority: "p1",
   },
@@ -240,9 +255,9 @@ export const HOME_WIDGET_DEFINITIONS: readonly HomeWidgetDefinition[] = [
     icon: LineChart,
     tone: "emerald",
     defaultVisible: true,
-    defaultOrder: 100,
-    supportedSizes: SIZES_MD_LG,
-    defaultSize: "md",
+    defaultOrder: 60,
+    layout: "card",
+    defaultColumn: 0,
     source: { kind: "batch", dataKey: "finance" },
     priority: "p1",
     href: "/dashboard/dre",
@@ -256,9 +271,9 @@ export const HOME_WIDGET_DEFINITIONS: readonly HomeWidgetDefinition[] = [
     icon: Wrench,
     tone: "amber",
     defaultVisible: true,
-    defaultOrder: 110,
-    supportedSizes: SIZES_MD_LG,
-    defaultSize: "md",
+    defaultOrder: 80,
+    layout: "card",
+    defaultColumn: 0,
     source: { kind: "core" },
     priority: "p1",
     href: "/dashboard/dre",
@@ -272,9 +287,9 @@ export const HOME_WIDGET_DEFINITIONS: readonly HomeWidgetDefinition[] = [
     icon: Tags,
     tone: "rose",
     defaultVisible: true,
-    defaultOrder: 120,
-    supportedSizes: SIZES_MD_LG,
-    defaultSize: "lg",
+    defaultOrder: 90,
+    layout: "card",
+    defaultColumn: 1,
     source: { kind: "core" },
     priority: "p0",
     href: "/dashboard/catalog-report",
@@ -309,9 +324,9 @@ export const HOME_WIDGET_DEFINITIONS: readonly HomeWidgetDefinition[] = [
     icon: AlertTriangle,
     tone: "rose",
     defaultVisible: true,
-    defaultOrder: 130,
-    supportedSizes: SIZES_MD_LG,
-    defaultSize: "lg",
+    defaultOrder: 100,
+    layout: "card",
+    defaultColumn: 1,
     source: { kind: "isolated", endpoint: "/api/dashboard/widgets/pma" },
     priority: "p1",
   },
@@ -324,9 +339,9 @@ export const HOME_WIDGET_DEFINITIONS: readonly HomeWidgetDefinition[] = [
     icon: Percent,
     tone: "amber",
     defaultVisible: true,
-    defaultOrder: 140,
-    supportedSizes: SIZES_MD_LG,
-    defaultSize: "lg",
+    defaultOrder: 110,
+    layout: "card",
+    defaultColumn: 1,
     source: {
       kind: "isolated",
       endpoint: "/api/dashboard/summary/promotions",
@@ -342,9 +357,9 @@ export const HOME_WIDGET_DEFINITIONS: readonly HomeWidgetDefinition[] = [
     icon: LayoutGrid,
     tone: "primary",
     defaultVisible: false,
-    defaultOrder: 170,
-    supportedSizes: SIZES_ALL,
-    defaultSize: "md",
+    defaultOrder: 150,
+    layout: "card",
+    defaultColumn: 1,
     source: { kind: "local" },
     priority: "p2",
   },
@@ -367,23 +382,6 @@ export const HOME_WIDGET_CATEGORY_ORDER: readonly HomeWidgetCategory[] = [
   "estoque",
   "pessoal",
 ];
-
-/**
- * Spans da grade. Os valores precisam ser **strings literais escritas aqui
- * no fonte**: o Tailwind v4 varre o texto dos arquivos e este projeto não
- * tem arquivo de config pra safelist. Nada de montar classe por template.
- */
-export const HOME_WIDGET_SIZE_SPAN: Record<HomeWidgetSize, string> = {
-  sm: "col-span-1 sm:col-span-2 xl:col-span-3",
-  md: "col-span-1 sm:col-span-3 xl:col-span-6",
-  lg: "col-span-1 sm:col-span-6 xl:col-span-12",
-};
-
-export const HOME_WIDGET_SIZE_LABEL: Record<HomeWidgetSize, string> = {
-  sm: "Pequeno",
-  md: "Médio",
-  lg: "Largo",
-};
 
 const DEFINITION_BY_ID = new Map(
   HOME_WIDGET_DEFINITIONS.map((definition) => [definition.id, definition]),

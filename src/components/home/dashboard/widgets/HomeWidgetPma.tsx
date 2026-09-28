@@ -1,82 +1,65 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { DashboardPmaAlertPanel } from "@/components/home/DashboardPmaAlertPanel";
 import {
-  DashboardSection,
-  DashboardSectionClear,
-} from "@/components/home/DashboardHomeSection";
-import { Skeleton } from "@/components/ui/skeleton";
-import { UserFeedback } from "@/components/ui/user-feedback";
+  HomeWidgetCard,
+  HomeWidgetEmpty,
+} from "@/components/home/dashboard/HomeWidgetCard";
 import { useInView } from "@/hooks/use-in-view";
+import { useWidgetFetch } from "@/hooks/use-widget-fetch";
 import { formatApiErrorMessage, readApiError } from "@/lib/api/api-client-error";
 import type { PmaAlertRow } from "@/lib/home/pma-alert-data";
+
+const ENDPOINT = "/api/dashboard/widgets/pma";
+
+async function loadPma(): Promise<PmaAlertRow[]> {
+  const res = await fetch(ENDPOINT, { cache: "no-store" });
+  if (!res.ok) {
+    throw new Error(
+      formatApiErrorMessage(await readApiError(res, "pma_alerts_failed")),
+    );
+  }
+  const json = (await res.json()) as { rows?: PmaAlertRow[] };
+  return json.rows ?? [];
+}
 
 /**
  * Anúncios abaixo do preço mínimo anunciável.
  *
- * Fetch próprio, fora do batch: faz 1-2 chamadas ao Mercado Livre por anúncio
- * com PMA cadastrado, e no batch travaria as outras chaves. Só dispara quando
- * o card chega perto da viewport — antes isso rodava no render do servidor e
- * era pago mesmo por quem não olhava.
+ * Passa pelo cache de módulo (`useWidgetFetch`) e não por `useState` local, por
+ * um motivo concreto: arrastar este card para a outra coluna o **remonta** (duas
+ * colunas são dois pais React, e mover um fiber entre pais é unmount + mount).
+ * Com estado local, cada arrasto re-disparava a varredura de anúncios no Mercado
+ * Livre — centenas de chamadas num seller médio. O `useInView` continua: a busca
+ * só começa quando o card chega perto da viewport.
  *
  * A seção nunca desaparece: sem nada a alertar vira "tudo ok", e falha vira o
- * erro dentro da própria seção. Esconder fazia o usuário achar que o recurso
- * não existe.
+ * erro dentro do próprio card.
  */
 export function HomeWidgetPma() {
   const [setRef, inView] = useInView<HTMLDivElement>();
-  const [rows, setRows] = useState<PmaAlertRow[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const entry = useWidgetFetch<PmaAlertRow[]>(ENDPOINT, loadPma, inView);
 
-  useEffect(() => {
-    if (!inView) return;
-    const controller = new AbortController();
-    let cancelled = false;
-
-    void (async () => {
-      try {
-        const res = await fetch("/api/dashboard/widgets/pma", {
-          cache: "no-store",
-          signal: controller.signal,
-        });
-        if (!res.ok) {
-          const code = await readApiError(res, "pma_alerts_failed");
-          if (!cancelled) setError(formatApiErrorMessage(code));
-          return;
-        }
-        const json = (await res.json()) as { rows: PmaAlertRow[] };
-        if (!cancelled) setRows(json.rows ?? []);
-      } catch (e) {
-        if (cancelled || (e instanceof Error && e.name === "AbortError")) return;
-        setError(formatApiErrorMessage("pma_alerts_failed"));
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [inView]);
-
-  const pending = rows === null && error === null;
+  const rows = entry.status === "ok" ? entry.value : null;
 
   return (
     <div ref={setRef}>
-      <DashboardSection
-        title="Abaixo do PMA"
-        count={rows && rows.length > 0 ? rows.length : undefined}
+      <HomeWidgetCard
+        definitionId="pma"
+        pending={entry.status === "loading"}
+        error={entry.status === "error" ? entry.error : null}
+        count={rows?.length}
       >
-        {pending ? (
-          <Skeleton className="h-24 rounded-3xl" />
-        ) : error ? (
-          <UserFeedback>{error}</UserFeedback>
-        ) : rows && rows.length > 0 ? (
+        {rows && rows.length > 0 ? (
           <DashboardPmaAlertPanel rows={rows} />
         ) : (
-          <DashboardSectionClear message="Nenhum anúncio abaixo do preço mínimo anunciável." />
+          <HomeWidgetEmpty
+            tone="ok"
+            title="Nenhum anúncio abaixo do PMA"
+            description="Todos estão acima do preço mínimo anunciável que você cadastrou."
+          />
         )}
-      </DashboardSection>
+      </HomeWidgetCard>
     </div>
   );
 }

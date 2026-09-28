@@ -1,13 +1,18 @@
-import Image from "next/image";
-import { ImageOff } from "lucide-react";
+import {
+  HOME_WIDGET_LIST_CAP,
+  HomeWidgetCard,
+  HomeWidgetEmpty,
+  HomeWidgetList,
+  HomeWidgetListRow,
+} from "@/components/home/dashboard/HomeWidgetCard";
 import { formatFinancialMoney } from "@/lib/pricing/financial-margin";
 import { sellerListingModifyUrl } from "@/lib/mercadolibre/seller-listing-url";
-import {
-  DashboardSection,
-  DashboardSectionClear,
-} from "@/components/home/DashboardHomeSection";
 import type { CatalogLosingRow } from "@/lib/home/catalog-losing-data";
 
+/**
+ * Card vazio **não desaparece**: mostra o "tudo ok". Esconder fazia o usuário
+ * achar que o monitoramento não existia.
+ */
 export function DashboardCatalogLosingPanel({
   rows,
 }: {
@@ -15,59 +20,35 @@ export function DashboardCatalogLosingPanel({
 }) {
   if (rows.length === 0) {
     return (
-      <DashboardSection title="Catálogo perdendo">
-        <DashboardSectionClear message="Nenhum anúncio de catálogo perdendo a compra." />
-      </DashboardSection>
+      <HomeWidgetCard definitionId="catalogo-perdendo">
+        <HomeWidgetEmpty
+          tone="ok"
+          title="Nenhum anúncio perdendo o catálogo"
+          description="Todos os seus anúncios de catálogo estão com a compra."
+        />
+      </HomeWidgetCard>
     );
   }
 
   return (
-    <DashboardSection title="Catálogo perdendo" count={rows.length}>
-      <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-3xl bg-[var(--card)]">
-        {rows.map((row) => (
-          <li key={row.mlItemId}>
-            <a
-              href={sellerListingModifyUrl(row.mlItemId)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-[var(--muted)]/40 sm:px-5"
-              title={`${row.title} · editar no Mercado Livre`}
-            >
-              <span className="relative size-11 shrink-0 overflow-hidden rounded-xl bg-[var(--muted)] sm:size-12">
-                {row.imageUrl ? (
-                  <Image
-                    src={row.imageUrl}
-                    alt=""
-                    width={48}
-                    height={48}
-                    className="size-full object-contain"
-                    sizes="48px"
-                  />
-                ) : (
-                  <span className="flex size-full items-center justify-center">
-                    <ImageOff
-                      className="size-4 text-[var(--muted-foreground)]/70"
-                      aria-hidden
-                    />
-                  </span>
-                )}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-[var(--foreground)]">
-                  {row.sku}
-                </span>
-                <span className="mt-0.5 block truncate text-xs text-[var(--muted-foreground)]">
-                  {formatFinancialMoney(row.sellerPrice)} · ganhar{" "}
-                  {formatFinancialMoney(row.priceToWin)}
-                </span>
-              </span>
-              <span className="shrink-0 text-sm font-semibold tabular-nums text-rose-700">
-                {row.gap != null ? formatFinancialMoney(row.gap) : "Perdendo"}
-              </span>
-            </a>
-          </li>
+    <HomeWidgetCard definitionId="catalogo-perdendo" count={rows.length}>
+      <HomeWidgetList
+        hiddenCount={Math.max(0, rows.length - HOME_WIDGET_LIST_CAP)}
+        moreHref="/dashboard/catalog-report"
+      >
+        {rows.slice(0, HOME_WIDGET_LIST_CAP).map((row) => (
+          <HomeWidgetListRow
+            key={row.mlItemId}
+            href={sellerListingModifyUrl(row.mlItemId)}
+            imageUrl={row.imageUrl}
+            title={row.sku}
+            subtitle={`${formatFinancialMoney(row.sellerPrice)} · ganhar ${formatFinancialMoney(row.priceToWin)}`}
+            trailing={row.gap != null ? formatFinancialMoney(row.gap) : "Perdendo"}
+            trailingClassName="text-rose-700"
+            hint={`${row.title} · editar no Mercado Livre`}
+          />
         ))}
-      </ul>
-    </DashboardSection>
+      </HomeWidgetList>
+    </HomeWidgetCard>
   );
 }

@@ -7,11 +7,9 @@ import {
   HomeWidgetEmpty,
 } from "@/components/home/dashboard/HomeWidgetCard";
 import { useHomeCore } from "@/components/home/dashboard/HomeDashboardProvider";
-import { getHomeWidgetDefinition } from "@/lib/home/dashboard/widget-registry";
 import { STATUS_PILL_CLASS, type StatusTone } from "@/lib/ui/tone";
 import { cn } from "@/lib/utils";
 
-const DEFINITION = getHomeWidgetDefinition("pendencias");
 
 type PendingRow = {
   id: string;
@@ -41,12 +39,11 @@ function relativeLabel(iso: string | null, timezone: string): string {
  */
 export function HomeWidgetPendings() {
   const { pendings, catalogPoll } = useHomeCore();
-  if (!DEFINITION) return null;
 
   if (!pendings) {
     return (
       <HomeWidgetCard
-        definition={DEFINITION}
+        definitionId="pendencias"
         error="Não foi possível verificar as pendências agora."
       />
     );
@@ -106,7 +103,7 @@ export function HomeWidgetPendings() {
 
   if (rows.length === 0) {
     return (
-      <HomeWidgetCard definition={DEFINITION}>
+      <HomeWidgetCard definitionId="pendencias">
         <HomeWidgetEmpty
           tone="ok"
           title="Nenhuma pendência no sistema"
@@ -121,7 +118,7 @@ export function HomeWidgetPendings() {
   }
 
   return (
-    <HomeWidgetCard definition={DEFINITION} count={rows.length}>
+    <HomeWidgetCard definitionId="pendencias" count={rows.length}>
       <ul className="-mx-2 divide-y divide-[var(--border)]">
         {rows.map((row) => {
           const pill = STATUS_PILL_CLASS[row.tone];

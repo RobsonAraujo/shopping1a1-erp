@@ -7,14 +7,12 @@ import {
   HomeWidgetMetric,
 } from "@/components/home/dashboard/HomeWidgetCard";
 import { useHomeWidgetSlice } from "@/components/home/dashboard/HomeDashboardProvider";
-import { getHomeWidgetDefinition } from "@/lib/home/dashboard/widget-registry";
 import {
   formatFinancialMoney,
   formatFinancialPercent,
 } from "@/lib/pricing/financial-margin";
 import { valueToneClass } from "@/lib/ui/tone";
 
-const DEFINITION = getHomeWidgetDefinition("dre-resultado");
 
 /**
  * Resultado do último mês **sincronizado** — não do mês corrente: no dia 1 o
@@ -22,17 +20,16 @@ const DEFINITION = getHomeWidgetDefinition("dre-resultado");
  */
 export function HomeWidgetDreResult() {
   const { value, loading, error } = useHomeWidgetSlice("finance");
-  if (!DEFINITION) return null;
 
   if (loading || error || !value) {
     return (
-      <HomeWidgetCard definition={DEFINITION} pending={loading} error={error} />
+      <HomeWidgetCard definitionId="dre-resultado" pending={loading} error={error} />
     );
   }
 
   if (value.latestMonth === null) {
     return (
-      <HomeWidgetCard definition={DEFINITION}>
+      <HomeWidgetCard definitionId="dre-resultado">
         <HomeWidgetEmpty
           title="Nenhum mês sincronizado ainda"
           description="Sincronize um mês no DRE para ver faturamento, margem e lucro aqui."
@@ -44,7 +41,7 @@ export function HomeWidgetDreResult() {
   }
 
   return (
-    <HomeWidgetCard definition={DEFINITION}>
+    <HomeWidgetCard definitionId="dre-resultado">
       <HomeWidgetMetric
         value={formatFinancialMoney(value.totalEntrada)}
         label={`faturamento · ${value.latestMonthLabel} de ${value.year}`}

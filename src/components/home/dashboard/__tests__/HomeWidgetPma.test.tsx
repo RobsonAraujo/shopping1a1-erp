@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
 import { act, renderIntoDocument } from "@/test-setup/render";
+import { clearWidgetFetch } from "@/lib/home/dashboard/widget-fetch-cache";
 import { HomeWidgetPma } from "@/components/home/dashboard/widgets/HomeWidgetPma";
 import {
   flush,
@@ -21,6 +22,9 @@ describe("HomeWidgetPma", () => {
   let restoreObserver: () => void;
 
   beforeEach(() => {
+    // O cache é de módulo: limpar antes E depois, senão um teste herda o
+    // resultado (ou o erro) do anterior.
+    clearWidgetFetch();
     restoreObserver = installImmediateIntersectionObserver();
   });
 
@@ -35,7 +39,8 @@ describe("HomeWidgetPma", () => {
     );
     const text = container.textContent ?? "";
     assert.match(text, /Abaixo do PMA/);
-    assert.match(text, /Nenhum anúncio abaixo do preço mínimo anunciável/);
+    assert.match(text, /Nenhum anúncio abaixo do PMA/);
+    assert.match(text, /acima do preço mínimo anunciável/);
     unmount();
   });
 

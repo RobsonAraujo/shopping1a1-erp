@@ -1,12 +1,20 @@
-import { TrendingUp } from "lucide-react";
-import { DashboardKpiCard } from "@/components/home/DashboardKpiCard";
-import { CATEGORY_BADGE_CLASS } from "@/lib/ui/tone";
+import {
+  HomeWidgetCard,
+  HomeWidgetMeter,
+  HomeWidgetMetric,
+} from "@/components/home/dashboard/HomeWidgetCard";
 import type { DashboardSalesSnapshot } from "@/lib/home/sales-card-data";
 
 const POSITIVE_RATINGS_LABEL = "Avaliações positivas";
 const POSITIVE_RATINGS_HINT =
   "Dos compradores que avaliaram a compra no Mercado Livre";
 
+/**
+ * Renderizado no **servidor** (vai pra grade como o nó `sellerCard`, dentro de
+ * um `<Suspense>`, pra o `fetchMe` streamar em vez de travar o TTFB). Por isso
+ * passa `definitionId` e não a definição: esta carrega `icon`, que é função, e
+ * função não atravessa a fronteira server → client.
+ */
 export function DashboardSalesCard({
   snapshot,
   pending = false,
@@ -17,27 +25,19 @@ export function DashboardSalesCard({
   const fillPercent = snapshot?.satisfactionPercent ?? null;
 
   return (
-    <DashboardKpiCard
-      title="Vendas"
-      icon={TrendingUp}
-      badgeClassName={CATEGORY_BADGE_CLASS.emerald}
-      meterFillClassName="bg-emerald-500"
-      meterValueClassName="text-emerald-700"
-      pending={pending}
-      value={
-        snapshot
-          ? snapshot.completed.toLocaleString("pt-BR")
-          : undefined
-      }
-      valueLabel="vendas concluídas no Mercado Livre"
-      meterLabel={
-        pending || fillPercent != null ? POSITIVE_RATINGS_LABEL : undefined
-      }
-      meterValue={fillPercent != null ? `${fillPercent}%` : undefined}
-      meterPercent={fillPercent}
-      meterHint={
-        pending || fillPercent != null ? POSITIVE_RATINGS_HINT : undefined
-      }
-    />
+    <HomeWidgetCard definitionId="kpi-vendas" pending={pending}>
+      <HomeWidgetMetric
+        value={snapshot ? snapshot.completed.toLocaleString("pt-BR") : "—"}
+        label="vendas concluídas no Mercado Livre"
+      />
+      <HomeWidgetMeter
+        label={POSITIVE_RATINGS_LABEL}
+        value={fillPercent != null ? `${fillPercent}%` : undefined}
+        percent={fillPercent}
+        fillClassName="bg-emerald-500"
+        valueClassName="text-emerald-700"
+        hint={POSITIVE_RATINGS_HINT}
+      />
+    </HomeWidgetCard>
   );
 }

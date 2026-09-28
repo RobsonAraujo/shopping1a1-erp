@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
 import { act, renderIntoDocument } from "@/test-setup/render";
+import { clearWidgetFetch } from "@/lib/home/dashboard/widget-fetch-cache";
 import { HomeWidgetPromocoes } from "@/components/home/dashboard/widgets/HomeWidgetPromocoes";
 import {
   flush,
@@ -40,6 +41,9 @@ describe("HomeWidgetPromocoes", () => {
   let restoreObserver: () => void;
 
   beforeEach(() => {
+    // O cache é de módulo: limpar antes E depois, senão um teste herda o
+    // resultado (ou o erro) do anterior.
+    clearWidgetFetch();
     restoreObserver = installImmediateIntersectionObserver();
   });
 
@@ -54,7 +58,7 @@ describe("HomeWidgetPromocoes", () => {
     );
     const text = container.textContent ?? "";
     assert.match(text, /Promoções terminando/);
-    assert.match(text, /Nenhuma promoção vencendo nos próximos dias/);
+    assert.match(text, /Nenhuma promoção vencendo/);
     unmount();
   });
 
@@ -64,7 +68,7 @@ describe("HomeWidgetPromocoes", () => {
     );
     const text = container.textContent ?? "";
     assert.match(text, /Promoções terminando/);
-    assert.match(text, /Falha ao carregar promoções|Falha de rede/);
+    assert.match(text, /Não foi possível carregar o resumo de promoções/);
     unmount();
   });
 

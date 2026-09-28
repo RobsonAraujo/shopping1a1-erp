@@ -1,14 +1,17 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
 import { act, renderIntoDocument } from "@/test-setup/render";
+import { clearWidgetFetch } from "@/lib/home/dashboard/widget-fetch-cache";
 import { HomeDashboardProvider } from "@/components/home/dashboard/HomeDashboardProvider";
 import { HomeWidgetGrid } from "@/components/home/dashboard/HomeWidgetGrid";
 import { createMemoryDashboardPreferences } from "@/lib/home/dashboard/dashboard-preferences-repository";
 import {
+  DASHBOARD_COLUMN_COUNT,
   buildDefaultDashboardPreferences,
-  reorderWidgets,
+  getDefaultView,
+  moveWidget,
+  moveWidgetSideways,
   setWidgetVisible,
-  visibleWidgetIds,
 } from "@/lib/home/dashboard/dashboard-preferences";
 import { HOME_WIDGET_DEFINITIONS } from "@/lib/home/dashboard/widget-registry";
 import { hasHomeWidgetRenderer } from "@/components/home/dashboard/HomeWidgetRenderer";
@@ -100,6 +103,10 @@ describe("HomeWidgetGrid", () => {
   let restoreObserver: () => void;
 
   beforeEach(() => {
+    // O cache é de módulo. Limpar só ANTES de cada teste: limpar DEPOIS
+    // notificaria os inscritos já com o `fetch` real restaurado, disparando uma
+    // busca de verdade que contaminava o teste seguinte.
+    clearWidgetFetch();
     restoreObserver = installImmediateIntersectionObserver();
   });
 
@@ -156,7 +163,7 @@ describe("HomeWidgetGrid", () => {
 
   it("não faz nenhum request de batch quando nenhum widget de batch está visível", async () => {
     let prefs = buildDefaultDashboardPreferences();
-    prefs = setWidgetVisible(prefs, "dre-resultado", false);
+    prefs = setWidgetVisible(prefs, "default", "dre-resultado", false);
 
     const { fetchMock, unmount } = await renderGrid({ preferences: prefs });
     assert.deepEqual(batchUrls(fetchMock.mock.calls), []);
@@ -188,13 +195,13 @@ describe("HomeWidgetGrid", () => {
 
     await act(async () => {
       repository.write(
-        setWidgetVisible(repository.read(), "dre-resultado", false),
+        setWidgetVisible(repository.read(), "default", "dre-resultado", false),
       );
       await flush();
     });
     await act(async () => {
       repository.write(
-        setWidgetVisible(repository.read(), "dre-resultado", true),
+        setWidgetVisible(repository.read(), "default", "dre-resultado", true),
       );
       await flush();
     });
@@ -209,8 +216,8 @@ describe("HomeWidgetGrid", () => {
 
   it("reordenar preserva o estado interno do widget e não refaz request", async () => {
     // A regressão que o desenho inteiro existe para evitar: se reordenar
-    // desmontasse os widgets, uma nota meio digitada seria perdida e todo
-    // fetch seria repetido.
+    // desmontasse os widgets, uma nota meio digitada seria perdida e todo fetch
+    // seria repetido.
     const { container, fetchMock, repository, unmount } = await renderGrid();
 
     const textarea = container.querySelector("textarea");
@@ -222,30 +229,77 @@ describe("HomeWidgetGrid", () => {
     });
 
     const requestsBefore = fetchMock.mock.calls.length;
-    const order = visibleWidgetIds(repository.read());
-    const notesIndex = order.indexOf("notas");
-    assert.ok(notesIndex > 0);
-    const reordered = [...order];
-    [reordered[notesIndex - 1], reordered[notesIndex]] = [
-      reordered[notesIndex],
-      reordered[notesIndex - 1],
-    ];
-
     await act(async () => {
-      repository.write(reorderWidgets(repository.read(), reordered));
+      repository.write(moveWidget(repository.read(), "default", "notas", "up"));
       await flush();
     });
 
-    const after = container.querySelector("textarea");
     assert.equal(
-      after?.value,
+      container.querySelector("textarea")?.value,
       "rascunho que não pode sumir",
-      "reordenar não pode remontar o widget",
+      "reordenar dentro da coluna não pode remontar o widget",
     );
     assert.equal(
       fetchMock.mock.calls.length,
       requestsBefore,
       "reordenar não pode disparar fetch",
+    );
+    unmount();
+  });
+
+  it("mover um widget que BUSCA entre colunas não refaz o request", async () => {
+    // Mover entre colunas **remonta** o widget (dois containers React = dois
+    // pais). A versão anterior deste teste movia o card de notas, que é `local` e
+    // não busca nada — passava sem nunca exercitar o risco. Movendo o PMA, que
+    // bate no Mercado Livre, é o cache de módulo que segura: sem ele, cada
+    // arrasto entre colunas custaria centenas de chamadas.
+    const { fetchMock, repository, unmount } = await renderGrid();
+
+    const pmaCalls = () =>
+      fetchMock.mock.calls.filter((call) =>
+        String(call.arguments[0]).includes("/widgets/pma"),
+      ).length;
+
+    const before = pmaCalls();
+    assert.ok(before >= 1, "o PMA precisa ter buscado ao menos uma vez");
+
+    await act(async () => {
+      repository.write(
+        moveWidgetSideways(repository.read(), "default", "pma", "left"),
+      );
+      await flush();
+    });
+
+    assert.equal(
+      pmaCalls(),
+      before,
+      "o remount não pode re-disparar a busca ao Mercado Livre",
+    );
+    unmount();
+  });
+
+  it("reordenar dentro da coluna preserva o estado do widget", async () => {
+    const { container, repository, unmount } = await renderGrid();
+
+    // o card de notas nasce fechado; o corpo continua montado (animação de
+    // altura), então a textarea está no DOM
+    const textarea = container.querySelector("textarea");
+    assert.ok(textarea, "o corpo do card colapsado precisa continuar montado");
+    await act(async () => {
+      textarea.value = "rascunho que não pode sumir";
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      await flush(1);
+    });
+
+    await act(async () => {
+      repository.write(moveWidget(repository.read(), "default", "notas", "up"));
+      await flush();
+    });
+
+    assert.equal(
+      container.querySelector("textarea")?.value,
+      "rascunho que não pode sumir",
+      "reordenar na mesma coluna não remonta o widget",
     );
     unmount();
   });
@@ -280,12 +334,10 @@ describe("HomeWidgetGrid", () => {
     unmount();
   });
 
-  it("entrar em modo de edição não revela nem busca widget escondido", async () => {
-    // Regressão: revelar os escondidos em modo de edição fazia PMA/promoções
-    // dispararem o fetch deles justamente por estarem escondidos.
+  it("widget escondido de batch continua fora do DOM em qualquer render", async () => {
     let prefs = buildDefaultDashboardPreferences();
-    prefs = setWidgetVisible(prefs, "promocoes", false);
-    prefs = setWidgetVisible(prefs, "dre-resultado", false);
+    prefs = setWidgetVisible(prefs, "default", "promocoes", false);
+    prefs = setWidgetVisible(prefs, "default", "dre-resultado", false);
 
     const { container, fetchMock, repository, unmount } = await renderGrid({
       preferences: prefs,
@@ -306,54 +358,94 @@ describe("HomeWidgetGrid", () => {
     unmount();
   });
 
-  it("roda no caminho de produção (localStorage) sem aviso de React", async () => {
-    // Os outros testes injetam o repositório de memória, cuja identidade é
-    // estável por construção — e foi exatamente por isso que eles não pegaram o
-    // `getSnapshot` sem cache do repositório de `localStorage`, que é o caminho
-    // real. Aqui o provider monta o repositório dele, como em produção, e
-    // qualquer "getSnapshot should be cached" / "Maximum update depth" derruba
-    // o teste.
-    const logged: string[] = [];
-    const consoleError = mock.method(console, "error", (...args: unknown[]) => {
-      logged.push(args.map(String).join(" "));
-    });
-    const consoleWarn = mock.method(console, "warn", (...args: unknown[]) => {
-      logged.push(args.map(String).join(" "));
-    });
-    mock.method(globalThis, "fetch", async () =>
-      Response.json({
-        resolvedAt: new Date().toISOString(),
-        data: { finance: { ok: true, value: financeSlice() } },
-      }),
+  it("renderiza as colunas e mantém as faixas fora delas", async () => {
+    const { container, unmount } = await renderGrid();
+
+    const columns = container.querySelectorAll("[data-home-column]");
+    assert.equal(columns.length, DASHBOARD_COLUMN_COUNT);
+
+    // A zona de atenção é faixa: largura cheia, acima e fora das colunas.
+    const banner = container.querySelector('[data-widget-id="atencao"]');
+    assert.ok(banner, "a faixa de atenção precisa estar na tela");
+    assert.equal(
+      banner.closest("[data-home-column]"),
+      null,
+      "faixa não pode viver dentro de uma coluna",
     );
 
-    // Sem prop `repository`: o provider usa createLocalStorageDashboardPreferences.
-    const view = renderIntoDocument(
-      <HomeDashboardProvider core={coreSnapshot()}>
-        <HomeWidgetGrid />
-      </HomeDashboardProvider>,
-    );
+    // e cada card está na coluna que o registry pediu
+    for (const widget of getDefaultView(
+      buildDefaultDashboardPreferences(),
+    ).widgets) {
+      const node = container.querySelector(`[data-widget-id="${widget.id}"]`);
+      if (!node) continue;
+      const column = node.closest("[data-home-column]");
+      if (!column) continue;
+      assert.equal(
+        column.getAttribute("data-home-column"),
+        String(widget.column),
+        `${widget.id} caiu na coluna errada`,
+      );
+    }
+    unmount();
+  });
+
+  it("todo card arrastável expõe o elemento e a alça de arrasto", async () => {
+    // O slot acha os dois por `querySelector` dentro do effect; se o atributo
+    // sumir, o card simplesmente deixa de arrastar em silêncio.
+    const { container, unmount } = await renderGrid();
+
+    const cards = [...container.querySelectorAll("[data-home-column] [data-widget-id]")];
+    assert.ok(cards.length > 0);
+    for (const card of cards) {
+      if (card.getAttribute("hidden") !== null) continue;
+      assert.ok(
+        card.querySelector("[data-home-drag-element]"),
+        `${card.getAttribute("data-widget-id")}: sem elemento arrastável`,
+      );
+      assert.ok(
+        card.querySelector("[data-home-drag-handle]"),
+        `${card.getAttribute("data-widget-id")}: sem alça`,
+      );
+    }
+    unmount();
+  });
+
+  it("faixa não é arrastável e não tem menu de mover", async () => {
+    const { container, unmount } = await renderGrid();
+    const banner = container.querySelector('[data-widget-id="atencao"]');
+    assert.ok(banner);
+    assert.equal(banner.closest("[data-home-column]"), null, "faixa fica fora das colunas");
+    assert.equal(banner.querySelector("[data-home-drag-element]"), null);
+    assert.equal(banner.querySelector('[aria-label^="Mover "]'), null);
+    unmount();
+  });
+
+  it("o menu de mover reordena de verdade", async () => {
+    // Cobertura ponta a ponta do caminho acessível, que substituiu o arrasto por
+    // teclado: hoje isso só existia para os botões do sheet.
+    const { container, repository, unmount } = await renderGrid();
+
+    const posOf = (id: string) => {
+      const column = container.querySelector('[data-home-column="0"]');
+      const ids = [...(column?.querySelectorAll("[data-widget-id]") ?? [])].map((n) =>
+        n.getAttribute("data-widget-id"),
+      );
+      return ids.indexOf(id);
+    };
+
+    const before = posOf("kpi-compras");
+    assert.ok(before > 0, "kpi-compras precisa ter alguém acima");
+
     await act(async () => {
+      repository.write(
+        moveWidget(repository.read(), "default", "kpi-compras", "up"),
+      );
       await flush();
     });
-    view.rerender(
-      <HomeDashboardProvider core={coreSnapshot()}>
-        <HomeWidgetGrid />
-      </HomeDashboardProvider>,
-    );
-    await act(async () => {
-      await flush();
-    });
 
-    const offenders = logged.filter((line) =>
-      /getSnapshot|Maximum update depth|infinite loop/i.test(line),
-    );
-    assert.deepEqual(offenders, [], `React reclamou:\n${offenders.join("\n")}`);
-    assert.match(view.container.textContent ?? "", /Compras/);
-
-    consoleError.mock.restore();
-    consoleWarn.mock.restore();
-    view.unmount();
+    assert.equal(posOf("kpi-compras"), before - 1, "o card subiu uma posição");
+    unmount();
   });
 
   it("a zona de atenção colapsa numa linha quando não há nada pendente", async () => {

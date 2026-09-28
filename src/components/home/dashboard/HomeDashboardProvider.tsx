@@ -11,9 +11,11 @@ import {
 } from "react";
 import {
   buildDefaultDashboardPreferences,
-  getActiveView,
+  getDefaultView,
+  getView,
   visibleWidgetIds,
   type DashboardPreferences,
+  type DashboardView,
   type DashboardWidgetPreference,
 } from "@/lib/home/dashboard/dashboard-preferences";
 import {
@@ -46,14 +48,17 @@ import { useHomeWidgetData } from "@/hooks/use-home-widget-data";
 
 type LayoutContextValue = {
   preferences: DashboardPreferences;
+  /** A versão sendo olhada agora. Estado de tela, não dado persistido: trocar
+   * de versão é visita temporária e o próximo acesso volta na principal. */
+  activeViewId: string;
+  setActiveViewId: (viewId: string) => void;
+  view: DashboardView;
   widgets: DashboardWidgetPreference[];
   visibleIds: string[];
   repository: DashboardPreferencesRepository;
   update: (
     next: DashboardPreferences | ((current: DashboardPreferences) => DashboardPreferences),
   ) => void;
-  editing: boolean;
-  setEditing: (editing: boolean) => void;
 };
 
 type DataContextValue = {
@@ -106,7 +111,13 @@ export function HomeDashboardProvider({
     () => DEFAULT_PREFERENCES,
   );
 
-  const [editing, setEditing] = useState(false);
+  // Começa na principal. `getView` cai na principal sozinho se a versão em foco
+  // deixar de existir (ex.: excluída em outra aba), então não precisa de effect
+  // de sincronização.
+  const [activeViewId, setActiveViewId] = useState(
+    () => getDefaultView(preferences).id,
+  );
+  const view = getView(preferences, activeViewId);
 
   const update = useCallback(
     (
@@ -121,10 +132,10 @@ export function HomeDashboardProvider({
     [repo],
   );
 
-  const widgets = getActiveView(preferences).widgets;
+  const widgets = view.widgets;
   const visibleIds = useMemo(
-    () => visibleWidgetIds(preferences),
-    [preferences],
+    () => visibleWidgetIds(preferences, view.id),
+    [preferences, view.id],
   );
 
   // Só as chaves dos widgets VISÍVEIS: widget escondido não gera request.
@@ -137,14 +148,15 @@ export function HomeDashboardProvider({
   const layoutValue = useMemo<LayoutContextValue>(
     () => ({
       preferences,
+      activeViewId: view.id,
+      setActiveViewId,
+      view,
       widgets,
       visibleIds,
       repository: repo,
       update,
-      editing,
-      setEditing,
     }),
-    [preferences, widgets, visibleIds, repo, update, editing],
+    [preferences, view, widgets, visibleIds, repo, update],
   );
 
   const dataValue = useMemo<DataContextValue>(

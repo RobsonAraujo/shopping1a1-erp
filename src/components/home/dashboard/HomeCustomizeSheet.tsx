@@ -1,9 +1,9 @@
 "use client";
 
-import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
-import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { RotateCcw } from "lucide-react";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/adapter/element-adapter";
+import { extractClosestEdge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge/extract-closest-edge";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -31,27 +31,29 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { HomeCustomizeRow } from "@/components/home/dashboard/HomeCustomizeRow";
 import { useHomeLayout } from "@/components/home/dashboard/HomeDashboardProvider";
 import {
+  DASHBOARD_COLUMN_COUNT,
   moveWidget,
-  reorderWidgets,
-  resetDashboardPreferences,
-  setWidgetSize,
+  moveWidgetSideways,
+  moveWidgetToColumn,
+  resetView,
   setWidgetVisible,
+  type DashboardWidgetPreference,
 } from "@/lib/home/dashboard/dashboard-preferences";
-import { useDndSensors } from "@/hooks/use-dnd-sensors";
 import {
-  HOME_WIDGET_CATEGORY_LABEL,
-  HOME_WIDGET_CATEGORY_ORDER,
-  getHomeWidgetDefinition,
-  type HomeWidgetCategory,
-} from "@/lib/home/dashboard/widget-registry";
+  parseWidgetDragData,
+  resolveDropFromTargets,
+} from "@/lib/home/dashboard/drop-target";
+import { getHomeWidgetDefinition } from "@/lib/home/dashboard/widget-registry";
+
+const COLUMN_LABEL = ["Coluna da esquerda", "Coluna da direita"];
 
 /**
- * "Personalizar início". Mudança aplica na hora — não há Salvar/Cancelar
- * porque o destino é `localStorage` e não existe o que dar errado no meio.
+ * "Personalizar início". Mudança aplica na hora — não há Salvar/Cancelar porque
+ * o destino é `localStorage` e não existe o que dar errado no meio.
  *
- * Reordenar acontece **dentro de cada categoria**: mantém cada
- * `SortableContext` numa lista de eixo único (o caso que o dnd-kit resolve
- * bem), e a ordem entre categorias já vem do registry.
+ * Agrupado por **coluna**, espelhando o layout real: agora que a coluna é parte
+ * da configuração, agrupar por categoria esconderia justamente a informação que
+ * a pessoa está tentando ajustar.
  */
 export function HomeCustomizeSheet({
   open,
@@ -60,41 +62,68 @@ export function HomeCustomizeSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { widgets, update } = useHomeLayout();
-  const sensors = useDndSensors();
+  const { widgets, update, activeViewId, view } = useHomeLayout();
 
-  const grouped = useMemo(() => {
-    const byCategory = new Map<
-      HomeWidgetCategory,
-      { id: string; definitionId: string }[]
-    >();
+  const groups = useMemo(() => {
+    const banners: DashboardWidgetPreference[] = [];
+    const columns: DashboardWidgetPreference[][] = Array.from(
+      { length: DASHBOARD_COLUMN_COUNT },
+      () => [],
+    );
     for (const widget of widgets) {
       const definition = getHomeWidgetDefinition(widget.id);
       if (!definition) continue;
-      const list = byCategory.get(definition.category) ?? [];
-      list.push({ id: widget.id, definitionId: definition.id });
-      byCategory.set(definition.category, list);
+      if (definition.layout === "banner") banners.push(widget);
+      else columns[Math.min(widget.column, columns.length - 1)].push(widget);
     }
-    return HOME_WIDGET_CATEGORY_ORDER.flatMap((category) => {
-      const items = byCategory.get(category);
-      return items ? [{ category, items }] : [];
-    });
+    return { banners, columns };
   }, [widgets]);
 
-  const onDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      const activeId = String(event.active.id);
-      const overId = event.over ? String(event.over.id) : null;
-      if (!overId || overId === activeId) return;
+  // Valores frescos sem re-registrar o monitor: o pdnd não entrega eventos a um
+  // monitor registrado no meio de um arrasto.
+  const latest = useRef({ widgets, update, activeViewId });
+  useEffect(() => {
+    latest.current = { widgets, update, activeViewId };
+  }, [widgets, update, activeViewId]);
 
-      const allIds = widgets.map((w) => w.id);
-      const from = allIds.indexOf(activeId);
-      const to = allIds.indexOf(overId);
-      if (from === -1 || to === -1) return;
-      update((prefs) => reorderWidgets(prefs, arrayMove(allIds, from, to)));
+  const commit = useCallback(
+    (
+      activeId: string,
+      targets: readonly { data: Record<string | symbol, unknown> }[],
+    ) => {
+      const { widgets: current, update: write, activeViewId: viewId } = latest.current;
+      const target = resolveDropFromTargets(
+        current,
+        activeId,
+        targets,
+        extractClosestEdge,
+      );
+      if (!target) return;
+      const next = moveWidgetToColumn(current, activeId, target.column, target.index);
+      if (next === current) return;
+      write((prefs) => ({
+        ...prefs,
+        views: prefs.views.map((view) =>
+          view.id === viewId ? { ...view, widgets: [...next] } : view,
+        ),
+      }));
     },
-    [widgets, update],
+    [],
   );
+
+  useEffect(() => {
+    if (!open) return;
+    return monitorForElements({
+      canMonitor: ({ source }) => parseWidgetDragData(source.data) !== null,
+      onDrop: ({ source, location }) => {
+        const dragged = parseWidgetDragData(source.data);
+        // `onDrop` também é o evento de cancelamento (Esc / soltar no vazio): sem
+        // alvo, não comita nada.
+        if (!dragged || location.current.dropTargets.length === 0) return;
+        commit(dragged.widgetId, location.current.dropTargets);
+      },
+    });
+  }, [open, commit]);
 
   const visibleCount = widgets.filter((w) => w.visible).length;
 
@@ -102,74 +131,96 @@ export function HomeCustomizeSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="sm:max-w-md">
         <SheetHeader>
-          <SheetTitle>Personalizar início</SheetTitle>
+          <SheetTitle>Personalizar «{view.name}»</SheetTitle>
           <SheetDescription>
-            Escolha o que aparece, o tamanho e a ordem. {visibleCount} de{" "}
+            Escolha o que aparece, em qual coluna e em que ordem. {visibleCount} de{" "}
             {widgets.length} cards visíveis.
           </SheetDescription>
         </SheetHeader>
 
         <SheetBody>
           <TooltipProvider>
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={onDragEnd}
-              accessibility={{
-                screenReaderInstructions: {
-                  draggable:
-                    "Pressione espaço ou enter para começar a mover o card. Use as setas para escolher a nova posição, espaço ou enter para soltar e escape para cancelar.",
-                },
-              }}
-            >
-              {grouped.map(({ category, items }) => (
-                <section key={category} className="mb-4 last:mb-0">
+              {groups.banners.length > 0 ? (
+                <section className="mb-4">
                   <h3 className="mb-1 px-1 text-xs font-semibold tracking-wide text-[var(--muted-foreground)] uppercase">
-                    {HOME_WIDGET_CATEGORY_LABEL[category]}
+                    Faixas do topo
                   </h3>
-                  <SortableContext
-                    items={items.map((item) => item.id)}
-                    strategy={verticalListSortingStrategy}
-                  >
+                  <ul>
+                    {groups.banners.map((widget) => {
+                      const definition = getHomeWidgetDefinition(widget.id);
+                      if (!definition) return null;
+                      return (
+                        <HomeCustomizeRow
+                          key={widget.id}
+                          definition={definition}
+                          preference={widget}
+                          canMoveUp={false}
+                          canMoveDown={false}
+                          canMoveLeft={false}
+                          canMoveRight={false}
+                          onToggle={(visible) =>
+                            update((prefs) =>
+                              setWidgetVisible(prefs, activeViewId, widget.id, visible),
+                            )
+                          }
+                          onMove={() => {}}
+                          onMoveSideways={() => {}}
+                        />
+                      );
+                    })}
+                  </ul>
+                </section>
+              ) : null}
+
+              {groups.columns.map((column, columnIndex) => (
+                <section key={columnIndex} className="mb-4 last:mb-0">
+                  <h3 className="mb-1 px-1 text-xs font-semibold tracking-wide text-[var(--muted-foreground)] uppercase">
+                    {COLUMN_LABEL[columnIndex] ?? `Coluna ${columnIndex + 1}`}
+                  </h3>
                     <ul>
-                      {items.map((item, index) => {
-                        const definition = getHomeWidgetDefinition(
-                          item.definitionId,
-                        );
-                        const preference = widgets.find(
-                          (w) => w.id === item.id,
-                        );
-                        if (!definition || !preference) return null;
+                      {column.map((widget, index) => {
+                        const definition = getHomeWidgetDefinition(widget.id);
+                        if (!definition) return null;
                         return (
                           <HomeCustomizeRow
-                            key={item.id}
+                            key={widget.id}
                             definition={definition}
-                            preference={preference}
+                            preference={widget}
                             canMoveUp={index > 0}
-                            canMoveDown={index < items.length - 1}
+                            canMoveDown={index < column.length - 1}
+                            canMoveLeft={columnIndex > 0}
+                            canMoveRight={columnIndex < DASHBOARD_COLUMN_COUNT - 1}
                             onToggle={(visible) =>
                               update((prefs) =>
-                                setWidgetVisible(prefs, item.id, visible),
-                              )
-                            }
-                            onResize={(size) =>
-                              update((prefs) =>
-                                setWidgetSize(prefs, item.id, size),
+                                setWidgetVisible(prefs, activeViewId, widget.id, visible),
                               )
                             }
                             onMove={(direction) =>
                               update((prefs) =>
-                                moveWidget(prefs, item.id, direction),
+                                moveWidget(prefs, activeViewId, widget.id, direction),
+                              )
+                            }
+                            onMoveSideways={(direction) =>
+                              update((prefs) =>
+                                moveWidgetSideways(
+                                  prefs,
+                                  activeViewId,
+                                  widget.id,
+                                  direction,
+                                ),
                               )
                             }
                           />
                         );
                       })}
+                      {column.length === 0 ? (
+                        <li className="px-1 py-2 text-xs text-[var(--muted-foreground)]">
+                          Nenhum card nesta coluna.
+                        </li>
+                      ) : null}
                     </ul>
-                  </SortableContext>
                 </section>
               ))}
-            </DndContext>
           </TooltipProvider>
         </SheetBody>
 
@@ -183,18 +234,21 @@ export function HomeCustomizeSheet({
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Restaurar o início padrão?</AlertDialogTitle>
+                <AlertDialogTitle>
+                  Restaurar «{view.name}» ao padrão?
+                </AlertDialogTitle>
                 <AlertDialogDescription>
-                  Os cards voltam à seleção, ao tamanho e à ordem originais.
-                  Suas tarefas, notas e atalhos não são apagados.
+                  Os cards desta versão voltam à seleção, à coluna e à ordem
+                  originais. Suas outras versões, tarefas, notas e atalhos não são
+                  afetados.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancelar</AlertDialogCancel>
                 <AlertDialogAction
                   onClick={() => {
-                    update(resetDashboardPreferences());
-                    toast.success("Início restaurado ao padrão.");
+                    update((prefs) => resetView(prefs, activeViewId));
+                    toast.success(`«${view.name}» restaurada ao padrão.`);
                   }}
                 >
                   Restaurar

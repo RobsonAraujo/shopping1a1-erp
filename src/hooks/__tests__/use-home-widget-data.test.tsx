@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it, mock } from "node:test";
-import { act, renderHook } from "@/test-setup/render";
+import { StrictMode } from "react";
+import { act, renderHook, renderIntoDocument } from "@/test-setup/render";
 import { useHomeWidgetData } from "@/hooks/use-home-widget-data";
 import type { HomeWidgetDataKey } from "@/lib/home/dashboard/widget-data-keys";
 
@@ -30,6 +31,42 @@ function okResponse(keys: readonly HomeWidgetDataKey[]) {
 
 describe("useHomeWidgetData", () => {
   afterEach(() => mock.restoreAll());
+
+  it("sobrevive ao ciclo duplo do StrictMode", async () => {
+    // O Next liga `reactStrictMode` por padrão, então em dev o effect roda
+    // mount -> cleanup -> mount. A limpeza abortava o request em voo E deixava a
+    // chave marcada como "já pedida", então a segunda execução não pedia de novo:
+    // o resultado nunca chegava e o card ficava em skeleton pra sempre.
+    const fetchMock = mock.method(globalThis, "fetch", async () =>
+      okResponse(["finance"]),
+    );
+
+    const seen: { slices: unknown; loading: number }[] = [];
+    function Probe() {
+      const state = useHomeWidgetData(["finance"]);
+      seen.push({ slices: state.slices, loading: state.loadingKeys.size });
+      return null;
+    }
+
+    const view = renderIntoDocument(
+      <StrictMode>
+        <Probe />
+      </StrictMode>,
+    );
+    await flush(10);
+
+    const last = seen[seen.length - 1];
+    assert.ok(
+      last && (last.slices as Record<string, unknown>).finance,
+      "a slice precisa chegar mesmo com o effect rodando duas vezes",
+    );
+    assert.equal(last.loading, 0, "não pode ficar carregando pra sempre");
+    assert.ok(
+      batchCalls(fetchMock.mock.calls).length <= 2,
+      "no máximo um re-pedido — não pode virar laço",
+    );
+    view.unmount();
+  });
 
   it("faz um request por conjunto de chaves, mesmo com o array recriado a cada render", async () => {
     const fetchMock = mock.method(globalThis, "fetch", async () =>

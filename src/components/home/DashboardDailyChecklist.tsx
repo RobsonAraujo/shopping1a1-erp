@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { Check, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { CollapsibleHomeCard } from "@/components/home/CollapsibleHomeCard";
-import { CoffeeLoader } from "@/components/home/CoffeeLoader";
+import { HomeWidgetCard } from "@/components/home/dashboard/HomeWidgetCard";
 import { FormInput } from "@/components/ui/form-input";
 import { usePersistedJson } from "@/hooks/use-persisted-json";
 import { usePersistedOpen } from "@/hooks/use-persisted-open";
@@ -65,14 +64,10 @@ export function DashboardDailyChecklist() {
         : `${pendingCount} de ${tasks.length} pendente${pendingCount === 1 ? "" : "s"}`;
 
   return (
-    <CollapsibleHomeCard
-      icon={
-        <span className="flex size-14 shrink-0 items-center justify-center">
-          <CoffeeLoader size={56} />
-        </span>
-      }
-      title="Onde você vai trabalhar hoje?"
+    <HomeWidgetCard
+      definitionId="tarefas-hoje"
       status={statusLabel}
+      collapsible
       open={open}
       onToggle={toggle}
     >
@@ -159,6 +154,6 @@ export function DashboardDailyChecklist() {
           Sem tarefas ainda. Adicione a primeira acima.
         </p>
       )}
-    </CollapsibleHomeCard>
+    </HomeWidgetCard>
   );
 }

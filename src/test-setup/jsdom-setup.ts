@@ -56,6 +56,9 @@ const globals: Record<string, unknown> = {
   HTMLSelectElement: window.HTMLSelectElement,
   HTMLButtonElement: window.HTMLButtonElement,
   HTMLAnchorElement: window.HTMLAnchorElement,
+  // O Pragmatic drag and drop referencia `HTMLIFrameElement` (ele bloqueia
+  // arrasto pra dentro de iframe); sem o global, montar a grade da Home quebra.
+  HTMLIFrameElement: window.HTMLIFrameElement,
   HTMLFormElement: window.HTMLFormElement,
   SVGElement: window.SVGElement,
   DOMRect: window.DOMRect,

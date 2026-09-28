@@ -9,7 +9,7 @@ import {
   buildDefaultDashboardPreferences,
   setWidgetVisible,
 } from "@/lib/home/dashboard/dashboard-preferences";
-import { getActiveView } from "@/lib/home/dashboard/dashboard-preferences";
+import { getDefaultView } from "@/lib/home/dashboard/dashboard-preferences";
 
 /**
  * Teste no conjunto DOM (não no puro) porque o repositório de `localStorage`
@@ -37,13 +37,13 @@ describe("createLocalStorageDashboardPreferences", () => {
 
   it("mantém a identidade estável também com valor já gravado", () => {
     const repo = createLocalStorageDashboardPreferences();
-    repo.write(setWidgetVisible(buildDefaultDashboardPreferences(), "notas", false));
+    repo.write(setWidgetVisible(buildDefaultDashboardPreferences(), "default", "notas", false));
 
     const first = repo.read();
     const second = repo.read();
     assert.equal(first, second);
     assert.equal(
-      getActiveView(first).widgets.find((w) => w.id === "notas")?.visible,
+      getDefaultView(first).widgets.find((w: { id: string }) => w.id === "notas")?.visible,
       false,
     );
   });
@@ -52,7 +52,7 @@ describe("createLocalStorageDashboardPreferences", () => {
     const repo = createLocalStorageDashboardPreferences();
     const before = repo.read();
 
-    repo.write(setWidgetVisible(before, "notas", false));
+    repo.write(setWidgetVisible(before, "default", "notas", false));
     const after = repo.read();
 
     assert.notEqual(before, after, "escrita real precisa mudar o snapshot");
@@ -72,7 +72,7 @@ describe("createLocalStorageDashboardPreferences", () => {
     const unsubscribe = repo.subscribe(() => {
       notified += 1;
     });
-    repo.write(setWidgetVisible(repo.read(), "notas", false));
+    repo.write(setWidgetVisible(repo.read(), "default", "notas", false));
     assert.ok(notified > 0);
     unsubscribe();
   });

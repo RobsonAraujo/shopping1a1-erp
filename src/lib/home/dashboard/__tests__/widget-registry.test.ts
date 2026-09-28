@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  HOME_DASHBOARD_COLUMN_COUNT,
+  HOME_DASHBOARD_GRID_CLASS,
   HOME_WIDGET_CATEGORY_LABEL,
   HOME_WIDGET_CATEGORY_ORDER,
   HOME_WIDGET_DEFINITIONS,
-  HOME_WIDGET_SIZE_SPAN,
   getHomeWidgetDefinition,
   homeWidgetDataKeysFor,
 } from "@/lib/home/dashboard/widget-registry";
@@ -29,17 +30,35 @@ describe("registry de widgets da Home", () => {
     assert.equal(new Set(orders).size, orders.length);
   });
 
-  it("todo defaultSize está entre os supportedSizes", () => {
+  it("toda coluna default existe no layout", () => {
     for (const definition of HOME_WIDGET_DEFINITIONS) {
       assert.ok(
-        definition.supportedSizes.length > 0,
-        `${definition.id}: supportedSizes vazio`,
+        Number.isInteger(definition.defaultColumn) &&
+          definition.defaultColumn >= 0 &&
+          definition.defaultColumn < HOME_DASHBOARD_COLUMN_COUNT,
+        `${definition.id}: defaultColumn ${definition.defaultColumn} fora do layout`,
       );
-      assert.ok(
-        (definition.supportedSizes as readonly string[]).includes(
-          definition.defaultSize,
-        ),
-        `${definition.id}: defaultSize "${definition.defaultSize}" fora de supportedSizes`,
+    }
+  });
+
+  it("a classe do grid casa com a quantidade de colunas", () => {
+    // As duas moram juntas justamente pra não divergirem, mas o Tailwind exige
+    // a classe literal — então só um teste garante que combinam.
+    assert.match(
+      HOME_DASHBOARD_GRID_CLASS,
+      new RegExp(`md:grid-cols-${HOME_DASHBOARD_COLUMN_COUNT}$`),
+    );
+  });
+
+  it("todo widget fixado é faixa, e há pelo menos uma faixa", () => {
+    const banners = HOME_WIDGET_DEFINITIONS.filter((d) => d.layout === "banner");
+    assert.ok(banners.length > 0, "a zona de atenção precisa ser faixa");
+    for (const definition of HOME_WIDGET_DEFINITIONS) {
+      if (!definition.pinned) continue;
+      assert.equal(
+        definition.layout,
+        "banner",
+        `${definition.id}: fixado precisa ser faixa (não entra no arrasto)`,
       );
     }
   });
@@ -111,12 +130,6 @@ describe("registry de widgets da Home", () => {
     for (const definition of HOME_WIDGET_DEFINITIONS) {
       assert.ok(HOME_WIDGET_CATEGORY_LABEL[definition.category]);
       assert.ok(HOME_WIDGET_CATEGORY_ORDER.includes(definition.category));
-    }
-  });
-
-  it("os spans da grade são literais que o Tailwind consegue varrer", () => {
-    for (const span of Object.values(HOME_WIDGET_SIZE_SPAN)) {
-      assert.match(span, /^col-span-1 sm:col-span-\d+ xl:col-span-\d+$/);
     }
   });
 

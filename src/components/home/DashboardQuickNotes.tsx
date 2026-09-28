@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { NotebookPen, Plus, X } from "lucide-react";
+// (sem useState: o rascunho é persistido)
+import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { CollapsibleHomeCard } from "@/components/home/CollapsibleHomeCard";
+import { HomeWidgetCard } from "@/components/home/dashboard/HomeWidgetCard";
 import { usePersistedJson } from "@/hooks/use-persisted-json";
 import { usePersistedOpen } from "@/hooks/use-persisted-open";
 
@@ -23,7 +23,13 @@ export function DashboardQuickNotes() {
     "dashboard-quick-notes-open",
     false,
   );
-  const [draft, setDraft] = useState("");
+  // Persistido, não `useState`: arrastar o card entre colunas remonta o widget
+  // (dois containers React = dois pais), e uma nota meio digitada não pode
+  // sumir por causa de um arrasto.
+  const [draft, setDraft] = usePersistedJson<string>(
+    "dashboard-quick-notes-draft",
+    "",
+  );
 
   function addNote() {
     const text = draft.trim();
@@ -42,14 +48,10 @@ export function DashboardQuickNotes() {
       : `${notes.length} nota${notes.length === 1 ? "" : "s"} salva${notes.length === 1 ? "" : "s"}`;
 
   return (
-    <CollapsibleHomeCard
-      icon={
-        <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
-          <NotebookPen className="size-6" aria-hidden />
-        </span>
-      }
-      title="Notas rápidas"
+    <HomeWidgetCard
+      definitionId="notas"
       status={status}
+      collapsible
       open={open}
       onToggle={toggle}
     >
@@ -113,6 +115,6 @@ export function DashboardQuickNotes() {
           ))}
         </ul>
       ) : null}
-    </CollapsibleHomeCard>
+    </HomeWidgetCard>
   );
 }

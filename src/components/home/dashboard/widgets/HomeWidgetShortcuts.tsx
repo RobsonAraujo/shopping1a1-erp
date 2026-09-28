@@ -9,11 +9,9 @@ import { Switch } from "@/components/ui/switch";
 import { HomeWidgetCard } from "@/components/home/dashboard/HomeWidgetCard";
 import { useHomeLayout } from "@/components/home/dashboard/HomeDashboardProvider";
 import { setWidgetSettings } from "@/lib/home/dashboard/dashboard-preferences";
-import { getHomeWidgetDefinition } from "@/lib/home/dashboard/widget-registry";
 import { getAllDashboardNavItems } from "@/lib/dashboard-nav";
 import { cn } from "@/lib/utils";
 
-const DEFINITION = getHomeWidgetDefinition("atalhos");
 const SETTINGS_PREFIX = "pin:";
 const DEFAULT_SHORTCUTS = [
   "/dashboard/produtos",
@@ -32,7 +30,7 @@ const DEFAULT_SHORTCUTS = [
  * chaves e de tamanho.
  */
 export function HomeWidgetShortcuts() {
-  const { widgets, update } = useHomeLayout();
+  const { widgets, update, activeViewId } = useHomeLayout();
   const navItems = useMemo(
     () => getAllDashboardNavItems().filter((item) => item.href !== "/dashboard"),
     [],
@@ -50,7 +48,6 @@ export function HomeWidgetShortcuts() {
     return new Set(hasChoice ? explicit : DEFAULT_SHORTCUTS);
   }, [settings]);
 
-  if (!DEFINITION) return null;
 
   const toggle = (href: string, next: boolean) => {
     const current = Object.fromEntries(
@@ -66,14 +63,14 @@ export function HomeWidgetShortcuts() {
       }
     }
     current[`${SETTINGS_PREFIX}${href}`] = next;
-    update((prefs) => setWidgetSettings(prefs, "atalhos", current));
+    update((prefs) => setWidgetSettings(prefs, activeViewId, "atalhos", current));
   };
 
   const visible = navItems.filter((item) => pinned.has(item.href));
 
   return (
     <HomeWidgetCard
-      definition={DEFINITION}
+      definitionId="atalhos"
       actions={
         <Popover>
           <PopoverTrigger asChild>

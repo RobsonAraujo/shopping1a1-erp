@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Pause, Play, RotateCcw, Timer as TimerIcon } from "lucide-react";
+import { Pause, Play, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { CollapsibleHomeCard } from "@/components/home/CollapsibleHomeCard";
+import { HomeWidgetCard } from "@/components/home/dashboard/HomeWidgetCard";
 import { FormInput } from "@/components/ui/form-input";
 import { usePersistedJson } from "@/hooks/use-persisted-json";
 import { usePersistedOpen } from "@/hooks/use-persisted-open";
@@ -169,14 +169,10 @@ export function DashboardFocusTimer() {
         : "Pronto pra começar";
 
   return (
-    <CollapsibleHomeCard
-      icon={
-        <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
-          <TimerIcon className="size-6" aria-hidden />
-        </span>
-      }
-      title="Quanto tempo você vai focar?"
+    <HomeWidgetCard
+      definitionId="foco"
       status={statusLabel}
+      collapsible
       open={open}
       onToggle={toggle}
     >
@@ -283,6 +279,6 @@ export function DashboardFocusTimer() {
           <RotateCcw className="size-4" aria-hidden />
         </Button>
       </div>
-    </CollapsibleHomeCard>
+    </HomeWidgetCard>
   );
 }

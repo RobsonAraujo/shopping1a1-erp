@@ -1,76 +1,136 @@
 "use client";
 
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { ArrowDown, ArrowUp, GripVertical, Lock } from "lucide-react";
+import {
+  draggable,
+  dropTargetForElements,
+} from "@atlaskit/pragmatic-drag-and-drop/adapter/element-adapter";
+import { combine } from "@atlaskit/pragmatic-drag-and-drop/utils/combine";
+import { attachClosestEdge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge/attach-closest-edge";
+import { extractClosestEdge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge/extract-closest-edge";
+import type { Edge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/types";
+import { useEffect, useRef, useState } from "react";
+import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  GripVertical,
+  Lock,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { FormSelect } from "@/components/ui/form-select";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import {
-  HOME_WIDGET_SIZE_LABEL,
-  type HomeWidgetDefinition,
-  type HomeWidgetSize,
-} from "@/lib/home/dashboard/widget-registry";
+import type { HomeWidgetDefinition } from "@/lib/home/dashboard/widget-registry";
 import type { DashboardWidgetPreference } from "@/lib/home/dashboard/dashboard-preferences";
+import {
+  homeWidgetDragData,
+  parseWidgetDragData,
+} from "@/lib/home/dashboard/drop-target";
 import { CATEGORY_BADGE_CLASS } from "@/lib/ui/tone";
 import { cn } from "@/lib/utils";
 
 /**
- * Uma linha do sheet de personalização. Arrastável, mas com ↑/↓ de verdade ao
- * lado: a acessibilidade não pode depender de arrastar, e teclado precisa de
- * um caminho óbvio, não só do `KeyboardSensor`.
+ * Uma linha do sheet de personalização. Arrastável com o Pragmatic drag and drop
+ * — o caso mais simples dele: lista vertical de altura uniforme.
+ *
+ * Os quatro botões (↑/↓ na coluna, ←/→ entre colunas) continuam sendo o caminho
+ * garantido de teclado: o pdnd não arrasta por teclado de propósito.
  */
 export function HomeCustomizeRow({
   definition,
   preference,
   canMoveUp,
   canMoveDown,
+  canMoveLeft,
+  canMoveRight,
   onToggle,
-  onResize,
   onMove,
+  onMoveSideways,
 }: {
   definition: HomeWidgetDefinition;
   preference: DashboardWidgetPreference;
   canMoveUp: boolean;
   canMoveDown: boolean;
+  canMoveLeft: boolean;
+  canMoveRight: boolean;
   onToggle: (visible: boolean) => void;
-  onResize: (size: HomeWidgetSize) => void;
   onMove: (direction: "up" | "down") => void;
+  onMoveSideways: (direction: "left" | "right") => void;
 }) {
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
-    useSortable({ id: definition.id, disabled: Boolean(definition.pinned) });
+  const isBanner = definition.layout === "banner";
+  const rowRef = useRef<HTMLLIElement | null>(null);
+  const handleRef = useRef<HTMLButtonElement | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [edge, setEdge] = useState<Edge | null>(null);
+
+  useEffect(() => {
+    const element = rowRef.current;
+    const handle = handleRef.current;
+    if (isBanner || !element || !handle) return;
+    const data = homeWidgetDragData(definition.id, preference.column);
+
+    return combine(
+      draggable({
+        element,
+        dragHandle: handle,
+        getInitialData: () => ({ ...data }),
+        onDragStart: () => setIsDragging(true),
+        onDrop: () => {
+          setIsDragging(false);
+          setEdge(null);
+        },
+      }),
+      dropTargetForElements({
+        element,
+        canDrop: ({ source }) => parseWidgetDragData(source.data) !== null,
+        getIsSticky: () => true,
+        getData: ({ input, element: el }) =>
+          attachClosestEdge(
+            { ...data },
+            { input, element: el, allowedEdges: ["top", "bottom"] },
+          ),
+        onDrag: ({ self, source }) => {
+          const from = parseWidgetDragData(source.data);
+          setEdge(
+            from?.widgetId === definition.id ? null : extractClosestEdge(self.data),
+          );
+        },
+        onDragLeave: () => setEdge(null),
+        onDrop: () => setEdge(null),
+      }),
+    );
+  }, [isBanner, definition.id, preference.column]);
 
   const Icon = definition.icon;
 
   return (
     <li
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
+      ref={rowRef}
+      data-customize-row={definition.id}
       className={cn(
         "flex items-start gap-2 rounded-xl border border-transparent px-1 py-2.5",
-        isDragging && "border-[var(--primary)] bg-[var(--card)] shadow-sm",
+        isDragging && "opacity-40",
+        edge === "top" && "border-t-[var(--primary)]",
+        edge === "bottom" && "border-b-[var(--primary)]",
       )}
     >
-      {definition.pinned ? (
+      {isBanner ? (
         <Tooltip>
           <TooltipTrigger asChild>
             <span className="flex size-8 shrink-0 items-center justify-center text-[var(--muted-foreground)]">
               <Lock className="size-3.5" aria-hidden />
-              <span className="sr-only">Sempre visível no topo</span>
+              <span className="sr-only">Faixa fixa no topo</span>
             </span>
           </TooltipTrigger>
-          <TooltipContent>Sempre visível no topo</TooltipContent>
+          <TooltipContent>Faixa fixa no topo</TooltipContent>
         </Tooltip>
       ) : (
         <Button
-          ref={setActivatorNodeRef}
+          ref={handleRef}
           variant="ghost"
           size="icon-sm"
           className="shrink-0 cursor-grab active:cursor-grabbing"
           aria-label={`Arrastar ${definition.title}`}
-          {...attributes}
-          {...listeners}
         >
           <GripVertical className="size-4" aria-hidden />
         </Button>
@@ -92,26 +152,29 @@ export function HomeCustomizeRow({
         <p className="mt-0.5 text-xs leading-snug text-[var(--muted-foreground)]">
           {definition.description}
         </p>
-
-        {definition.supportedSizes.length > 1 ? (
-          <div className="mt-2 max-w-40">
-            <FormSelect
-              id={`size-${definition.id}`}
-              value={preference.size}
-              onValueChange={(value) => onResize(value as HomeWidgetSize)}
-              options={definition.supportedSizes.map((size) => ({
-                value: size,
-                label: HOME_WIDGET_SIZE_LABEL[size],
-              }))}
-              triggerClassName="h-8 text-xs"
-            />
-          </div>
-        ) : null}
       </div>
 
       <div className="flex shrink-0 items-center gap-0.5">
-        {!definition.pinned ? (
+        {!isBanner ? (
           <>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              disabled={!canMoveLeft}
+              onClick={() => onMoveSideways("left")}
+              aria-label={`Mover ${definition.title} para a coluna anterior`}
+            >
+              <ArrowLeft className="size-4" aria-hidden />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              disabled={!canMoveRight}
+              onClick={() => onMoveSideways("right")}
+              aria-label={`Mover ${definition.title} para a coluna seguinte`}
+            >
+              <ArrowRight className="size-4" aria-hidden />
+            </Button>
             <Button
               variant="ghost"
               size="icon-sm"

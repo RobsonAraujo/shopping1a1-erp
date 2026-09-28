@@ -61,6 +61,9 @@ export function useHomeWidgetData(keys: readonly HomeWidgetDataKey[]): {
 
     const controller = new AbortController();
     let cancelled = false;
+    /** Já tratou a resposta (ok ou erro)? Decide se a limpeza precisa liberar
+     * as chaves para uma nova tentativa. */
+    let settled = false;
 
     void (async () => {
       try {
@@ -69,6 +72,7 @@ export function useHomeWidgetData(keys: readonly HomeWidgetDataKey[]): {
           { cache: "no-store", signal: controller.signal },
         );
         if (!res.ok) {
+          settled = true;
           const code = await readApiError(res, "request_failed");
           if (!cancelled) setError(formatApiErrorMessage(code));
           // Libera pra uma nova tentativa via "Atualizar" — mas sem re-pedir
@@ -78,6 +82,7 @@ export function useHomeWidgetData(keys: readonly HomeWidgetDataKey[]): {
         }
         const json = (await res.json()) as HomeWidgetDataResponse;
         if (cancelled) return;
+        settled = true;
         setError(null);
         setSlices((current) => {
           const next = { ...current, ...json.data };
@@ -96,6 +101,7 @@ export function useHomeWidgetData(keys: readonly HomeWidgetDataKey[]): {
         });
       } catch (e) {
         if (cancelled || (e instanceof Error && e.name === "AbortError")) return;
+        settled = true;
         setError(formatApiErrorMessage("request_failed"));
         for (const key of missing) requested.delete(key);
       }
@@ -104,8 +110,19 @@ export function useHomeWidgetData(keys: readonly HomeWidgetDataKey[]): {
     return () => {
       cancelled = true;
       controller.abort();
-      // NÃO limpar `requested` aqui: era exatamente isso que realimentava o
-      // laço. Um desmonte real descarta o ref junto.
+      // Request abortado ANTES de resolver precisa liberar as chaves: senão a
+      // execução seguinte do effect acha que já pediu, não pede de novo, e o
+      // resultado nunca chega — skeleton eterno. É o que acontecia no ciclo
+      // duplo do StrictMode (mount → cleanup → mount).
+      //
+      // Isso é seguro **porque as deps do effect não derivam mais de
+      // `requestedRef`**. O laço antigo existia justamente porque a lista de
+      // chaves faltantes era calculada do ref E servia de dependência: liberar
+      // a chave mudava a própria dep. Hoje a dep é `[wantedParam, reloadToken]`,
+      // então liberar só faz a próxima execução pedir uma vez.
+      if (!settled) {
+        for (const key of missing) requested.delete(key);
+      }
     };
   }, [wantedParam, reloadToken]);
 

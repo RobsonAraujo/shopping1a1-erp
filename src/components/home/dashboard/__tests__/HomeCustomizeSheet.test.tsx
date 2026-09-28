@@ -6,7 +6,7 @@ import { HomeDashboardProvider } from "@/components/home/dashboard/HomeDashboard
 import { createMemoryDashboardPreferences } from "@/lib/home/dashboard/dashboard-preferences-repository";
 import {
   buildDefaultDashboardPreferences,
-  getActiveView,
+  getDefaultView,
 } from "@/lib/home/dashboard/dashboard-preferences";
 import { HOME_WIDGET_DEFINITIONS } from "@/lib/home/dashboard/widget-registry";
 import { coreSnapshot, flush } from "./home-dashboard-fixtures";
@@ -28,6 +28,18 @@ async function renderSheet() {
 }
 
 /** O sheet renderiza num portal, então as buscas são no document. */
+function renderSheetSync() {
+  const repository = createMemoryDashboardPreferences();
+  return {
+    ...renderIntoDocument(
+      <HomeDashboardProvider core={coreSnapshot()} repository={repository}>
+        <HomeCustomizeSheet open onOpenChange={() => {}} />
+      </HomeDashboardProvider>,
+    ),
+    repository,
+  };
+}
+
 function byLabel(label: string): HTMLElement | null {
   return document.querySelector(`[aria-label="${label}"]`);
 }
@@ -56,21 +68,25 @@ describe("HomeCustomizeSheet", () => {
         `"${definition.title}" não aparece no sheet`,
       );
     }
-    assert.match(text, /Personalizar início/);
+    assert.match(text, /Personalizar «Meu início»/);
+    // agrupado por coluna, espelhando o layout real
+    assert.match(text, /Coluna da esquerda/);
+    assert.match(text, /Coluna da direita/);
+    assert.match(text, /Faixas do topo/);
     unmount();
   });
 
   it("o switch de visibilidade persiste no repositório", async () => {
     const { repository, unmount } = await renderSheet();
-    const before = getActiveView(repository.read()).widgets.find(
-      (w) => w.id === "produtos-saude",
+    const before = getDefaultView(repository.read()).widgets.find(
+      (w: { id: string }) => w.id === "produtos-saude",
     );
     assert.equal(before?.visible, true);
 
     await click(byLabel("Mostrar Saúde do catálogo"));
 
-    const after = getActiveView(repository.read()).widgets.find(
-      (w) => w.id === "produtos-saude",
+    const after = getDefaultView(repository.read()).widgets.find(
+      (w: { id: string }) => w.id === "produtos-saude",
     );
     assert.equal(after?.visible, false);
     unmount();
@@ -95,7 +111,7 @@ describe("HomeCustomizeSheet", () => {
     unmount();
   });
 
-  it("os botões de mover ficam desabilitados nos extremos da categoria", async () => {
+  it("os botões de mover ficam desabilitados nos extremos da coluna", async () => {
     const { unmount } = await renderSheet();
     // "Vendas" é o primeiro de Operação; "Atalhos" é o último
     const firstUp = byLabel("Mover Vendas para cima") as HTMLButtonElement | null;
@@ -110,9 +126,9 @@ describe("HomeCustomizeSheet", () => {
   it("mover para baixo troca a ordem e persiste", async () => {
     const { repository, unmount } = await renderSheet();
     const order = () =>
-      getActiveView(repository.read())
-        .widgets.map((w) => w.id)
-        .filter((id) => id === "kpi-compras" || id === "kpi-vendas");
+      getDefaultView(repository.read())
+        .widgets.map((w: { id: string }) => w.id)
+        .filter((id: string) => id === "kpi-compras" || id === "kpi-vendas");
 
     assert.deepEqual(order(), ["kpi-vendas", "kpi-compras"]);
     await click(byLabel("Mover Vendas para baixo"));
@@ -120,24 +136,36 @@ describe("HomeCustomizeSheet", () => {
     unmount();
   });
 
-  it("só mostra seletor de tamanho para widget com mais de um tamanho", async () => {
-    const { unmount } = await renderSheet();
-    const multi = HOME_WIDGET_DEFINITIONS.find(
-      (d) => d.supportedSizes.length > 1,
+  it("mostra os quatro botões de mover, desabilitados nos limites", () => {
+    const { unmount } = renderSheetSync();
+    // "Vendas" é o primeiro da coluna da esquerda
+    const up = byLabel("Mover Vendas para cima") as HTMLButtonElement | null;
+    const left = byLabel(
+      "Mover Vendas para a coluna anterior",
+    ) as HTMLButtonElement | null;
+    const right = byLabel(
+      "Mover Vendas para a coluna seguinte",
+    ) as HTMLButtonElement | null;
+    assert.ok(up && left && right);
+    assert.equal(up.disabled, true, "primeiro da coluna não sobe");
+    assert.equal(left.disabled, true, "coluna 0 não vai pra esquerda");
+    assert.equal(right.disabled, false, "dá pra ir pra coluna da direita");
+    unmount();
+  });
+
+  it("mover para a coluna seguinte persiste a coluna", async () => {
+    const { repository, unmount } = await renderSheet();
+    const before = getDefaultView(repository.read()).widgets.find(
+      (w: { id: string }) => w.id === "kpi-vendas",
     );
-    const single = HOME_WIDGET_DEFINITIONS.find(
-      (d) => d.supportedSizes.length === 1,
+    assert.equal(before?.column, 0);
+
+    await click(byLabel("Mover Vendas para a coluna seguinte"));
+
+    const after = getDefaultView(repository.read()).widgets.find(
+      (w: { id: string }) => w.id === "kpi-vendas",
     );
-    assert.ok(multi && single);
-    assert.ok(
-      document.getElementById(`size-${multi.id}`),
-      `${multi.id} tem vários tamanhos e precisa do seletor`,
-    );
-    assert.equal(
-      document.getElementById(`size-${single.id}`),
-      null,
-      `${single.id} tem um tamanho só e não pode mostrar seletor`,
-    );
+    assert.equal(after?.column, 1);
     unmount();
   });
 
