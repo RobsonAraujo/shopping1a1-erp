@@ -400,10 +400,6 @@ describe("HomeWidgetGrid", () => {
     for (const card of cards) {
       if (card.getAttribute("hidden") !== null) continue;
       assert.ok(
-        card.querySelector("[data-home-drag-element]"),
-        `${card.getAttribute("data-widget-id")}: sem elemento arrastável`,
-      );
-      assert.ok(
         card.querySelector("[data-home-drag-handle]"),
         `${card.getAttribute("data-widget-id")}: sem alça`,
       );
@@ -416,7 +412,7 @@ describe("HomeWidgetGrid", () => {
     const banner = container.querySelector('[data-widget-id="atencao"]');
     assert.ok(banner);
     assert.equal(banner.closest("[data-home-column]"), null, "faixa fica fora das colunas");
-    assert.equal(banner.querySelector("[data-home-drag-element]"), null);
+    assert.equal(banner.querySelector("[data-home-drag-handle]"), null);
     assert.equal(banner.querySelector('[aria-label^="Mover "]'), null);
     unmount();
   });

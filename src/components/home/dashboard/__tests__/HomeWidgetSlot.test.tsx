@@ -72,9 +72,9 @@ describe("HomeWidgetSlot", () => {
 
     // O pdnd marca `draggable="true"` no elemento que registra — é a prova
     // observável de que o registro aconteceu.
-    const header = view.container.querySelector("[data-home-drag-element]");
-    assert.ok(header, "o header precisa estar no DOM");
-    assert.equal(header.getAttribute("draggable"), "true");
+    const handle = view.container.querySelector("[data-home-drag-handle]");
+    assert.ok(handle, "a alça precisa estar no DOM");
+    assert.equal(handle.getAttribute("draggable"), "true");
     view.unmount();
   });
 
@@ -94,13 +94,45 @@ describe("HomeWidgetSlot", () => {
       await flush();
     });
 
-    const header = view.container.querySelector("[data-home-drag-element]");
-    assert.ok(header, "o card montou");
+    const handle = view.container.querySelector("[data-home-drag-handle]");
+    assert.ok(handle, "o card montou");
     assert.equal(
-      header.getAttribute("draggable"),
+      handle.getAttribute("draggable"),
       "true",
       "o slot precisa registrar quando o elemento aparece",
     );
+    view.unmount();
+  });
+
+  it("a seta de abrir e o menu de mover ficam fora do que arrasta", async () => {
+    // Regressão: com `draggable="true"` no header inteiro e a alça restrita ao
+    // título, o pdnd cancela o `dragstart` com `preventDefault()` quando ele não
+    // começa na alça — e `dragstart` cancelado come o `click` que viria depois.
+    // Clicar na setinha de abrir o relatório não fazia nada, a não ser que o
+    // ponteiro não andasse um pixel entre apertar e soltar.
+    const view = renderSlot(
+      <HomeWidgetCard definitionId="pendencias">
+        <p>corpo</p>
+      </HomeWidgetCard>,
+    );
+    await act(async () => {
+      await flush();
+    });
+
+    const source = view.container.querySelector('[draggable="true"]');
+    assert.ok(source, "o pdnd marca de `draggable` o elemento que registra");
+
+    const link = view.container.querySelector('a[aria-label^="Abrir "]');
+    assert.ok(link, "pendencias tem href no registry");
+    assert.equal(
+      source.contains(link),
+      false,
+      "a seta não pode estar dentro do que arrasta",
+    );
+
+    const move = view.container.querySelector('[aria-label^="Mover "]');
+    assert.ok(move, "o menu de mover existe num card arrastável");
+    assert.equal(source.contains(move), false, "nem o menu de mover");
     view.unmount();
   });
 
@@ -129,8 +161,8 @@ describe("HomeWidgetSlot", () => {
     });
 
     // Rect zero poderia ganhar uma colisão em 0,0 e dar preview em branco.
-    const header = view.container.querySelector("[data-home-drag-element]");
-    assert.equal(header, null, "sem alça: o contexto diz que não é arrastável");
+    const handle = view.container.querySelector("[data-home-drag-handle]");
+    assert.equal(handle, null, "sem alça: o contexto diz que não é arrastável");
     view.unmount();
   });
 
@@ -176,7 +208,7 @@ describe("HomeWidgetSlot", () => {
     // abortá-lo — o card continua no DOM, só sem altura.
     assert.ok(!slot.classList.contains("hidden"), "segue no fluxo, sem altura");
     assert.ok(
-      view.container.querySelector("[data-home-drag-element]"),
+      view.container.querySelector("[data-home-drag-handle]"),
       "a alça continua registrada durante o arrasto",
     );
     view.unmount();

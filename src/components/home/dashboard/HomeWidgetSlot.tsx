@@ -56,15 +56,17 @@ function DropShadow({ height, edge }: { height: number | null; edge: Edge }) {
  *
  * Decisões que não são óbvias:
  *
- * 1. **O `draggable` fica no HEADER, não no card.** O pdnd põe
- *    `draggable="true"` no elemento que recebe — e no card inteiro isso mataria a
- *    seleção de texto dentro do corpo (o card de Notas tem uma `textarea`) e
- *    faria o preview nativo ter a largura do card, acima do limite de 280px em
- *    que o Windows aplica um degradê de opacidade.
- * 2. **A alça é uma zona interna do header.** O DnD nativo não pode ser cancelado
- *    por um `onDragStart` de filho (o listener do pdnd no header já disparou na
- *    borbulha), então `dragHandle` é o único jeito confiável de excluir o link,
- *    as ações e o menu de mover.
+ * 1. **O `draggable` fica na ALÇA (ícone + título), não no card nem no header.**
+ *    O pdnd põe `draggable="true"` no elemento que registra, e isso tem dois
+ *    efeitos: no card inteiro mataria a seleção de texto do corpo (o card de
+ *    Notas tem uma `textarea`), e no header inteiro engoliria o clique da seta de
+ *    abrir e do menu de mover.
+ * 2. **Por que engoliria: `dragHandle` cancela, e cancelar custa o clique.** Com
+ *    `element: header` + `dragHandle: alça`, um arrasto que começa fora da alça é
+ *    abortado pelo pdnd com `preventDefault()` no `dragstart` — e depois de um
+ *    `dragstart` cancelado o navegador não dispara o `click`. Clicar na seta só
+ *    funcionava se o ponteiro não andasse um pixel. Registrando direto na alça,
+ *    os controles do header não têm ancestral arrastável e o clique é só clique.
  * 3. **Os elementos chegam por `ref` de callback, não por `querySelector`.**
  *    Quatro widgets da Home entram por `next/dynamic` e renderizam um skeleton no
  *    primeiro paint: procurar o header no mount não achava nada e o card nunca
@@ -97,15 +99,10 @@ export function HomeWidgetSlot({
   children: ReactNode;
 }) {
   const [wrapperEl, setWrapperEl] = useState<HTMLDivElement | null>(null);
-  const [dragEl, setDragEl] = useState<HTMLElement | null>(null);
   const [handleEl, setHandleEl] = useState<HTMLElement | null>(null);
   const [edge, setEdge] = useState<Edge | null>(null);
   const [shadowHeight, setShadowHeight] = useState<number | null>(null);
 
-  const setDragElementRef = useCallback(
-    (el: HTMLElement | null) => setDragEl(el),
-    [],
-  );
   const setDragHandleRef = useCallback(
     (el: HTMLElement | null) => setHandleEl(el),
     [],
@@ -114,8 +111,8 @@ export function HomeWidgetSlot({
   useEffect(() => {
     if (!visible || !wrapperEl) return;
     // O que este card manda quando é a origem. Medido na hora do arrasto, e do
-    // WRAPPER: o elemento arrastável é o header, então medi-lo daria ~40px em vez
-    // da altura do card.
+    // WRAPPER: o elemento arrastável é a alça, então medi-la daria a altura do
+    // título em vez da do card.
     const sourceData = () =>
       homeWidgetDragData(
         definition.id,
@@ -150,11 +147,10 @@ export function HomeWidgetSlot({
         onDragLeave: () => setEdge(null),
         onDrop: () => setEdge(null),
       }),
-      ...(dragEl
+      ...(handleEl
         ? [
             draggable({
-              element: dragEl,
-              dragHandle: handleEl ?? undefined,
+              element: handleEl,
               getInitialData: () => ({ ...sourceData() }),
               onGenerateDragPreview: ({ location, nativeSetDragImage }) => {
                 const width = wrapperEl.getBoundingClientRect().width;
@@ -179,17 +175,16 @@ export function HomeWidgetSlot({
           ]
         : []),
     );
-  }, [visible, wrapperEl, dragEl, handleEl, definition.id, column]);
+  }, [visible, wrapperEl, handleEl, definition.id, column]);
 
   const drag = useMemo(
     () => ({
-      setDragElementRef: visible ? setDragElementRef : undefined,
       setDragHandleRef: visible ? setDragHandleRef : undefined,
       draggable: visible,
       isDragging,
       dragging,
     }),
-    [visible, setDragElementRef, setDragHandleRef, isDragging, dragging],
+    [visible, setDragHandleRef, isDragging, dragging],
   );
 
   return (

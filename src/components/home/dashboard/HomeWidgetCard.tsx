@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils";
  * A **única** casca de card da Home. Antes existiam quatro (KPI com o card
  * inteiro virando link, colapsável com header de toggle, seção com o título
  * fora da superfície, e esta) — o que tornava impossível a regra "todo card se
- * arrasta pelo header".
+ * arrasta pela alça do header".
  *
  * Duas decisões não óbvias:
  *
@@ -35,14 +35,16 @@ import { cn } from "@/lib/utils";
  * `icon`, que é função — passar daria "Functions cannot be passed directly to
  * Client Components".
  *
- * **Ponteiro e teclado arrastam por caminhos diferentes.** O header todo
- * responde ao ponteiro (mãozinha, arrasta de qualquer ponto), mas os
- * `attributes` do dnd-kit e o `onKeyDown` ficam numa alça própria. Se ficassem
- * no mesmo botão que colapsa, Espaço/Enter dispararia as duas coisas.
+ * **Quem arrasta é a alça, não o header.** A zona de agarrar (ícone + título) é
+ * o elemento que o pdnd registra, então o `draggable="true"` fica só nela, e os
+ * controles do header — seta de abrir, ações, menu de mover — ficam do lado de
+ * fora **de propósito**. Dentro de um ancestral arrastável, um clique com um
+ * pixel de movimento já vira `dragstart`; o pdnd cancela o `dragstart` que não
+ * começou na alça, e depois de um `dragstart` cancelado o navegador não dispara o
+ * `click`. Era isso que deixava a setinha de abrir o relatório sem resposta.
  *
- * Clicar sem arrastar continua funcionando: o `MouseSensor` só ativa após 5px e
- * o `TouchSensor` após 250ms mantidos, e quando o arrasto ativa o dnd-kit
- * engole o `click` seguinte.
+ * **Não há arrasto por teclado** — é decisão de projeto do pdnd. O caminho
+ * acessível é o menu de mover, que vive no próprio header.
  *
  * **Invariante que o layout em colunas impõe:** reordenar dentro da coluna
  * preserva a instância do widget; mover **entre** colunas remonta (dois
@@ -50,24 +52,22 @@ import { cn } from "@/lib/utils";
  * não-persistido nem disparar request não-cacheado no mount.
  */
 
-/** Atributos de dados dos dois elementos do arrasto. Ficam no DOM para os testes
- * (e para inspeção) poderem apontar neles; quem registra usa os refs abaixo. */
-export const HOME_DRAG_ELEMENT_ATTR = "data-home-drag-element";
+/** Atributo de dados da alça. Fica no DOM para os testes (e para inspeção)
+ * poderem apontar nela; quem registra usa o ref abaixo. */
 export const HOME_DRAG_HANDLE_ATTR = "data-home-drag-handle";
 
 export type HomeWidgetDragProps = {
   /**
-   * `ref` do header (o elemento que o pdnd arrasta) e da zona de agarrar.
+   * `ref` da zona de agarrar — o elemento que o pdnd arrasta.
    *
-   * São **refs de callback**, não `querySelector` no effect do slot: quatro
+   * É **ref de callback**, não `querySelector` no effect do slot: quatro
    * widgets da Home entram por `next/dynamic` e renderizam um skeleton no
    * primeiro paint, então procurar o elemento no mount não achava nada e o card
    * nunca era registrado — mostrava mãozinha e, ao arrastar, selecionava o texto.
    * Com o elemento em estado, o effect roda de novo quando ele aparece.
    */
-  setDragElementRef?: (element: HTMLElement | null) => void;
   setDragHandleRef?: (element: HTMLElement | null) => void;
-  /** Booleano explícito, e não `Boolean(setDragElementRef)`: o React Compiler
+  /** Booleano explícito, e não `Boolean(setDragHandleRef)`: o React Compiler
    * trata a função de ref como ref e proíbe **ler** ela durante o render
    * ("Cannot access refs during render"). Passar para `ref=` é permitido. */
   draggable?: boolean;
@@ -143,7 +143,6 @@ export function HomeWidgetCard({
   // JSX faz o React Compiler reclamar de "Cannot access refs during render" — o
   // mesmo aviso que `use-drop-highlight.ts` documenta.
   const {
-    setDragElementRef,
     setDragHandleRef,
     draggable: isDraggable,
     isDragging,
@@ -158,7 +157,11 @@ export function HomeWidgetCard({
   // Colapsar durante um arrasto animaria a altura no meio da medição do dnd-kit.
   const toggle = dragInProgress ? undefined : onToggle;
 
-  // Impede que um clique num controle do header borbulhe pro toggle.
+  // Cada controle do header retém o próprio ponteiro/clique. Hoje não há
+  // handler acima deles pra roubar o evento — o que abre e fecha é o botão do
+  // título, que é irmão, não ancestral —, mas a casca é compartilhada por 15
+  // widgets e é barato garantir que nada colocado em volta do header depois
+  // sequestre o clique de um link ou de uma ação.
   const stop = (event: SyntheticEvent) => event.stopPropagation();
 
   const body = pending ? (
@@ -182,13 +185,11 @@ export function HomeWidgetCard({
         className,
       )}
     >
-      <div
-        ref={setDragElementRef}
-        {...(draggable ? { [HOME_DRAG_ELEMENT_ATTR]: true } : {})}
-        className="flex items-center gap-2"
-      >
-        {/* A zona de agarrar é só ícone + título: link, ações e menu de mover
-            ficam FORA dela, senão clicar neles iniciaria um arrasto. */}
+      <div className="flex items-center gap-2">
+        {/* A zona de agarrar é só ícone + título, e é ela que leva o
+            `draggable="true"` do pdnd. Link, ações e menu de mover ficam FORA:
+            dentro de um ancestral arrastável, o clique deles se perderia no
+            `dragstart` que o pdnd cancela. */}
         <div
           ref={setDragHandleRef}
           {...(draggable ? { [HOME_DRAG_HANDLE_ATTR]: true } : {})}
@@ -221,16 +222,42 @@ export function HomeWidgetCard({
               onClick={toggle}
               aria-expanded={open}
               aria-controls={panelId}
-              className="w-full rounded-xl text-left focus-visible:ring-2 focus-visible:ring-[var(--ring)]/40 focus-visible:outline-none"
+              className={cn(
+                "flex w-full items-center gap-2 rounded-xl text-left focus-visible:ring-2 focus-visible:ring-[var(--ring)]/40 focus-visible:outline-none",
+                // Repete a mãozinha da alça. Herdar não resolve: o UA stylesheet
+                // põe `cursor: default` em `<button>`, e como aqui o título
+                // inteiro é um botão, ele era o único card em que nada indicava
+                // que dava pra arrastar.
+                draggable && !dragInProgress && "cursor-grab",
+                draggable && dragInProgress && "cursor-grabbing",
+              )}
             >
-              <span className="block truncate text-base font-medium text-[var(--foreground)]">
-                {definition.title}
-              </span>
-              {status ? (
-                <span className="mt-0.5 block truncate text-xs text-[var(--muted-foreground)]">
-                  {status}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-base font-medium text-[var(--foreground)]">
+                  {definition.title}
                 </span>
-              ) : null}
+                {status ? (
+                  <span className="mt-0.5 block truncate text-xs text-[var(--muted-foreground)]">
+                    {status}
+                  </span>
+                ) : null}
+              </span>
+              {/* A seta vive DENTRO do botão, não do lado. Fora dele ela era só
+                  desenho: o título abria e fechava e clicar na seta não fazia
+                  nada. Dentro, ela é a mesma affordance do controle — e continua
+                  havendo um `aria-expanded` só, como o padrão da APG pede. */}
+              <ChevronDown
+                className={cn(
+                  "size-4 shrink-0 text-[var(--muted-foreground)] transition-transform duration-300 motion-reduce:transition-none",
+                  // Na seta o cursor volta a ser de clique. Ela é o gesto mais
+                  // barato de abrir e fechar, e a mãozinha de arrastar aqui
+                  // prometeria a coisa errada. O cursor do próprio elemento ganha
+                  // do que o botão passa por herança.
+                  !dragInProgress && "cursor-pointer",
+                  open && "rotate-180",
+                )}
+                aria-hidden
+              />
             </button>
           </h2>
         ) : (
@@ -273,16 +300,6 @@ export function HomeWidgetCard({
               aria-hidden
             />
           </Link>
-        ) : null}
-
-        {collapsible ? (
-          <ChevronDown
-            className={cn(
-              "size-4 shrink-0 text-[var(--muted-foreground)] transition-transform duration-300 motion-reduce:transition-none",
-              open && "rotate-180",
-            )}
-            aria-hidden
-          />
         ) : null}
 
         {draggable ? (

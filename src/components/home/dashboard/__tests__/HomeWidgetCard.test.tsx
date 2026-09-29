@@ -66,6 +66,85 @@ describe("HomeWidgetCard", () => {
     unmount();
   });
 
+  it("clicar na seta abre e fecha, igual ao título", async () => {
+    // Regressão: a seta era um ícone decorativo do lado de FORA do botão. O
+    // título abria e fechava, a seta não fazia nada — e ela é a affordance mais
+    // óbvia de um card colapsável. Agora ela vive DENTRO do botão, que continua
+    // sendo o único controle do painel (um só `aria-expanded`).
+    function Wrapper() {
+      const [open, setOpen] = useState(false);
+      return (
+        <HomeWidgetCard
+          definitionId="notas"
+          collapsible
+          open={open}
+          onToggle={() => setOpen((v: boolean) => !v)}
+        >
+          <p>corpo</p>
+        </HomeWidgetCard>
+      );
+    }
+
+    const { container, unmount } = renderIntoDocument(<Wrapper />);
+    const toggle = container.querySelector("[aria-expanded]");
+    assert.ok(toggle);
+    assert.equal(toggle.getAttribute("aria-expanded"), "false");
+
+    const chevron = toggle.querySelector("svg");
+    assert.ok(chevron, "a seta precisa viver dentro do botão que abre e fecha");
+    await act(async () => {
+      chevron.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    assert.equal(
+      container.querySelector("[aria-expanded]")?.getAttribute("aria-expanded"),
+      "true",
+      "clicar na seta precisa abrir",
+    );
+    assert.equal(
+      container.querySelectorAll("[aria-expanded]").length,
+      1,
+      "um controle só para o painel",
+    );
+    unmount();
+  });
+
+  it("a mãozinha aparece também no botão do título", () => {
+    // O UA stylesheet põe `cursor: default` em `<button>`, e isso ganha do
+    // `cursor-grab` que a alça passa por herança. Como no card colapsável o
+    // título inteiro É um botão, ele era o único card sem mãozinha — nada
+    // indicava que dava pra arrastar.
+    const { container, unmount } = renderIntoDocument(
+      <HomeDashboardProvider
+        core={coreSnapshot()}
+        repository={createMemoryDashboardPreferences()}
+      >
+        <HomeWidgetDragProvider value={{ draggable: true, setDragHandleRef: () => {} }}>
+          <HomeWidgetCard definitionId="notas" collapsible open>
+            <p>corpo</p>
+          </HomeWidgetCard>
+        </HomeWidgetDragProvider>
+      </HomeDashboardProvider>,
+    );
+
+    const toggle = container.querySelector("[aria-expanded]");
+    assert.ok(toggle);
+    assert.ok(
+      toggle.classList.contains("cursor-grab"),
+      "o botão precisa repetir a mãozinha: herdar não basta",
+    );
+
+    // Na seta, o cursor volta a ser de clique: ela é o gesto mais barato de abrir
+    // e fechar, e a mãozinha de arrastar aqui diria a coisa errada.
+    const chevron = toggle.querySelector("svg");
+    assert.ok(chevron, "a seta vive dentro do botão");
+    assert.ok(
+      chevron.classList.contains("cursor-pointer"),
+      "a seta indica clique, não arrasto",
+    );
+    unmount();
+  });
+
   it("colapsável expõe heading de nível 2 E o botão de expandir", () => {
     // Conteúdo de `<button>` é apresentacional em ARIA: um `role="heading"` DENTRO
     // do botão é achatado e não existe pro leitor de tela. O padrão da ARIA APG é
@@ -132,7 +211,7 @@ describe("HomeWidgetCard", () => {
         core={coreSnapshot()}
         repository={createMemoryDashboardPreferences()}
       >
-        <HomeWidgetDragProvider value={{ draggable: true, setDragElementRef: () => {}, setDragHandleRef: () => {} }}>
+        <HomeWidgetDragProvider value={{ draggable: true, setDragHandleRef: () => {} }}>
           <HomeWidgetCard definitionId="kpi-compras">
             <p>corpo</p>
           </HomeWidgetCard>
@@ -147,9 +226,11 @@ describe("HomeWidgetCard", () => {
     assert.equal(handle.contains(link), false, "o link não pode estar na alça");
     assert.equal(link.getAttribute("draggable"), "false", "âncora não arrasta sozinha");
 
-    const dragElement = container.querySelector("[data-home-drag-element]");
-    assert.ok(dragElement);
-    assert.ok(dragElement.contains(handle), "a alça vive dentro do elemento arrastável");
+    // A alça É o elemento arrastável (o pdnd registra nela), então tudo que se
+    // clica no header precisa estar fora dela.
+    const move = container.querySelector('[aria-label^="Mover "]');
+    assert.ok(move, "o menu de mover existe num card arrastável");
+    assert.equal(handle.contains(move), false, "o menu não pode estar na alça");
     unmount();
   });
 
@@ -159,7 +240,6 @@ describe("HomeWidgetCard", () => {
         <p>corpo</p>
       </HomeWidgetCard>,
     );
-    assert.equal(container.querySelector("[data-home-drag-element]"), null);
     assert.equal(container.querySelector("[data-home-drag-handle]"), null);
     unmount();
   });
