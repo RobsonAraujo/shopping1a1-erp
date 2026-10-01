@@ -4,13 +4,14 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+import { toast } from "sonner";
 import {
-  buildDefaultDashboardPreferences,
   getDefaultView,
   getView,
   visibleWidgetIds,
@@ -18,10 +19,12 @@ import {
   type DashboardView,
   type DashboardWidgetPreference,
 } from "@/lib/home/dashboard/dashboard-preferences";
+import type { DashboardPreferencesRepository } from "@/lib/home/dashboard/dashboard-preferences-repository";
 import {
-  createLocalStorageDashboardPreferences,
-  type DashboardPreferencesRepository,
-} from "@/lib/home/dashboard/dashboard-preferences-repository";
+  createServerDashboardPreferences,
+  type ServerDashboardRepository,
+} from "@/lib/home/dashboard/dashboard-preferences-server-repository";
+import { importLocalDashboardPreferences } from "@/lib/home/dashboard/dashboard-preferences-import";
 import { homeWidgetDataKeysFor } from "@/lib/home/dashboard/widget-registry";
 import type { HomeCoreSnapshot } from "@/lib/home/dashboard/home-core-types";
 import type {
@@ -73,11 +76,11 @@ const SellerCardContext = createContext<ReactNode>(null);
 const LayoutContext = createContext<LayoutContextValue | null>(null);
 const DataContext = createContext<DataContextValue | null>(null);
 
-const DEFAULT_PREFERENCES = buildDefaultDashboardPreferences();
-
 export function HomeDashboardProvider({
   core,
   sellerCard = null,
+  layout,
+  viewId,
   repository,
   children,
 }: {
@@ -85,31 +88,47 @@ export function HomeDashboardProvider({
   /** Card de Vendas renderizado no servidor (dentro de `<Suspense>`), para o
    * `fetchMe` streamar em vez de bloquear a página. */
   sellerCard?: ReactNode;
-  /** Injetável para teste; em produção é o de `localStorage`. */
+  /** As versões lidas do banco no servidor. */
+  layout?: { views: DashboardView[]; revision: number };
+  /** Cookie `home-view`, lido no servidor: qual versão abre neste navegador. */
+  viewId?: string | null;
+  /** Injetável para teste; em produção é o que fala com o banco. */
   repository?: DashboardPreferencesRepository;
   children: ReactNode;
 }) {
-  const repo = useMemo(
-    () => repository ?? createLocalStorageDashboardPreferences(),
-    [repository],
+  // Criado **uma vez**: o repositório guarda estado (revisão confirmada, escrita
+  // pendente) que não pode ser jogado fora a cada render do provider.
+  const [repo] = useState<DashboardPreferencesRepository>(
+    () =>
+      repository ??
+      createServerDashboardPreferences(
+        {
+          views: layout?.views ?? [],
+          revision: layout?.revision ?? 0,
+          viewId,
+        },
+        { onError: (message) => toast.error(message) },
+      ),
   );
 
   /**
-   * As preferências vivem no `localStorage`, então o HTML do servidor só pode
-   * conter o layout default — renderizar o layout do usuário já no primeiro
-   * render do client daria mismatch de hidratação em todo load de quem
-   * personalizou.
-   *
-   * É exatamente o que `useSyncExternalStore` resolve: o `getServerSnapshot`
-   * (3º argumento) vale no servidor **e** na hidratação, e só depois o React
-   * troca para o `getSnapshot` real. Nada de `useState` + `useEffect` para
-   * detectar o mount à mão.
+   * As versões vêm do banco, e o cookie diz qual abre — então o servidor já
+   * monta o layout **certo** e o `getServerSnapshot` pode ser a mesma leitura do
+   * client. Era aqui que morava a limitação do `localStorage`: o HTML só podia
+   * conter o layout padrão, e quem tinha personalizado via a Home trocar de cara
+   * depois da hidratação.
    */
-  const preferences = useSyncExternalStore(
-    repo.subscribe,
-    repo.read,
-    () => DEFAULT_PREFERENCES,
-  );
+  const preferences = useSyncExternalStore(repo.subscribe, repo.read, repo.read);
+
+  /**
+   * Importa uma vez o layout que ficou no `localStorage` da época em que as
+   * versões não iam pro banco. Fora do render porque escreve (cookie + PUT).
+   */
+  useEffect(() => {
+    if ("revision" in repo) {
+      importLocalDashboardPreferences(repo as ServerDashboardRepository);
+    }
+  }, [repo]);
 
   // Começa na principal. `getView` cai na principal sozinho se a versão em foco
   // deixar de existir (ex.: excluída em outra aba), então não precisa de effect

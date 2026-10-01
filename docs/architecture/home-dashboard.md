@@ -20,7 +20,7 @@ A Home é dinâmica (lê `cookies()`), então **não há cache de página**: cad
 |---|-------|-------|
 | 1 | `readSession(cookies())` | zero |
 | 2 | `getOrganizationContext()` | 1 query, envolvida em `React.cache()` (compartilhada com o layout) |
-| 3 | `loadHomeCoreSnapshot(organizationId)` | **11 queries numa onda só** (`Promise.all`), todas indexadas por `organizationId` |
+| 3 | `loadHomeCoreSnapshot` + `loadDashboardLayout` | **12 queries numa onda só** (`Promise.all`): 11 do snapshot mais a leitura do layout por chave primária |
 | 4 | Duas ilhas em `<Suspense>` (identidade do seller + card de Vendas) | **1 chamada ML** (`fetchMe`), compartilhada pelas duas via `React.cache()` |
 | 5 | Client monta → `/api/dashboard/widgets?keys=…` | **1 request**, só com as chaves dos widgets **visíveis** |
 | 6 | Cards de PMA e Promoções entram na viewport | 1 request cada, **chamadas ML** (ver tabela) |
@@ -53,12 +53,32 @@ e `memo` no renderer, **reordenar move a instância em vez de desmontá-la**: ne
 effect roda de novo, nenhum fetch se repete, e o estado interno (nota meio
 digitada, timer rodando) sobrevive.
 
-**Preferências vivem no `localStorage`** (`dashboard:v1`), atrás de uma interface
-de repositório (`DashboardPreferencesRepository`). O HTML do servidor contém o
-layout default e o `getServerSnapshot` do `useSyncExternalStore` vale na
-hidratação, então quem personalizou não toma mismatch. Trocar pra banco é
-implementar a mesma interface chaveada por `(organizationId, userId)` — a UI não
-muda.
+**As versões vivem no banco; qual delas abre, no navegador.** `DashboardLayout`
+guarda uma linha por organização com o conjunto de versões — elas são
+**compartilhadas**, que é o que faz sentido quando a versão se chama «Robson» e
+quem precisa vê-la é o Jhonattan. Já *qual versão abre* é preferência de quem
+está olhando e mora num cookie (`home-view`), não no banco: assim o Robson no
+computador dele e o Jhonattan no dele abrem em versões diferentes sem brigar.
+
+Cookie e não `localStorage` por um motivo concreto: o servidor precisa saber qual
+versão renderizar no primeiro paint. Com a escolha só no `localStorage`, quem
+usa a segunda versão veria a primeira piscar em **todo** acesso.
+
+Tudo isso continua atrás da mesma interface (`DashboardPreferencesRepository`),
+que foi o que permitiu trocar `localStorage` por banco sem tocar em um componente
+de widget. A implementação de produção
+(`createServerDashboardPreferences`) tem três propriedades que a UI depende:
+
+| Propriedade | Por quê |
+|---|---|
+| Escrita **otimista** | arrastar um card não pode esperar ida e volta de rede; o PUT vai depois |
+| Escritas **agrupadas** (350 ms) | três arrastos seguidos viram um PUT com o estado final |
+| `revision` **compare-and-set** | duas pessoas arrastando ao mesmo tempo: a segunda escrita volta 409 e **adota** o que está valendo, em vez de apagar o trabalho da primeira em silêncio |
+
+Falha de rede **volta ao último estado confirmado** e avisa: deixar na tela uma
+mudança que não foi salva seria mentir. E há uma importação única do
+`localStorage` da época anterior — banco vazio, o local sobe inteiro; banco com
+conteúdo, sobem só as versões cujo **nome** ainda não existe lá.
 
 Toda leitura passa por `normalizeDashboardPreferences`: storage corrompido, widget
 que saiu do registry ou coluna inválida não quebram a Home.

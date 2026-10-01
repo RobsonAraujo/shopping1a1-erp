@@ -13,6 +13,8 @@ import { buildSellerReputationBadge } from "@/lib/mercadolibre/seller-reputation
 import { DashboardSalesCard } from "@/components/home/DashboardSalesCard";
 import { buildDashboardSalesSnapshot } from "@/lib/home/sales-card-data";
 import { loadHomeCoreSnapshot } from "@/lib/home/dashboard/home-core-snapshot";
+import { loadDashboardLayout } from "@/lib/home/dashboard/dashboard-layout-data";
+import { HOME_VIEW_COOKIE } from "@/lib/home/dashboard/dashboard-preferences";
 import { cn } from "@/lib/utils";
 
 /**
@@ -24,8 +26,9 @@ import { cn } from "@/lib/utils";
  * O que esta página faz, e só isto:
  *
  * 1. resolve sessão e tenant;
- * 2. carrega o snapshot barato de servidor (`loadHomeCoreSnapshot`), que é o
- *    que garante conteúdo real na primeira pintura;
+ * 2. carrega o snapshot barato de servidor (`loadHomeCoreSnapshot`) e o layout
+ *    salvo (`loadDashboardLayout`), que é o que garante a Home **certa** na
+ *    primeira pintura — não o layout padrão;
  * 3. mantém `fetchMe` como ilha de servidor — o header precisa do perfil de
  *    qualquer forma, então o KPI de vendas sai de graça do mesmo `cache()`;
  * 4. entrega tudo ao provider e sai da frente.
@@ -124,11 +127,20 @@ export default async function DashboardPage() {
   // Uma slice que falha vira aviso dentro do widget dela (ver `failedSlices`) —
   // antes uma falha de operações devolvia erro de página inteira e derrubava a
   // Home junto.
-  const core = await loadHomeCoreSnapshot(organizationId);
+  //
+  // O layout vai na mesma onda: é uma leitura por chave primária, e trazê-lo
+  // aqui é o que permite renderizar a versão certa no servidor em vez de pintar
+  // o padrão e trocar depois da hidratação.
+  const [core, layout] = await Promise.all([
+    loadHomeCoreSnapshot(organizationId),
+    loadDashboardLayout(organizationId),
+  ]);
 
   return (
     <HomeDashboardProvider
       core={core}
+      layout={layout}
+      viewId={cookieStore.get(HOME_VIEW_COOKIE)?.value ?? null}
       sellerCard={
         <Suspense fallback={<DashboardSalesCard pending />}>
           <SalesCardSection token={token} />

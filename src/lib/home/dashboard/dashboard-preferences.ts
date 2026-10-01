@@ -29,6 +29,16 @@ import {
 
 export const DASHBOARD_PREFERENCES_VERSION = 1;
 export const DASHBOARD_PREFERENCES_STORAGE_KEY = "dashboard:v1";
+/**
+ * Onde fica **qual versão abre** neste navegador.
+ *
+ * Cookie e não `localStorage` porque o servidor precisa do valor pra renderizar
+ * a versão certa no primeiro paint — do `localStorage` ele só sabe depois da
+ * hidratação, e aí quem escolheu a segunda versão veria a primeira piscar em
+ * todo acesso. Mora neste módulo (puro) porque servidor e client leem o mesmo
+ * nome.
+ */
+export const HOME_VIEW_COOKIE = "home-view";
 export const DEFAULT_VIEW_ID = "default";
 export const DEFAULT_VIEW_NAME = "Meu início";
 
@@ -680,4 +690,83 @@ export function resetDashboardPreferences(
   definitions: readonly HomeWidgetDefinition[] = HOME_WIDGET_DEFINITIONS,
 ): DashboardPreferences {
   return buildDefaultDashboardPreferences(definitions);
+}
+
+// ── Banco (compartilhado) + navegador (qual versão abre) ────────────────────
+
+/**
+ * O que vai pro banco: **só as versões**.
+ *
+ * Qual delas abre é preferência de quem está olhando, não da organização, então
+ * `defaultViewId` não atravessa — ele mora num cookie por navegador.
+ */
+export function dashboardViewsPayload(
+  prefs: DashboardPreferences,
+): DashboardView[] {
+  return prefs.views;
+}
+
+/**
+ * Monta as preferências a partir do que veio do banco mais a versão escolhida
+ * neste navegador.
+ *
+ * Passa pelo normalizador igual ao storage fazia: o banco também **não** é fonte
+ * de verdade de formato — um widget que saiu do registry, uma coluna que deixou
+ * de existir, um blob escrito por uma versão futura do app.
+ */
+export function dashboardPreferencesFromViews(
+  views: unknown,
+  viewId: string | null | undefined,
+  definitions: readonly HomeWidgetDefinition[] = HOME_WIDGET_DEFINITIONS,
+): DashboardPreferences {
+  return normalizeDashboardPreferences(
+    {
+      version: DASHBOARD_PREFERENCES_VERSION,
+      views,
+      defaultViewId: viewId ?? undefined,
+    },
+    definitions,
+  );
+}
+
+/**
+ * Importação única do `localStorage` pro banco, quando o banco **já tem**
+ * conteúdo: acrescenta as versões locais que faltam, comparadas por **nome**.
+ *
+ * Por nome e não por id porque os ids são locais (`view-1`, `view-2`) e colidem
+ * entre navegadores — o «view-2» do Jhonattan não é o «view-2» do Robson. Nome é
+ * o que a pessoa deu de propósito e o que ela reconhece.
+ *
+ * Uma versão local **com nome que já existe no banco é descartada**, inclusive a
+ * padrão. É a consequência de o layout ser compartilhado: quem carregar depois
+ * não pode sobrescrever em silêncio o que já está valendo pra todos. Quando o
+ * banco está vazio não há merge nenhum — o local sobe inteiro.
+ *
+ * Devolve `server` **por identidade** quando não há nada a acrescentar, pra quem
+ * chama saber que não precisa gravar.
+ */
+export function mergeDashboardViews(
+  server: DashboardPreferences,
+  local: DashboardPreferences,
+): DashboardPreferences {
+  const takenNames = new Set(
+    server.views.map((view) => view.name.trim().toLowerCase()),
+  );
+  const usedIds = new Set(server.views.map((view) => view.id));
+  const extra: DashboardView[] = [];
+
+  for (const view of local.views) {
+    if (server.views.length + extra.length >= MAX_VIEWS) break;
+    const key = view.name.trim().toLowerCase();
+    if (takenNames.has(key)) continue;
+    takenNames.add(key);
+    const id = usedIds.has(view.id)
+      ? nextViewId({ ...server, views: [...server.views, ...extra] })
+      : view.id;
+    usedIds.add(id);
+    extra.push({ ...view, id });
+  }
+
+  if (extra.length === 0) return server;
+  return { ...server, views: [...server.views, ...extra] };
 }

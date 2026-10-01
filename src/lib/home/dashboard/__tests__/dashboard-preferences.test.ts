@@ -11,6 +11,7 @@ import {
   getView,
   moveWidget,
   moveWidgetSideways,
+  mergeDashboardViews,
   moveWidgetToColumn,
   normalizeDashboardPreferences,
   renameView,
@@ -529,5 +530,61 @@ describe("versões do dashboard", () => {
   it("getView cai na principal quando o id não existe", () => {
     assert.equal(getView(base, "fantasma").id, VIEW);
     assert.equal(getView(base, null).id, VIEW);
+  });
+});
+
+describe("mergeDashboardViews (importação única do localStorage)", () => {
+  function withViews(names: string[]): DashboardPreferences {
+    let prefs = buildDefaultDashboardPreferences(DEFS);
+    prefs = renameView(prefs, prefs.views[0].id, names[0]);
+    for (const name of names.slice(1)) {
+      prefs = createView(prefs, { name }, DEFS).preferences;
+    }
+    return prefs;
+  }
+
+  it("acrescenta a versão local que o banco ainda não tem", () => {
+    const merged = mergeDashboardViews(
+      withViews(["Robson"]),
+      withViews(["Jhonattan"]),
+    );
+    assert.deepEqual(
+      merged.views.map((v) => v.name),
+      ["Robson", "Jhonattan"],
+    );
+  });
+
+  it("descarta a local cujo nome já existe no banco", () => {
+    // O layout é compartilhado: quem carrega depois não pode sobrescrever em
+    // silêncio o que já está valendo pra todos.
+    const server = withViews(["Robson", "Jhonattan"]);
+    const merged = mergeDashboardViews(server, withViews(["Jhonattan"]));
+    assert.equal(merged, server, "nada a acrescentar devolve o mesmo objeto");
+  });
+
+  it("compara por nome, ignorando caixa e espaço", () => {
+    const server = withViews(["Robson"]);
+    assert.equal(mergeDashboardViews(server, withViews(["  robson "])), server);
+  });
+
+  it("não ultrapassa o teto de versões", () => {
+    const names = Array.from({ length: MAX_DASHBOARD_VIEWS }, (_, i) => `S${i}`);
+    const merged = mergeDashboardViews(
+      withViews(names),
+      withViews(["Local A", "Local B"]),
+    );
+    assert.equal(merged.views.length, MAX_DASHBOARD_VIEWS);
+  });
+
+  it("troca o id da local quando ele colide com um do banco", () => {
+    // Os ids são locais (`view-1`, `view-2`) e colidem entre navegadores: o
+    // «view-1» do Jhonattan não é o «view-1» do Robson.
+    const server = withViews(["Robson"]);
+    const local = withViews(["Jhonattan"]);
+    assert.equal(local.views[0].id, server.views[0].id, "mesmo id nos dois");
+
+    const merged = mergeDashboardViews(server, local);
+    const ids = merged.views.map((v) => v.id);
+    assert.equal(new Set(ids).size, ids.length, "ids únicos depois do merge");
   });
 });

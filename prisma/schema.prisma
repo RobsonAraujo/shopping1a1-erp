@@ -40,6 +40,7 @@ model Organization {
 
   members   OrganizationMember[]
   mlSellers OrganizationMlSeller[]
+  dashboardLayout DashboardLayout?
 
   @@map("organizations")
 }
@@ -93,6 +94,35 @@ model OrganizationMlSeller {
   @@id([organizationId, mlUserId])
   @@unique([mlUserId])
   @@map("organization_ml_sellers")
+}
+
+/// Layout da Home: as "versões" do dashboard (Robson, Jhonattan…) com ordem,
+/// coluna e visibilidade de cada card.
+///
+/// **Uma linha por organização, com o conjunto inteiro num Json.** O conteúdo é
+/// sempre lido e escrito inteiro — `normalizeDashboardPreferences` trabalha no
+/// conjunto, não numa versão isolada —, então linha-por-versão só traria escrita
+/// parcial e nenhuma vantagem: são no máximo 8 versões de ~15 entradas, uns 4 KB.
+///
+/// **Qual versão abre NÃO está aqui.** Isso é preferência de quem está olhando,
+/// não da organização, e mora num cookie por navegador (`home-view`) — cookie e
+/// não localStorage porque o servidor precisa saber qual versão renderizar no
+/// primeiro paint, senão todo acesso de quem escolheu a segunda versão pisca a
+/// primeira antes de trocar.
+model DashboardLayout {
+  organizationId String   @id @map("organization_id")
+  /// `DashboardView[]` serializado, normalizado na leitura E na escrita: dado
+  /// guardado nunca é fonte de verdade de formato.
+  views          Json
+  /// Sobe a cada escrita. O PUT recusa escrita baseada em revisão antiga (409),
+  /// que é o que impede duas pessoas arrastando ao mesmo tempo de apagarem o
+  /// trabalho uma da outra em silêncio.
+  revision       Int      @default(1)
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("dashboard_layouts")
 }
 
 /// Anúncio sincronizado do Mercado Livre (chave = ml_item_id, ex. MLB…).
