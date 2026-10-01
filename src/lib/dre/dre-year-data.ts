@@ -277,13 +277,24 @@ export async function loadDreYearView(
   year: number,
   options?: {
     /**
-     * Lê os snapshots sem os arrays de breakdown (~390× menos egress). Para
-     * quem só precisa dos totais — a Home. A tela do DRE precisa dos
-     * breakdowns e não passa esta opção.
+     * Modo Home: duas economias de uma vez.
+     *
+     * 1. Lê os snapshots sem os arrays de breakdown (~390× menos egress).
+     * 2. **Pula as três leituras que só alimentam campo de auditoria**
+     *    (`fullReportSourced`, `pendingReconciliation*`) — e duas delas são
+     *    proporcionais ao volume: uma varre todo envio do ano, a outra todo
+     *    envio `ml_billing` **sem limite de ano**. 6 queries viram 3.
+     *
+     * O que a Home consome está em `HomeFinanceSlice`: 14 campos, nenhum
+     * derivado dessas leituras — então quem garante que isto é seguro é o
+     * compilador, não um teste. A tela do DRE precisa dos breakdowns e dos
+     * campos de auditoria e **não** passa esta opção.
      */
     leanSnapshots?: boolean;
   },
 ): Promise<DreYearView> {
+  const lean = options?.leanSnapshots === true;
+
   const [
     allCostItems,
     snapshots,
@@ -303,7 +314,7 @@ export async function loadDreYearView(
         recurring: true,
       },
     }),
-    options?.leanSnapshots
+    lean
       ? loadLeanDreSnapshots(organizationId, year)
       : prisma.dreMonthSnapshot.findMany({
           where: { organizationId, year },
@@ -312,12 +323,23 @@ export async function loadDreYearView(
       where: { organizationId, year: { in: [year, year - 1] } },
       select: { costItemId: true, year: true, month: true, amount: true },
     }),
-    listFullShipmentActivityMonthsForYear(organizationId, year),
-    listImportedBillingPeriods(organizationId),
-    prisma.dreReconciliationImport.findMany({
-      where: { organizationId, year, status: "pending" },
-      select: { id: true, month: true, appliedAt: true },
-    }),
+    // As três abaixo existem só para `fullReportSourced` e
+    // `pendingReconciliation*`, que são avisos da tela do DRE. No modo Home elas
+    // nem saem — ver o comentário da opção.
+    lean
+      ? Promise.resolve(new Set<number>())
+      : listFullShipmentActivityMonthsForYear(organizationId, year),
+    lean
+      ? Promise.resolve<Array<{ year: number; month: number }>>([])
+      : listImportedBillingPeriods(organizationId),
+    lean
+      ? Promise.resolve<
+          Array<{ id: string; month: number; appliedAt: Date | null }>
+        >([])
+      : prisma.dreReconciliationImport.findMany({
+          where: { organizationId, year, status: "pending" },
+          select: { id: true, month: true, appliedAt: true },
+        }),
   ]);
 
   const pendingReconciliationByMonth = new Map(

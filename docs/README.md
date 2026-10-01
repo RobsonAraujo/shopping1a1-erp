@@ -9,6 +9,7 @@ Documentação de arquitetura e processos do projeto. O README na raiz cobre set
 | [Modelo de dados do tenant](architecture/tenant-data-model.md) | Multi-tenancy (concluído): `Organization`, `User`, `OrganizationMlSeller`, classificação das tabelas, guard-rail de isolamento, convenções obrigatórias em código novo |
 | [Gatilhos de escala](architecture/saas-scale-triggers.md) | O que mudar quando houver muitos tenants ou receita (cron, ML rate limit, billing, RLS) |
 | [Mapa de fontes de dados](architecture/erp-data-sources.md) | Onde cada dado vive, tipos canônicos, APIs existentes e como carregar dados nos insights |
+| [Home (dashboard configurável)](architecture/home-dashboard.md) | O que carrega num acesso, de onde vem o dado de cada widget, custo por carregamento, invariantes e o que fazer quando apertar |
 
 ## Documentação por módulo
 

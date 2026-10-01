@@ -11,7 +11,7 @@ function snapshot(overrides: Partial<HomeCoreSnapshot> = {}): HomeCoreSnapshot {
   return { ...emptyHomeCoreSnapshot(), ...overrides };
 }
 
-function losing(count: number) {
+function losingRows(count: number) {
   return Array.from({ length: count }, (_, i) => ({
     mlItemId: `MLB${i}`,
     sku: `SKU${i}`,
@@ -21,6 +21,11 @@ function losing(count: number) {
     priceToWin: 90,
     gap: 10,
   }));
+}
+
+/** `total` acompanha a prévia por default — quem precisa divergir passa os dois. */
+function losing(count: number, total: number = count) {
+  return { rows: losingRows(count), total };
 }
 
 function pendings(overrides: Partial<HomeCoreSnapshot["pendings"] & object> = {}) {
@@ -159,6 +164,19 @@ describe("buildHomeAttentionSignals", () => {
     );
     const unsynced = signals.find((s) => s.id === "dre-months-unsynced");
     assert.equal(unsynced?.count, 2);
+  });
+
+  it("conta o total do banco, não o tamanho da prévia", () => {
+    // O snapshot traz só as 5 piores linhas. Se o sinal contasse `rows.length`,
+    // o aviso diria "5 anúncios perdendo o catálogo" num catálogo com 37 — o
+    // número do card viria do corte, não do banco.
+    const signals = buildHomeAttentionSignals(
+      snapshot({ catalogLosing: losing(5, 37) }),
+    );
+    assert.equal(
+      signals.find((s) => s.id === "catalog-losing")?.count,
+      37,
+    );
   });
 
   it("usa singular e plural corretos", () => {

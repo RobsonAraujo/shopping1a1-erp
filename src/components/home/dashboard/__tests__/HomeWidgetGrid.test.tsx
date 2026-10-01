@@ -455,7 +455,9 @@ describe("HomeWidgetGrid", () => {
   it("a zona de atenção lista os sinais, do mais grave para o menos", async () => {
     const { container, unmount } = await renderGrid({
       core: coreSnapshot({
-        catalogLosing: [
+        catalogLosing: {
+          total: 1,
+          rows: [
           {
             mlItemId: "MLB1",
             sku: "SKU1",
@@ -465,7 +467,8 @@ describe("HomeWidgetGrid", () => {
             priceToWin: 90,
             gap: 10,
           },
-        ],
+          ],
+        },
         pendings: {
           failedInventoryRuns: 1,
           pendingDreImports: 0,

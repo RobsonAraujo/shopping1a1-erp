@@ -123,7 +123,7 @@ export async function loadHomeCoreSnapshot(
     ...snapshot,
     onboarding,
     operations,
-    catalogLosing: catalogLosing ?? [],
+    catalogLosing: catalogLosing ?? { rows: [], total: 0 },
     catalogPoll,
     catalog,
     pendings,

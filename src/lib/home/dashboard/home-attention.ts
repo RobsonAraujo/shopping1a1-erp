@@ -59,9 +59,9 @@ export function buildHomeAttentionSignals(
 
   push({
     id: "catalog-losing",
-    count: core.catalogLosing.length,
+    count: core.catalogLosing.total,
     label: plural(
-      core.catalogLosing.length,
+      core.catalogLosing.total,
       "anúncio perdendo o catálogo",
       "anúncios perdendo o catálogo",
     ),

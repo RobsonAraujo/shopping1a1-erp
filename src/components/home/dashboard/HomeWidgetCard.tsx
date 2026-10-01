@@ -557,29 +557,73 @@ export function HomeWidgetListRow({
   );
 }
 
-/** Casca da lista + o "+ N" quando passa do teto de linhas. */
+const MORE_LINK_CLASS =
+  "font-medium text-[var(--primary)] underline-offset-4 hover:underline disabled:opacity-60";
+
+/**
+ * Casca da lista + o "Ver todos" quando passa do teto de linhas.
+ *
+ * O "mais" tem duas formas, e a escolha é de custo de dado:
+ *
+ * - `moreHref` **navega** pra tela de detalhe. É o default, e serve pro card que
+ *   já tem a lista inteira em mão (PMA, promoções).
+ * - `onMore` **expande no lugar**, buscando o resto. Serve pro card cuja lista
+ *   completa é cara e por isso não vem no carregamento da Home — hoje o catálogo
+ *   perdendo. A maioria não clica, e é justamente aí que está a economia.
+ */
 export function HomeWidgetList({
   children,
   hiddenCount = 0,
   moreHref,
   moreLabel = "Ver todos",
+  onMore,
+  morePending = false,
+  /** O número que aparece no "Ver todos". Sem ele, assume que a lista está no
+   * teto de linhas — o que só vale pros cards que não expandem. Com a lista
+   * aberta, `hiddenCount + teto` daria um número errado. */
+  moreTotal,
+  /** Teto de altura com rolagem interna. Lista expandida sem isso vira um card
+   * de metro e meio, que estraga a coluna (e a sombra do arrasto, que mede a
+   * altura do card). */
+  scroll = false,
 }: {
   children: ReactNode;
   hiddenCount?: number;
   moreHref?: string;
   moreLabel?: string;
+  onMore?: () => void;
+  morePending?: boolean;
+  moreTotal?: number;
+  scroll?: boolean;
 }) {
+  const total = (moreTotal ?? hiddenCount + HOME_WIDGET_LIST_CAP).toLocaleString(
+    "pt-BR",
+  );
+
   return (
     <>
-      <ul className="flex flex-col divide-y divide-[var(--border)]">{children}</ul>
+      <ul
+        className={cn(
+          "flex flex-col divide-y divide-[var(--border)]",
+          scroll && "max-h-96 overflow-y-auto",
+        )}
+      >
+        {children}
+      </ul>
       {hiddenCount > 0 ? (
         <p className="mt-2 text-xs text-[var(--muted-foreground)]">
-          {moreHref ? (
-            <Link
-              href={moreHref}
-              className="font-medium text-[var(--primary)] underline-offset-4 hover:underline"
+          {onMore ? (
+            <button
+              type="button"
+              onClick={onMore}
+              disabled={morePending}
+              className={cn(MORE_LINK_CLASS, "cursor-pointer")}
             >
-              {moreLabel} ({(hiddenCount + HOME_WIDGET_LIST_CAP).toLocaleString("pt-BR")})
+              {morePending ? "Carregando…" : `${moreLabel} (${total})`}
+            </button>
+          ) : moreHref ? (
+            <Link href={moreHref} className={MORE_LINK_CLASS}>
+              {moreLabel} ({total})
             </Link>
           ) : (
             `+ ${hiddenCount.toLocaleString("pt-BR")} item(ns)`

@@ -29,5 +29,10 @@ export function HomeWidgetOnboarding() {
 
 export function HomeWidgetCatalogoPerdendo() {
   const { catalogLosing } = useHomeCore();
-  return <DashboardCatalogLosingPanel rows={catalogLosing} />;
+  return (
+    <DashboardCatalogLosingPanel
+      preview={catalogLosing.rows}
+      total={catalogLosing.total}
+    />
+  );
 }

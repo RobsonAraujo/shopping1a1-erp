@@ -1,4 +1,4 @@
-import type { CatalogLosingRow } from "@/lib/home/catalog-losing-data";
+import type { CatalogLosingResult } from "@/lib/home/catalog-losing-data";
 import type { OperationsSummaryCounts } from "@/lib/compras/replenishment-cycle";
 import type { OnboardingChecklistState } from "@/lib/onboarding/onboarding-checklist";
 
@@ -50,7 +50,9 @@ export type HomePendings = {
 export type HomeCoreSnapshot = {
   onboarding: OnboardingChecklistState | null;
   operations: OperationsSummaryCounts | null;
-  catalogLosing: CatalogLosingRow[];
+  /** Prévia + total. A prévia é curta de propósito — ver
+   * `CATALOG_LOSING_PREVIEW_LIMIT`. */
+  catalogLosing: CatalogLosingResult;
   catalogPoll: HomeCatalogPollStats | null;
   catalog: HomeCatalogHealth | null;
   suppliers: HomeSuppliersCount | null;
@@ -70,7 +72,7 @@ export function emptyHomeCoreSnapshot(): HomeCoreSnapshot {
   return {
     onboarding: null,
     operations: null,
-    catalogLosing: [],
+    catalogLosing: { rows: [], total: 0 },
     catalogPoll: null,
     catalog: null,
     suppliers: null,
