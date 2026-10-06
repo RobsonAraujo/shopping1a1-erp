@@ -287,6 +287,10 @@ export async function fetchOrdersInDateRange(
   options: {
     dateField?: SalesWindowDateField;
     orderStatus?: string;
+    /** Chamado a cada página — progresso de buscas longas (ex.: 90 dias). */
+    onPage?: (progress: { fetched: number; total: number | null }) => void;
+    /** Interrompe a paginação (ex.: o client trocou de período). */
+    signal?: AbortSignal;
   } = {},
 ): Promise<OrderSearchOrder[]> {
   const { apiBase } = getMercadoLibreConfig();
@@ -300,6 +304,7 @@ export async function fetchOrdersInDateRange(
   let total = Infinity;
 
   while (offset < total) {
+    options.signal?.throwIfAborted();
     const u = new URL(`${apiBase}/orders/search`);
     u.searchParams.set("seller", String(sellerId));
     if (options.orderStatus) {
@@ -325,6 +330,10 @@ export async function fetchOrdersInDateRange(
 
     const batch = data.results ?? [];
     orders.push(...batch);
+    options.onPage?.({
+      fetched: orders.length,
+      total: Number.isFinite(total) ? total : null,
+    });
 
     if (batch.length === 0) break;
     offset += limit;
@@ -391,10 +400,16 @@ export async function fetchPaidOrdersByPeriod(
   from: Date,
   to: Date,
   dateField: SalesWindowDateField = stockPlanningConfig.salesWindowDateField,
+  options: {
+    onPage?: (progress: { fetched: number; total: number | null }) => void;
+    signal?: AbortSignal;
+  } = {},
 ): Promise<OrderSearchOrder[]> {
   const orders = await fetchOrdersInDateRange(accessToken, sellerId, from, to, {
     dateField,
     orderStatus: "paid",
+    onPage: options.onPage,
+    signal: options.signal,
   });
   return orders.filter((order) => order.status === "paid");
 }

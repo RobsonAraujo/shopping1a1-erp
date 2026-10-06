@@ -116,12 +116,6 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
     kind: "dropdown",
     items: [
       {
-        href: "/dashboard/lucratividade",
-        label: "Lucratividade",
-        description: "Margem de contribuição por anúncio",
-        icon: TrendingUp,
-      },
-      {
         href: "/dashboard/catalog-report",
         label: "Relatório de Catálogo",
         description: "Veja mudanças de competição no catálogo",
@@ -151,6 +145,12 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
         label: "DRE",
         description: "Resultado mensal — faturamento, custos, impostos e ADS",
         icon: LineChart,
+      },
+      {
+        href: "/dashboard/lucratividade",
+        label: "Lucratividade",
+        description: "Margem real das vendas por anúncio",
+        icon: TrendingUp,
       },
       {
         href: "/dashboard/tributario",

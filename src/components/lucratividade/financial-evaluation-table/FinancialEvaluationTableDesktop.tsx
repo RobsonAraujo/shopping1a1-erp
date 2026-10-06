@@ -1,142 +1,113 @@
 "use client";
 
 import Image from "next/image";
-import { Badge } from "@/components/ui/badge";
 import {
   ListingStatusBadge,
   listingRowMutedClass,
 } from "@/components/shared/ListingStatusBadge";
+import { BlurredValue } from "@/components/shared/BlurredValue";
+import { PlanningInfoTrigger } from "@/components/shared/PlanningInfoTrigger";
+import { SortableTh } from "@/components/ui/sortable-th";
 import {
   formatFinancialMoney,
   formatFinancialPercent,
   marginBasisLabel,
 } from "@/lib/pricing/financial-margin";
+import { marginExclusionReason } from "@/lib/lucratividade/margin-summary";
 import { cn } from "@/lib/utils";
 import {
-  MinPriceTableCell,
-  SortableTh,
+  ExclusionBadge,
+  PmaBadge,
   StackedMarginCell,
-  currentSectionClass,
-  decisionSectionClass,
-  sectionGroupPill,
+  TargetPriceCellView,
   tableCellPad,
   tableHeadPad,
 } from "@/components/lucratividade/financial-evaluation-table/shared";
 import type { FinancialEvaluationTableProps } from "@/components/lucratividade/financial-evaluation-table/types";
-import { BlurredValue } from "@/components/shared/BlurredValue";
 
 export function FinancialEvaluationTableDesktop({
-  sortedItems,
-  sortKey,
-  sortDir,
-  onSort,
-  isPeriodMode,
+  rows,
+  sort,
+  onSortChange,
+  isSimulation,
   targetMarginPercent,
   marginBasis,
-  refiningMinPrices,
-  minPriceStale,
-  tacosPeriodLabel,
+  targetCellFor,
   onSelect,
 }: FinancialEvaluationTableProps) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[880px] table-fixed border-collapse text-sm">
+      <table className="w-full min-w-[920px] table-fixed border-collapse text-sm">
         <colgroup>
-          <col className="w-[34%]" />
-          <col className="w-[7%]" />
-          <col className="w-[9%]" />
+          <col className={isSimulation ? "w-[38%]" : "w-[32%]"} />
+          {isSimulation ? null : <col className="w-[12%]" />}
           <col className="w-[11%]" />
-          <col className="w-[11%]" />
-          <col className="w-[9%]" />
+          <col className="w-[13%]" />
+          <col className="w-[13%]" />
+          <col className="w-[14%]" />
         </colgroup>
         <thead>
-          <tr className="text-left text-[var(--muted-foreground)]">
-            <th colSpan={3} className={cn(tableHeadPad, "pt-2")} />
-            <th
-              colSpan={2}
-              className={cn(
-                currentSectionClass,
-                tableHeadPad,
-                "pt-2 pb-1 text-center",
-              )}
-            >
-              <span className={sectionGroupPill("current")}>
-                {isPeriodMode ? "No período" : "Situação atual"}
-              </span>
-            </th>
-            <th
-              colSpan={1}
-              className={cn(
-                decisionSectionClass,
-                tableHeadPad,
-                "pt-2 pb-1 text-center",
-              )}
-            >
-              <span className={sectionGroupPill("decision")}>Decidir</span>
-            </th>
-          </tr>
-          <tr className="border-b border-[var(--border)] text-left text-[var(--muted-foreground)]">
+          <tr className="border-b border-[var(--border)] text-left text-xs text-[var(--muted-foreground)]">
             <SortableTh
-              label="Produto"
+              label="Anúncio"
               sortKey="product"
-              activeKey={sortKey}
-              activeDir={sortDir}
-              onSort={onSort}
-              className={cn(tableHeadPad)}
+              sort={sort}
+              onSortChange={onSortChange}
+              align="left"
+              className={tableHeadPad}
             />
-            <th className={cn(tableHeadPad, "font-medium")}>Tipo</th>
+            {isSimulation ? null : (
+              <SortableTh
+                label="Vendas"
+                sortKey="sales"
+                sort={sort}
+                onSortChange={onSortChange}
+                className={tableHeadPad}
+                hint={
+                  <PlanningInfoTrigger content="Unidades vendidas e faturamento do anúncio no período. É o peso dele na média do topo." />
+                }
+              />
+            )}
             <SortableTh
-              label="Preço"
+              label={isSimulation ? "Preço hoje" : "Preço médio"}
               sortKey="price"
-              activeKey={sortKey}
-              activeDir={sortDir}
-              onSort={onSort}
-              className={cn(tableHeadPad, "text-right")}
-              align="right"
-              title={
-                isPeriodMode
-                  ? "Preço médio ponderado das vendas no período"
-                  : undefined
-              }
+              sort={sort}
+              onSortChange={onSortChange}
+              className={tableHeadPad}
             />
             <SortableTh
               label="Margem"
               sortKey="margin"
-              activeKey={sortKey}
-              activeDir={sortDir}
-              onSort={onSort}
-              className={cn(currentSectionClass, tableHeadPad, "text-right")}
-              align="right"
-              title="Margem de contribuição (% em destaque, R$ abaixo)"
+              sort={sort}
+              onSortChange={onSortChange}
+              className={tableHeadPad}
+              hint={
+                <PlanningInfoTrigger content="Margem de contribuição: preço − taxa ML − frete − custo − impostos. Em % do preço e em R$ por unidade." />
+              }
             />
             <SortableTh
-              label="Pós ADS"
+              label="Após ADS"
               sortKey="afterAds"
-              activeKey={sortKey}
-              activeDir={sortDir}
-              onSort={onSort}
-              className={cn(currentSectionClass, tableHeadPad, "text-right")}
-              align="right"
-              title={`Margem de contribuição menos TACOS (${tacosPeriodLabel})`}
+              sort={sort}
+              onSortChange={onSortChange}
+              className={tableHeadPad}
+              hint={
+                <PlanningInfoTrigger content="Margem de contribuição menos o gasto com Product Ads do anúncio (TACOS = gasto em ADS ÷ faturamento total)." />
+              }
             />
-            <th
-              className={cn(
-                decisionSectionClass,
-                tableHeadPad,
-                "font-medium text-right",
-              )}
-              title={`Preço mínimo para ${formatFinancialPercent(targetMarginPercent)} (${marginBasisLabel(marginBasis)})`}
-            >
-              P/ meta
+            <th className={cn(tableHeadPad, "text-right font-medium")}>
+              <span className="inline-flex items-center justify-end gap-1">
+                Preço p/ meta
+                <PlanningInfoTrigger
+                  content={`Menor preço de venda que entrega a meta de ${formatFinancialPercent(targetMarginPercent)} de ${marginBasisLabel(marginBasis)}, comparado ao preço de hoje. "Na meta" = já atinge. Mude a meta no botão Meta.`}
+                />
+              </span>
             </th>
           </tr>
         </thead>
         <tbody>
-          {sortedItems.map((row) => {
-            const marginValue = row.breakdown?.marginValue ?? null;
-            const marginPercent = row.breakdown?.marginPercent ?? null;
-            const afterAdsPercent = row.marginAfterAdsPercent;
-            const afterAdsValue = row.marginAfterAdsValue;
+          {rows.map((row) => {
+            const excluded = marginExclusionReason(row) !== null;
             const tacosSublabel =
               row.adsMetricsAvailable &&
               row.tacosPercent != null &&
@@ -160,49 +131,42 @@ export function FinancialEvaluationTableDesktop({
                         alt={row.title}
                         width={40}
                         height={40}
-                        className="size-10 rounded-md object-cover"
+                        className="size-10 shrink-0 rounded-md object-cover"
                       />
                     ) : (
-                      <div className="size-10 rounded-md bg-[var(--muted)]" />
+                      <div className="size-10 shrink-0 rounded-md bg-[var(--muted)]" />
                     )}
                     <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="truncate font-medium">
-                          {row.sku ?? row.title}
-                        </p>
+                      <p className="truncate font-medium" title={row.title}>
+                        {row.sku ?? row.title}
+                      </p>
+                      <p className="truncate text-xs text-[var(--muted-foreground)]">
+                        {row.mlItemId}
+                        {row.listingTypeLabel ? ` · ${row.listingTypeLabel}` : ""}
+                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
                         <ListingStatusBadge
                           status={row.status}
                           mlStock={0}
                           warehouseStock={0}
                         />
-                        {row.taxRatePercent === null &&
-                        row.productCost !== null ? (
-                          <Badge
-                            variant="warning"
-                            title="Imposto não considerado na margem — sem alíquota no relatório tributário. Recalcule em Relatório tributário."
-                          >
-                            Sem alíquota
-                          </Badge>
-                        ) : null}
-                        {!row.pending &&
-                        row.pmaPrice !== null &&
-                        row.salePrice < row.pmaPrice ? (
-                          <Badge
-                            variant="destructive"
-                            title={`Preço atual (${formatFinancialMoney(row.salePrice)}) abaixo do PMA (${formatFinancialMoney(row.pmaPrice)}).`}
-                          >
-                            Abaixo do PMA
-                          </Badge>
-                        ) : null}
+                        <ExclusionBadge row={row} />
+                        <PmaBadge row={row} isSimulation={isSimulation} />
                       </div>
-                      <p className="truncate text-xs text-[var(--muted-foreground)]">
-                        {row.mlItemId}
-                      </p>
                     </div>
                   </div>
                 </td>
-                <td className={tableCellPad}>{row.listingTypeLabel ?? "—"}</td>
-                <td className={cn(tableCellPad, "text-right")}>
+                {isSimulation ? null : (
+                  <td className={cn(tableCellPad, "text-right")}>
+                    <div className="font-medium tabular-nums">
+                      {(row.periodUnitsSold ?? 0).toLocaleString("pt-BR")} un.
+                    </div>
+                    <div className="mt-0.5 text-xs tabular-nums text-[var(--muted-foreground)]">
+                      {formatFinancialMoney(row.periodRevenue ?? null)}
+                    </div>
+                  </td>
+                )}
+                <td className={cn(tableCellPad, "text-right tabular-nums")}>
                   {row.pending ? (
                     <BlurredValue srLabel="Preço ainda carregando" />
                   ) : (
@@ -216,31 +180,30 @@ export function FinancialEvaluationTableDesktop({
                     </>
                   )}
                 </td>
-                <td className={cn(currentSectionClass, tableCellPad)}>
+                <td className={tableCellPad}>
                   <StackedMarginCell
-                    percent={marginPercent}
-                    value={marginValue}
+                    percent={row.breakdown?.marginPercent ?? null}
+                    value={row.breakdown?.marginValue ?? null}
                     pending={row.pending}
+                    excluded={excluded}
+                    excludedNote="fora da média"
                   />
                 </td>
-                <td className={cn(currentSectionClass, tableCellPad)}>
+                <td className={tableCellPad}>
                   <StackedMarginCell
-                    percent={afterAdsPercent}
-                    value={afterAdsValue}
+                    percent={row.marginAfterAdsPercent}
+                    value={row.marginAfterAdsValue}
                     sublabel={tacosSublabel}
                     unavailable={!row.adsMetricsAvailable}
                     pending={row.pending}
+                    excluded={excluded}
                   />
                 </td>
-                <td
-                  className={cn(decisionSectionClass, tableCellPad, "text-right")}
-                >
-                  <MinPriceTableCell
-                    row={row}
+                <td className={cn(tableCellPad, "text-right")}>
+                  <TargetPriceCellView
+                    cell={targetCellFor(row)}
                     targetMarginPercent={targetMarginPercent}
                     marginBasis={marginBasis}
-                    refining={refiningMinPrices && !isPeriodMode}
-                    showProportionalWhileStale={minPriceStale}
                   />
                 </td>
               </tr>

@@ -1,47 +1,69 @@
 "use client";
 
 import Image from "next/image";
-import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { FormSelect } from "@/components/ui/form-select";
 import {
   ListingStatusBadge,
   listingRowMutedClass,
 } from "@/components/shared/ListingStatusBadge";
+import { BlurredValue } from "@/components/shared/BlurredValue";
 import {
   formatFinancialMoney,
   formatFinancialPercent,
-  marginBasisLabel,
 } from "@/lib/pricing/financial-margin";
+import { marginExclusionReason } from "@/lib/lucratividade/margin-summary";
 import { cn } from "@/lib/utils";
 import {
-  MinPriceTableCell,
+  ExclusionBadge,
+  PmaBadge,
   StackedMarginCell,
+  TargetPriceCellView,
 } from "@/components/lucratividade/financial-evaluation-table/shared";
-import type { FinancialEvaluationTableProps } from "@/components/lucratividade/financial-evaluation-table/types";
-import { BlurredValue } from "@/components/shared/BlurredValue";
+import type {
+  FinancialEvaluationTableProps,
+  SortKey,
+} from "@/components/lucratividade/financial-evaluation-table/types";
+
+const SORT_OPTIONS: Array<{ value: string; label: string; key: SortKey; dir: "asc" | "desc"; periodOnly?: boolean }> = [
+  { value: "sales-desc", label: "Mais vendidos", key: "sales", dir: "desc", periodOnly: true },
+  { value: "margin-asc", label: "Menor margem", key: "margin", dir: "asc" },
+  { value: "margin-desc", label: "Maior margem", key: "margin", dir: "desc" },
+  { value: "afterAds-asc", label: "Menor margem após ADS", key: "afterAds", dir: "asc" },
+  { value: "product-asc", label: "Produto (A–Z)", key: "product", dir: "asc" },
+];
 
 export function FinancialEvaluationTableMobile({
-  sortedItems,
-  isPeriodMode,
+  rows,
+  sort,
+  onSortSet,
+  isSimulation,
   targetMarginPercent,
   marginBasis,
-  refiningMinPrices,
-  minPriceStale,
-  tacosPeriodLabel,
+  targetCellFor,
   onSelect,
 }: FinancialEvaluationTableProps) {
+  const options = SORT_OPTIONS.filter((option) => !(isSimulation && option.periodOnly));
+  const current =
+    options.find(
+      (option) => option.key === sort.key && option.dir === sort.direction,
+    )?.value ?? "";
+
   return (
     <div className="space-y-3">
-      <p className="text-[11px] text-[var(--muted-foreground)]">
-        Meta: {formatFinancialPercent(targetMarginPercent)} (
-        {marginBasisLabel(marginBasis)}) · Pós ADS: TACOS {tacosPeriodLabel}
-      </p>
+      <FormSelect
+        aria-label="Ordenar anúncios"
+        value={current}
+        placeholder="Ordenar por…"
+        options={options.map(({ value, label }) => ({ value, label }))}
+        onValueChange={(value) => {
+          const option = options.find((o) => o.value === value);
+          if (option) onSortSet({ key: option.key, direction: option.dir });
+        }}
+      />
       <ul className="space-y-3">
-        {sortedItems.map((row) => {
-          const marginValue = row.breakdown?.marginValue ?? null;
-          const marginPercent = row.breakdown?.marginPercent ?? null;
-          const afterAdsPercent = row.marginAfterAdsPercent;
-          const afterAdsValue = row.marginAfterAdsValue;
+        {rows.map((row) => {
+          const excluded = marginExclusionReason(row) !== null;
           const tacosSublabel =
             row.adsMetricsAvailable &&
             row.tacosPercent != null &&
@@ -70,53 +92,40 @@ export function FinancialEvaluationTableMobile({
                     <div className="size-10 shrink-0 rounded-md bg-[var(--muted)]" />
                   )}
                   <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="truncate text-sm font-semibold text-[var(--foreground)]">
-                        {row.sku ?? row.title}
-                      </p>
+                    <p className="truncate text-sm font-semibold text-[var(--foreground)]">
+                      {row.sku ?? row.title}
+                    </p>
+                    <p className="truncate text-xs text-[var(--muted-foreground)]">
+                      {row.mlItemId}
+                      {row.listingTypeLabel ? ` · ${row.listingTypeLabel}` : ""}
+                    </p>
+                    <div className="mt-1 flex flex-wrap items-center gap-1">
                       <ListingStatusBadge
                         status={row.status}
                         mlStock={0}
                         warehouseStock={0}
                       />
+                      <ExclusionBadge row={row} />
+                      <PmaBadge row={row} isSimulation={isSimulation} />
                     </div>
-                    <p className="truncate text-xs text-[var(--muted-foreground)]">
-                      {row.mlItemId} · {row.listingTypeLabel ?? "—"}
-                    </p>
-                    {row.taxRatePercent === null && row.productCost !== null ? (
-                      <Badge
-                        variant="warning"
-                        className="mt-1"
-                        title="Imposto não considerado na margem — sem alíquota no relatório tributário. Recalcule em Relatório tributário."
-                      >
-                        Sem alíquota
-                      </Badge>
-                    ) : null}
-                    {!row.pending &&
-                    row.pmaPrice !== null &&
-                    row.salePrice < row.pmaPrice ? (
-                      <Badge
-                        variant="destructive"
-                        className="mt-1"
-                        title={`Preço atual (${formatFinancialMoney(row.salePrice)}) abaixo do PMA (${formatFinancialMoney(row.pmaPrice)}).`}
-                      >
-                        Abaixo do PMA
-                      </Badge>
-                    ) : null}
                   </div>
                   <div className="shrink-0 text-right">
                     {row.pending ? (
                       <BlurredValue srLabel="Preço ainda carregando" />
                     ) : (
                       <>
-                        <div className="text-sm font-medium">
+                        <div className="text-sm font-medium tabular-nums">
                           {formatFinancialMoney(row.salePrice)}
                         </div>
-                        {row.hasPromotion && row.regularPrice != null ? (
-                          <div className="text-xs text-[var(--muted-foreground)] line-through">
-                            {formatFinancialMoney(row.regularPrice)}
+                        <div className="text-[10px] text-[var(--muted-foreground)]">
+                          {isSimulation ? "hoje" : "preço médio"}
+                        </div>
+                        {isSimulation ? null : (
+                          <div className="mt-0.5 text-xs tabular-nums text-[var(--muted-foreground)]">
+                            {(row.periodUnitsSold ?? 0).toLocaleString("pt-BR")} un. ·{" "}
+                            {formatFinancialMoney(row.periodRevenue ?? null)}
                           </div>
-                        ) : null}
+                        )}
                       </>
                     )}
                   </div>
@@ -129,37 +138,38 @@ export function FinancialEvaluationTableMobile({
                     </p>
                     <div className="mt-0.5">
                       <StackedMarginCell
-                        percent={marginPercent}
-                        value={marginValue}
+                        percent={row.breakdown?.marginPercent ?? null}
+                        value={row.breakdown?.marginValue ?? null}
                         pending={row.pending}
+                        excluded={excluded}
+                        excludedNote="fora da média"
                       />
                     </div>
                   </div>
                   <div>
                     <p className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
-                      Pós ADS
+                      Após ADS
                     </p>
                     <div className="mt-0.5">
                       <StackedMarginCell
-                        percent={afterAdsPercent}
-                        value={afterAdsValue}
+                        percent={row.marginAfterAdsPercent}
+                        value={row.marginAfterAdsValue}
                         sublabel={tacosSublabel}
                         unavailable={!row.adsMetricsAvailable}
                         pending={row.pending}
+                        excluded={excluded}
                       />
                     </div>
                   </div>
                   <div>
                     <p className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
-                      P/ meta
+                      Preço p/ meta
                     </p>
                     <div className="mt-0.5 text-right">
-                      <MinPriceTableCell
-                        row={row}
+                      <TargetPriceCellView
+                        cell={targetCellFor(row)}
                         targetMarginPercent={targetMarginPercent}
                         marginBasis={marginBasis}
-                        refining={refiningMinPrices && !isPeriodMode}
-                        showProportionalWhileStale={minPriceStale}
                       />
                     </div>
                   </div>

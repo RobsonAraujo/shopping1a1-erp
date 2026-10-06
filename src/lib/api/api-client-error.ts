@@ -93,7 +93,11 @@ const API_ERROR_MESSAGES: Record<string, string> = {
   stock_attention_ack_failed: "Não foi possível marcar o alerta como visto.",
   items_failed: "Não foi possível carregar os anúncios.",
   item_failed: "Não foi possível carregar o anúncio.",
-  financial_evaluation_failed: "Não foi possível carregar a lucratividade.",
+  financial_evaluation_failed:
+    "Não foi possível carregar a lucratividade agora. Tente de novo em instantes.",
+  ml_unavailable:
+    "O Mercado Livre não respondeu a tempo. Aguarde alguns segundos e tente de novo.",
+  ml_rate_limited: RATE_LIMIT_USER_ERROR,
   min_prices_failed: "Não foi possível calcular os preços mínimos.",
   wholesale_settings_update_failed:
     "Não foi possível salvar as configurações de atacado.",

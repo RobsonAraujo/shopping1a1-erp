@@ -60,6 +60,23 @@ describe("isDashboardNavGroupActive / getAllDashboardNavItems", () => {
     );
   });
 
+  it("keeps Lucratividade in Financeiro, right after DRE", () => {
+    const financeiro = DASHBOARD_NAV_GROUPS.find((g) => g.id === "financeiro");
+    assert.ok(financeiro);
+    const hrefs = financeiro.items.map((item) => item.href);
+    assert.equal(hrefs[hrefs.indexOf("/dashboard/dre") + 1], "/dashboard/lucratividade");
+    assert.equal(
+      isDashboardNavGroupActive("/dashboard/lucratividade", financeiro),
+      true,
+    );
+    const analises = DASHBOARD_NAV_GROUPS.find((g) => g.id === "analises");
+    assert.ok(analises);
+    assert.equal(
+      analises.items.some((item) => item.href === "/dashboard/lucratividade"),
+      false,
+    );
+  });
+
   it("lists every nav item once, in display order", () => {
     const items = getAllDashboardNavItems();
     const hrefs = items.map((item) => item.href);

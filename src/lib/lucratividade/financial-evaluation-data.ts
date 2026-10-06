@@ -27,12 +27,18 @@ import {
   fetchPadsAdvertiserId,
   fetchProductAdsMetricsByItem,
   getProductAdsDateRange,
+  isProductAdsLookbackLimitError,
+  isProductAdsMetricsRangeAvailable,
   PRODUCT_ADS_PERIOD_DAYS,
   type ItemAdMetrics,
 } from "@/lib/mercadolibre/product-ads-metrics";
 import { fetchSellerShippingCost } from "@/lib/mercadolibre/seller-shipping-cost";
-import type { ItemBody, OrderSearchOrder } from "@/lib/mercadolibre/types";
-import { getCompanySettings, loadProductsMapBySku } from "@/lib/products/product-data";
+import type { ItemBody } from "@/lib/mercadolibre/types";
+import {
+  getCompanySettings,
+  loadProductsMapBySku,
+  type CompanySettings,
+} from "@/lib/products/product-data";
 import { resolveEffectiveSkuByItemId } from "@/lib/products/product-resolver";
 import {
   loadKitsByMlItemId,
@@ -43,7 +49,14 @@ import {
   normalizeProductSku,
   type ResolvedProductPricing,
 } from "@/lib/pricing/product-pricing";
-import { loadProductTaxFromLatestReport } from "@/lib/products/product-tax-from-report";
+import {
+  loadProductTaxFromLatestReport,
+  type ProductTaxReportLookup,
+} from "@/lib/products/product-tax-from-report";
+import {
+  aggregatePeriodSalesByItem,
+  type PeriodSaleAgg,
+} from "@/lib/lucratividade/period-sales-aggregate";
 import { refineMinSalePriceForTargetMargin } from "@/lib/pricing/refine-min-sale-price";
 
 export {
@@ -83,7 +96,18 @@ export type FinancialEvaluationRow = {
   adsStatus: string | null;
   adsMetricsAvailable: boolean;
   errors: string[];
+  /** Problemas que pedem ação do usuário (ex.: gasto em ADS sem venda). */
   warnings: string[];
+  /** Informativos de "como foi calculado" — não pedem ação (ex.: frete
+   * estimado no preço médio, TACOS 0% sem campanha). */
+  notes?: string[];
+  /** SKUs de componentes do kit sem cadastro em Meus produtos — com algum,
+   * o custo do kit fica parcial e a margem, inflada. */
+  kitMissingSkus?: string[];
+  /** Só no modo período: unidades vendidas e faturamento bruto do anúncio
+   * no intervalo (base da média ponderada). */
+  periodUnitsSold?: number;
+  periodRevenue?: number;
   minSalePriceForTarget?: MinSalePriceResult | null;
   minSalePriceTargetPercent?: number | null;
   minSalePriceMarginBasis?: MarginBasis | null;
@@ -107,6 +131,8 @@ async function mapWithConcurrency<T, R>(
   concurrency: number,
   fn: (item: T, index: number) => Promise<R>,
   onEach?: (result: R, index: number) => void,
+  /** Abortado → para de agendar itens e rejeita (o client desistiu). */
+  signal?: AbortSignal,
 ): Promise<R[]> {
   if (items.length === 0) return [];
   const results = new Array<R>(items.length);
@@ -114,6 +140,7 @@ async function mapWithConcurrency<T, R>(
 
   async function worker() {
     while (nextIndex < items.length) {
+      signal?.throwIfAborted();
       const index = nextIndex;
       nextIndex += 1;
       const result = await fn(items[index], index);
@@ -154,6 +181,7 @@ function applyAdsToRow(
   adsPeriodDays: number = PRODUCT_ADS_PERIOD_DAYS,
 ): FinancialEvaluationRow {
   const warnings = [...row.warnings];
+  const notes = [...(row.notes ?? [])];
 
   if (!adsMetricsAvailable) {
     return {
@@ -170,11 +198,12 @@ function applyAdsToRow(
       adsStatus: null,
       adsMetricsAvailable: false,
       warnings,
+      notes,
     };
   }
 
   if (!adMetrics) {
-    warnings.push("Sem Product Ads no período (TACOS considerado 0%).");
+    notes.push("Sem Product Ads no período (TACOS considerado 0%).");
     const afterAds =
       row.breakdown &&
       computeMarginAfterAds({
@@ -201,6 +230,7 @@ function applyAdsToRow(
       adsStatus: null,
       adsMetricsAvailable: true,
       warnings,
+      notes,
     };
   }
 
@@ -216,10 +246,10 @@ function applyAdsToRow(
     adMetrics.unitsQuantity < 3 &&
     tacosPercent !== null
   ) {
-    warnings.push("Poucas vendas no período; TACOS pode variar bastante.");
+    notes.push("Poucas vendas no período; TACOS pode variar bastante.");
   }
   if (adMetrics.status === "idle" && !row.isKit) {
-    warnings.push("Anúncio disponível para ADS, mas sem campanha ativa.");
+    notes.push("Anúncio disponível para ADS, mas sem campanha ativa.");
   }
 
   const afterAds =
@@ -248,6 +278,7 @@ function applyAdsToRow(
     adsStatus: adMetrics.status,
     adsMetricsAvailable: true,
     warnings,
+    notes,
   };
 }
 
@@ -324,30 +355,39 @@ export function resolvePmaPrice(
  * Mantida separada de propósito — `buildRowForItem` fica intocada, pra não
  * arriscar a lógica financeira já validada.
  */
-function buildFastRowPreview(
+type KitContext = {
+  pricingBySku: Map<string, ResolvedProductPricing>;
+  kitsByMlItemId: Map<string, KitComponent[]>;
+};
+
+type RowCostResolution = {
+  sku: string | null;
+  productCost: number | null;
+  extraCosts: number | null;
+  taxRatePercent: number | null;
+  isKitComposition: boolean;
+  kitComponents: KitComponent[] | null;
+  kitMissingSkus: string[];
+};
+
+/**
+ * Custo, extras e alíquota de um anúncio — do cadastro vinculado (mlItemId →
+ * SKU) ou, em kit sem SKU próprio, da composição cadastrada. Os avisos
+ * acionáveis (sem SKU/custo/alíquota) são montados no client a partir desses
+ * campos + regime (`src/lib/lucratividade/row-issues.ts`).
+ */
+function resolveRowCosts(
   item: ItemBody,
   pricing: ResolvedProductPricing | null,
   taxBySku: Map<string, number>,
   taxByMlItemId: Map<string, number>,
-  kitContext:
-    | {
-        pricingBySku: Map<string, ResolvedProductPricing>;
-        kitsByMlItemId: Map<string, KitComponent[]>;
-      }
-    | undefined,
-  pmaLookup: PmaLookup | undefined,
+  kitContext: KitContext | undefined,
   effectiveSku: string | null | undefined,
-): FastRowFields {
-  const warnings: string[] = [];
-
+): RowCostResolution {
   const sku = effectiveSku ?? getItemSku(item);
-  let productCost = pricing?.pricingCost ?? null;
-  let extraCosts = pricing?.extraCosts ?? null;
-  let taxRatePercent =
+  const taxRatePercent =
     taxByMlItemId.get(item.id) ??
     (sku ? (taxBySku.get(normalizeProductSku(sku)) ?? null) : null);
-  let isKitComposition = false;
-  let kitComponents: KitComponent[] | null = null;
 
   if (!sku && isKitItem(item) && kitContext) {
     const components = kitContext.kitsByMlItemId.get(item.id);
@@ -357,43 +397,51 @@ function buildFastRowPreview(
         kitContext.pricingBySku,
         taxBySku,
       );
-      productCost = resolved.productCost;
-      extraCosts = resolved.extraCosts;
-      taxRatePercent = resolved.taxRatePercent;
-      isKitComposition = true;
-      kitComponents = components;
-      if (resolved.missingSkus.length > 0) {
-        warnings.push(
-          `Kit com componente(s) sem cadastro em Meus produtos: ${resolved.missingSkus.join(", ")}.`,
-        );
-      }
+      return {
+        sku,
+        productCost: resolved.productCost,
+        extraCosts: resolved.extraCosts,
+        taxRatePercent: resolved.taxRatePercent,
+        isKitComposition: true,
+        kitComponents: components,
+        kitMissingSkus: resolved.missingSkus,
+      };
     }
   }
 
-  if (isKitComposition) {
-    // avisos de composição do kit já foram adicionados acima (componentes faltando, se houver)
-  } else if (!sku && isKitItem(item)) {
-    warnings.push(
-      "Anúncio kit sem SKU — cadastre a composição em Meus produtos > Kits sem SKU.",
-    );
-  } else if (!sku) {
-    warnings.push(
-      "Anúncio sem SKU — cadastre o produto em Meus produtos com o mesmo SKU do ML.",
-    );
-  } else if (!pricing) {
-    warnings.push(
-      `SKU ${sku} sem cadastro completo em Meus produtos — preencha o custo de precificação.`,
-    );
-  } else if (taxRatePercent === null) {
-    warnings.push(
-      `SKU ${sku} sem dados no relatório tributário — recalcule em Relatório tributário para obter o imposto.`,
-    );
-  }
+  return {
+    sku,
+    productCost: pricing?.pricingCost ?? null,
+    extraCosts: pricing?.extraCosts ?? null,
+    taxRatePercent,
+    isKitComposition: false,
+    kitComponents: null,
+    kitMissingSkus: [],
+  };
+}
+
+function buildFastRowPreview(
+  item: ItemBody,
+  pricing: ResolvedProductPricing | null,
+  taxBySku: Map<string, number>,
+  taxByMlItemId: Map<string, number>,
+  kitContext: KitContext | undefined,
+  pmaLookup: PmaLookup | undefined,
+  effectiveSku: string | null | undefined,
+): FastRowFields {
+  const costs = resolveRowCosts(
+    item,
+    pricing,
+    taxBySku,
+    taxByMlItemId,
+    kitContext,
+    effectiveSku,
+  );
 
   return {
     mlItemId: item.id,
     title: item.title,
-    sku,
+    sku: costs.sku,
     imageUrl: bestItemImageUrl(item) ?? null,
     permalink: buyerFacingItemPermalink(item.permalink, item.id),
     status: item.status,
@@ -402,20 +450,22 @@ function buildFastRowPreview(
     hasPromotion: false,
     listingTypeId: item.listing_type_id ?? null,
     listingTypeLabel: listingTypeLabelFromId(item.listing_type_id),
-    productCost,
-    extraCosts,
-    taxRatePercent,
+    productCost: costs.productCost,
+    extraCosts: costs.extraCosts,
+    taxRatePercent: costs.taxRatePercent,
     mlFeeAmount: null,
     mlFeeRebate: null,
     mlFeeRebateOrderId: null,
     shippingCost: null,
     breakdown: null,
     errors: [],
-    warnings,
+    warnings: [],
+    notes: [],
     isKit: isKitItem(item),
-    isKitComposition,
-    kitComponents,
-    pmaPrice: resolvePmaPrice(pmaLookup, item.id, sku),
+    isKitComposition: costs.isKitComposition,
+    kitComponents: costs.kitComponents,
+    kitMissingSkus: costs.kitMissingSkus,
+    pmaPrice: resolvePmaPrice(pmaLookup, item.id, costs.sku),
     pending: true,
   };
 }
@@ -427,61 +477,31 @@ async function buildRowForItem(
   pricing: ResolvedProductPricing | null,
   taxBySku: Map<string, number>,
   taxByMlItemId: Map<string, number>,
-  kitContext?: {
-    pricingBySku: Map<string, ResolvedProductPricing>;
-    kitsByMlItemId: Map<string, KitComponent[]>;
-  },
+  kitContext?: KitContext,
   pmaLookup?: PmaLookup,
   /** SKU cadastrado no Product vinculado por mlItemId, quando existe — sobrepõe o SKU ao vivo do anúncio (ver src/lib/product-resolver.ts). */
   effectiveSku?: string | null,
-): Promise<
-  Omit<
-    FinancialEvaluationRow,
-    | "acosPercent"
-    | "tacosPercent"
-    | "adsCost"
-    | "adsUnitsSold"
-    | "adsCostPerUnit"
-    | "adsPeriodDays"
-    | "marginAfterAdsPercent"
-    | "marginAfterAdsValue"
-    | "hasActiveAds"
-    | "adsStatus"
-    | "adsMetricsAvailable"
-  >
-> {
+): Promise<FastRowFields> {
   const errors: string[] = [];
   const warnings: string[] = [];
+  const notes: string[] = [];
 
-  const sku = effectiveSku ?? getItemSku(item);
-  let productCost = pricing?.pricingCost ?? null;
-  let extraCosts = pricing?.extraCosts ?? null;
-  let taxRatePercent =
-    taxByMlItemId.get(item.id) ??
-    (sku ? (taxBySku.get(normalizeProductSku(sku)) ?? null) : null);
-  let isKitComposition = false;
-  let kitComponents: KitComponent[] | null = null;
-
-  if (!sku && isKitItem(item) && kitContext) {
-    const components = kitContext.kitsByMlItemId.get(item.id);
-    if (components && components.length > 0) {
-      const resolved = resolveKitPricing(
-        components,
-        kitContext.pricingBySku,
-        taxBySku,
-      );
-      productCost = resolved.productCost;
-      extraCosts = resolved.extraCosts;
-      taxRatePercent = resolved.taxRatePercent;
-      isKitComposition = true;
-      kitComponents = components;
-      if (resolved.missingSkus.length > 0) {
-        warnings.push(
-          `Kit com componente(s) sem cadastro em Meus produtos: ${resolved.missingSkus.join(", ")}.`,
-        );
-      }
-    }
-  }
+  const {
+    sku,
+    productCost,
+    extraCosts,
+    taxRatePercent,
+    isKitComposition,
+    kitComponents,
+    kitMissingSkus,
+  } = resolveRowCosts(
+    item,
+    pricing,
+    taxBySku,
+    taxByMlItemId,
+    kitContext,
+    effectiveSku,
+  );
 
   let salePrice = item.price;
   let regularPrice: number | null = null;
@@ -499,30 +519,10 @@ async function buildRowForItem(
     hasPromotion = salePriceInfo.hasPromotion;
     currencyId = salePriceInfo.currencyId ?? currencyId;
   } catch (e) {
-    warnings.push(
+    notes.push(
       e instanceof Error
         ? `Preço promocional indisponível: ${e.message}`
         : "Preço promocional indisponível; usando preço do anúncio.",
-    );
-  }
-
-  if (isKitComposition) {
-    // avisos de composição do kit já foram adicionados acima (componentes faltando, se houver)
-  } else if (!sku && isKitItem(item)) {
-    warnings.push(
-      "Anúncio kit sem SKU — cadastre a composição em Meus produtos > Kits sem SKU.",
-    );
-  } else if (!sku) {
-    warnings.push(
-      "Anúncio sem SKU — cadastre o produto em Meus produtos com o mesmo SKU do ML.",
-    );
-  } else if (!pricing) {
-    warnings.push(
-      `SKU ${sku} sem cadastro completo em Meus produtos — preencha o custo de precificação.`,
-    );
-  } else if (taxRatePercent === null) {
-    warnings.push(
-      `SKU ${sku} sem dados no relatório tributário — recalcule em Relatório tributário para obter o imposto.`,
     );
   }
 
@@ -564,7 +564,7 @@ async function buildRowForItem(
       });
       shippingCost = shipping.applicable ? shipping.cost : 0;
       if (!shipping.applicable) {
-        warnings.push("Frete grátis não aplicável ou indisponível (considerado 0).");
+        notes.push("Frete grátis não aplicável ou indisponível (considerado 0).");
       }
     } catch (e) {
       errors.push(
@@ -601,7 +601,7 @@ async function buildRowForItem(
     if (lastRebate) {
       mlFeeRebate = lastRebate.rebate;
       mlFeeRebateOrderId = lastRebate.orderId;
-      warnings.push(
+      notes.push(
         `Desconto de tarifa baseado na última venda paga (pedido ${lastRebate.orderId}).`,
       );
     }
@@ -643,26 +643,45 @@ async function buildRowForItem(
     breakdown,
     errors,
     warnings,
+    notes,
     isKit: isKitItem(item),
     isKitComposition,
     kitComponents,
+    kitMissingSkus,
     pmaPrice: resolvePmaPrice(pmaLookup, item.id, sku),
   };
 }
+
+/** Por que a margem pós ADS não pôde ser calculada na página inteira. */
+export type AdsUnavailableReason = "lookback_limit" | "api_error";
+
+type AdsLoad = {
+  map: Map<string, ItemAdMetrics>;
+  available: boolean;
+  unavailableReason: AdsUnavailableReason | null;
+};
 
 async function loadAdsMetricsByItem(
   accessToken: string,
   siteId: string,
   itemIds?: string[],
   dateRange?: { dateFrom: string; dateTo: string },
-): Promise<{ map: Map<string, ItemAdMetrics>; available: boolean }> {
+): Promise<AdsLoad> {
+  const { dateFrom, dateTo } = dateRange ?? getProductAdsDateRange();
+  // A API de Product Ads recusa `date_from` com mais de 90 dias — nem tenta.
+  if (!isProductAdsMetricsRangeAvailable(dateFrom)) {
+    return {
+      map: new Map(),
+      available: false,
+      unavailableReason: "lookback_limit",
+    };
+  }
   try {
     const advertiserId = await fetchPadsAdvertiserId(accessToken, siteId);
     if (!advertiserId) {
-      return { map: new Map(), available: true };
+      return { map: new Map(), available: true, unavailableReason: null };
     }
 
-    const { dateFrom, dateTo } = dateRange ?? getProductAdsDateRange();
     const map = await fetchProductAdsMetricsByItem(accessToken, {
       advertiserId,
       siteId,
@@ -670,92 +689,16 @@ async function loadAdsMetricsByItem(
       dateTo,
       itemIds,
     });
-    return { map, available: true };
-  } catch {
-    return { map: new Map(), available: false };
+    return { map, available: true, unavailableReason: null };
+  } catch (e) {
+    return {
+      map: new Map(),
+      available: false,
+      unavailableReason: isProductAdsLookbackLimitError(e)
+        ? "lookback_limit"
+        : "api_error",
+    };
   }
-}
-
-type PeriodSaleAgg = {
-  itemId: string;
-  quantity: number;
-  revenue: number;
-  saleFeeSum: number;
-  saleFeeKnownQty: number;
-};
-
-function quantityFromOrderLine(line: { quantity?: unknown }): number {
-  const q = line.quantity;
-  if (typeof q === "number" && Number.isFinite(q)) return Math.max(0, q);
-  if (typeof q === "string") {
-    const n = parseInt(q, 10);
-    return Number.isFinite(n) ? Math.max(0, n) : 0;
-  }
-  return 0;
-}
-
-function revenueFromOrderLine(line: {
-  quantity?: unknown;
-  unit_price?: unknown;
-}): number {
-  const qty = quantityFromOrderLine(line);
-  const price = line.unit_price;
-  if (typeof price !== "number" || !Number.isFinite(price) || price < 0) {
-    return 0;
-  }
-  return price * qty;
-}
-
-function saleFeeFromOrderLine(line: { sale_fee?: unknown }): number | null {
-  const fee = line.sale_fee;
-  if (typeof fee === "number" && Number.isFinite(fee) && fee >= 0) {
-    return fee;
-  }
-  return null;
-}
-
-function listingIdFromOrderLine(line: {
-  item?: { id?: string };
-  item_id?: string;
-}): string | undefined {
-  return line.item?.id ?? line.item_id ?? undefined;
-}
-
-function aggregatePeriodSalesByItem(
-  orders: OrderSearchOrder[],
-): Map<string, PeriodSaleAgg> {
-  const byItem = new Map<string, PeriodSaleAgg>();
-
-  for (const order of orders) {
-    if (order.status === "cancelled") continue;
-    for (const line of order.order_items ?? []) {
-      const itemId = listingIdFromOrderLine(line);
-      if (!itemId) continue;
-      const quantity = quantityFromOrderLine(line);
-      const revenue = revenueFromOrderLine(line);
-      if (quantity <= 0 && revenue <= 0) continue;
-
-      const existing = byItem.get(itemId) ?? {
-        itemId,
-        quantity: 0,
-        revenue: 0,
-        saleFeeSum: 0,
-        saleFeeKnownQty: 0,
-      };
-      existing.quantity += quantity;
-      existing.revenue += revenue;
-
-      const saleFee = saleFeeFromOrderLine(line);
-      if (saleFee !== null && quantity > 0) {
-        existing.saleFeeSum += saleFee;
-        existing.saleFeeKnownQty += quantity;
-      }
-
-      byItem.set(itemId, existing);
-    }
-  }
-
-  return byItem;
 }
 
 async function buildRowForPeriodItem(
@@ -766,89 +709,39 @@ async function buildRowForPeriodItem(
   agg: PeriodSaleAgg,
   taxBySku: Map<string, number>,
   taxByMlItemId: Map<string, number>,
-  kitContext?: {
-    pricingBySku: Map<string, ResolvedProductPricing>;
-    kitsByMlItemId: Map<string, KitComponent[]>;
-  },
+  kitContext?: KitContext,
   pmaLookup?: PmaLookup,
   /** SKU cadastrado no Product vinculado por mlItemId, quando existe — sobrepõe o SKU ao vivo do anúncio (ver src/lib/product-resolver.ts). */
   effectiveSku?: string | null,
-): Promise<
-  Omit<
-    FinancialEvaluationRow,
-    | "acosPercent"
-    | "tacosPercent"
-    | "adsCost"
-    | "adsUnitsSold"
-    | "adsCostPerUnit"
-    | "adsPeriodDays"
-    | "marginAfterAdsPercent"
-    | "marginAfterAdsValue"
-    | "hasActiveAds"
-    | "adsStatus"
-    | "adsMetricsAvailable"
-  >
-> {
+): Promise<FastRowFields> {
   const errors: string[] = [];
   const warnings: string[] = [];
+  const notes: string[] = [];
 
-  const sku = effectiveSku ?? getItemSku(item);
-  let productCost = pricing?.pricingCost ?? null;
-  let extraCosts = pricing?.extraCosts ?? null;
-  let taxRatePercent =
-    taxByMlItemId.get(item.id) ??
-    (sku ? (taxBySku.get(normalizeProductSku(sku)) ?? null) : null);
-  let isKitComposition = false;
-  let kitComponents: KitComponent[] | null = null;
-
-  if (!sku && isKitItem(item) && kitContext) {
-    const components = kitContext.kitsByMlItemId.get(item.id);
-    if (components && components.length > 0) {
-      const resolved = resolveKitPricing(
-        components,
-        kitContext.pricingBySku,
-        taxBySku,
-      );
-      productCost = resolved.productCost;
-      extraCosts = resolved.extraCosts;
-      taxRatePercent = resolved.taxRatePercent;
-      isKitComposition = true;
-      kitComponents = components;
-      if (resolved.missingSkus.length > 0) {
-        warnings.push(
-          `Kit com componente(s) sem cadastro em Meus produtos: ${resolved.missingSkus.join(", ")}.`,
-        );
-      }
-    }
-  }
+  const {
+    sku,
+    productCost,
+    extraCosts,
+    taxRatePercent,
+    isKitComposition,
+    kitComponents,
+    kitMissingSkus,
+  } = resolveRowCosts(
+    item,
+    pricing,
+    taxBySku,
+    taxByMlItemId,
+    kitContext,
+    effectiveSku,
+  );
 
   const salePrice =
     agg.quantity > 0 ? roundMoney(agg.revenue / agg.quantity) : 0;
   const currencyId = item.currency_id ?? null;
 
-  warnings.push(
+  notes.push(
     `Preço médio de ${agg.quantity} un. vendidas no período (custos/impostos do cadastro atual).`,
   );
-
-  if (isKitComposition) {
-    // avisos de composição do kit já foram adicionados acima (componentes faltando, se houver)
-  } else if (!sku && isKitItem(item)) {
-    warnings.push(
-      "Anúncio kit sem SKU — cadastre a composição em Meus produtos > Kits sem SKU.",
-    );
-  } else if (!sku) {
-    warnings.push(
-      "Anúncio sem SKU — cadastre o produto em Meus produtos com o mesmo SKU do ML.",
-    );
-  } else if (!pricing) {
-    warnings.push(
-      `SKU ${sku} sem cadastro completo em Meus produtos — preencha o custo de precificação.`,
-    );
-  } else if (taxRatePercent === null) {
-    warnings.push(
-      `SKU ${sku} sem dados no relatório tributário — recalcule em Relatório tributário para obter o imposto.`,
-    );
-  }
 
   let mlFeeAmount: number | null = null;
   let listingTypeLabel = listingTypeLabelFromId(item.listing_type_id);
@@ -858,7 +751,7 @@ async function buildRowForPeriodItem(
     if (agg.saleFeeKnownQty > 0) {
       mlFeeAmount = roundMoney(agg.saleFeeSum / agg.saleFeeKnownQty);
       usedOrderFee = true;
-      warnings.push("Taxa ML média das vendas do período.");
+      notes.push("Taxa ML média das vendas do período.");
       return;
     }
     if (!item.category_id || !item.listing_type_id) {
@@ -877,7 +770,7 @@ async function buildRowForPeriodItem(
       });
       mlFeeAmount = fee.feeAmount;
       listingTypeLabel = fee.listingTypeLabel ?? listingTypeLabel;
-      warnings.push(
+      notes.push(
         "Taxa ML estimada no preço médio (pedido sem sale_fee).",
       );
     } catch (e) {
@@ -898,9 +791,9 @@ async function buildRowForPeriodItem(
       });
       shippingCost = shipping.applicable ? shipping.cost : 0;
       if (!shipping.applicable) {
-        warnings.push("Frete grátis não aplicável ou indisponível (considerado 0).");
+        notes.push("Frete grátis não aplicável ou indisponível (considerado 0).");
       } else {
-        warnings.push("Frete estimado no preço médio do período.");
+        notes.push("Frete estimado no preço médio do período.");
       }
     } catch (e) {
       errors.push(
@@ -953,10 +846,14 @@ async function buildRowForPeriodItem(
     breakdown,
     errors,
     warnings,
+    notes,
     isKit: isKitItem(item),
     isKitComposition,
     kitComponents,
+    kitMissingSkus,
     pmaPrice: resolvePmaPrice(pmaLookup, item.id, sku),
+    periodUnitsSold: agg.quantity,
+    periodRevenue: roundMoney(agg.revenue),
   };
 }
 
@@ -1037,272 +934,46 @@ async function applyMinPriceRefinement(
   };
 }
 
-export async function loadFinancialEvaluationRows(
-  accessToken: string,
-  userId: number,
-  organizationId: string,
-  options?: {
-    itemIds?: string[];
-    targetMarginPercent?: number;
-    marginBasis?: MarginBasis;
-    /** Chamado a cada linha pronta (com ADS já aplicado), pra permitir streaming incremental. */
-    onRow?: (row: FinancialEvaluationRow) => void;
-  },
-): Promise<FinancialEvaluationRow[]> {
-  const listingIds =
-    options?.itemIds && options.itemIds.length > 0
-      ? [...new Set(options.itemIds)]
-      : await fetchOperationalListingIds(accessToken, userId, organizationId);
-
-  if (listingIds.length === 0) return [];
-
-  const siteId = listingIds[0]
-    ? siteIdFromItemId(listingIds[0])
-    : "MLB";
-
-  const [items, adsLoad] = await Promise.all([
-    fetchItemsByIdsBatched(accessToken, listingIds),
-    loadAdsMetricsByItem(accessToken, siteId, listingIds),
-  ]);
-
-  const operationalItems = items.filter((item) =>
-    isOperationalStatus(item.status),
-  );
-
-  // SKU "efetivo" por anúncio: segue o cadastro do Product vinculado via
-  // mlItemId quando existe (estável mesmo se o SKU mudar no anúncio ML);
-  // cai pro SKU ao vivo do anúncio quando não há vínculo.
-  const effectiveSkuByItemId = await resolveEffectiveSkuByItemId(
-    organizationId,
-    operationalItems.map((item) => ({ id: item.id, sku: getItemSku(item) })),
-  );
-
-  const kitItemIds = operationalItems
-    .filter((item) => !getItemSku(item) && isKitItem(item))
-    .map((item) => item.id);
-  const kitsByMlItemId = await loadKitsByMlItemId(organizationId, kitItemIds);
-  const kitComponentSkus = [...kitsByMlItemId.values()].flatMap((components) =>
-    components.map((c) => c.sku),
-  );
-
-  const skus = [...effectiveSkuByItemId.values()]
-    .filter((sku): sku is string => Boolean(sku))
-    .concat(kitComponentSkus);
-  const [pricingLookup, taxFromReport, productsForPma, companySettings] =
-    await Promise.all([
-      loadProductsMapBySku(
-        organizationId,
-        skus,
-        operationalItems.map((item) => item.id),
-      ),
-      loadProductTaxFromLatestReport(userId),
-      prisma.product.findMany({
-        where: {
-          organizationId,
-          OR: [
-            { mlItemId: { in: operationalItems.map((item) => item.id) } },
-            { sku: { in: skus } },
-          ],
-        },
-        select: { mlItemId: true, sku: true, pmaPrice: true },
-      }),
-      getCompanySettings(organizationId),
-    ]);
-  const { byMlItemId: pricingByMlItemId, bySku: pricingBySku } = pricingLookup;
-  const taxBySku =
-    companySettings.taxRegime === "SIMPLES"
-      ? new Map(
-          companySettings.simplesAliquotaEfetivaPercent != null
-            ? skus.map((sku) => [
-                normalizeProductSku(sku),
-                companySettings.simplesAliquotaEfetivaPercent!,
-              ])
-            : [],
-        )
-      : new Map(
-          [...taxFromReport.bySku].map(([sku, entry]) => [sku, entry.taxPercent]),
-        );
-  const taxByMlItemId =
-    companySettings.taxRegime === "SIMPLES"
-      ? new Map<string, number>()
-      : new Map(
-          [...taxFromReport.byMlItemId].map(([mlItemId, entry]) => [
-            mlItemId,
-            entry.taxPercent,
-          ]),
-        );
-  const pmaLookup = indexPmaLookup(productsForPma);
-
-  // Modo streaming: emite uma pré-visualização de TODAS as linhas na hora
-  // (título/imagem/custo/PMA já disponíveis, sem chamada ao ML) — antes do
-  // preço/taxa/frete/rebate/margem, que só resolvem no loop lento abaixo.
-  // O client desborra cada linha individualmente quando o `onRow` final
-  // (com `pending` ausente) daquele item chegar.
-  if (options?.onRow) {
-    for (const item of operationalItems) {
-      const sku = effectiveSkuByItemId.get(item.id) ?? null;
-      const pricing =
-        pricingByMlItemId.get(item.id) ??
-        (sku ? (pricingBySku.get(normalizeProductSku(sku)) ?? null) : null);
-      const preview = buildFastRowPreview(
-        item,
-        pricing,
-        taxBySku,
-        taxByMlItemId,
-        { pricingBySku, kitsByMlItemId },
-        pmaLookup,
-        sku,
-      );
-      const withAds = applyAdsToRow(preview, adsLoad.map.get(item.id), adsLoad.available);
-      if (!adsLoad.available) {
-        withAds.warnings.push(
-          "Métricas de Product Ads indisponíveis; margem pós ADS não calculada.",
-        );
-      }
-      options.onRow(withAds);
+/**
+ * Alíquota por anúncio/SKU conforme o regime: no Simples é a alíquota efetiva
+ * única da empresa (vale também pra anúncio sem SKU); fora dele, o % apurado
+ * no relatório tributário (último mês fechado, com fallback).
+ */
+function buildTaxLookups(
+  companySettings: CompanySettings,
+  taxFromReport: ProductTaxReportLookup,
+  skus: string[],
+  itemIds: string[],
+): { taxBySku: Map<string, number>; taxByMlItemId: Map<string, number> } {
+  if (companySettings.taxRegime === "SIMPLES") {
+    const rate = companySettings.simplesAliquotaEfetivaPercent;
+    if (rate == null) {
+      return { taxBySku: new Map(), taxByMlItemId: new Map() };
     }
-  }
-
-  const baseRows = await mapWithConcurrency(
-    operationalItems,
-    5,
-    async (item) => {
-      const sku = effectiveSkuByItemId.get(item.id) ?? null;
-      const pricing =
-        pricingByMlItemId.get(item.id) ??
-        (sku ? (pricingBySku.get(normalizeProductSku(sku)) ?? null) : null);
-      return buildRowForItem(
-        accessToken,
-        userId,
-        item,
-        pricing,
-        taxBySku,
-        taxByMlItemId,
-        {
-          pricingBySku,
-          kitsByMlItemId,
-        },
-        pmaLookup,
-        sku,
-      );
-    },
-    options?.onRow
-      ? (row) => {
-          const withAds = applyAdsToRow(
-            row,
-            adsLoad.map.get(row.mlItemId),
-            adsLoad.available,
-          );
-          if (!adsLoad.available) {
-            withAds.warnings.push(
-              "Métricas de Product Ads indisponíveis; margem pós ADS não calculada.",
-            );
-          }
-          options.onRow!(withAds);
-        }
-      : undefined,
-  );
-
-  const rows = baseRows.map((row) => {
-    const withAds = applyAdsToRow(
-      row,
-      adsLoad.map.get(row.mlItemId),
-      adsLoad.available,
-    );
-    if (!adsLoad.available) {
-      withAds.warnings.push(
-        "Métricas de Product Ads indisponíveis; margem pós ADS não calculada.",
-      );
-    }
-    return withAds;
-  });
-
-  const itemById = new Map(operationalItems.map((item) => [item.id, item]));
-
-  const targetMarginPercent = options?.targetMarginPercent;
-  const marginBasis = options?.marginBasis ?? "contribution";
-  const shouldRefineMinPrice =
-    targetMarginPercent !== undefined &&
-    Number.isFinite(targetMarginPercent) &&
-    targetMarginPercent >= 0 &&
-    targetMarginPercent <= 100;
-
-  const rowsWithMinPrice = shouldRefineMinPrice
-    ? await mapWithConcurrency(rows, 3, async (row) => {
-        const item = itemById.get(row.mlItemId);
-        if (!item) return row;
-        return applyMinPriceRefinement(
-          accessToken,
-          userId,
-          row,
-          item,
-          targetMarginPercent,
-          marginBasis,
-        );
-      })
-    : rows;
-
-  return rowsWithMinPrice.sort((a, b) => {
-    const keyA = (a.sku ?? a.title ?? a.mlItemId).toLowerCase();
-    const keyB = (b.sku ?? b.title ?? b.mlItemId).toLowerCase();
-    return keyA.localeCompare(keyB, "pt-BR");
-  });
-}
-
-export type FinancialEvaluationPeriodResult = {
-  items: FinancialEvaluationRow[];
-  from: string;
-  to: string;
-  salesCount: number;
-  periodDays: number;
-};
-
-export async function loadFinancialEvaluationRowsForPeriod(
-  accessToken: string,
-  userId: number,
-  organizationId: string,
-  fromYmd: string,
-  toYmd: string,
-  options?: {
-    /** Chamado a cada linha pronta (com ADS já aplicado), pra permitir streaming incremental. */
-    onRow?: (row: FinancialEvaluationRow) => void;
-  },
-): Promise<FinancialEvaluationPeriodResult> {
-  const range = calendarYmdRangeToUtc(fromYmd, toYmd);
-  if (!range) {
-    throw new Error("Invalid date range");
-  }
-
-  const orders = await fetchPaidOrdersByPeriod(
-    accessToken,
-    userId,
-    range.from,
-    range.to,
-  );
-  const salesByItem = aggregatePeriodSalesByItem(orders);
-  const itemIds = [...salesByItem.keys()];
-
-  if (itemIds.length === 0) {
     return {
-      items: [],
-      from: range.dateFrom,
-      to: range.dateTo,
-      salesCount: 0,
-      periodDays: range.periodDays,
+      taxBySku: new Map(skus.map((sku) => [normalizeProductSku(sku), rate])),
+      taxByMlItemId: new Map(itemIds.map((id) => [id, rate])),
     };
   }
+  return {
+    taxBySku: new Map(
+      [...taxFromReport.bySku].map(([sku, entry]) => [sku, entry.taxPercent]),
+    ),
+    taxByMlItemId: new Map(
+      [...taxFromReport.byMlItemId].map(([mlItemId, entry]) => [
+        mlItemId,
+        entry.taxPercent,
+      ]),
+    ),
+  };
+}
 
-  const siteId = siteIdFromItemId(itemIds[0]!) || "MLB";
-  const [items, adsLoad] = await Promise.all([
-    fetchItemsByIdsBatched(accessToken, itemIds),
-    loadAdsMetricsByItem(accessToken, siteId, itemIds, {
-      dateFrom: range.dateFrom,
-      dateTo: range.dateTo,
-    }),
-  ]);
-
-  const itemById = new Map(items.map((item) => [item.id, item]));
-
+/** Custo/imposto/PMA de um conjunto de anúncios já buscados no ML. */
+async function loadRowContext(
+  userId: number,
+  organizationId: string,
+  items: ItemBody[],
+) {
   // SKU "efetivo" por anúncio: segue o cadastro do Product vinculado via
   // mlItemId quando existe (estável mesmo se o SKU mudar no anúncio ML);
   // cai pro SKU ao vivo do anúncio quando não há vínculo.
@@ -1318,135 +989,352 @@ export async function loadFinancialEvaluationRowsForPeriod(
   const kitComponentSkus = [...kitsByMlItemId.values()].flatMap((components) =>
     components.map((c) => c.sku),
   );
+
+  const itemIds = items.map((item) => item.id);
   const skus = [...effectiveSkuByItemId.values()]
     .filter((sku): sku is string => Boolean(sku))
     .concat(kitComponentSkus);
   const [pricingLookup, taxFromReport, productsForPma, companySettings] =
     await Promise.all([
-      loadProductsMapBySku(
-        organizationId,
-        skus,
-        items.map((item) => item.id),
-      ),
+      loadProductsMapBySku(organizationId, skus, itemIds),
       loadProductTaxFromLatestReport(userId),
       prisma.product.findMany({
         where: {
           organizationId,
-          OR: [
-            { mlItemId: { in: items.map((item) => item.id) } },
-            { sku: { in: skus } },
-          ],
+          OR: [{ mlItemId: { in: itemIds } }, { sku: { in: skus } }],
         },
         select: { mlItemId: true, sku: true, pmaPrice: true },
       }),
       getCompanySettings(organizationId),
     ]);
   const { byMlItemId: pricingByMlItemId, bySku: pricingBySku } = pricingLookup;
-  const taxBySku =
-    companySettings.taxRegime === "SIMPLES"
-      ? new Map(
-          companySettings.simplesAliquotaEfetivaPercent != null
-            ? skus.map((sku) => [
-                normalizeProductSku(sku),
-                companySettings.simplesAliquotaEfetivaPercent!,
-              ])
-            : [],
-        )
-      : new Map(
-          [...taxFromReport.bySku].map(([sku, entry]) => [sku, entry.taxPercent]),
-        );
-  const taxByMlItemId =
-    companySettings.taxRegime === "SIMPLES"
-      ? new Map<string, number>()
-      : new Map(
-          [...taxFromReport.byMlItemId].map(([mlItemId, entry]) => [
-            mlItemId,
-            entry.taxPercent,
-          ]),
-        );
-  const pmaLookup = indexPmaLookup(productsForPma);
+  const { taxBySku, taxByMlItemId } = buildTaxLookups(
+    companySettings,
+    taxFromReport,
+    skus,
+    itemIds,
+  );
+  const kitContext: KitContext = { pricingBySku, kitsByMlItemId };
 
-  const orderedAggs = itemIds
-    .map((id) => {
-      const agg = salesByItem.get(id);
-      const item = itemById.get(id);
-      if (!agg || !item) return null;
-      return { agg, item };
-    })
-    .filter((row): row is { agg: PeriodSaleAgg; item: ItemBody } => row !== null);
+  return {
+    taxBySku,
+    taxByMlItemId,
+    kitContext,
+    pmaLookup: indexPmaLookup(productsForPma),
+    skuFor: (itemId: string) => effectiveSkuByItemId.get(itemId) ?? null,
+    pricingFor: (itemId: string, sku: string | null) =>
+      pricingByMlItemId.get(itemId) ??
+      (sku ? (pricingBySku.get(normalizeProductSku(sku)) ?? null) : null),
+  };
+}
+
+function sortRowsByProduct(rows: FinancialEvaluationRow[]) {
+  return rows.sort((a, b) => {
+    const keyA = (a.sku ?? a.title ?? a.mlItemId).toLowerCase();
+    const keyB = (b.sku ?? b.title ?? b.mlItemId).toLowerCase();
+    return keyA.localeCompare(keyB, "pt-BR");
+  });
+}
+
+/** Fatos da página inteira, emitidos antes das linhas no streaming. */
+export type FinancialEvaluationMeta = {
+  /** Anúncios que vão chegar (linhas). */
+  listingCount: number;
+  adsAvailable: boolean;
+  adsUnavailableReason: AdsUnavailableReason | null;
+  /** Só período: vendas de anúncios que o ML não devolveu mais (excluídos/
+   * inacessíveis) — somem da tabela, mas são reportadas pra fechar a conta. */
+  droppedListings?: { count: number; units: number; revenue: number };
+};
+
+export type FinancialEvaluationProgress = {
+  stage: "orders";
+  fetched: number;
+  total: number | null;
+};
+
+type LoadStreamOptions = {
+  /** Chamado a cada linha pronta (com ADS já aplicado), pra permitir streaming incremental. */
+  onRow?: (row: FinancialEvaluationRow) => void;
+  onMeta?: (meta: FinancialEvaluationMeta) => void;
+  onProgress?: (progress: FinancialEvaluationProgress) => void;
+  signal?: AbortSignal;
+};
+
+export async function loadFinancialEvaluationRows(
+  accessToken: string,
+  userId: number,
+  organizationId: string,
+  options?: LoadStreamOptions & {
+    itemIds?: string[];
+    targetMarginPercent?: number;
+    marginBasis?: MarginBasis;
+  },
+): Promise<FinancialEvaluationRow[]> {
+  const signal = options?.signal;
+  const listingIds =
+    options?.itemIds && options.itemIds.length > 0
+      ? [...new Set(options.itemIds)]
+      : await fetchOperationalListingIds(accessToken, userId, organizationId);
+
+  if (listingIds.length === 0) {
+    options?.onMeta?.({
+      listingCount: 0,
+      adsAvailable: true,
+      adsUnavailableReason: null,
+    });
+    return [];
+  }
+
+  const siteId = listingIds[0]
+    ? siteIdFromItemId(listingIds[0])
+    : "MLB";
+
+  const [items, adsLoad] = await Promise.all([
+    fetchItemsByIdsBatched(accessToken, listingIds),
+    loadAdsMetricsByItem(accessToken, siteId, listingIds),
+  ]);
+  signal?.throwIfAborted();
+
+  const operationalItems = items.filter((item) =>
+    isOperationalStatus(item.status),
+  );
+  const ctx = await loadRowContext(userId, organizationId, operationalItems);
+  signal?.throwIfAborted();
+
+  options?.onMeta?.({
+    listingCount: operationalItems.length,
+    adsAvailable: adsLoad.available,
+    adsUnavailableReason: adsLoad.unavailableReason,
+  });
+
+  // Modo streaming: emite uma pré-visualização de TODAS as linhas na hora
+  // (título/imagem/custo/PMA já disponíveis, sem chamada ao ML) — antes do
+  // preço/taxa/frete/rebate/margem, que só resolvem no loop lento abaixo.
+  // O client desborra cada linha individualmente quando o `onRow` final
+  // (com `pending` ausente) daquele item chegar.
+  if (options?.onRow) {
+    for (const item of operationalItems) {
+      const sku = ctx.skuFor(item.id);
+      const preview = buildFastRowPreview(
+        item,
+        ctx.pricingFor(item.id, sku),
+        ctx.taxBySku,
+        ctx.taxByMlItemId,
+        ctx.kitContext,
+        ctx.pmaLookup,
+        sku,
+      );
+      options.onRow(
+        applyAdsToRow(preview, adsLoad.map.get(item.id), adsLoad.available),
+      );
+    }
+  }
 
   const baseRows = await mapWithConcurrency(
-    orderedAggs,
+    operationalItems,
     5,
-    async ({ agg, item }) => {
-      const sku = effectiveSkuByItemId.get(item.id) ?? null;
-      const pricing =
-        pricingByMlItemId.get(item.id) ??
-        (sku ? (pricingBySku.get(normalizeProductSku(sku)) ?? null) : null);
-      return buildRowForPeriodItem(
+    async (item) => {
+      const sku = ctx.skuFor(item.id);
+      return buildRowForItem(
         accessToken,
         userId,
         item,
-        pricing,
-        agg,
-        taxBySku,
-        taxByMlItemId,
-        {
-          pricingBySku,
-          kitsByMlItemId,
-        },
-        pmaLookup,
+        ctx.pricingFor(item.id, sku),
+        ctx.taxBySku,
+        ctx.taxByMlItemId,
+        ctx.kitContext,
+        ctx.pmaLookup,
         sku,
       );
     },
     options?.onRow
       ? (row) => {
-          const withAds = applyAdsToRow(
-            row,
-            adsLoad.map.get(row.mlItemId),
-            adsLoad.available,
+          options.onRow!(
+            applyAdsToRow(
+              row,
+              adsLoad.map.get(row.mlItemId),
+              adsLoad.available,
+            ),
           );
-          if (!adsLoad.available) {
-            withAds.warnings.push(
-              "Métricas de Product Ads indisponíveis; margem pós ADS não calculada.",
-            );
-          }
-          options.onRow!(withAds);
         }
       : undefined,
+    signal,
   );
 
-  const rows = baseRows.map((row) => {
-    const withAds = applyAdsToRow(
-      row,
-      adsLoad.map.get(row.mlItemId),
-      adsLoad.available,
-      range.periodDays,
-    );
-    if (!adsLoad.available) {
-      withAds.warnings.push(
-        "Métricas de Product Ads indisponíveis; margem pós ADS não calculada.",
-      );
-    }
-    return withAds;
-  });
+  const rows = baseRows.map((row) =>
+    applyAdsToRow(row, adsLoad.map.get(row.mlItemId), adsLoad.available),
+  );
 
-  const sorted = rows.sort((a, b) => {
-    const keyA = (a.sku ?? a.title ?? a.mlItemId).toLowerCase();
-    const keyB = (b.sku ?? b.title ?? b.mlItemId).toLowerCase();
-    return keyA.localeCompare(keyB, "pt-BR");
-  });
+  const itemById = new Map(operationalItems.map((item) => [item.id, item]));
 
+  const targetMarginPercent = options?.targetMarginPercent;
+  const marginBasis = options?.marginBasis ?? "contribution";
+  const shouldRefineMinPrice =
+    targetMarginPercent !== undefined &&
+    Number.isFinite(targetMarginPercent) &&
+    targetMarginPercent >= 0 &&
+    targetMarginPercent <= 100;
+
+  const rowsWithMinPrice = shouldRefineMinPrice
+    ? await mapWithConcurrency(
+        rows,
+        3,
+        async (row) => {
+          const item = itemById.get(row.mlItemId);
+          if (!item) return row;
+          return applyMinPriceRefinement(
+            accessToken,
+            userId,
+            row,
+            item,
+            targetMarginPercent,
+            marginBasis,
+          );
+        },
+        undefined,
+        signal,
+      )
+    : rows;
+
+  return sortRowsByProduct(rowsWithMinPrice);
+}
+
+export type FinancialEvaluationPeriodResult = {
+  items: FinancialEvaluationRow[];
+  from: string;
+  to: string;
+  salesCount: number;
+  periodDays: number;
+  meta: FinancialEvaluationMeta;
+};
+
+export async function loadFinancialEvaluationRowsForPeriod(
+  accessToken: string,
+  userId: number,
+  organizationId: string,
+  fromYmd: string,
+  toYmd: string,
+  options?: LoadStreamOptions,
+): Promise<FinancialEvaluationPeriodResult> {
+  const signal = options?.signal;
+  const range = calendarYmdRangeToUtc(fromYmd, toYmd);
+  if (!range) {
+    throw new Error("Invalid date range");
+  }
+
+  const orders = await fetchPaidOrdersByPeriod(
+    accessToken,
+    userId,
+    range.from,
+    range.to,
+    undefined,
+    {
+      signal,
+      onPage: options?.onProgress
+        ? ({ fetched, total }) =>
+            options.onProgress!({ stage: "orders", fetched, total })
+        : undefined,
+    },
+  );
+  const salesByItem = aggregatePeriodSalesByItem(orders);
+  const itemIds = [...salesByItem.keys()];
   const salesCount = [...salesByItem.values()].reduce(
     (sum, agg) => sum + agg.quantity,
     0,
   );
 
+  if (itemIds.length === 0) {
+    const meta: FinancialEvaluationMeta = {
+      listingCount: 0,
+      adsAvailable: true,
+      adsUnavailableReason: null,
+      droppedListings: { count: 0, units: 0, revenue: 0 },
+    };
+    options?.onMeta?.(meta);
+    return {
+      items: [],
+      from: range.dateFrom,
+      to: range.dateTo,
+      salesCount: 0,
+      periodDays: range.periodDays,
+      meta,
+    };
+  }
+
+  const siteId = siteIdFromItemId(itemIds[0]!) || "MLB";
+  const [items, adsLoad] = await Promise.all([
+    fetchItemsByIdsBatched(accessToken, itemIds),
+    loadAdsMetricsByItem(accessToken, siteId, itemIds, {
+      dateFrom: range.dateFrom,
+      dateTo: range.dateTo,
+    }),
+  ]);
+  signal?.throwIfAborted();
+
+  const itemById = new Map(items.map((item) => [item.id, item]));
+  const ctx = await loadRowContext(userId, organizationId, items);
+  signal?.throwIfAborted();
+
+  const orderedAggs: Array<{ agg: PeriodSaleAgg; item: ItemBody }> = [];
+  const dropped = { count: 0, units: 0, revenue: 0 };
+  for (const id of itemIds) {
+    const agg = salesByItem.get(id);
+    if (!agg) continue;
+    const item = itemById.get(id);
+    if (!item) {
+      dropped.count += 1;
+      dropped.units += agg.quantity;
+      dropped.revenue = roundMoney(dropped.revenue + agg.revenue);
+      continue;
+    }
+    orderedAggs.push({ agg, item });
+  }
+
+  const meta: FinancialEvaluationMeta = {
+    listingCount: orderedAggs.length,
+    adsAvailable: adsLoad.available,
+    adsUnavailableReason: adsLoad.unavailableReason,
+    droppedListings: dropped,
+  };
+  options?.onMeta?.(meta);
+
+  const withAds = (row: FastRowFields) =>
+    applyAdsToRow(
+      row,
+      adsLoad.map.get(row.mlItemId),
+      adsLoad.available,
+      range.periodDays,
+    );
+
+  const baseRows = await mapWithConcurrency(
+    orderedAggs,
+    5,
+    async ({ agg, item }) => {
+      const sku = ctx.skuFor(item.id);
+      return buildRowForPeriodItem(
+        accessToken,
+        userId,
+        item,
+        ctx.pricingFor(item.id, sku),
+        agg,
+        ctx.taxBySku,
+        ctx.taxByMlItemId,
+        ctx.kitContext,
+        ctx.pmaLookup,
+        sku,
+      );
+    },
+    options?.onRow ? (row) => options.onRow!(withAds(row)) : undefined,
+    signal,
+  );
+
   return {
-    items: sorted,
+    items: sortRowsByProduct(baseRows.map(withAds)),
     from: range.dateFrom,
     to: range.dateTo,
     salesCount,
     periodDays: range.periodDays,
+    meta,
   };
 }

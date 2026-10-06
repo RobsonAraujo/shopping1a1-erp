@@ -4,6 +4,8 @@ import type { MarginBasis } from "@/lib/pricing/financial-margin";
 import { requireOrganization } from "@/lib/api/api-auth";
 import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 
+export const maxDuration = 300;
+
 export async function GET(request: NextRequest) {
   const auth = await requireOrganization();
   if (!auth.ok) {
@@ -38,20 +40,31 @@ export async function GET(request: NextRequest) {
       itemIds,
       targetMarginPercent,
       marginBasis,
+      signal: request.signal,
     });
+    const returnedIds = new Set(rows.map((row) => row.mlItemId));
 
     return NextResponse.json({
       targetMarginPercent,
       marginBasis,
       patches: rows.map((row) => ({
         mlItemId: row.mlItemId,
+        // Preço de hoje do anúncio — no modo período a linha da tabela traz o
+        // preço médio vendido; a comparação "quanto falta subir" usa este.
+        currentSalePrice: row.salePrice,
         minSalePriceForTarget: row.minSalePriceForTarget ?? null,
         minSalePriceTargetPercent: row.minSalePriceTargetPercent ?? null,
         minSalePriceMarginBasis: row.minSalePriceMarginBasis ?? null,
         minSalePriceRefined: row.minSalePriceRefined ?? false,
       })),
+      // Anúncios pedidos que não estão mais ativos/pausados (ex.: encerrados
+      // que ainda aparecem num período de vendas) — sem preço p/ meta.
+      notOperationalIds: (itemIds ?? []).filter((id) => !returnedIds.has(id)),
     });
   } catch (e) {
+    if (request.signal.aborted) {
+      return new NextResponse(null, { status: 499 });
+    }
     logServerError("api/financial-evaluation/min-prices GET", e);
     return NextResponse.json(apiErrorPayload(e, "min_prices_failed"), {
       status: 502,

@@ -89,6 +89,20 @@ export function validateWholesaleReductionSettings(
   return null;
 }
 
+/** Só as faixas de atacado de um objeto que as contém (ex.: `CompanySettings`). */
+export function pickWholesaleReductions(
+  settings: WholesaleReductionSettings,
+): WholesaleReductionSettings {
+  return {
+    level1ReductionPercent: settings.level1ReductionPercent,
+    level2ReductionPercent: settings.level2ReductionPercent,
+    level3ReductionPercent: settings.level3ReductionPercent,
+    level1MinPurchaseUnit: settings.level1MinPurchaseUnit,
+    level2MinPurchaseUnit: settings.level2MinPurchaseUnit,
+    level3MinPurchaseUnit: settings.level3MinPurchaseUnit,
+  };
+}
+
 export function wholesaleMinPurchaseUnitsFromSettings(
   settings: WholesaleReductionSettings,
 ): [number, number, number] {

@@ -1,159 +1,72 @@
-import { useMemo } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { BlurredValue } from "@/components/shared/BlurredValue";
 import {
-  computeFinancialMargin,
-  computeMarginAfterAds,
-  computeMinSalePriceForTargetMargin,
   formatFinancialMoney,
   formatFinancialPercent,
   marginBasisLabel,
   type MarginBasis,
-  type MinSalePriceResult,
 } from "@/lib/pricing/financial-margin";
 import type { FinancialEvaluationRow } from "@/lib/lucratividade/financial-evaluation-data";
+import {
+  MARGIN_EXCLUSION_LABEL,
+  marginExclusionReason,
+  type MarginExclusionReason,
+} from "@/lib/lucratividade/margin-summary";
+import type { TargetPriceCell } from "@/lib/lucratividade/target-margin";
+import { valueToneClass } from "@/lib/ui/tone";
 import { cn } from "@/lib/utils";
-import { BlurredValue } from "@/components/shared/BlurredValue";
-import type { SortDir, SortKey } from "@/components/lucratividade/financial-evaluation-table/types";
-
-export const currentSectionClass = "bg-[var(--muted)]/10";
-
-export const decisionSectionClass =
-  "border-l border-sky-200/90 bg-sky-50/50 px-2";
 
 export const tableCellPad = "px-3 py-3";
 export const tableHeadPad = "px-3 py-2";
 
-export function sectionGroupPill(variant: "current" | "decision") {
-  return cn(
-    "inline-block rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide",
-    variant === "current"
-      ? "bg-[var(--muted)]/40 text-[var(--muted-foreground)]"
-      : "bg-sky-100 text-sky-900",
-  );
-}
-
-export type CostOverrides = {
-  productCost: number | null;
-  extraCosts: number | null;
-  taxRatePercent: number | null;
+const EXCLUSION_TOOLTIP: Record<MarginExclusionReason, string> = {
+  missing_cost:
+    "Sem custo cadastrado: a margem sairia com custo R$ 0. Não entra na média até cadastrar o custo em Meus produtos.",
+  missing_tax:
+    "Sem alíquota: a margem sairia sem imposto. Não entra na média até ter alíquota.",
+  kit_incomplete:
+    "Kit com componente sem cadastro: o custo está parcial. Não entra na média até completar o kit.",
+  incomplete:
+    "Taxa ou frete não puderam ser consultados no ML. Não entra na média — tente Recalcular.",
 };
 
-export type MinPriceSuggestion = MinSalePriceResult & {
-  refined?: boolean;
-};
-
-export type MinPricesApiResponse = {
-  targetMarginPercent: number;
-  marginBasis: MarginBasis;
-  patches: Array<{
-    mlItemId: string;
-    minSalePriceForTarget: MinSalePriceResult | null;
-    minSalePriceTargetPercent: number | null;
-    minSalePriceMarginBasis: MarginBasis | null;
-    minSalePriceRefined: boolean;
-  }>;
-};
-
-function costsMatchRow(
-  costs: CostOverrides,
-  row: FinancialEvaluationRow,
-): boolean {
+/** Flag do anúncio que não entra na média, com o motivo e como resolver. */
+export function ExclusionBadge({ row }: { row: FinancialEvaluationRow }) {
+  const reason = marginExclusionReason(row);
+  if (!reason) return null;
   return (
-    costs.productCost === row.productCost &&
-    costs.extraCosts === row.extraCosts &&
-    costs.taxRatePercent === row.taxRatePercent
+    <Badge
+      variant="warning"
+      dot
+      className="h-5 px-1.5 text-[10px] font-medium"
+      title={EXCLUSION_TOOLTIP[reason]}
+    >
+      {MARGIN_EXCLUSION_LABEL[reason]}
+    </Badge>
   );
 }
 
-export function resolveMinPriceSuggestion(
-  row: FinancialEvaluationRow,
-  targetMarginPercent: number,
-  marginBasis: MarginBasis,
-  costs: CostOverrides,
-): MinPriceSuggestion {
-  const serverMatches =
-    costsMatchRow(costs, row) &&
-    row.minSalePriceForTarget &&
-    row.minSalePriceTargetPercent === targetMarginPercent &&
-    row.minSalePriceMarginBasis === marginBasis;
-
-  if (serverMatches && row.minSalePriceForTarget) {
-    return {
-      ...row.minSalePriceForTarget,
-      refined: row.minSalePriceRefined ?? false,
-    };
+export function PmaBadge({
+  row,
+  isSimulation,
+}: {
+  row: FinancialEvaluationRow;
+  isSimulation: boolean;
+}) {
+  if (row.pending || row.pmaPrice === null || row.salePrice >= row.pmaPrice) {
+    return null;
   }
-
-  return {
-    ...buildMinPriceSuggestion(row, targetMarginPercent, marginBasis, costs),
-    refined: false,
-  };
-}
-
-function buildMinPriceSuggestion(
-  row: FinancialEvaluationRow,
-  targetMarginPercent: number,
-  marginBasis: MarginBasis,
-  costs: CostOverrides,
-): MinSalePriceResult {
-  if (
-    row.mlFeeAmount === null ||
-    row.shippingCost === null ||
-    !row.breakdown ||
-    row.salePrice <= 0
-  ) {
-    return {
-      minSalePrice: null,
-      currentMarginPercent: null,
-      alreadyMeetsTarget: false,
-      reason: "incomplete",
-    };
-  }
-
-  const breakdown = computeFinancialMargin({
-    salePrice: row.salePrice,
-    mlFeeAmount: row.mlFeeAmount,
-    mlFeeRebate: row.mlFeeRebate ?? 0,
-    shippingCost: row.shippingCost,
-    productCost: costs.productCost,
-    extraCosts: costs.extraCosts,
-    taxRatePercent: costs.taxRatePercent,
-    listingTypeLabel: row.listingTypeLabel,
-  });
-
-  const afterAds =
-    row.adsMetricsAvailable && marginBasis === "afterAds"
-      ? computeMarginAfterAds({
-          marginBreakdown: breakdown,
-          tacosPercent: row.tacosPercent,
-          adsCost: row.adsCost,
-          unitsSold: row.adsUnitsSold,
-        })
-      : null;
-
-  return computeMinSalePriceForTargetMargin({
-    salePrice: row.salePrice,
-    mlFeeAmount: row.mlFeeAmount,
-    mlFeeRebate: row.mlFeeRebate ?? 0,
-    shippingCost: row.shippingCost,
-    productCost: costs.productCost,
-    extraCosts: costs.extraCosts,
-    taxRatePercent: costs.taxRatePercent,
-    targetMarginPercent,
-    marginBasis,
-    tacosPercent: row.tacosPercent,
-    currentContributionMarginPercent: breakdown.marginPercent,
-    currentAfterAdsMarginPercent: afterAds?.marginAfterAdsPercent ?? null,
-  });
-}
-
-export function marginTone(margin: number | null | undefined): string {
-  if (margin === null || margin === undefined) {
-    return "text-[var(--muted-foreground)]";
-  }
-  if (margin > 0) return "text-emerald-600";
-  if (margin < 0) return "text-rose-600";
-  return "text-[var(--muted-foreground)]";
+  const priceLabel = isSimulation ? "Preço de hoje" : "Preço médio vendido";
+  return (
+    <Badge
+      variant="destructive"
+      className="h-5 px-1.5 text-[10px]"
+      title={`${priceLabel} (${formatFinancialMoney(row.salePrice)}) abaixo do PMA (${formatFinancialMoney(row.pmaPrice)}).`}
+    >
+      Abaixo do PMA
+    </Badge>
+  );
 }
 
 export function StackedMarginCell({
@@ -162,14 +75,19 @@ export function StackedMarginCell({
   sublabel,
   unavailable,
   pending,
+  excluded,
+  excludedNote,
 }: {
   percent: number | null;
   value: number | null;
   sublabel?: string | null;
   unavailable?: boolean;
-  /** Linha ainda esperando o preço/taxa/frete/margem via streaming (SSE) —
-   * mostra um placeholder borrado em vez do valor (que ainda seria 0/null). */
+  /** Linha ainda esperando preço/taxa/frete via streaming. */
   pending?: boolean;
+  /** Fora da média — valor esmaecido (margem não confiável). */
+  excluded?: boolean;
+  /** Aviso em destaque sob o valor esmaecido (ex.: "fora da média"). */
+  excludedNote?: string;
 }) {
   if (pending) {
     return (
@@ -190,143 +108,122 @@ export function StackedMarginCell({
 
   return (
     <div className="text-right">
-      <div className={cn("font-semibold", marginTone(percent))}>
-        {formatFinancialPercent(percent)}
+      <div className={cn(excluded && "opacity-45")}>
+        <div
+          className={cn(
+            "font-semibold tabular-nums",
+            excluded ? "text-[var(--muted-foreground)]" : valueToneClass(percent),
+          )}
+        >
+          {formatFinancialPercent(percent)}
+        </div>
+        <div className="mt-0.5 text-xs tabular-nums text-[var(--muted-foreground)]">
+          {formatFinancialMoney(value)}
+          {value !== null ? "/un." : ""}
+        </div>
+        {sublabel ? (
+          <div className="mt-0.5 text-[10px] text-[var(--muted-foreground)]">
+            {sublabel}
+          </div>
+        ) : null}
       </div>
-      <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-        {formatFinancialMoney(value)}
-      </div>
-      {sublabel ? (
-        <div className="mt-0.5 text-[10px] text-[var(--muted-foreground)]">
-          {sublabel}
+      {excluded && excludedNote ? (
+        <div className="mt-0.5 text-[10px] font-medium text-amber-700">
+          {excludedNote}
         </div>
       ) : null}
     </div>
   );
 }
 
-export function MinPriceCellSkeleton() {
-  return (
-    <div
-      className="ml-auto h-4 w-16 animate-pulse rounded bg-sky-200/80"
-      aria-hidden
-    />
-  );
-}
-
-export function MinPriceTableCell({
-  row,
+/** Célula "Preço p/ meta": ✓ na meta, preço mínimo (+ quanto falta) ou o motivo. */
+export function TargetPriceCellView({
+  cell,
   targetMarginPercent,
   marginBasis,
-  refining,
-  showProportionalWhileStale,
 }: {
-  row: FinancialEvaluationRow;
+  cell: TargetPriceCell;
   targetMarginPercent: number;
   marginBasis: MarginBasis;
-  refining?: boolean;
-  showProportionalWhileStale?: boolean;
 }) {
-  const suggestion = useMemo(
-    () =>
-      resolveMinPriceSuggestion(row, targetMarginPercent, marginBasis, {
-        productCost: row.productCost,
-        extraCosts: row.extraCosts,
-        taxRatePercent: row.taxRatePercent,
-      }),
-    [row, targetMarginPercent, marginBasis],
-  );
-
-  if (refining) {
-    return <MinPriceCellSkeleton />;
-  }
-
-  const isProportionalFallback =
-    showProportionalWhileStale && !suggestion.refined;
-
-  if (suggestion.reason === "missing_product_cost") {
-    return (
-      <span
-        className="text-xs text-[var(--muted-foreground)]"
-        title="Preencha o custo do produto"
-      >
-        Sem custo
-      </span>
-    );
-  }
-
-  if (
-    suggestion.reason === "incomplete" ||
-    suggestion.reason === "impossible"
-  ) {
-    return <span className="text-[var(--muted-foreground)]">—</span>;
-  }
-
-  const meetsOrBeatsTarget = suggestion.alreadyMeetsTarget;
-  const needsHigherPrice =
-    suggestion.minSalePrice !== null &&
-    suggestion.minSalePrice > row.salePrice + 0.005;
-
-  return (
-    <span
-      className={cn(
-        "font-medium tabular-nums",
-        meetsOrBeatsTarget && !needsHigherPrice
-          ? "text-emerald-600"
-          : "text-amber-700",
-      )}
-      title={`Mínimo para ${formatFinancialPercent(targetMarginPercent)} de ${marginBasisLabel(marginBasis)} · atual ${formatFinancialMoney(row.salePrice)} (${formatFinancialPercent(suggestion.currentMarginPercent)})${suggestion.refined ? " · taxa e frete ML no preço sugerido" : isProportionalFallback ? " · estimativa proporcional (clique em Atualizar)" : " · estimativa proporcional"}`}
-    >
-      {formatFinancialMoney(suggestion.minSalePrice)}
-      {isProportionalFallback ? (
-        <span className="ml-1 text-[10px] font-normal text-[var(--muted-foreground)]">
-          ~
+  const targetLabel = `${formatFinancialPercent(targetMarginPercent)} de ${marginBasisLabel(marginBasis)}`;
+  switch (cell.kind) {
+    case "pending":
+      return <BlurredValue srLabel="Preço p/ meta carregando" />;
+    case "refining":
+      return (
+        <span className="inline-flex items-center gap-1 text-xs text-[var(--muted-foreground)]">
+          <Loader2 className="size-3 animate-spin" aria-hidden />
+          Consultando ML
         </span>
-      ) : null}
-    </span>
-  );
-}
-
-export function SortableTh({
-  label,
-  sortKey,
-  activeKey,
-  activeDir,
-  onSort,
-  className,
-  title,
-  align = "left",
-}: {
-  label: string;
-  sortKey: SortKey;
-  activeKey: SortKey;
-  activeDir: SortDir;
-  onSort: (key: SortKey) => void;
-  className?: string;
-  title?: string;
-  align?: "left" | "right";
-}) {
-  const active = activeKey === sortKey;
-  const Icon = !active
-    ? ArrowUpDown
-    : activeDir === "asc"
-      ? ArrowUp
-      : ArrowDown;
-
-  return (
-    <th className={cn(className, "cursor-pointer")} title={title}>
-      <button
-        type="button"
-        className={cn(
-          "inline-flex cursor-pointer items-center gap-1 font-medium hover:text-[var(--foreground)]",
-          align === "right" && "ml-auto flex-row-reverse",
-          active && "text-[var(--foreground)]",
-        )}
-        onClick={() => onSort(sortKey)}
-      >
-        {label}
-        <Icon className="size-3.5 shrink-0 opacity-70" aria-hidden />
-      </button>
-    </th>
-  );
+      );
+    case "excluded":
+      return (
+        <span
+          className="text-xs text-[var(--muted-foreground)]"
+          title="Complete o cadastro para calcular o preço p/ meta."
+        >
+          —
+        </span>
+      );
+    case "meets":
+      return (
+        <span
+          className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700"
+          title={`Margem já atinge a meta de ${targetLabel}.`}
+        >
+          <Check className="size-3.5" aria-hidden />
+          Na meta
+        </span>
+      );
+    case "impossible":
+      return (
+        <span
+          className="text-xs font-medium text-rose-700"
+          title={`Com os custos atuais, nenhum preço atinge ${targetLabel}.`}
+        >
+          Inatingível
+        </span>
+      );
+    case "unavailable":
+      return (
+        <span className="text-xs text-[var(--muted-foreground)]" title={cell.reason}>
+          —
+        </span>
+      );
+    case "price": {
+      const todayOk = cell.delta !== null && cell.delta <= 0.005;
+      const title = [
+        `Menor preço que entrega ${targetLabel}.`,
+        cell.livePrice !== null
+          ? `Hoje o anúncio está a ${formatFinancialMoney(cell.livePrice)}.`
+          : null,
+        cell.estimate
+          ? "Estimativa: taxa ML proporcional ao preço."
+          : "Taxa e frete consultados no ML nesse preço.",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      return (
+        <div className="text-right" title={title}>
+          <div
+            className={cn(
+              "font-medium tabular-nums",
+              todayOk ? "text-emerald-700" : "text-amber-700",
+            )}
+          >
+            {cell.estimate ? "~" : ""}
+            {formatFinancialMoney(cell.minSalePrice)}
+          </div>
+          {cell.delta !== null ? (
+            <div className="mt-0.5 text-[11px] text-[var(--muted-foreground)]">
+              {todayOk
+                ? "preço de hoje já atinge"
+                : `+${formatFinancialMoney(cell.delta)} sobre hoje`}
+            </div>
+          ) : null}
+        </div>
+      );
+    }
+  }
 }

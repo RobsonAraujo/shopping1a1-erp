@@ -52,9 +52,17 @@ export function localDateToYmd(date: Date): string {
 type DateRangePickerProps = {
   fromYmd: string;
   toYmd: string;
-  onChange: (fromYmd: string, toYmd: string) => void;
+  /** Chamado a cada clique no calendário (o 1º clique já manda de == até). */
+  onChange?: (fromYmd: string, toYmd: string) => void;
+  /**
+   * Quando informado, a seleção vira rascunho e só é confirmada no botão
+   * "Aplicar" — evita disparar uma busca no 1º clique do intervalo.
+   */
+  onCommit?: (fromYmd: string, toYmd: string) => void;
   disabled?: boolean;
   className?: string;
+  /** Texto fixo do botão (ex.: "Personalizado") no lugar das datas. */
+  triggerLabel?: string;
   numberOfMonths?: number;
   /** When true, dates after today cannot be selected. Default true. */
   disableFuture?: boolean;
@@ -66,25 +74,48 @@ export function DateRangePicker({
   fromYmd,
   toYmd,
   onChange,
+  onCommit,
   disabled,
   className,
+  triggerLabel,
   numberOfMonths = 2,
   disableFuture = true,
   maxDays,
 }: DateRangePickerProps) {
   const [open, setOpen] = React.useState(false);
   const [rangeHint, setRangeHint] = React.useState<string | null>(null);
+  const [draft, setDraft] = React.useState<{ from: string; to: string } | null>(
+    null,
+  );
   const isMobile = useIsMobile();
-  const selected: DateRange | undefined = React.useMemo(() => {
+  const committedSelection: DateRange | undefined = React.useMemo(() => {
     const from = ymdToLocalDate(fromYmd);
     const to = ymdToLocalDate(toYmd);
     if (!from && !to) return undefined;
     return { from, to };
   }, [fromYmd, toYmd]);
+  const selected: DateRange | undefined = React.useMemo(() => {
+    if (!onCommit || !draft) return committedSelection;
+    return { from: ymdToLocalDate(draft.from), to: ymdToLocalDate(draft.to) };
+  }, [onCommit, draft, committedSelection]);
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (next) {
+      setDraft(null);
+      setRangeHint(null);
+    }
+  };
+
+  const commitDraft = () => {
+    if (onCommit && draft) onCommit(draft.from, draft.to);
+    setOpen(false);
+  };
 
   const label = React.useMemo(() => {
-    const from = selected?.from;
-    const to = selected?.to;
+    if (triggerLabel) return triggerLabel;
+    const from = committedSelection?.from;
+    const to = committedSelection?.to;
     if (from && to) {
       if (localDateToYmd(from) === localDateToYmd(to)) {
         return format(from, "dd MMM yyyy", { locale: ptBR });
@@ -95,7 +126,7 @@ export function DateRangePicker({
       return format(from, "dd MMM yyyy", { locale: ptBR });
     }
     return "Escolher período";
-  }, [selected]);
+  }, [committedSelection, triggerLabel]);
 
   const triggerButton = (
     <Button
@@ -104,8 +135,9 @@ export function DateRangePicker({
       size="sm"
       disabled={disabled}
       className={cn(
-        "h-[38px] min-w-[220px] justify-start gap-2 font-normal",
-        !selected?.from && "text-[var(--muted-foreground)]",
+        "h-[38px] justify-start gap-2 font-normal",
+        !triggerLabel && "min-w-[220px]",
+        !committedSelection?.from && !triggerLabel && "text-[var(--muted-foreground)]",
         className,
       )}
     >
@@ -127,10 +159,12 @@ export function DateRangePicker({
           const toDate = range.to ?? range.from;
           const to = localDateToYmd(toDate);
           if (maxDays != null) {
-            const diffDays = Math.round(
-              (toDate.getTime() - range.from.getTime()) / 86_400_000,
-            );
-            if (diffDays > maxDays) {
+            // inclusivo: 01→30 são 30 dias
+            const spanDays =
+              Math.round(
+                (toDate.getTime() - range.from.getTime()) / 86_400_000,
+              ) + 1;
+            if (spanDays > maxDays) {
               setRangeHint(
                 `O período pode ter no máximo ${maxDays} dias. Ajuste as datas e tente de novo.`,
               );
@@ -138,7 +172,8 @@ export function DateRangePicker({
             }
           }
           setRangeHint(null);
-          onChange(from, to);
+          if (onCommit) setDraft({ from, to });
+          onChange?.(from, to);
         }}
         numberOfMonths={isMobile ? 1 : numberOfMonths}
         disabled={disableFuture ? { after: new Date() } : undefined}
@@ -151,12 +186,27 @@ export function DateRangePicker({
           </UserFeedback>
         </div>
       ) : null}
+      {onCommit && !isMobile ? (
+        <div className="flex justify-end gap-2 border-t border-[var(--border)] px-3 py-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setOpen(false)}
+          >
+            Cancelar
+          </Button>
+          <Button type="button" size="sm" disabled={!draft} onClick={commitDraft}>
+            Aplicar
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 
   if (isMobile) {
     return (
-      <Sheet open={open} onOpenChange={setOpen}>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
         <SheetTrigger asChild>{triggerButton}</SheetTrigger>
         <SheetContent>
           <SheetHeader>
@@ -164,7 +214,11 @@ export function DateRangePicker({
           </SheetHeader>
           <div className="flex justify-center px-4 pb-2">{calendar}</div>
           <SheetFooter>
-            <Button type="button" onClick={() => setOpen(false)}>
+            <Button
+              type="button"
+              disabled={Boolean(onCommit) && !draft}
+              onClick={commitDraft}
+            >
               Aplicar
             </Button>
           </SheetFooter>
@@ -174,7 +228,7 @@ export function DateRangePicker({
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>{triggerButton}</PopoverTrigger>
       <PopoverContent
         align="start"
