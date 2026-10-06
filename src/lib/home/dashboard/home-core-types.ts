@@ -33,18 +33,35 @@ export type HomeCatalogPollStats = {
   timezone: string;
 };
 
-export type HomeDreMonthStatus = {
-  year: number;
-  month: number;
+export type HomeYearMonth = { year: number; month: number };
+
+export type HomeDreMonthStatus = HomeYearMonth & {
   syncedAt: string | null;
 };
 
 export type HomePendings = {
   failedInventoryRuns: number;
+  /**
+   * Derivado de `pendingDreImportMonths.length` — **nunca** uma segunda
+   * contagem. Com duas leituras, o número do pill e a lista de meses poderiam
+   * divergir (bastaria uma filtrar por ano e a outra não).
+   */
   pendingDreImports: number;
+  /** O mês de cada conciliação pendente, **sem filtro de ano** (ver
+   * `loadPendings`). No máximo 1 pendente por mês, por invariante do banco. */
+  pendingDreImportMonths: HomeYearMonth[];
   /** Só `{year, month, syncedAt}` — nunca o `payload` do snapshot. */
   dreMonths: HomeDreMonthStatus[];
-  closedInventoryMonths: { year: number; month: number }[];
+  closedInventoryMonths: HomeYearMonth[];
+  /**
+   * Ano de referência do snapshot. É o que decide se um rótulo de mês precisa
+   * levar o ano.
+   *
+   * Vem daqui e não de `new Date()` no client por duas razões: mantém a
+   * derivação dos sinais de atenção **pura** (testável sem mexer no relógio) e
+   * garante que o HTML do servidor bate com o da hidratação na virada do ano.
+   */
+  year: number;
 };
 
 export type HomeCoreSnapshot = {

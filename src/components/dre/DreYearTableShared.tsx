@@ -38,6 +38,19 @@ export function formatSyncTime(iso: string | null): string {
 export function getMonthAlertMessages(month: DreMonthView): string[] {
   const messages: string[] = [];
 
+  // Conciliação pendente era o único aviso que a Home mostrava e esta tela não:
+  // o banner do `DreClient` exige mês selecionado **e** estado da própria sessão,
+  // então uma conciliação importada em outra aba (ou por outra pessoa) ficava
+  // invisível aqui — quem clicava no aviso da Home não achava nada. O dado já vem
+  // no `DreMonthView` (modo não-lean), então isto não custa query nenhuma.
+  if (month.pendingReconciliationImportId) {
+    messages.push(
+      month.pendingReconciliationApplied
+        ? "Conciliação aplicada e não salva — revise e salve ou descarte."
+        : "Conciliação importada esperando confirmação.",
+    );
+  }
+
   if (month.isPartial) {
     messages.push(
       "Período parcial — mês em andamento ou custos ML ainda incompletos.",

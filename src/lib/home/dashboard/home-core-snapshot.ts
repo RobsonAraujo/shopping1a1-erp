@@ -25,12 +25,16 @@ import {
  * página**. Cada membro do `Promise.all` tem `.catch` próprio e registra o
  * nome em `failedSlices`.
  *
- * Custo medido em queries: 2 (onboarding) + 1 (operações) + 1 (catálogo
- * perdendo) + 2 (poll stats) + 1 (groupBy de produtos) + 1 (anúncios ativos)
- * + 3 (pendências) = 11 idas ao banco, todas indexadas por
- * `organizationId`, numa onda só. Não deixar crescer sem medir: o pool
- * padrão é pequeno (`DATABASE_POOL_MAX`, default 5) e o layout do dashboard
+ * Custo medido em queries: 2 (onboarding) + 1 (operações) + 2 (catálogo
+ * perdendo: as piores linhas + o total) + 2 (poll stats) + 1 (groupBy de
+ * produtos) + 1 (anúncios ativos) + 3 (pendências) = 12 idas ao banco, todas
+ * indexadas por `organizationId`, numa onda só. Não deixar crescer sem medir: o
+ * pool padrão é pequeno (`DATABASE_POOL_MAX`, default 5) e o layout do dashboard
  * disputa as mesmas conexões.
+ *
+ * Projeção importa tanto quanto contagem: a leitura de conciliações pendentes
+ * devolve os **meses** em vez de um `count`, e isso não custou query nenhuma —
+ * os campos já estavam no índice (ver `loadPendings`).
  */
 
 async function loadCatalogHealth(
@@ -62,7 +66,7 @@ async function loadPendings(
   organizationId: string,
   year: number,
 ): Promise<HomePendings> {
-  const [failedInventoryRuns, pendingDreImports, dreMonths] = await Promise.all([
+  const [failedInventoryRuns, pendingDreImportMonths, dreMonths] = await Promise.all([
     // `InventoryMonthSnapshotRun` está FORA do tenant guard de propósito (é a
     // tabela de fan-out do cron). O filtro por organizationId aqui é
     // obrigatório e não é verificado em runtime — sem ele, contaríamos as
@@ -70,8 +74,24 @@ async function loadPendings(
     prisma.inventoryMonthSnapshotRun.count({
       where: { organizationId, status: "failed" },
     }),
-    prisma.dreReconciliationImport.count({
+    // Era um `count`. Devolver os meses **não acrescenta query** (continuam 3
+    // aqui, 11 no snapshot) e o plano é o mesmo: `@@index([organizationId, year,
+    // month, status])` só é usado pelo prefixo `organizationId` nos dois casos, e
+    // `year`/`month` já estão no índice — segue index-only, sem ida ao heap. O
+    // count simplesmente jogava fora dado que já vinha.
+    //
+    // A cardinalidade é limitada por regra de negócio, não por `take`:
+    // `createPendingReconciliationImport` apaga os pendentes do mesmo
+    // (org, ano, mês) antes de inserir, então são ≤12 linhas por ano. `take`
+    // aqui seria errado — faria a contagem sub-reportar.
+    //
+    // **Sem filtro de ano, de propósito:** filtrar esconderia pendência real de
+    // ano anterior. É por isso que o rótulo tem que carregar o ano quando difere
+    // (ver `formatDreMonthList`).
+    prisma.dreReconciliationImport.findMany({
       where: { organizationId, status: "pending" },
+      select: { year: true, month: true },
+      orderBy: [{ year: "asc" }, { month: "asc" }],
     }),
     // Só year/month/syncedAt: o `payload` de cada snapshot tem o DRE inteiro
     // do mês e não pode entrar num carregamento de Home.
@@ -84,13 +104,17 @@ async function loadPendings(
 
   return {
     failedInventoryRuns,
-    pendingDreImports,
+    // Uma fonte de verdade só: o número do pill não pode divergir da lista de
+    // meses que aparece ao lado dele.
+    pendingDreImports: pendingDreImportMonths.length,
+    pendingDreImportMonths,
     dreMonths: dreMonths.map((month) => ({
       year: month.year,
       month: month.month,
       syncedAt: month.syncedAt?.toISOString() ?? null,
     })),
     closedInventoryMonths: [],
+    year,
   };
 }
 

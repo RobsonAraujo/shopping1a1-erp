@@ -10,8 +10,30 @@ import { getZonedYearMonth } from "@/lib/mercadolibre/revenue-periods";
 import { getOrganizationContext } from "@/lib/organizations/context";
 import { publicPageLoadMessage } from "@/lib/infra/server-public-error";
 
-async function DreDataSection({ organizationId }: { organizationId: string }) {
-  const year = getZonedYearMonth().year;
+/**
+ * Resolve o ano a abrir a partir de `?ano=`.
+ *
+ * Existe porque a Home linka pra cá nomeando o mês da pendência, e uma pendência
+ * de dezembro do ano passado caía numa tabela do ano corrente onde não havia nada
+ * — o pior beco sem saída possível.
+ *
+ * **Lista branca, nunca `Number()` cru:** só os anos que o `FormSelect` do
+ * `DreClient` oferece (corrente ±1). Qualquer outra coisa cai no ano corrente, em
+ * vez de carregar um ano que o seletor não consegue mostrar de volta.
+ */
+function resolveYear(raw: string | undefined, currentYear: number): number {
+  const parsed = Number.parseInt(raw ?? "", 10);
+  const allowed = [currentYear - 1, currentYear, currentYear + 1];
+  return allowed.includes(parsed) ? parsed : currentYear;
+}
+
+async function DreDataSection({
+  organizationId,
+  year,
+}: {
+  organizationId: string;
+  year: number;
+}) {
 
   let data: Awaited<ReturnType<typeof loadDreYearView>> | null = null;
   let displaySettings: Awaited<ReturnType<typeof loadDreDisplaySettings>> | null = null;
@@ -50,11 +72,19 @@ export const metadata: Metadata = {
   title: "DRE",
 };
 
-export default async function DrePage() {
+export default async function DrePage({
+  searchParams,
+}: {
+  // `searchParams` é Promise no Next 16 — precisa de `await`.
+  searchParams: Promise<{ ano?: string }>;
+}) {
   const orgContext = await getOrganizationContext();
   if (orgContext.status !== "active") {
     return null;
   }
+
+  const { ano } = await searchParams;
+  const year = resolveYear(ano, getZonedYearMonth().year);
 
   return (
     <div className="relative left-1/2 w-screen max-w-[100vw] -translate-x-1/2 px-4 sm:px-6 lg:px-8">
@@ -79,7 +109,10 @@ export default async function DrePage() {
         </header>
 
         <Suspense fallback={<DreSkeleton />}>
-          <DreDataSection organizationId={orgContext.organization.id} />
+          <DreDataSection
+            organizationId={orgContext.organization.id}
+            year={year}
+          />
         </Suspense>
       </div>
     </div>

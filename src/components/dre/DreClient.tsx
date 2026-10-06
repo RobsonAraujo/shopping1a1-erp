@@ -7,6 +7,7 @@ import {
   ChevronDown,
   Download,
   FileCheck2,
+  FileSpreadsheet,
   FolderPlus,
   HelpCircle,
   Info,
@@ -174,6 +175,20 @@ export function DreClient({
       })),
     };
   }, [data, sessionAdjustedByMonth]);
+
+  /**
+   * Os meses com conciliação pendente, **independente de sessão**.
+   *
+   * O banner logo abaixo depende de `sessionAdjustedByMonth`, que só existe na
+   * aba onde a conciliação foi aplicada. Quem abre o DRE depois (outro
+   * navegador, outro dia, outra pessoa) não via nada — e era justamente quem
+   * chegava clicando no aviso da Home. O `pendingReconciliationImportId` vem do
+   * servidor, então vale pra qualquer sessão.
+   */
+  const pendingReconciliationMonths = useMemo(
+    () => viewData?.months.filter((m) => m.pendingReconciliationImportId) ?? [],
+    [viewData],
+  );
 
   const loadYear = useCallback(async (targetYear: number) => {
     setLoading(true);
@@ -793,6 +808,34 @@ export function DreClient({
 
         {error ? (
           <UserFeedback onDismiss={() => setError(null)}>{error}</UserFeedback>
+        ) : null}
+
+        {pendingReconciliationMonths.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            <FileSpreadsheet className="size-4 shrink-0" aria-hidden />
+            <span>
+              {pendingReconciliationMonths.length === 1
+                ? "Conciliação pendente em"
+                : "Conciliações pendentes em"}
+            </span>
+            {/* Cada mês é um atalho: clicar destaca a coluna, que é o mesmo
+                `setSelectedMonth` do cabeçalho da tabela. Chip e não texto
+                corrido porque aqui o mês não é só informação, é pra onde ir. */}
+            {pendingReconciliationMonths.map((month) => (
+              <button
+                key={month.month}
+                type="button"
+                onClick={() => setSelectedMonth(month.month)}
+                aria-label={`Destacar ${month.label}, com conciliação pendente`}
+                className="cursor-pointer rounded-full bg-amber-200/70 px-2 py-0.5 font-medium underline-offset-2 hover:bg-amber-200 hover:underline"
+              >
+                {month.label}
+              </button>
+            ))}
+            <span className="text-amber-900">
+              — revise o mês e salve ou descarte.
+            </span>
+          </div>
         ) : null}
 
         {viewData && selectedMonth

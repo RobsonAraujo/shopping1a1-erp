@@ -63,8 +63,18 @@ export function HomeAttentionZone() {
             <li key={signal.id}>
               <Link
                 href={signal.href}
+                // A lista completa fica no título — o visível é cortado. Só
+                // quando há detalhe: definir `aria-label` nos outros pills
+                // mudaria o nome acessível deles sem motivo. E como `aria-label`
+                // SUBSTITUI o texto visível, ele repete contagem e rótulo.
+                title={signal.detailFull}
+                aria-label={
+                  signal.detailFull
+                    ? `${signal.count.toLocaleString("pt-BR")} ${signal.label}: ${signal.detailFull}`
+                    : undefined
+                }
                 className={cn(
-                  "flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-opacity hover:opacity-80",
+                  "flex max-w-full items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-opacity hover:opacity-80",
                   pill.wrap,
                 )}
               >
@@ -72,10 +82,25 @@ export function HomeAttentionZone() {
                   className={cn("size-1.5 shrink-0 rounded-full", pill.dot)}
                   aria-hidden
                 />
-                <span className="font-semibold tabular-nums">
+                <span className="shrink-0 font-semibold tabular-nums">
                   {signal.count.toLocaleString("pt-BR")}
                 </span>
-                <span>{signal.label}</span>
+                <span className="shrink-0 whitespace-nowrap">{signal.label}</span>
+                {signal.detail ? (
+                  <>
+                    {/* O mesmo "·" que o estado vazio desta seção já usa. */}
+                    <span aria-hidden className="shrink-0 opacity-50">
+                      ·
+                    </span>
+                    {/* O único item que encolhe (os outros são `shrink-0`):
+                        degrada em elipse em vez de estourar o cartão. Escondido
+                        no celular, onde não cabe — a informação continua no card
+                        de pendências e no título. */}
+                    <span className="hidden min-w-0 truncate opacity-70 sm:block">
+                      {signal.detail}
+                    </span>
+                  </>
+                ) : null}
               </Link>
             </li>
           );

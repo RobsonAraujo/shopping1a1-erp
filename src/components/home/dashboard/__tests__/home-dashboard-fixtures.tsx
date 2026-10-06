@@ -37,8 +37,10 @@ export function coreSnapshot(
     pendings: {
       failedInventoryRuns: 0,
       pendingDreImports: 0,
+      pendingDreImportMonths: [],
       dreMonths: [{ year: 2026, month: 1, syncedAt: "2026-02-01T00:00:00.000Z" }],
       closedInventoryMonths: [],
+      year: 2026,
     },
     ...overrides,
   };

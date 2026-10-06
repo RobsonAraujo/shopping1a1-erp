@@ -1,4 +1,10 @@
 import type { StatusTone } from "@/lib/ui/tone";
+import {
+  formatDreMonthList,
+  singleForeignYear,
+  type DreMonthListText,
+  type DreMonthRef,
+} from "@/lib/dre/dre-month-list";
 import type { HomeCoreSnapshot } from "@/lib/home/dashboard/home-core-types";
 
 /**
@@ -27,10 +33,51 @@ export type HomeAttentionSignal = {
   href: string;
   /** Maior = mais urgente. Ordena a zona. */
   severity: number;
+  /**
+   * Detalhe curto, já cortado pra caber no pill de uma linha (ex.: os meses de
+   * uma pendência). **Opcional:** sinal sem detalhe renderiza como sempre.
+   *
+   * Existe porque contagem sem contexto deixa o usuário perdido: «5
+   * conciliações de DRE pendentes» não diz onde agir.
+   */
+  detail?: string;
+  /** O detalhe **completo**, sem corte — vai pro `title`/`aria-label` do pill,
+   * onde não há limite de largura. Só existe quando há `detail`. */
+  detailFull?: string;
 };
 
 function plural(count: number, one: string, many: string): string {
   return count === 1 ? one : many;
+}
+
+/**
+ * Os dois campos de detalhe, ou **nada** quando não há mês nenhum.
+ *
+ * Devolver `{}` e não `{ detail: "" }` é de propósito: string vazia faria o pill
+ * renderizar um separador `·` solto, pendurado sem texto depois.
+ */
+function monthDetail(
+  months: DreMonthListText,
+): Pick<HomeAttentionSignal, "detail" | "detailFull"> {
+  if (months.full === "") return {};
+  return { detail: months.short, detailFull: months.full };
+}
+
+/**
+ * Leva pro ano certo quando **todas** as pendências são de um ano só que não é o
+ * corrente — senão o clique cai numa tabela onde não há pendência nenhuma, que é
+ * o pior beco sem saída possível. Com anos misturados, o ano corrente é o melhor
+ * destino, porque é onde está a maioria.
+ *
+ * Exportada porque o card de pendências aponta pro mesmo lugar que o pill: dois
+ * cálculos separados poderiam divergir.
+ */
+export function dreHref(
+  months: readonly DreMonthRef[],
+  currentYear: number,
+): string {
+  const foreign = singleForeignYear(months, currentYear);
+  return foreign === null ? "/dashboard/dre" : `/dashboard/dre?ano=${foreign}`;
 }
 
 export function buildHomeAttentionSignals(
@@ -71,6 +118,9 @@ export function buildHomeAttentionSignals(
   });
 
   if (pendings) {
+    const months = formatDreMonthList(pendings.pendingDreImportMonths, {
+      currentYear: pendings.year,
+    });
     push({
       id: "dre-reconciliation-pending",
       count: pendings.pendingDreImports,
@@ -80,8 +130,9 @@ export function buildHomeAttentionSignals(
         "conciliações de DRE pendentes",
       ),
       tone: "warning",
-      href: "/dashboard/dre",
+      href: dreHref(pendings.pendingDreImportMonths, pendings.year),
       severity: 80,
+      ...monthDetail(months),
     });
   }
 
@@ -113,9 +164,12 @@ export function buildHomeAttentionSignals(
   }
 
   if (pendings) {
-    const unsynced = pendings.dreMonths.filter(
+    // A lista já estava em mão e era descartada com `.length` — nomear os meses
+    // custa zero e é a mesma informação que falta na conciliação.
+    const unsyncedMonths = pendings.dreMonths.filter(
       (month) => month.syncedAt === null,
-    ).length;
+    );
+    const unsynced = unsyncedMonths.length;
     push({
       id: "dre-months-unsynced",
       count: unsynced,
@@ -126,6 +180,9 @@ export function buildHomeAttentionSignals(
       ),
       tone: "neutral",
       href: "/dashboard/dre",
+      ...monthDetail(
+        formatDreMonthList(unsyncedMonths, { currentYear: pendings.year }),
+      ),
       severity: 40,
     });
   }

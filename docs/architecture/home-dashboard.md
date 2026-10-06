@@ -20,7 +20,7 @@ A Home é dinâmica (lê `cookies()`), então **não há cache de página**: cad
 |---|-------|-------|
 | 1 | `readSession(cookies())` | zero |
 | 2 | `getOrganizationContext()` | 1 query, envolvida em `React.cache()` (compartilhada com o layout) |
-| 3 | `loadHomeCoreSnapshot` + `loadDashboardLayout` | **12 queries numa onda só** (`Promise.all`): 11 do snapshot mais a leitura do layout por chave primária |
+| 3 | `loadHomeCoreSnapshot` + `loadDashboardLayout` | **13 queries numa onda só** (`Promise.all`): 12 do snapshot mais a leitura do layout por chave primária |
 | 4 | Duas ilhas em `<Suspense>` (identidade do seller + card de Vendas) | **1 chamada ML** (`fetchMe`), compartilhada pelas duas via `React.cache()` |
 | 5 | Client monta → `/api/dashboard/widgets?keys=…` | **1 request**, só com as chaves dos widgets **visíveis** |
 | 6 | Cards de PMA e Promoções entram na viewport | 1 request cada, **chamadas ML** (ver tabela) |
@@ -31,7 +31,7 @@ página** — o nome entra em `failedSlices` e o widget mostra o aviso.
 
 ### Pool de conexões
 
-`DATABASE_POOL_MAX` tem default **5**. As 11 queries do passo 3 saem juntas, então
+`DATABASE_POOL_MAX` tem default **5**. As 13 queries do passo 3 saem juntas, então
 elas se enfileiram em ~3 ondas, e disputam o pool com o layout. É daqui que vem a
 latência de cauda quando há muitos acessos simultâneos — não deixar o passo 3
 crescer sem medir.
@@ -106,6 +106,7 @@ lista grande de volta em todo acesso e desfaria a economia.
 | **Resultado do mês** | `batch` (`finance`) | 3 queries via `loadDreYearView(lean)` | sync do DRE (ver abaixo) |
 | **Saúde do catálogo** | `core` | 2 queries (`groupBy` de produtos + count de anúncios ativos) | cadastro + sync de anúncios |
 | **Pendências do sistema** | `core` | 5 queries (3 de pendências + 2 de poll do catálogo) | crons e importações |
+| ↳ dizem **quais meses** | — | zero: a leitura de conciliações devolve os meses em vez de um `count`, e os campos já estavam no índice | — |
 | **Catálogo perdendo** | `core` | 2 queries: as **5 piores** linhas (ordenadas pelo gap no banco) + um `count` | **cron de catálogo** — zero ML na Home |
 | **Abaixo do PMA** | `isolated` | 1 query + `⌈N/20⌉ + N` **chamadas ML** (N = produtos com PMA) | ML, ao vivo |
 | **Promoções terminando** | `isolated` | `⌈A/50⌉ + ⌈A/20⌉ + O + P` **chamadas ML** | ML, ao vivo |
@@ -167,20 +168,26 @@ Quebrar qualquer uma destas encarece a página mais acessada do produto:
 2. **Nada que passe de ~1,5s entra na rota de batch.** Ela é um request só, então a
    chave mais lenta trava as outras. A correção pra uma chave lenta é dividir a
    chave, não aumentar o timeout — a rota não tem `maxDuration` de propósito.
-3. **Leitura de lista precisa de teto, e o teto precisa de ordenação no banco.**
+3. **Contagem sozinha deixa o usuário perdido.** Um sinal que diz «5 conciliações
+   de DRE pendentes» sem dizer *onde* não é acionável. Quando o dado que nomeia o
+   problema está no mesmo índice que a contagem (ou já na mão, como em
+   `dreMonths`), trazê-lo é de graça — `formatDreMonthList` é o formatador único
+   dessas listas. E o destino do link tem que mostrar a mesma coisa: informar na
+   Home e não marcar no DRE só move o beco sem saída de lugar.
+4. **Leitura de lista precisa de teto, e o teto precisa de ordenação no banco.**
    O card mostra 5 linhas (`HOME_WIDGET_LIST_CAP`); trazer mil pra mostrar cinco é
    egress e payload de RSC jogados fora. Mas cortar sem ordenar **pelo mesmo
    critério que a UI usa** troca as 5 piores por 5 quaisquer — regressão de dado
    pior que o custo. Quando o critério é expressão entre colunas (o caso do gap de
    catálogo), a ordenação desce pro SQL. Contagem para badge vem de `count`
    separado, nunca de `rows.length`.
-4. **Memo de loader é por chamada, nunca de módulo.** Em escopo de módulo viraria
+5. **Memo de loader é por chamada, nunca de módulo.** Em escopo de módulo viraria
    cache cross-request e vazaria dado de um tenant pro próximo. Qualquer cache que
    entre aqui tem que ser chaveado por `organizationId`.
-5. **`sellerId` vem só de `auth.ctx.userId`.** `TaxReportMonthSnapshot` é escopada
+6. **`sellerId` vem só de `auth.ctx.userId`.** `TaxReportMonthSnapshot` é escopada
    por `sellerId` e está **fora** do tenant guard, então um `sellerId` vindo da
    query não seria pego por nada.
-6. **O registry é só metadado.** Nada de componente, `prisma` ou `server-only` —
+7. **O registry é só metadado.** Nada de componente, `prisma` ou `server-only` —
    ele é importado por RSC, route handler, componente client e teste node.
 
 ---

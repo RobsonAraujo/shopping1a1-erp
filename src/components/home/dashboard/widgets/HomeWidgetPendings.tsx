@@ -7,6 +7,8 @@ import {
   HomeWidgetEmpty,
 } from "@/components/home/dashboard/HomeWidgetCard";
 import { useHomeCore } from "@/components/home/dashboard/HomeDashboardProvider";
+import { formatDreMonthList } from "@/lib/dre/dre-month-list";
+import { dreHref } from "@/lib/home/dashboard/home-attention";
 import { STATUS_PILL_CLASS, type StatusTone } from "@/lib/ui/tone";
 import { cn } from "@/lib/utils";
 
@@ -65,27 +67,42 @@ export function HomeWidgetPendings() {
   }
 
   if (pendings.pendingDreImports > 0) {
+    // `full`, sem corte: este card é a superfície onde se lê a lista inteira. Se
+    // o pill da zona de atenção (que corta em "+N") e o card cortassem, não
+    // sobraria lugar nenhum pra ver todos os meses antes de ir pro DRE.
+    const months = formatDreMonthList(pendings.pendingDreImportMonths, {
+      currentYear: pendings.year,
+    });
     rows.push({
       id: "reconciliation",
       label:
         pendings.pendingDreImports === 1
           ? "1 conciliação de DRE pendente"
           : `${pendings.pendingDreImports} conciliações de DRE pendentes`,
-      detail: "Há uma planilha importada esperando confirmação.",
-      href: "/dashboard/dre",
+      // Sem ponto final depois da lista: os rótulos de mês já terminam em ponto.
+      detail: months.full
+        ? `Esperando confirmação: ${months.full}`
+        : "Há uma planilha importada esperando confirmação.",
+      href: dreHref(pendings.pendingDreImportMonths, pendings.year),
       tone: "warning",
     });
   }
 
-  const unsynced = pendings.dreMonths.filter((m) => m.syncedAt === null).length;
+  const unsyncedMonths = pendings.dreMonths.filter((m) => m.syncedAt === null);
+  const unsynced = unsyncedMonths.length;
   if (unsynced > 0) {
+    const months = formatDreMonthList(unsyncedMonths, {
+      currentYear: pendings.year,
+    });
     rows.push({
       id: "dre-sync",
       label:
         unsynced === 1
           ? "1 mês de DRE sem sincronizar"
           : `${unsynced} meses de DRE sem sincronizar`,
-      detail: "Sincronize para o resultado do mês ficar completo.",
+      detail: months.full
+        ? `Sincronize para o resultado ficar completo: ${months.full}`
+        : "Sincronize para o resultado do mês ficar completo.",
       href: "/dashboard/dre",
       tone: "neutral",
     });
