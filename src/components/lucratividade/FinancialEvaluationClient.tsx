@@ -58,28 +58,29 @@ type QuickFilter = "all" | "below" | "excluded";
 
 /** Cor de cada filtro rápido — "Fora da média" no mesmo âmbar das flags dos
  * anúncios e do badge do topo; "Abaixo da meta" em vermelho (margem a
- * corrigir). Família de status do `tone.ts`. */
+ * corrigir). Já vêm tingidos (tom translúcido, que só fica mais forte no
+ * hover — sem sombra nem movimento); o ativo fica preenchido. */
 const QUICK_FILTER_TONE: Record<
   QuickFilter,
-  { dot: string; count: string; idle: string; active: string }
+  { idle: string; active: string; dot: string; count: string }
 > = {
   all: {
+    idle: "border-[var(--primary)]/20 bg-[var(--primary)]/[0.07] text-[var(--primary)] hover:bg-[var(--primary)]/[0.14]",
+    active: "border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--primary)]/90",
     dot: "bg-[var(--primary)]",
-    count: "bg-[var(--primary)]/10 text-[var(--primary)]",
-    idle: "border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
-    active: "border-[var(--primary)]/40 bg-[var(--primary)]/10 text-[var(--primary)]",
+    count: "bg-white/80 text-[var(--primary)]",
   },
   below: {
+    idle: "border-rose-200 bg-rose-500/[0.08] text-rose-700 hover:bg-rose-500/[0.16]",
+    active: "border-rose-600 bg-rose-600 text-white hover:bg-rose-600/90",
     dot: STATUS_PILL_CLASS.danger.dot,
-    count: STATUS_PILL_CLASS.danger.wrap,
-    idle: "border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)] hover:border-rose-200 hover:text-rose-700",
-    active: "border-rose-200 bg-rose-50 text-rose-700",
+    count: "bg-white/80 text-rose-700",
   },
   excluded: {
+    idle: "border-amber-200 bg-amber-500/[0.10] text-amber-800 hover:bg-amber-500/[0.20]",
+    active: "border-amber-700 bg-amber-700 text-white hover:bg-amber-700/90",
     dot: STATUS_PILL_CLASS.warning.dot,
-    count: STATUS_PILL_CLASS.warning.wrap,
-    idle: "border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)] hover:border-amber-200 hover:text-amber-700",
-    active: "border-amber-200 bg-amber-50 text-amber-700",
+    count: "bg-white/80 text-amber-800",
   },
 };
 
@@ -480,16 +481,20 @@ export function FinancialEvaluationClient({
                   aria-pressed={active}
                   onClick={() => setQuickFilter(filter.id)}
                   className={cn(
-                    "inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                    "inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-150",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1",
                     active ? tone.active : tone.idle,
                   )}
                 >
-                  <span className={cn("size-2 rounded-full", tone.dot)} aria-hidden />
+                  <span
+                    className={cn("size-2 rounded-full", active ? "bg-white/90" : tone.dot)}
+                    aria-hidden
+                  />
                   {filter.label}
                   <span
                     className={cn(
-                      "rounded-full px-1.5 tabular-nums",
-                      active ? "bg-white/70" : tone.count,
+                      "rounded-full px-1.5 font-semibold tabular-nums",
+                      active ? "bg-white/25 text-white" : tone.count,
                     )}
                   >
                     {filter.count.toLocaleString("pt-BR")}
