@@ -1,13 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { RefreshCw, Scale, Wallet } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { FileSearch, Info, RefreshCw, Scale, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { UserFeedback } from "@/components/ui/user-feedback";
 import { FormSelect } from "@/components/ui/form-select";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { TaxReportApuracaoPanel } from "@/components/relatorio-tributario/TaxReportApuracaoPanel";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   TaxFixedCostsModal,
   type TaxFixedCostItemRow,
@@ -16,7 +28,6 @@ import {
   TaxReportGenerationOverlay,
   type TaxReportProgressState,
 } from "@/components/relatorio-tributario/TaxReportGenerationOverlay";
-import { TaxReportHeaderWithTip } from "@/components/relatorio-tributario/TaxReportTransactionTable";
 import { TaxReportSkuTable } from "@/components/relatorio-tributario/tax-report-sku-table";
 import { ItemListSearch } from "@/components/shared/ItemListSearch";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
@@ -31,7 +42,6 @@ import {
   taxReportSkuPath,
   taxReportSkuPeriodPath,
 } from "@/lib/tax-report/routes";
-import { margemOperacionalConsolidado } from "@/lib/tax-report/imposto-operacional";
 import type { TaxReportPayload } from "@/lib/tax-report/types";
 import { cn } from "@/lib/utils";
 
@@ -40,31 +50,11 @@ function formatYmdBr(ymd: string): string {
   return `${d}/${m}/${y}`;
 }
 
-function SummaryCard({
-  label,
-  value,
-  tip,
-  highlight,
-}: {
-  label: string;
-  value: string;
-  tip: string;
-  highlight?: boolean;
-}) {
+function MetaChip({ children }: { children: ReactNode }) {
   return (
-    <Card className="p-4">
-      <p className="text-xs text-[var(--muted-foreground)]">
-        <TaxReportHeaderWithTip label={label} tip={tip} />
-      </p>
-      <p
-        className={cn(
-          "mt-1 text-xl font-semibold tabular-nums",
-          highlight && "text-[var(--primary)]",
-        )}
-      >
-        {value}
-      </p>
-    </Card>
+    <span className="inline-flex items-center rounded-full border border-[var(--border)] bg-[var(--background)] px-2.5 py-0.5 text-xs text-[var(--muted-foreground)] tabular-nums">
+      {children}
+    </span>
   );
 }
 
@@ -209,7 +199,7 @@ export function MonthlyTaxReportClient({
   }, [generateSSE.error]);
 
   const generateReport = useCallback(
-    async (force: boolean) => {
+    async () => {
       setGenerateProgress({
         phase: "orders",
         message: "Iniciando geração do relatório…",
@@ -218,7 +208,7 @@ export function MonthlyTaxReportClient({
       await generateSSE.start("/api/reports/monthly-tax", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ year, month, force, stream: true }),
+        body: JSON.stringify({ year, month, force: true, stream: true }),
       });
       setTimeout(() => setGenerateProgress(null), 400);
     },
@@ -278,6 +268,16 @@ export function MonthlyTaxReportClient({
     [report?.porSku, searchQuery],
   );
 
+  const periodLabel =
+    report?.periodFrom && report.periodTo
+      ? `${formatYmdBr(report.periodFrom)} – ${formatYmdBr(report.periodTo)}`
+      : report
+        ? `${TAX_REPORT_MONTH_NAMES[report.month - 1]}/${report.year}`
+        : "";
+  const fixedCostProrated =
+    report?.consolidado.creditoCustosFixosBaseCreditavel !=
+    report?.consolidado.creditoCustosFixosBaseRegistrada;
+
   if (companyTaxRegime && companyTaxRegime !== "LUCRO_REAL") {
     return (
       <Card className="p-6 text-center">
@@ -301,15 +301,6 @@ export function MonthlyTaxReportClient({
         <TaxReportGenerationOverlay progress={generateProgress} />
       ) : null}
       <div className="space-y-4">
-        <Card className="border-amber-200 bg-amber-50/60 p-4 text-sm text-amber-950">
-          <p className="font-medium">Estimativa gerencial — Lucro Real</p>
-          <p className="mt-1 text-xs leading-relaxed">
-            Não substitui a apuração contábil oficial (LALUR/e-Lalur). O DRE
-            continua usando percentual simplificado por SKU; aqui cada venda é
-            calculada com UF de destino e tipo de comprador.
-          </p>
-        </Card>
-
         <div className="flex flex-wrap items-end gap-3 rounded-lg border border-[var(--border)] bg-[var(--muted)]/10 px-3 py-2">
           <div className="flex rounded-lg border border-[var(--border)] bg-[var(--background)] p-0.5">
             <Button
@@ -417,17 +408,9 @@ export function MonthlyTaxReportClient({
               <Button
                 type="button"
                 disabled={loading || generating}
-                onClick={() => void generateReport(false)}
+                onClick={() => void generateReport()}
               >
-                Gerar relatório
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={loading || generating}
-                onClick={() => void generateReport(true)}
-              >
-                <RefreshCw className="mr-2 size-4" />
+                <RefreshCw className={cn("mr-2 size-4", generating && "animate-spin")} />
                 Recalcular
               </Button>
               <Button
@@ -467,112 +450,157 @@ export function MonthlyTaxReportClient({
             {missingMonths
               .map((m) => `${TAX_REPORT_MONTH_NAMES[m.month - 1]}/${m.year}`)
               .join(", ")}
-            . Parte do período pode estar incompleta — gere esses meses no modo
-            “Mês”.
+            . Parte do período pode estar incompleta — calcule esses meses no
+            modo “Mês” com o botão Recalcular.
           </UserFeedback>
         ) : null}
 
         {!report && !loading && !generating && !error ? (
-          <Card className="p-6 text-center text-sm text-[var(--muted-foreground)]">
-            {isPeriodMode
-              ? "Nenhum dado encontrado para o período selecionado."
-              : <>
-                  Nenhum snapshot salvo para {TAX_REPORT_MONTH_NAMES[month - 1]}/
-                  {year}. Clique em &quot;Gerar relatório&quot; para buscar pedidos no
-                  Mercado Livre.
-                </>}
+          <Card className="flex flex-col items-center gap-3 px-6 py-10 text-center">
+            <span className="flex size-10 items-center justify-center rounded-full bg-[var(--primary)]/10 text-[var(--primary)]">
+              <FileSearch className="size-5" aria-hidden />
+            </span>
+            <div>
+              <p className="text-sm font-semibold">
+                {isPeriodMode
+                  ? "Nenhum dado no período"
+                  : `${TAX_REPORT_MONTH_NAMES[month - 1]}/${year} ainda não calculado`}
+              </p>
+              <p className="mx-auto mt-1 max-w-md text-sm text-[var(--muted-foreground)]">
+                {isPeriodMode
+                  ? "Calcule os meses deste período no modo “Mês” (botão Recalcular) para vê-los aqui."
+                  : "O Recalcular busca do zero os pedidos pagos no Mercado Livre e calcula os impostos venda a venda."}
+              </p>
+            </div>
+            {!isPeriodMode ? (
+              <Button type="button" onClick={() => void generateReport()}>
+                <RefreshCw className="mr-2 size-4" />
+                Recalcular
+              </Button>
+            ) : null}
           </Card>
         ) : null}
 
         {report ? (
           <>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <SummaryCard
-                label="Faturamento"
-                value={formatFinancialMoney(report.consolidado.faturamento)}
-                tip="Soma da receita bruta das vendas incluídas na apuração (pedidos pagos)."
-              />
-              <SummaryCard
-                label="PIS/COFINS líquido"
-                value={formatFinancialMoney(
-                  report.consolidado.apuracao?.pisCofinsLiquido ??
-                    report.consolidado.pisCofinsLiquido,
-                )}
-                tip="Débito sobre a venda menos crédito sobre NF de entrada (não-cumulativo)."
-              />
-              <SummaryCard
-                label="Margem operacional"
-                value={formatFinancialMoney(
-                  margemOperacionalConsolidado(report.consolidado),
-                )}
-                tip="Faturamento − CMV − impostos operacionais (PIS/COFINS + ICMS) do mês."
-                highlight
-              />
-            </div>
+            <Card className="overflow-hidden p-0">
+              <div className="grid gap-0 md:grid-cols-[1fr_auto]">
+                <div className="p-5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+                      Faturamento
+                    </p>
+                    <Badge variant="muted">{periodLabel}</Badge>
+                  </div>
+                  <p className="mt-1 text-3xl font-semibold tracking-tight tabular-nums">
+                    {formatFinancialMoney(report.consolidado.faturamento)}
+                  </p>
+                  <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                    Receita bruta das vendas pagas incluídas na apuração
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    <MetaChip>
+                      {report.meta.pedidosProcessados.toLocaleString("pt-BR")} pedidos
+                    </MetaChip>
+                    <MetaChip>
+                      {report.porSku.length.toLocaleString("pt-BR")} SKUs
+                    </MetaChip>
+                    <MetaChip>Origem {report.meta.originUf}</MetaChip>
+                    {report.meta.semBillingInfo > 0 ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button type="button" className="rounded-md">
+                            <Badge variant="warning" dot>
+                              {report.meta.semBillingInfo} sem dados do comprador
+                            </Badge>
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          Pedidos sem billing_info no Mercado Livre: UF de
+                          destino e tipo de comprador foram estimados.
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : null}
+                  </div>
+                </div>
 
-            {report.consolidado.apuracao ? (
-              <TaxReportApuracaoPanel
-                apuracao={report.consolidado.apuracao}
-                faturamento={report.consolidado.faturamento}
-              />
-            ) : null}
-
-            {report.consolidado.creditoCustosFixosTotal ? (
-              <Card className="p-4 text-sm">
-                <p className="font-medium text-[var(--foreground)]">
-                  Crédito de custos fixos (aluguel etc.) já incluído na margem
-                </p>
-                <p className="mt-1 text-[var(--muted-foreground)]">
-                  {!isPeriodMode &&
-                  report.consolidado.creditoCustosFixosBaseCreditavel !=
-                    report.consolidado.creditoCustosFixosBaseRegistrada ? (
-                    <>
-                      Mês em andamento: base rateada{" "}
-                      {formatFinancialMoney(
-                        report.consolidado.creditoCustosFixosBaseCreditavel ?? 0,
-                      )}{" "}
-                      de{" "}
-                      {formatFinancialMoney(
-                        report.consolidado.creditoCustosFixosBaseRegistrada ?? 0,
-                      )}{" "}
-                      cadastrados ×{" "}
-                    </>
-                  ) : !isPeriodMode ? (
-                    <>
-                      Base cadastrada{" "}
-                      {formatFinancialMoney(
-                        report.consolidado.creditoCustosFixosBaseRegistrada ?? 0,
-                      )}{" "}
-                      ×{" "}
-                    </>
-                  ) : null}
-                  9,25% ={" "}
-                  <strong>
-                    {formatFinancialMoney(
-                      report.consolidado.creditoCustosFixosTotal,
+                <div className="flex flex-col justify-between gap-3 border-t border-[var(--border)] bg-[var(--muted)]/25 p-5 md:min-w-[17rem] md:border-t-0 md:border-l">
+                  <div>
+                    <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+                      <Wallet className="size-3.5" aria-hidden />
+                      Crédito de custos fixos
+                    </p>
+                    {report.consolidado.creditoCustosFixosTotal ? (
+                      <>
+                        <p className="mt-1 text-xl font-semibold tabular-nums text-emerald-800 dark:text-emerald-300">
+                          {formatFinancialMoney(
+                            report.consolidado.creditoCustosFixosTotal,
+                          )}
+                        </p>
+                        <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                          {!isPeriodMode && fixedCostProrated ? (
+                            <>
+                              Mês em andamento: base rateada{" "}
+                              {formatFinancialMoney(
+                                report.consolidado.creditoCustosFixosBaseCreditavel ?? 0,
+                              )}{" "}
+                              de{" "}
+                              {formatFinancialMoney(
+                                report.consolidado.creditoCustosFixosBaseRegistrada ?? 0,
+                              )}{" "}
+                              × 9,25%
+                            </>
+                          ) : !isPeriodMode ? (
+                            <>
+                              Base{" "}
+                              {formatFinancialMoney(
+                                report.consolidado.creditoCustosFixosBaseRegistrada ?? 0,
+                              )}{" "}
+                              × 9,25% · já incluído na margem
+                            </>
+                          ) : (
+                            "Soma dos meses do período · já incluído na margem"
+                          )}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+                        Nenhum custo fixo com crédito
+                        {isPeriodMode ? " no período." : " neste mês."}
+                      </p>
                     )}
-                  </strong>
-                </p>
-              </Card>
-            ) : null}
+                  </div>
+                  {!isPeriodMode ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="self-start"
+                      onClick={() => setFixedCostModalOpen(true)}
+                    >
+                      {report.consolidado.creditoCustosFixosTotal
+                        ? "Gerenciar custos fixos"
+                        : "Adicionar custos fixos"}
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
 
-            <p className="text-xs text-[var(--muted-foreground)]">
-              {report.periodFrom && report.periodTo ? (
-                <>
-                  Período: {formatYmdBr(report.periodFrom)} –{" "}
-                  {formatYmdBr(report.periodTo)}{" "}
-                </>
-              ) : (
-                <>
-                  Gerado em{" "}
-                  {new Date(report.meta.geradoEm).toLocaleString("pt-BR")}{" "}
-                </>
-              )}
-              · {report.meta.pedidosProcessados} pedidos ·{" "}
-              {report.meta.linhasProcessadas} linhas ·{" "}
-              {report.meta.semBillingInfo} sem billing_info · UF origem{" "}
-              {report.meta.originUf}
-            </p>
+              <div className="flex items-start gap-2 border-t border-[var(--border)] px-5 py-2.5 text-xs text-[var(--muted-foreground)]">
+                <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                <p>
+                  Estimativa gerencial (Lucro Real), calculada venda a venda com
+                  UF de destino e tipo de comprador. Não substitui a apuração
+                  contábil oficial (LALUR/e-Lalur).{" "}
+                  {report.periodFrom && report.periodTo ? null : (
+                    <>
+                      Gerado em{" "}
+                      {new Date(report.meta.geradoEm).toLocaleString("pt-BR")}.
+                    </>
+                  )}
+                </p>
+              </div>
+            </Card>
 
             <Card className="p-4">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

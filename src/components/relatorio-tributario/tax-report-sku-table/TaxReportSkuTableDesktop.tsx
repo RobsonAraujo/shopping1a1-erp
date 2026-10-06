@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { itemListSearchEmptyMessage } from "@/components/shared/ItemListSearch";
-import { TaxReportHeaderWithTip } from "@/components/relatorio-tributario/TaxReportTransactionTable";
+import { TaxReportTipIcon } from "@/components/relatorio-tributario/TaxReportTransactionTable";
 import { SortableTh } from "@/components/ui/sortable-th";
 import { formatFinancialMoney, formatFinancialPercent } from "@/lib/pricing/financial-margin";
 import {
@@ -44,23 +44,15 @@ export function TaxReportSkuTableDesktop({
               onSortChange={onSortChange}
             />
             <SortableTh
-              label={
-                <TaxReportHeaderWithTip
-                  label="Imp. oper. médio"
-                  tip="Média de PIS/COFINS + ICMS por venda."
-                />
-              }
+              label="Imp. oper. médio"
+              hint={<TaxReportTipIcon label="Imp. oper. médio" tip="Média de PIS/COFINS + ICMS por venda." />}
               sortKey="impostoOperacionalMedio"
               sort={sort}
               onSortChange={onSortChange}
             />
             <SortableTh
-              label={
-                <TaxReportHeaderWithTip
-                  label="% oper."
-                  tip="Imposto operacional total do SKU sobre a receita."
-                />
-              }
+              label="% oper."
+              hint={<TaxReportTipIcon label="% oper." tip="Imposto operacional total do SKU sobre a receita." />}
               sortKey="impostoOperacionalPercentual"
               sort={sort}
               onSortChange={onSortChange}

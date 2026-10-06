@@ -16,6 +16,7 @@ export type TableSort<K extends string> = {
  */
 export function SortableTh<K extends string>({
   label,
+  hint,
   sortKey,
   sort,
   onSortChange,
@@ -23,6 +24,8 @@ export function SortableTh<K extends string>({
   className,
 }: {
   label: React.ReactNode;
+  /** Ex.: ícone de ajuda com tooltip. Renderizado ao lado do botão, nunca dentro — `<button>` não pode conter outro `<button>`. */
+  hint?: React.ReactNode;
   sortKey: K;
   sort: TableSort<K>;
   onSortChange: (key: K) => void;
@@ -45,6 +48,7 @@ export function SortableTh<K extends string>({
         {label}
         <Icon className="size-3" />
       </button>
+      {hint ? <span className="ml-1 inline-flex align-middle">{hint}</span> : null}
     </th>
   );
 }

@@ -71,12 +71,15 @@ function getTransactionSortValue(
 
 function SortTrigger({
   label,
+  hint,
   sortKey,
   sort,
   onSortChange,
   align = "right",
 }: {
   label: ReactNode;
+  /** Fica ao lado do botão (não dentro) — botão não pode conter outro botão. */
+  hint?: ReactNode;
   sortKey: TransactionSortKey;
   sort: TableSort<TransactionSortKey>;
   onSortChange: (key: TransactionSortKey) => void;
@@ -85,18 +88,26 @@ function SortTrigger({
   const active = sort.key === sortKey;
   const Icon = active ? (sort.direction === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
   return (
-    <button
-      type="button"
-      onClick={() => onSortChange(sortKey)}
+    <span
       className={cn(
-        "inline-flex w-full cursor-pointer items-center gap-1 hover:text-[var(--foreground)]",
-        align === "right" && "flex-row-reverse",
-        active && "text-[var(--foreground)]",
+        "inline-flex w-full items-center gap-1",
+        align === "right" && "justify-end",
       )}
     >
-      {label}
-      <Icon className="size-3 shrink-0" />
-    </button>
+      <button
+        type="button"
+        onClick={() => onSortChange(sortKey)}
+        className={cn(
+          "inline-flex min-w-0 cursor-pointer items-center gap-1 whitespace-nowrap hover:text-[var(--foreground)]",
+          align === "right" && "flex-row-reverse",
+          active && "text-[var(--foreground)]",
+        )}
+      >
+        {label}
+        <Icon className="size-3 shrink-0" />
+      </button>
+      {hint}
+    </span>
   );
 }
 
@@ -138,40 +149,24 @@ function tableMinWidth(options: { showSku?: boolean; showOrderSku?: boolean }): 
 const TABLE_ROW_CLASS =
   "grid w-full items-center border-b border-[var(--border)]";
 
-export function TaxReportHeaderWithTip({
-  label,
-  tip,
-  align = "right",
-}: {
-  label: string;
-  tip: string;
-  align?: "left" | "right" | "center";
-}) {
+/** Só o ícone ⓘ com tooltip — para usar ao lado de um botão (ex.: `hint` de cabeçalho ordenável), nunca dentro dele. */
+export function TaxReportTipIcon({ label, tip }: { label: string; tip: string }) {
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 whitespace-nowrap",
-        align === "right" && "justify-end",
-        align === "center" && "justify-center",
-      )}
-    >
-      {label}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            className="relative z-10 shrink-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-            aria-label={`Sobre ${label}`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Info className="size-3.5" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-sm text-left text-xs">
-          {tip}
-        </TooltipContent>
-      </Tooltip>
-    </span>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className="relative z-10 shrink-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+          aria-label={`Sobre ${label}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Info className="size-3.5" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-sm text-left text-xs">
+        {tip}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -197,13 +192,8 @@ function TransactionTableHeader({
       {showOrderSku ? (
         <span className="min-w-0 truncate px-2 py-2.5">
           <SortTrigger
-            label={
-              <TaxReportHeaderWithTip
-                label="SKU no pedido"
-                tip="Nome do SKU registrado no pedido do Mercado Livre. Pode diferir do cadastro atual quando o SKU foi renomeado."
-                align="left"
-              />
-            }
+            label="SKU no pedido"
+            hint={<TaxReportTipIcon label="SKU no pedido" tip="Nome do SKU registrado no pedido do Mercado Livre. Pode diferir do cadastro atual quando o SKU foi renomeado." />}
             sortKey="sku"
             sort={sort}
             onSortChange={onSortChange}
@@ -224,13 +214,8 @@ function TransactionTableHeader({
       </span>
       <span className="min-w-0 px-2 py-2.5 text-right">
         <SortTrigger
-          label={
-            <TaxReportHeaderWithTip
-              label="Qtd"
-              tip="Unidades vendidas nesta linha do pedido."
-              align="right"
-            />
-          }
+          label="Qtd"
+            hint={<TaxReportTipIcon label="Qtd" tip="Unidades vendidas nesta linha do pedido." />}
           sortKey="qtd"
           sort={sort}
           onSortChange={onSortChange}
@@ -241,12 +226,8 @@ function TransactionTableHeader({
       </span>
       <span className="px-2 py-2.5 text-right whitespace-nowrap">
         <SortTrigger
-          label={
-            <TaxReportHeaderWithTip
-              label="PIS/COFINS"
-              tip="Líquido após crédito na NF de entrada. Passe o mouse no valor da linha para ver débito e crédito."
-            />
-          }
+          label="PIS/COFINS"
+            hint={<TaxReportTipIcon label="PIS/COFINS" tip="Líquido após crédito na NF de entrada. Passe o mouse no valor da linha para ver débito e crédito." />}
           sortKey="pisCofins"
           sort={sort}
           onSortChange={onSortChange}
@@ -254,12 +235,8 @@ function TransactionTableHeader({
       </span>
       <span className="px-2 py-2.5 text-right whitespace-nowrap">
         <SortTrigger
-          label={
-            <TaxReportHeaderWithTip
-              label="ICMS"
-              tip="ICMS interno ou interestadual (UF origem) — sem DIFAL."
-            />
-          }
+          label="ICMS"
+            hint={<TaxReportTipIcon label="ICMS" tip="ICMS interno ou interestadual (UF origem) — sem DIFAL." />}
           sortKey="icms"
           sort={sort}
           onSortChange={onSortChange}
@@ -267,12 +244,8 @@ function TransactionTableHeader({
       </span>
       <span className="px-2 py-2.5 text-right whitespace-nowrap">
         <SortTrigger
-          label={
-            <TaxReportHeaderWithTip
-              label="DIFAL"
-              tip="Diferencial de alíquota (EC 87/2015) para comprador não contribuinte."
-            />
-          }
+          label="DIFAL"
+            hint={<TaxReportTipIcon label="DIFAL" tip="Diferencial de alíquota (EC 87/2015) para comprador não contribuinte." />}
           sortKey="difal"
           sort={sort}
           onSortChange={onSortChange}
@@ -280,12 +253,8 @@ function TransactionTableHeader({
       </span>
       <span className="px-2 py-2.5 text-right whitespace-nowrap">
         <SortTrigger
-          label={
-            <TaxReportHeaderWithTip
-              label="Imp. oper."
-              tip="PIS/COFINS + ICMS por venda. Percentual sobre a receita bruta."
-            />
-          }
+          label="Imp. oper."
+            hint={<TaxReportTipIcon label="Imp. oper." tip="PIS/COFINS + ICMS por venda. Percentual sobre a receita bruta." />}
           sortKey="impostoOperacional"
           sort={sort}
           onSortChange={onSortChange}
@@ -293,12 +262,8 @@ function TransactionTableHeader({
       </span>
       <span className="px-2 py-2.5 text-right whitespace-nowrap">
         <SortTrigger
-          label={
-            <TaxReportHeaderWithTip
-              label="Margem oper."
-              tip="Receita menos CMV e impostos operacionais nesta venda."
-            />
-          }
+          label="Margem oper."
+            hint={<TaxReportTipIcon label="Margem oper." tip="Receita menos CMV e impostos operacionais nesta venda." />}
           sortKey="margemOperacional"
           sort={sort}
           onSortChange={onSortChange}
