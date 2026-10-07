@@ -58,29 +58,30 @@ type QuickFilter = "all" | "below" | "excluded";
 
 /** Cor de cada filtro rápido — "Fora da média" no mesmo âmbar das flags dos
  * anúncios e do badge do topo; "Abaixo da meta" em vermelho (margem a
- * corrigir). Já vêm tingidos (tom translúcido, que só fica mais forte no
- * hover — sem sombra nem movimento); o ativo fica preenchido. */
+ * corrigir). Cor discreta: bolinha e contador coloridos, fundo só levemente
+ * tingido; o hover só pinta a borda na cor do filtro; o ativo ganha borda e
+ * texto na cor, sem preenchimento sólido. */
 const QUICK_FILTER_TONE: Record<
   QuickFilter,
   { idle: string; active: string; dot: string; count: string }
 > = {
   all: {
-    idle: "border-[var(--primary)]/20 bg-[var(--primary)]/[0.07] text-[var(--primary)] hover:bg-[var(--primary)]/[0.14]",
-    active: "border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--primary)]/90",
+    idle: "border-[var(--border)] bg-[var(--primary)]/[0.03] text-[var(--foreground)] hover:border-[var(--primary)]/40",
+    active: "border-[var(--primary)]/40 bg-[var(--primary)]/[0.08] text-[var(--primary)]",
     dot: "bg-[var(--primary)]",
-    count: "bg-white/80 text-[var(--primary)]",
+    count: "bg-[var(--primary)]/10 text-[var(--primary)]",
   },
   below: {
-    idle: "border-rose-200 bg-rose-500/[0.08] text-rose-700 hover:bg-rose-500/[0.16]",
-    active: "border-rose-600 bg-rose-600 text-white hover:bg-rose-600/90",
+    idle: "border-[var(--border)] bg-rose-500/[0.03] text-[var(--foreground)] hover:border-rose-300",
+    active: "border-rose-300 bg-rose-500/[0.08] text-rose-700",
     dot: STATUS_PILL_CLASS.danger.dot,
-    count: "bg-white/80 text-rose-700",
+    count: "bg-rose-500/10 text-rose-700",
   },
   excluded: {
-    idle: "border-amber-200 bg-amber-500/[0.10] text-amber-800 hover:bg-amber-500/[0.20]",
-    active: "border-amber-700 bg-amber-700 text-white hover:bg-amber-700/90",
+    idle: "border-[var(--border)] bg-amber-500/[0.04] text-[var(--foreground)] hover:border-amber-300",
+    active: "border-amber-300 bg-amber-500/[0.10] text-amber-800",
     dot: STATUS_PILL_CLASS.warning.dot,
-    count: "bg-white/80 text-amber-800",
+    count: "bg-amber-500/15 text-amber-800",
   },
 };
 
@@ -486,15 +487,12 @@ export function FinancialEvaluationClient({
                     active ? tone.active : tone.idle,
                   )}
                 >
-                  <span
-                    className={cn("size-2 rounded-full", active ? "bg-white/90" : tone.dot)}
-                    aria-hidden
-                  />
+                  <span className={cn("size-2 rounded-full", tone.dot)} aria-hidden />
                   {filter.label}
                   <span
                     className={cn(
                       "rounded-full px-1.5 font-semibold tabular-nums",
-                      active ? "bg-white/25 text-white" : tone.count,
+                      tone.count,
                     )}
                   >
                     {filter.count.toLocaleString("pt-BR")}
