@@ -65,7 +65,7 @@ async function OperacoesFullDataSection({
 
   return (
     <OperationsKanban
-      initialData={boards}
+      initialCards={boards.full.cards}
       kind="full"
       initialColumns={columns}
       initialBackground={background}
@@ -93,8 +93,8 @@ export default async function OperacoesFullPage() {
   }
 
   const organizationId = orgContext.organization.id;
-  const boardsPromise = loadOperationsBoardsFast(organizationId, token, "full");
   const columnsPromise = loadOrMaterializeKanbanColumns(organizationId, "full");
+  const boardsPromise = loadOperationsBoardsFast(organizationId, token, "full", columnsPromise);
   const settingsPromise = loadOrMaterializeKanbanBoardSettings(organizationId, "full");
 
   let settings = DEFAULT_SETTINGS;
@@ -140,8 +140,8 @@ export default async function OperacoesFullPage() {
             Operações Full
           </h1>
           <p className="mt-2 hidden max-w-2xl text-[15px] leading-relaxed text-[var(--muted-foreground)] sm:block">
-            Acompanhe o fluxo de envio ao Full: agendamento e coleta. Use
-            Avançar ou Mover para… em cada card.
+            Acompanhe o fluxo de envio ao Full: agendamento e coleta. Arraste
+            os cards entre as etapas e organize a ordem de cada coluna.
           </p>
         </div>
       </header>

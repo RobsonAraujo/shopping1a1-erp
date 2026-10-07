@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
 import {
@@ -13,7 +13,7 @@ import {
   PowerOff,
   Trash2,
 } from "lucide-react";
-import { DndContext, DragOverlay, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
+import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/adapter/element-adapter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -38,12 +38,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ItemListSearch, itemListSearchEmptyMessage } from "@/components/shared/ItemListSearch";
-import { ChipVisual, DraggableChip } from "@/components/shared/DraggableChip";
+import { DraggableChip, parseChipDragId } from "@/components/shared/DraggableChip";
 import { UserFeedback } from "@/components/ui/user-feedback";
 import { filterByItemListSearch } from "@/lib/item-list-search";
 import { readApiError } from "@/lib/api/api-client-error";
-import { useDndSensors } from "@/hooks/use-dnd-sensors";
-import { useDropHighlight } from "@/hooks/use-drop-highlight";
+import { parseDropHighlightId, useDropHighlight } from "@/hooks/use-drop-highlight";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import type {
   AssignedProduct,
@@ -57,6 +56,8 @@ export type { SupplierRow } from "@/lib/fornecedores/fornecedores-data";
 /** Sentinela de id pro drop-target da caixa "sem fornecedor" — nunca colide
  * com um id real de fornecedor (cuid). */
 const UNASSIGNED_DROP_ID = "unassigned";
+/** Tipo do arrasto de produto (chip) até um fornecedor ou "sem fornecedor". */
+const PRODUCT_DRAG_TYPE = "supplier-product";
 
 type DraggedProduct = UnassignedProduct | Pick<AssignedProduct, "mlItemId" | "sku">;
 
@@ -75,6 +76,8 @@ function ProductChipLabel({ product }: { product: DraggedProduct }) {
           alt=""
           width={20}
           height={20}
+          // O chip inteiro é o arrastável; um <img> nativo arrastaria a imagem.
+          draggable={false}
           className="size-5 shrink-0 rounded object-cover"
         />
       ) : null}
@@ -90,7 +93,7 @@ function DroppableSupplierRow({
   supplier: SupplierRow;
   children: React.ReactNode;
 }) {
-  const { setNodeRef, className } = useDropHighlight(supplier.id);
+  const { setNodeRef, className } = useDropHighlight(supplier.id, { accepts: PRODUCT_DRAG_TYPE });
   return (
     <tr ref={setNodeRef} className={cn("border-b border-[var(--border)] last:border-0", className)}>
       {children}
@@ -99,7 +102,7 @@ function DroppableSupplierRow({
 }
 
 function DroppableUnassignedTray({ children }: { children: React.ReactNode }) {
-  const { setNodeRef, className } = useDropHighlight(UNASSIGNED_DROP_ID);
+  const { setNodeRef, className } = useDropHighlight(UNASSIGNED_DROP_ID, { accepts: PRODUCT_DRAG_TYPE });
   return (
     <div ref={setNodeRef} className={cn("flex max-h-40 flex-wrap gap-2 overflow-y-auto rounded-lg p-1", className)}>
       {children}
@@ -133,8 +136,6 @@ export function FornecedoresClient({
   const [assignError, setAssignError] = useState<string | null>(null);
   const [productSearchQuery, setProductSearchQuery] = useState("");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  const [activeDragId, setActiveDragId] = useState<string | null>(null);
-  const sensors = useDndSensors();
   const isMobile = useIsMobile();
 
   const upsertSupplierLocally = useCallback((supplier: SupplierRow) => {
@@ -154,15 +155,6 @@ export function FornecedoresClient({
     }
     return map;
   }, [assignedProducts]);
-
-  const activeDragProduct = useMemo<DraggedProduct | null>(() => {
-    if (!activeDragId) return null;
-    return (
-      unassignedProducts.find((p) => p.mlItemId === activeDragId) ??
-      assignedProducts.find((p) => p.mlItemId === activeDragId) ??
-      null
-    );
-  }, [activeDragId, unassignedProducts, assignedProducts]);
 
   function toggleExpanded(supplierId: string) {
     setExpandedIds((prev) => {
@@ -213,15 +205,7 @@ export function FornecedoresClient({
     }
   }
 
-  function handleDragStart(event: DragStartEvent) {
-    setActiveDragId(String(event.active.id));
-  }
-
-  async function handleDragEnd(event: DragEndEvent) {
-    setActiveDragId(null);
-    const mlItemId = String(event.active.id);
-    const overId = event.over?.id ? String(event.over.id) : null;
-    if (!overId) return;
+  async function handleDrop(mlItemId: string, overId: string) {
     const targetSupplierId = overId === UNASSIGNED_DROP_ID ? null : overId;
 
     const location = locateProduct(mlItemId);
@@ -246,6 +230,26 @@ export function FornecedoresClient({
       applyMove(product, targetSupplierId, sourceSupplierId);
     }
   }
+
+  // O monitor fica registrado uma vez só (re-registrar no meio de um arrasto
+  // o cancelaria) e lê a versão atual do handler por ref — escrita num
+  // effect, que mutar ref durante o render quebra as regras do React Compiler.
+  const handleDropRef = useRef(handleDrop);
+  useEffect(() => {
+    handleDropRef.current = handleDrop;
+  });
+  useEffect(
+    () =>
+      monitorForElements({
+        canMonitor: ({ source }) => parseChipDragId(source.data, PRODUCT_DRAG_TYPE) !== null,
+        onDrop: ({ source, location }) => {
+          const mlItemId = parseChipDragId(source.data, PRODUCT_DRAG_TYPE);
+          const overId = parseDropHighlightId(location.current.dropTargets[0]?.data);
+          if (mlItemId && overId) void handleDropRef.current(mlItemId, overId);
+        },
+      }),
+    [],
+  );
 
   const filteredUnassignedProducts = useMemo(
     () =>
@@ -367,13 +371,6 @@ export function FornecedoresClient({
   }
 
   return (
-    <DndContext
-      sensors={sensors}
-      autoScroll={false}
-      onDragStart={handleDragStart}
-      onDragEnd={(event) => void handleDragEnd(event)}
-      onDragCancel={() => setActiveDragId(null)}
-    >
       <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-[var(--muted-foreground)]">
@@ -414,7 +411,7 @@ export function FornecedoresClient({
               </p>
             ) : (
               filteredUnassignedProducts.map((product) => (
-                <DraggableChip key={product.mlItemId} id={product.mlItemId}>
+                <DraggableChip key={product.mlItemId} id={product.mlItemId} type={PRODUCT_DRAG_TYPE}>
                   <ProductChipLabel product={product} />
                 </DraggableChip>
               ))
@@ -660,7 +657,7 @@ export function FornecedoresClient({
                               ) : (
                                 <div className="flex flex-wrap gap-2">
                                   {supplierProducts.map((product) => (
-                                    <DraggableChip key={product.mlItemId} id={product.mlItemId}>
+                                    <DraggableChip key={product.mlItemId} id={product.mlItemId} type={PRODUCT_DRAG_TYPE}>
                                       <ProductChipLabel product={product} />
                                     </DraggableChip>
                                   ))}
@@ -779,14 +776,5 @@ export function FornecedoresClient({
         </AlertDialogContent>
       </AlertDialog>
       </div>
-
-      <DragOverlay>
-        {activeDragProduct ? (
-          <ChipVisual>
-            <ProductChipLabel product={activeDragProduct} />
-          </ChipVisual>
-        ) : null}
-      </DragOverlay>
-    </DndContext>
   );
 }

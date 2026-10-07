@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { useEffect } from "react";
 import { act, renderIntoDocument } from "@/test-setup/render";
-import { renderCardDragPreview } from "@/lib/home/dashboard/drag-preview";
+import { renderCardDragPreview } from "@/lib/dnd/drag-preview";
 
 let mounts = 0;
 

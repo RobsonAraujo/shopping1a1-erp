@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { Suspense } from "react";
 import { ShoppingCart } from "lucide-react";
-import { ComprasPageClient } from "@/components/compras/ComprasPageClient";
+import { SupplierPurchaseKanban } from "@/components/compras/SupplierPurchaseKanban";
 import { ComprasPageSkeleton } from "@/components/compras/ComprasPageSkeleton";
 import { KanbanFullscreenSkeleton } from "@/components/kanban/KanbanFullscreenSkeleton";
 import { UserFeedback } from "@/components/ui/user-feedback";
@@ -67,8 +67,8 @@ async function ComprasDataSection({
   }
 
   return (
-    <ComprasPageClient
-      cards={cards}
+    <SupplierPurchaseKanban
+      initialCards={cards}
       initialColumns={columns}
       initialBackground={background}
       initialFullscreen={isFullscreen}
@@ -95,8 +95,8 @@ export default async function ComprasPage() {
   }
 
   const organizationId = orgContext.organization.id;
-  const boardsPromise = loadOperationsBoardsFast(organizationId, token, "purchase");
   const columnsPromise = loadOrMaterializeKanbanColumns(organizationId, "purchase");
+  const boardsPromise = loadOperationsBoardsFast(organizationId, token, "purchase", columnsPromise);
   const settingsPromise = loadOrMaterializeKanbanBoardSettings(
     organizationId,
     "purchase",

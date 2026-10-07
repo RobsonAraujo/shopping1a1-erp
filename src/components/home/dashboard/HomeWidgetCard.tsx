@@ -154,7 +154,8 @@ export function HomeWidgetCard({
 
   const Icon = definition.icon;
   const draggable = isDraggable === true;
-  // Colapsar durante um arrasto animaria a altura no meio da medição do dnd-kit.
+  // Colapsar durante um arrasto mudaria a altura do card no meio do arrasto
+  // (a sombra de destino usa a altura medida no início).
   const toggle = dragInProgress ? undefined : onToggle;
 
   // Cada controle do header retém o próprio ponteiro/clique. Hoje não há

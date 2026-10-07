@@ -1,8 +1,8 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useDraggable } from "@dnd-kit/core";
 import { ImageOff, SearchCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,9 +11,7 @@ import type { SupplierBoardCard } from "@/lib/compras/supplier-board";
 import { supplierPathSegment } from "@/lib/compras/purchase-analysis";
 import { cn } from "@/lib/utils";
 
-export const SUPPLIER_DRAG_ID_PREFIX = "supplier:";
-
-function SupplierCardHeader({ card }: { card: SupplierBoardCard }) {
+function SupplierCardHeader({ card, menu }: { card: SupplierBoardCard; menu?: ReactNode }) {
   return (
     <div className="p-3">
       <div className="flex items-start justify-between gap-2">
@@ -23,6 +21,7 @@ function SupplierCardHeader({ card }: { card: SupplierBoardCard }) {
         <span className="shrink-0 rounded-full bg-[var(--muted)] px-2 py-0.5 text-xs tabular-nums">
           {card.totalActive} a repor
         </span>
+        {menu ? <div className="-my-1 -mr-1.5 shrink-0">{menu}</div> : null}
       </div>
 
       {card.breakdown.length > 0 ? (
@@ -47,6 +46,7 @@ function SupplierCardHeader({ card }: { card: SupplierBoardCard }) {
                 alt=""
                 width={28}
                 height={28}
+                draggable={false}
                 className="size-7 shrink-0 rounded-md object-cover"
               />
             ) : (
@@ -89,14 +89,14 @@ function SupplierCardHeader({ card }: { card: SupplierBoardCard }) {
   );
 }
 
-/** Único link de ação do card. Avançar/regredir etapa agora é só via
- * drag-and-drop (arrastar o card entre colunas) — os botões "Avançar"/
- * "Mover para…" saíram pra não duplicar visualmente o que o drag já faz. */
+/** Único link de ação do card. Mudar de etapa é arrastando o card (ou pelo
+ * menu ⋯ do header). `draggable={false}` no link: o card inteiro é
+ * arrastável, e um `<a>` nativo arrastaria a URL em vez do card. */
 function SupplierCardFooter({ card }: { card: SupplierBoardCard }) {
   return (
     <div className="border-t border-[var(--border)] bg-[var(--muted)]/20 px-3 py-2">
       <Button asChild size="sm" variant="secondary" className="h-7 w-full gap-1.5 text-xs font-semibold">
-        <Link href={`/dashboard/compras/${supplierPathSegment(card.supplier)}`}>
+        <Link href={`/dashboard/compras/${supplierPathSegment(card.supplier)}`} draggable={false}>
           <SearchCheck className="size-3.5" aria-hidden />
           Analisar
         </Link>
@@ -105,54 +105,26 @@ function SupplierCardFooter({ card }: { card: SupplierBoardCard }) {
   );
 }
 
-/** Aparência completa do card (cabeçalho + rodapé) — usada tanto pelo card
- * "de verdade" (arrastável) quanto pela cópia flutuante do `DragOverlay`.
- * Ter uma só definição visual evita que o card "se desmonte" durante o
- * arrasto (a cópia flutuante do overlay é sempre o card inteiro). */
+/** Aparência completa do card de fornecedor. O arrasto é do board
+ * (`KanbanCardSlot`), que também gera o fantasma clonando este DOM. */
 export function SupplierCardBody({
   card,
+  menu,
   className,
 }: {
   card: SupplierBoardCard;
+  menu?: ReactNode;
   className?: string;
 }) {
   return (
     <article
       className={cn(
-        "overflow-hidden rounded-lg border bg-[var(--card)] shadow-sm",
-        card.hasOverdue ? "border-rose-200" : "border-[var(--border)]",
+        "overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-sm",
         className,
       )}
     >
-      <SupplierCardHeader card={card} />
+      <SupplierCardHeader card={card} menu={menu} />
       <SupplierCardFooter card={card} />
     </article>
-  );
-}
-
-export function SupplierPurchaseKanbanCard({
-  card,
-  busy,
-}: {
-  card: SupplierBoardCard;
-  busy: boolean;
-}) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: `${SUPPLIER_DRAG_ID_PREFIX}${card.supplier}`,
-  });
-
-  return (
-    <div
-      ref={setNodeRef}
-      {...listeners}
-      {...attributes}
-      className={cn(
-        "cursor-grab touch-none active:cursor-grabbing",
-        isDragging && "opacity-0",
-        busy && "pointer-events-none opacity-60",
-      )}
-    >
-      <SupplierCardBody card={card} />
-    </div>
   );
 }

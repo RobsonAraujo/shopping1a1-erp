@@ -30,6 +30,10 @@ export type SupplierBoardCard = {
   columnId: string;
   columnLabel: string;
   columnPosition: number;
+  /** Ordem manual do card na coluna = a menor `position` entre os ciclos do
+   * fornecedor **nessa** coluna. Mover o card grava a mesma posição em todos
+   * eles (ver `SupplierPurchaseKanban`), então na prática é um valor só. */
+  position: number;
   totalActive: number;
   /** Só populado quando há mais de uma coluna entre os ciclos do grupo
    * (evita ruído visual no caso comum de todos no mesmo estágio). */
@@ -58,9 +62,35 @@ function compareTopItems(a: OperationsBoardCard, b: OperationsBoardCard): number
   return (a.sku ?? a.mlItemId).localeCompare(b.sku ?? b.mlItemId, "pt-BR");
 }
 
+/**
+ * Atualiza `columnLabel`/`columnPosition` dos cards com as colunas **atuais**
+ * do board. Os cards trazem esses campos do servidor no load; depois de
+ * renomear ou reordenar colunas eles ficavam velhos — e `columnPosition` é o
+ * que decide a coluna "elo mais fraco" do fornecedor e se um drag avança ou
+ * volta etapa. Devolve o mesmo objeto quando nada mudou.
+ */
+export function withCurrentColumnInfo(
+  cards: OperationsBoardCard[],
+  columns: readonly { id: string; label: string; position: number }[],
+): OperationsBoardCard[] {
+  const byId = new Map(columns.map((column) => [column.id, column]));
+  let changed = false;
+  const next = cards.map((card) => {
+    const column = byId.get(card.columnId);
+    if (!column || (column.label === card.columnLabel && column.position === card.columnPosition)) {
+      return card;
+    }
+    changed = true;
+    return { ...card, columnLabel: column.label, columnPosition: column.position };
+  });
+  return changed ? next : cards;
+}
+
 /** Constrói um card por fornecedor a partir dos cards de reposição de
- * compra (`kind: "purchase"`) já ativos — ordenado por urgência, depois por
- * quantidade de itens ativos, depois por nome. */
+ * compra (`kind: "purchase"`) já ativos. **Não ordena**: a ordem dentro da
+ * coluna é a manual (`position`), aplicada pelo board — reordenar por
+ * urgência aqui fazia os cards trocarem de lugar sozinhos enquanto o
+ * streaming de vendas ia acendendo o "Urgente" de cada fornecedor. */
 export function buildSupplierBoardCards(
   cards: OperationsBoardCard[],
 ): SupplierBoardCard[] {
@@ -77,6 +107,9 @@ export function buildSupplierBoardCards(
   for (const [supplier, group] of bySupplier) {
     const weakest = group.reduce((weakest, card) =>
       card.columnPosition < weakest.columnPosition ? card : weakest,
+    );
+    const position = Math.min(
+      ...group.filter((card) => card.columnId === weakest.columnId).map((card) => card.position),
     );
 
     const countByColumn = new Map<string, { label: string; position: number; count: number }>();
@@ -116,6 +149,7 @@ export function buildSupplierBoardCards(
       columnId: weakest.columnId,
       columnLabel: weakest.columnLabel,
       columnPosition: weakest.columnPosition,
+      position,
       totalActive: group.length,
       breakdown,
       hasOverdue: group.some((card) => card.purchaseIsOverdue),
@@ -127,13 +161,57 @@ export function buildSupplierBoardCards(
     });
   }
 
-  result.sort((a, b) => {
-    if (a.hasOverdue !== b.hasOverdue) return a.hasOverdue ? -1 : 1;
-    if (a.totalActive !== b.totalActive) return b.totalActive - a.totalActive;
-    return a.supplier.localeCompare(b.supplier, "pt-BR", { sensitivity: "base" });
-  });
-
   return result;
+}
+
+function sameSupplierBoardCard(a: SupplierBoardCard, b: SupplierBoardCard): boolean {
+  return (
+    a.supplier === b.supplier &&
+    a.columnId === b.columnId &&
+    a.columnLabel === b.columnLabel &&
+    a.columnPosition === b.columnPosition &&
+    a.position === b.position &&
+    a.totalActive === b.totalActive &&
+    a.hasOverdue === b.hasOverdue &&
+    a.salesPending === b.salesPending &&
+    a.suggestedQtyTotal === b.suggestedQtyTotal &&
+    a.overflowCount === b.overflowCount &&
+    a.cycleIds.length === b.cycleIds.length &&
+    a.cycleIds.every((id, i) => id === b.cycleIds[i]) &&
+    a.breakdown.length === b.breakdown.length &&
+    a.breakdown.every(
+      (entry, i) =>
+        entry.columnId === b.breakdown[i].columnId &&
+        entry.columnLabel === b.breakdown[i].columnLabel &&
+        entry.count === b.breakdown[i].count,
+    ) &&
+    a.topItems.length === b.topItems.length &&
+    a.topItems.every(
+      (item, i) =>
+        item.mlItemId === b.topItems[i].mlItemId &&
+        item.sku === b.topItems[i].sku &&
+        item.suggestedQty === b.topItems[i].suggestedQty &&
+        item.imageUrl === b.topItems[i].imageUrl,
+    )
+  );
+}
+
+/**
+ * Devolve `next`, mas reaproveitando o objeto **anterior** de cada fornecedor
+ * cujo conteúdo não mudou. `buildSupplierBoardCards` sempre cria objetos
+ * novos; sem isto, cada lote do streaming de vendas (que toca um ou dois
+ * produtos) trocava a identidade de todos os cards e o board memoizado
+ * re-renderizava inteiro.
+ */
+export function reuseUnchangedSupplierCards(
+  previous: readonly SupplierBoardCard[],
+  next: SupplierBoardCard[],
+): SupplierBoardCard[] {
+  const previousBySupplier = new Map(previous.map((card) => [card.supplier, card]));
+  return next.map((card) => {
+    const before = previousBySupplier.get(card.supplier);
+    return before && sameSupplierBoardCard(before, card) ? before : card;
+  });
 }
 
 export type MoveDirection = "forward" | "backward" | "noop";

@@ -45,9 +45,16 @@ export async function POST(request: NextRequest) {
   const { kind } = parsedBody.data;
 
   const encoder = new TextEncoder();
+  // O client aborta o fetch ao desmontar (inclusive a montagem dupla do
+  // StrictMode em dev). Sem esta guarda, o `enqueue` depois do cancelamento
+  // lançava, o `catch` tentava mandar o evento de erro (lançava de novo) e o
+  // `close` final também — erro no log e a varredura pesada seguindo até o
+  // fim sem ninguém ouvindo.
+  let closed = false;
   const readable = new ReadableStream({
     async start(controller) {
       function send(event: ResyncStreamEvent) {
+        if (closed) return;
         controller.enqueue(encoder.encode(sseLine(event)));
       }
       try {
@@ -57,15 +64,24 @@ export async function POST(request: NextRequest) {
           organizationId,
           kind,
           (mlItemId, patch) => send({ type: "card-patch", mlItemId, ...patch }),
+          request.signal,
         );
-        send({ type: "done", ...board });
+        if (board) send({ type: "done", ...board });
       } catch (e) {
-        logServerError("api/replenishment-cycles/resync-stream POST", e);
-        const message = e instanceof Error ? e.message : "resync_stream_failed";
-        send({ type: "error", message });
+        if (!closed && !request.signal.aborted) {
+          logServerError("api/replenishment-cycles/resync-stream POST", e);
+          const message = e instanceof Error ? e.message : "resync_stream_failed";
+          send({ type: "error", message });
+        }
       } finally {
-        controller.close();
+        if (!closed) {
+          closed = true;
+          controller.close();
+        }
       }
+    },
+    cancel() {
+      closed = true;
     },
   });
 

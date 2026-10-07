@@ -13,7 +13,7 @@ import type { Edge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/types";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { HomeWidgetDefinition } from "@/lib/home/dashboard/widget-registry";
 import { HomeWidgetDragProvider } from "@/components/home/dashboard/HomeWidgetCard";
-import { renderCardDragPreview } from "@/lib/home/dashboard/drag-preview";
+import { renderCardDragPreview } from "@/lib/dnd/drag-preview";
 import {
   homeWidgetDragData,
   parseWidgetDragData,

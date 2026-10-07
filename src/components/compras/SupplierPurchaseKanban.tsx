@@ -1,15 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Maximize2, RefreshCw } from "lucide-react";
-import { DndContext, DragOverlay, type DragEndEvent } from "@dnd-kit/core";
-import { arrayMove } from "@dnd-kit/sortable";
-import {
-  ItemListSearch,
-  itemListSearchEmptyMessage,
-} from "@/components/shared/ItemListSearch";
-import { Button } from "@/components/ui/button";
+import { itemListSearchEmptyMessage } from "@/components/shared/ItemListSearch";
 import { FormSelect } from "@/components/ui/form-select";
 import { UserFeedback } from "@/components/ui/user-feedback";
 import {
@@ -22,58 +15,56 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  SupplierPurchaseKanbanBoard,
-  COLUMN_DRAG_ID_PREFIX,
-  COLUMN_DROP_ID_PREFIX,
-} from "@/components/compras/SupplierPurchaseKanbanBoard";
-import {
-  SUPPLIER_DRAG_ID_PREFIX,
-  SupplierCardBody,
-} from "@/components/compras/SupplierPurchaseKanbanCard";
+import { SupplierCardBody } from "@/components/compras/SupplierPurchaseKanbanCard";
+import { KanbanBoard } from "@/components/kanban/KanbanBoard";
+import { KanbanFullscreenFrame } from "@/components/kanban/KanbanFullscreenFrame";
+import { KanbanToolbar } from "@/components/kanban/KanbanToolbar";
+import type { SupplierRow } from "@/components/fornecedores/FornecedoresClient";
 import {
   buildSupplierBoardCards,
   resolveMoveActionForSupplier,
-  type MoveAction,
+  reuseUnchangedSupplierCards,
+  withCurrentColumnInfo,
+  type MoveDirection,
+  type SupplierBoardCard,
 } from "@/lib/compras/supplier-board";
-import {
-  finalStatusForKind,
-  mergeOperationsBoardCards,
-  patchOperationsBoardCardsSales,
-} from "@/lib/compras/replenishment-cycle";
 import { supplierPathSegment } from "@/lib/compras/purchase-analysis";
-import type {
-  OperationsBoardCard,
-  OperationsBoardsData,
-  OperationsCardSalesPatch,
-} from "@/lib/compras/replenishment-cycle-data";
-import { filterByItemListSearch } from "@/lib/item-list-search";
-import { readApiError } from "@/lib/api/api-client-error";
-import { useApiResource } from "@/hooks/use-api-resource";
-import { useDndSensors } from "@/hooks/use-dnd-sensors";
-import { useSSEStream } from "@/hooks/use-sse-stream";
-import {
-  useKanbanBoard,
-  type KanbanColumnRow,
-} from "@/hooks/use-kanban-columns";
-import { KanbanBackgroundPicker } from "@/components/kanban/KanbanBackgroundPicker";
-import { KanbanAppearancePicker } from "@/components/kanban/KanbanAppearancePicker";
-import { KanbanFullscreenFrame } from "@/components/kanban/KanbanFullscreenFrame";
-import type { SupplierRow } from "@/components/fornecedores/FornecedoresClient";
+import type { OperationsBoardCard } from "@/lib/compras/replenishment-cycle-data";
+import { matchesItemListSearch } from "@/lib/item-list-search";
 import type { KanbanAppearance } from "@/lib/kanban/kanban-column-colors";
+import { useApiResource } from "@/hooks/use-api-resource";
+import { useKanbanBoard, type KanbanColumnRow } from "@/hooks/use-kanban-columns";
+import {
+  useOperationsBoardCards,
+  type CardMoveTarget,
+} from "@/hooks/use-operations-board-cards";
 import { cn } from "@/lib/utils";
 
-type PendingBackwardMove = MoveAction & {
+type PlannedSupplierMove = {
   supplier: string;
-  targetColumn: KanbanColumnRow;
-  isFinalColumn: boolean;
+  direction: MoveDirection;
+  /** Ciclos que mudam de coluna (os que "voltam etapa" no caso backward). */
+  transitionCount: number;
+  /** Tudo o que é escrito: os que mudam de coluna **e** os que já estavam
+   * nela — todos recebem a posição onde o card foi solto. */
+  cycleIds: string[];
+  target: CardMoveTarget;
 };
 
-type ResyncStreamEvent =
-  | ({ type: "card-patch"; mlItemId: string } & OperationsCardSalesPatch)
-  | { type: "done"; cards: OperationsBoardCard[] }
-  | { type: "error"; message: string };
+const NO_SUPPLIERS: ReadonlySet<string> = new Set();
 
+const getSupplierId = (card: SupplierBoardCard) => card.supplier;
+const getSupplierColumnId = (card: SupplierBoardCard) => card.columnId;
+const getSupplierPosition = (card: SupplierBoardCard) => card.position;
+const renderSupplierCard = (card: SupplierBoardCard, menu: ReactNode) => (
+  <SupplierCardBody card={card} menu={menu} />
+);
+
+/**
+ * Kanban de Compras: um card por **fornecedor** (agregado dos ciclos de
+ * reposição dos produtos dele — ver `supplier-board.ts`), porque a compra é
+ * feita por fornecedor, não produto a produto.
+ */
 export function SupplierPurchaseKanban({
   initialCards,
   initialColumns,
@@ -90,43 +81,27 @@ export function SupplierPurchaseKanban({
   initialFullscreen: boolean;
   initialAppearance: KanbanAppearance;
 }) {
-  const [cards, setCards] = useState(initialCards);
   const [searchQuery, setSearchQuery] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [busySupplier, setBusySupplier] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [activeDragSupplier, setActiveDragSupplier] = useState<string | null>(
-    null,
-  );
-  const [activeDragColumnId, setActiveDragColumnId] = useState<string | null>(
-    null,
-  );
-  const [pendingBackwardMove, setPendingBackwardMove] =
-    useState<PendingBackwardMove | null>(null);
-  const sensors = useDndSensors();
+  const [pendingBackwardMove, setPendingBackwardMove] = useState<PlannedSupplierMove | null>(null);
   const router = useRouter();
-  const {
-    columns,
-    background,
-    isFullscreen,
-    appearance,
-    rename: renameColumn,
-    addColumn,
-    removeColumn,
-    reorder: reorderColumns,
-    toggleCollapse,
-    setBackground,
-    setFullscreen,
-    setTheme,
-    setSolidColor,
-    setColumnColor,
-    setColorMode,
-  } = useKanbanBoard("purchase", {
+  const board = useKanbanBoard("purchase", {
     columns: initialColumns,
     background: initialBackground,
     isFullscreen: initialFullscreen,
     appearance: initialAppearance,
   });
+  const { columns, removeColumn, setFullscreen } = board;
+  const {
+    cards: rawCards,
+    busyIds,
+    error: cardsError,
+    streamError,
+    streaming,
+    syncing,
+    refresh,
+    moveCycles,
+    applyServerRows,
+  } = useOperationsBoardCards("purchase", initialCards, columns);
 
   // Lista leve (só o cadastro de fornecedores, sem sweep do catálogo ML) —
   // acesso rápido a um fornecedor mesmo quando ele não tem nenhum produto
@@ -142,210 +117,102 @@ export function SupplierPurchaseKanban({
     [suppliersResource.data],
   );
 
-  const supplierCards = useMemo(() => buildSupplierBoardCards(cards), [cards]);
+  const cards = useMemo(() => withCurrentColumnInfo(rawCards, columns), [rawCards, columns]);
 
-  const filteredSupplierCards = useMemo(
+  // Estado derivado guardado entre renders (padrão "ajustar estado quando a
+  // prop muda" do React): cada fornecedor mantém o objeto anterior enquanto
+  // o conteúdo não muda, então o board memoizado só re-renderiza o card que
+  // de fato mudou durante o streaming de vendas.
+  const [derived, setDerived] = useState(() => ({
+    source: cards,
+    supplierCards: buildSupplierBoardCards(cards),
+  }));
+  let supplierCards = derived.supplierCards;
+  if (derived.source !== cards) {
+    supplierCards = reuseUnchangedSupplierCards(derived.supplierCards, buildSupplierBoardCards(cards));
+    setDerived({ source: cards, supplierCards });
+  }
+
+  const filterCard = useMemo(
     () =>
-      filterByItemListSearch(supplierCards, searchQuery, (card) => ({
-        title: card.supplier,
-      })),
-    [supplierCards, searchQuery],
+      searchQuery.trim()
+        ? (card: SupplierBoardCard) => matchesItemListSearch(searchQuery, { title: card.supplier })
+        : null,
+    [searchQuery],
+  );
+  const filteredCount = filterCard ? supplierCards.filter(filterCard).length : supplierCards.length;
+
+  const busySupplierIds = useMemo(() => {
+    if (busyIds.size === 0) return NO_SUPPLIERS;
+    return new Set(
+      supplierCards.filter((s) => s.cycleIds.some((id) => busyIds.has(id))).map((s) => s.supplier),
+    );
+  }, [busyIds, supplierCards]);
+
+  const planMove = useCallback(
+    (supplier: string, column: KanbanColumnRow, position: number): PlannedSupplierMove | null => {
+      const cycles = cards.filter((c) => c.kind === "purchase" && c.supplier === supplier);
+      const action = resolveMoveActionForSupplier(
+        cycles.map((c) => ({ cycleId: c.cycleId, columnPosition: c.columnPosition })),
+        column.position,
+      );
+      const alreadyThere = cycles.filter((c) => c.columnId === column.id).map((c) => c.cycleId);
+      const cycleIds = [...new Set([...action.cycleIdsToTransition, ...alreadyThere])];
+      if (cycleIds.length === 0) return null;
+      const last = columns.reduce<KanbanColumnRow | undefined>(
+        (max, c) => (!max || c.position > max.position ? c : max),
+        undefined,
+      );
+      return {
+        supplier,
+        direction: action.direction,
+        transitionCount: action.cycleIdsToTransition.length,
+        cycleIds,
+        target: { column, isFinal: column.id === last?.id, position },
+      };
+    },
+    [cards, columns],
   );
 
-  const activeDragCard = activeDragSupplier
-    ? supplierCards.find((c) => c.supplier === activeDragSupplier)
-    : undefined;
-  const activeDragColumn = activeDragColumnId
-    ? columns.find((c) => c.id === activeDragColumnId)
-    : undefined;
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/replenishment-cycles?kind=purchase", {
-        method: "POST",
-      });
-      const json = (await res.json()) as OperationsBoardsData & {
-        error?: string;
-      };
-      if (!res.ok) {
-        setError(json.error ?? "Falha ao sincronizar.");
+  const handleMoveCard = useCallback(
+    (card: SupplierBoardCard, column: KanbanColumnRow, position: number) => {
+      const plan = planMove(card.supplier, column, position);
+      if (!plan) return;
+      // Voltar etapa é ação corretiva deliberada (regride produtos já
+      // adiantados) — pede confirmação. Avançar e reordenar na mesma coluna
+      // ("noop" de etapa) aplicam direto.
+      if (plan.direction === "backward") {
+        setPendingBackwardMove(plan);
         return;
       }
-      setCards((prev) => mergeOperationsBoardCards(prev, json.purchase.cards));
-    } catch {
-      setError("Falha de rede ao sincronizar.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Resync em background: o board já pintou com o que estava no banco
-  // (fast path do server component) — este stream busca a venda de
-  // verdade no Mercado Livre e vai destravando os campos borrados
-  // (`salesPending`) card a card, sem travar a tela. Também pode fazer
-  // cards novos aparecerem/desaparecerem no evento final (`done`).
-  const resyncStream = useSSEStream<ResyncStreamEvent>(
-    useCallback((event) => {
-      if (event.type === "card-patch") {
-        const { mlItemId, ...patch } = event;
-        setCards((prev) =>
-          patchOperationsBoardCardsSales(prev, mlItemId, patch),
-        );
-      } else if (event.type === "done") {
-        setCards((prev) => mergeOperationsBoardCards(prev, event.cards));
-      } else if (event.type === "error") {
-        setError(event.message);
-      }
-    }, []),
+      void moveCycles(plan.cycleIds, plan.target);
+    },
+    [planMove, moveCycles],
   );
 
-  useEffect(() => {
-    const controller = new AbortController();
-    void resyncStream.start("/api/replenishment-cycles/resync-stream", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind: "purchase" }),
-      signal: controller.signal,
-    });
-    return () => controller.abort();
-    // Dispara 1x ao montar.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  function planMove(
-    supplier: string,
-    targetColumn: KanbanColumnRow,
-  ): PendingBackwardMove {
-    const cyclesInGroup = cards
-      .filter((c) => c.kind === "purchase" && c.supplier === supplier)
-      .map((c) => ({ cycleId: c.cycleId, columnPosition: c.columnPosition }));
-    const sorted = [...columns].sort((a, b) => a.position - b.position);
-    const isFinalColumn = targetColumn.id === sorted[sorted.length - 1]?.id;
-    return {
-      ...resolveMoveActionForSupplier(cyclesInGroup, targetColumn.position),
-      supplier,
-      targetColumn,
-      isFinalColumn,
-    };
-  }
-
-  async function executeMove(action: PendingBackwardMove) {
-    if (action.cycleIdsToTransition.length === 0) return;
-    const previousCards = cards;
-    setCards((prev) =>
-      prev.map((c) =>
-        action.cycleIdsToTransition.includes(c.cycleId)
-          ? {
-              ...c,
-              columnId: action.targetColumn.id,
-              columnLabel: action.targetColumn.label,
-              columnPosition: action.targetColumn.position,
-              status: action.isFinalColumn
-                ? finalStatusForKind(c.kind)
-                : "attention",
-            }
-          : c,
-      ),
-    );
-    setBusySupplier(action.supplier);
-    setError(null);
-    try {
-      const res = await fetch("/api/replenishment-cycles/batch", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          cycleIds: action.cycleIdsToTransition,
-          columnId: action.targetColumn.id,
-        }),
-      });
-      if (!res.ok) {
-        setError(await readApiError(res, "replenishment_batch_failed"));
-        setCards(previousCards);
-      }
-    } catch {
-      setError("Falha de rede ao mover fornecedor.");
-      setCards(previousCards);
-    } finally {
-      setBusySupplier(null);
-    }
-  }
-
-  function handleMoveDecision(action: PendingBackwardMove) {
-    if (action.direction === "noop") return;
-    if (action.direction === "backward") {
-      setPendingBackwardMove(action);
-      return;
-    }
-    void executeMove(action);
-  }
-
-  function handleDragStart(id: string) {
-    if (id.startsWith(SUPPLIER_DRAG_ID_PREFIX)) {
-      setActiveDragSupplier(id.replace(SUPPLIER_DRAG_ID_PREFIX, ""));
-    } else if (id.startsWith(COLUMN_DRAG_ID_PREFIX)) {
-      setActiveDragColumnId(id.replace(COLUMN_DRAG_ID_PREFIX, ""));
-    }
-  }
-
-  function handleDragEnd(event: DragEndEvent) {
-    setActiveDragSupplier(null);
-    setActiveDragColumnId(null);
-    const activeId = String(event.active.id);
-    const overId = event.over?.id ? String(event.over.id) : null;
-    if (!overId) return;
-
-    if (activeId.startsWith(COLUMN_DRAG_ID_PREFIX)) {
-      if (!overId.startsWith(COLUMN_DRAG_ID_PREFIX)) return;
-      const draggedId = activeId.replace(COLUMN_DRAG_ID_PREFIX, "");
-      const targetId = overId.replace(COLUMN_DRAG_ID_PREFIX, "");
-      if (draggedId === targetId) return;
-      const sorted = [...columns].sort((a, b) => a.position - b.position);
-      const locked = sorted.filter((c) => c.isLocked);
-      const middle = sorted.filter((c) => !c.isLocked);
-      const fromIndex = middle.findIndex((c) => c.id === draggedId);
-      const toIndex = middle.findIndex((c) => c.id === targetId);
-      if (fromIndex === -1 || toIndex === -1) return;
-      const reordered = arrayMove(middle, fromIndex, toIndex);
-      const first = locked.find((c) => c.position === 0);
-      const last = locked.find((c) => c.position === sorted.length - 1);
-      const fullOrder = [
-        ...(first ? [first.id] : []),
-        ...reordered.map((c) => c.id),
-        ...(last ? [last.id] : []),
-      ];
-      void reorderColumns(fullOrder);
-      return;
-    }
-
-    const supplier = activeId.replace(SUPPLIER_DRAG_ID_PREFIX, "");
-    const targetColumnId = overId.replace(COLUMN_DROP_ID_PREFIX, "");
-    const targetColumn = columns.find((c) => c.id === targetColumnId);
-    if (!targetColumn) return;
-    handleMoveDecision(planMove(supplier, targetColumn));
-  }
+  const handleDeleteColumn = useCallback(
+    async (id: string, moveCardsToColumnId?: string) => {
+      const result = await removeColumn(id, moveCardsToColumnId);
+      if (result.ok) applyServerRows(result.relocated);
+      return result;
+    },
+    [removeColumn, applyServerRows],
+  );
 
   const exitFullscreen = useCallback(() => {
     void setFullscreen(false);
   }, [setFullscreen]);
 
+  const isFullscreen = board.isFullscreen;
+  const errors = [...new Set([cardsError, board.error, streamError].filter(Boolean))];
+
   return (
-    <DndContext
-      sensors={sensors}
-      autoScroll={false}
-      onDragStart={(event) => handleDragStart(String(event.active.id))}
-      onDragEnd={handleDragEnd}
-      onDragCancel={() => {
-        setActiveDragSupplier(null);
-        setActiveDragColumnId(null);
-      }}
-    >
+    <>
       <KanbanFullscreenFrame
         active={isFullscreen}
         title="Compras"
         count={supplierCards.length}
-        background={background}
+        background={board.background}
         onExit={exitFullscreen}
       >
         <div className={cn("flex min-h-0 flex-col gap-3 sm:gap-5", isFullscreen && "h-full max-sm:overflow-hidden")}>
@@ -355,77 +222,49 @@ export function SupplierPurchaseKanban({
               isFullscreen && "px-3 pt-3 sm:px-4",
             )}
           >
-            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
-              <ItemListSearch
-                className="max-sm:w-full"
-                value={searchQuery}
-                onChange={setSearchQuery}
-                filteredCount={filteredSupplierCards.length}
-                totalCount={supplierCards.length}
-                placeholder="Buscar fornecedor…"
-                entitySingular="fornecedor"
-                entityPlural="fornecedores"
-              />
-              <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto sm:gap-2">
-                {supplierOptions.length > 0 ? (
+            <KanbanToolbar
+              search={{
+                value: searchQuery,
+                onChange: setSearchQuery,
+                filteredCount,
+                totalCount: supplierCards.length,
+                placeholder: "Buscar fornecedor…",
+                entitySingular: "fornecedor",
+                entityPlural: "fornecedores",
+              }}
+              extra={
+                supplierOptions.length > 0 ? (
                   <FormSelect
                     className="hidden sm:block"
                     value=""
                     onValueChange={(name) =>
-                      router.push(
-                        `/dashboard/compras/${supplierPathSegment(name)}`,
-                      )
+                      router.push(`/dashboard/compras/${supplierPathSegment(name)}`)
                     }
                     options={supplierOptions}
                     placeholder="Ir para fornecedor…"
                     triggerClassName="h-9 w-48"
                     aria-label="Ir para a página de um fornecedor específico"
                   />
-                ) : null}
-                <KanbanBackgroundPicker
-                  background={background}
-                  onChange={setBackground}
-                />
-                <KanbanAppearancePicker
-                  appearance={appearance}
-                  setTheme={setTheme}
-                  setSolidColor={setSolidColor}
-                  setColorMode={setColorMode}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-2 max-sm:size-9 max-sm:px-0"
-                  disabled={loading}
-                  onClick={() => void refresh()}
-                  aria-label="Sincronizar"
-                >
-                  <RefreshCw
-                    className={cn("size-4", loading && "animate-spin")}
-                    aria-hidden
-                  />
-                  <span className="hidden sm:inline">Sincronizar</span>
-                </Button>
-                {!isFullscreen ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="gap-2 max-sm:size-9 max-sm:px-0"
-                    onClick={() => void setFullscreen(true)}
-                    aria-label="Tela cheia"
-                  >
-                    <Maximize2 className="size-4" aria-hidden />
-                    <span className="hidden sm:inline">Tela cheia</span>
-                  </Button>
-                ) : null}
-              </div>
-            </div>
+                ) : null
+              }
+              background={board.background}
+              onBackgroundChange={board.setBackground}
+              appearance={board.appearance}
+              setTheme={board.setTheme}
+              setSolidColor={board.setSolidColor}
+              setColorMode={board.setColorMode}
+              syncing={syncing}
+              syncDisabled={syncing || streaming}
+              onSync={() => void refresh()}
+              isFullscreen={isFullscreen}
+              onEnterFullscreen={() => void setFullscreen(true)}
+            />
 
-            {error ? <UserFeedback>{error}</UserFeedback> : null}
+            {errors.map((message) => (
+              <UserFeedback key={message}>{message}</UserFeedback>
+            ))}
 
-            {supplierCards.length > 0 && filteredSupplierCards.length === 0 ? (
+            {supplierCards.length > 0 && filteredCount === 0 ? (
               <p className="text-sm text-[var(--muted-foreground)]">
                 {itemListSearchEmptyMessage(searchQuery, "fornecedor")}
               </p>
@@ -442,35 +281,31 @@ export function SupplierPurchaseKanban({
               Nenhum fornecedor precisa de compra no momento.
             </p>
           ) : (
-            <SupplierPurchaseKanbanBoard
-              cards={filteredSupplierCards}
-              busySupplier={busySupplier}
+            <KanbanBoard
+              boardId="purchase"
               columns={columns}
-              onRenameColumn={renameColumn}
-              onAddColumn={addColumn}
-              onDeleteColumn={removeColumn}
-              onToggleCollapse={toggleCollapse}
-              appearance={appearance}
-              setColumnColor={setColumnColor}
-              background={background}
+              cards={supplierCards}
+              filterCard={filterCard}
+              getCardId={getSupplierId}
+              getCardColumnId={getSupplierColumnId}
+              getCardPosition={getSupplierPosition}
+              getCardLabel={getSupplierId}
+              renderCard={renderSupplierCard}
+              busyCardIds={busySupplierIds}
+              onMoveCard={handleMoveCard}
+              onReorderColumns={board.reorder}
+              onRenameColumn={board.rename}
+              onAddColumn={board.addColumn}
+              onDeleteColumn={handleDeleteColumn}
+              onToggleCollapse={board.toggleCollapse}
+              appearance={board.appearance}
+              setColumnColor={board.setColumnColor}
+              background={board.background}
               fullHeight={isFullscreen}
             />
           )}
         </div>
       </KanbanFullscreenFrame>
-
-      <DragOverlay>
-        {activeDragCard ? (
-          <SupplierCardBody
-            card={activeDragCard}
-            className="w-[calc(100vw-2.75rem)] sm:w-72"
-          />
-        ) : activeDragColumn ? (
-          <div className="w-56 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-sm font-semibold shadow-md">
-            {activeDragColumn.label}
-          </div>
-        ) : null}
-      </DragOverlay>
 
       <AlertDialog
         open={pendingBackwardMove != null}
@@ -478,12 +313,10 @@ export function SupplierPurchaseKanban({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              Voltar fornecedor para uma etapa anterior?
-            </AlertDialogTitle>
+            <AlertDialogTitle>Voltar fornecedor para uma etapa anterior?</AlertDialogTitle>
             <AlertDialogDescription>
               {pendingBackwardMove
-                ? `Isso volta ${pendingBackwardMove.cycleIdsToTransition.length} produto(s) de "${pendingBackwardMove.supplier}" para "${pendingBackwardMove.targetColumn.label}".`
+                ? `Isso volta ${pendingBackwardMove.transitionCount} produto(s) de "${pendingBackwardMove.supplier}" para "${pendingBackwardMove.target.column.label}".`
                 : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -492,7 +325,9 @@ export function SupplierPurchaseKanban({
             <AlertDialogAction
               variant="destructive"
               onClick={() => {
-                if (pendingBackwardMove) void executeMove(pendingBackwardMove);
+                if (pendingBackwardMove) {
+                  void moveCycles(pendingBackwardMove.cycleIds, pendingBackwardMove.target);
+                }
                 setPendingBackwardMove(null);
               }}
             >
@@ -501,6 +336,6 @@ export function SupplierPurchaseKanban({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </DndContext>
+    </>
   );
 }

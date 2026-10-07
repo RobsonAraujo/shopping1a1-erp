@@ -56,9 +56,15 @@ export function useSSEStream<TEvent>(
   const [error, setError] = useState<string | null>(null);
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
+  // Só a execução mais recente mexe no estado. Um stream abortado (o caller
+  // desmontou, ou a montagem dupla do StrictMode) termina de forma assíncrona
+  // — sem isso ele gravava "aborted" como erro e desligava o `streaming` do
+  // stream novo que já estava rodando.
+  const runRef = useRef(0);
 
   const start = useCallback(
     async (input: RequestInfo, init?: RequestInit) => {
+      const run = ++runRef.current;
       setStreaming(true);
       setError(null);
       try {
@@ -68,9 +74,11 @@ export function useSSEStream<TEvent>(
         }
         await consumeSSEStream<TEvent>(res, (event) => onEventRef.current(event));
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Erro de rede");
+        if (run === runRef.current && !init?.signal?.aborted) {
+          setError(e instanceof Error ? e.message : "Erro de rede");
+        }
       } finally {
-        setStreaming(false);
+        if (run === runRef.current) setStreaming(false);
       }
     },
     [],

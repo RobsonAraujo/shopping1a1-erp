@@ -1,8 +1,8 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useDraggable } from "@dnd-kit/core";
 import { ExternalLink, ImageOff } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,9 +12,7 @@ import { supplierPathSegment } from "@/lib/compras/purchase-analysis";
 import type { OperationsBoardCard } from "@/lib/compras/replenishment-cycle-data";
 import { cn } from "@/lib/utils";
 
-export const OPERATIONS_DRAG_ID_PREFIX = "cycle:";
-
-function OperationsCardHeader({ card }: { card: OperationsBoardCard }) {
+function OperationsCardHeader({ card, menu }: { card: OperationsBoardCard; menu?: ReactNode }) {
   const urgent = card.kind === "purchase" ? card.purchaseIsOverdue : card.searchIsOverdue;
 
   return (
@@ -26,6 +24,7 @@ function OperationsCardHeader({ card }: { card: OperationsBoardCard }) {
             alt={card.title}
             width={40}
             height={40}
+            draggable={false}
             className="size-10 shrink-0 rounded-md object-cover"
           />
         ) : (
@@ -40,6 +39,7 @@ function OperationsCardHeader({ card }: { card: OperationsBoardCard }) {
           <p className="truncate text-xs text-[var(--muted-foreground)]">{card.mlItemId}</p>
           <p className="mt-0.5 text-[11px] text-[var(--muted-foreground)]">{card.supplier}</p>
         </div>
+        {menu ? <div className="-my-1 -mr-1.5 shrink-0">{menu}</div> : null}
       </div>
 
       <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-[var(--muted-foreground)]">
@@ -92,21 +92,21 @@ function OperationsCardHeader({ card }: { card: OperationsBoardCard }) {
   );
 }
 
-/** Único link de ação do card. Avançar/mover etapa agora é só via
- * drag-and-drop (arrastar o card entre colunas) — os botões "Avançar"/
- * "Mover para…" saíram pra não duplicar visualmente o que o drag já faz. */
+/** Links do card. Mudar de etapa é arrastando o card (ou pelo menu ⋯ do
+ * header). `draggable={false}` nos links: o card inteiro é arrastável, e um
+ * `<a>` nativo arrastaria a URL em vez do card. */
 function OperationsCardFooter({ card }: { card: OperationsBoardCard }) {
   return (
     <div className="flex items-center gap-2 border-t border-[var(--border)] bg-[var(--muted)]/20 px-3 py-2">
       <Button asChild size="sm" variant="secondary" className="h-7 w-full gap-1.5 text-xs font-semibold">
-        <Link href={`/dashboard/items/${card.mlItemId}`}>
+        <Link href={`/dashboard/items/${card.mlItemId}`} draggable={false}>
           Ver anúncio
           <ExternalLink className="size-3.5" aria-hidden />
         </Link>
       </Button>
       {card.kind === "purchase" ? (
         <Button asChild size="sm" variant="outline" className="h-7 w-full gap-1.5 text-xs font-semibold">
-          <Link href={`/dashboard/compras/${supplierPathSegment(card.supplier)}`}>
+          <Link href={`/dashboard/compras/${supplierPathSegment(card.supplier)}`} draggable={false}>
             Análise
             <ExternalLink className="size-3.5" aria-hidden />
           </Link>
@@ -116,56 +116,26 @@ function OperationsCardFooter({ card }: { card: OperationsBoardCard }) {
   );
 }
 
-/** Aparência completa do card (cabeçalho + rodapé) — usada tanto pelo card
- * "de verdade" (arrastável) quanto pela cópia flutuante do `DragOverlay`.
- * Ter uma só definição visual evita que o card "se desmonte" durante o
- * arrasto (a cópia flutuante do overlay é sempre o card inteiro). */
+/** Aparência completa do card de um ciclo. O arrasto é do board
+ * (`KanbanCardSlot`), que também gera o fantasma clonando este DOM. */
 export function OperationsCardBody({
   card,
+  menu,
   className,
 }: {
   card: OperationsBoardCard;
+  menu?: ReactNode;
   className?: string;
 }) {
-  const urgent = card.kind === "purchase" ? card.purchaseIsOverdue : card.searchIsOverdue;
-
   return (
     <article
       className={cn(
-        "overflow-hidden rounded-lg border bg-[var(--card)] shadow-sm",
-        urgent ? "border-rose-200" : "border-[var(--border)]",
+        "overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-sm",
         className,
       )}
     >
-      <OperationsCardHeader card={card} />
+      <OperationsCardHeader card={card} menu={menu} />
       <OperationsCardFooter card={card} />
     </article>
-  );
-}
-
-export function OperationsKanbanCard({
-  card,
-  busy,
-}: {
-  card: OperationsBoardCard;
-  busy: boolean;
-}) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: `${OPERATIONS_DRAG_ID_PREFIX}${card.cycleId}`,
-  });
-
-  return (
-    <div
-      ref={setNodeRef}
-      {...listeners}
-      {...attributes}
-      className={cn(
-        "cursor-grab touch-none active:cursor-grabbing",
-        isDragging && "opacity-0",
-        busy && "pointer-events-none opacity-60",
-      )}
-    >
-      <OperationsCardBody card={card} />
-    </div>
   );
 }

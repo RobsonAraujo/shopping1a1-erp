@@ -1,20 +1,34 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { useDraggable } from "@dnd-kit/core";
+import { useEffect, useState, type ReactNode } from "react";
+import { draggable } from "@atlaskit/pragmatic-drag-and-drop/adapter/element-adapter";
 import { GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+type ChipDragData = { type: string; id: string };
+
+/** Dado que o chip publica no arrasto — `type` separa uma feature da outra,
+ * pra um monitor nunca reagir ao arrasto de outra superfície da página. */
+export function chipDragData(type: string, id: string): ChipDragData {
+  return { type, id };
+}
+
+/** Lê o id de um chip do `type` pedido; `null` se o dado não for dele. O
+ * Pragmatic entrega `Record<string | symbol, unknown>`, sem tipo. */
+export function parseChipDragId(
+  data: Record<string | symbol, unknown> | undefined | null,
+  type: string,
+): string | null {
+  if (!data || data.type !== type) return null;
+  return typeof data.id === "string" && data.id.length > 0 ? data.id : null;
+}
 
 type ChipVisualProps = {
   children: ReactNode;
   className?: string;
 };
 
-/**
- * Só o visual do chip, sem comportamento de drag — usado dentro de
- * `DraggableChip` e também pelo `<DragOverlay>` (a cópia flutuante que
- * segue o cursor precisa do mesmo visual, mas não é ela própria arrastável).
- */
+/** Só o visual do chip, sem comportamento de drag. */
 export function ChipVisual({ children, className }: ChipVisualProps) {
   return (
     <div
@@ -31,32 +45,38 @@ export function ChipVisual({ children, className }: ChipVisualProps) {
 
 type DraggableChipProps = {
   id: string;
+  /** Tipo do arrasto (ver `chipDragData`); quem recebe usa o mesmo em
+   * `useDropHighlight({ accepts })` e no `monitorForElements`. */
+  type: string;
   children: ReactNode;
   className?: string;
 };
 
 /**
- * Chip pequeno e arrastável — bloco genérico de drag-and-drop do app (só
- * cuida do "pegar e segurar"; o conteúdo é livre). Reaproveitar em qualquer
- * feature futura que precise arrastar um item pra um alvo (`useDropHighlight`
- * do lado de quem recebe), em vez de reimplementar `useDraggable` cru.
- *
- * Some (opacity 0) enquanto arrasta — a posição visual durante o drag é
- * responsabilidade de um `<DragOverlay>` no `DndContext` pai (renderizado
- * fora de qualquer container com scroll/overflow, então nunca fica "preso"
- * numa caixinha pequena nem é cortado ao passar da borda dela). Sem
- * `DragOverlay` no contexto, o chip original só fica invisível — sempre
- * inclua um `<DragOverlay>` que renderize `<ChipVisual>` pro item ativo.
+ * Chip pequeno e arrastável (Pragmatic drag and drop) — bloco genérico pra
+ * arrastar um item até um alvo (`useDropHighlight` do lado de quem recebe;
+ * quem comita é um `monitorForElements` da feature). O fantasma é o
+ * snapshot nativo do próprio chip, então não precisa de overlay: o original
+ * só fica esmaecido enquanto arrasta.
  */
-export function DraggableChip({ id, children, className }: DraggableChipProps) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id });
+export function DraggableChip({ id, type, children, className }: DraggableChipProps) {
+  const [element, setElement] = useState<HTMLDivElement | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  useEffect(() => {
+    if (!element) return;
+    return draggable({
+      element,
+      getInitialData: () => ({ ...chipDragData(type, id) }),
+      onDragStart: () => setIsDragging(true),
+      onDrop: () => setIsDragging(false),
+    });
+  }, [element, type, id]);
 
   return (
     <div
-      ref={setNodeRef}
-      {...listeners}
-      {...attributes}
-      className={cn("cursor-grab touch-none active:cursor-grabbing", isDragging && "opacity-0")}
+      ref={setElement}
+      className={cn("cursor-grab active:cursor-grabbing", isDragging && "opacity-40")}
     >
       <ChipVisual className={className}>{children}</ChipVisual>
     </div>

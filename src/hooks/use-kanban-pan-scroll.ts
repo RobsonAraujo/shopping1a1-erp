@@ -5,9 +5,9 @@ import { useRef, type PointerEvent as ReactPointerEvent } from "react";
 /**
  * Arrastar o fundo vazio do board (fora de card/coluna) com o mouse rola o
  * board horizontalmente, tipo Trello/Miro. Só ativa quando o pointerdown cai
- * direto no container (não em um filho — card/coluna já tem seu próprio
- * drag-and-drop do dnd-kit) e é mouse (touch já rola nativamente por scroll
- * do sistema; interceptar aqui duplicaria/atrapalharia esse gesto).
+ * direto no container (não em um filho — card/coluna têm o próprio
+ * drag-and-drop nativo do Pragmatic) e é mouse (touch já rola nativamente
+ * por scroll do sistema; interceptar aqui duplicaria/atrapalharia esse gesto).
  */
 export function useKanbanPanScroll() {
   const panState = useRef<{

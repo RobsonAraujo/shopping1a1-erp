@@ -234,6 +234,13 @@ model ReplenishmentCycle {
   /// travado do kind ("ordered"/"collected", só ao entrar na última coluna),
   /// e "completed". Nulo só antes da materialização lazy das colunas da org.
   columnId              String?             @map("column_id")
+  /// Ordem manual do card dentro da coluna (estilo Trello): crescente =
+  /// de cima pra baixo. Ao soltar entre dois cards grava o ponto médio entre
+  /// os vizinhos (1 linha só); a coluna é renumerada quando o espaço entre
+  /// dois valores fica pequeno demais (`kanban-position.ts`). Card novo nasce
+  /// acima do primeiro da coluna. Ciclos do mesmo fornecedor (Compras)
+  /// compartilham o valor — o card de fornecedor é um agregado deles.
+  position              Float               @default(0)
   triggerMlQty          Int                 @map("trigger_ml_qty")
   triggerWarehouseQty   Int                 @map("trigger_warehouse_qty")
   triggerLeadTimeDays   Int?                @map("trigger_lead_time_days")
@@ -255,7 +262,7 @@ model ReplenishmentCycle {
   @@index([mlItemId, kind, status])
   @@index([status])
   @@index([organizationId])
-  @@index([columnId])
+  @@index([columnId, position])
   @@map("replenishment_cycles")
 }
 

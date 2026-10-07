@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildSupplierBoardCards, resolveMoveActionForSupplier } from "../supplier-board";
+import {
+  buildSupplierBoardCards,
+  resolveMoveActionForSupplier,
+  reuseUnchangedSupplierCards,
+} from "../supplier-board";
 import type { OperationsBoardCard } from "../replenishment-cycle-data";
 
 const COLUMN_LABELS: Record<number, string> = {
@@ -22,6 +26,7 @@ function boardCard(
     columnId: `col-${columnPosition}`,
     columnLabel: COLUMN_LABELS[columnPosition] ?? `Coluna ${columnPosition}`,
     columnPosition,
+    position: 0,
     title: "Item",
     sku: "SKU-1",
     supplier: "MXT",
@@ -135,18 +140,49 @@ describe("buildSupplierBoardCards", () => {
     assert.equal(result[0].overflowCount, 1);
   });
 
-  it("sorts suppliers: overdue first, then more active items, then name", () => {
+  it("does not reorder suppliers by urgency — order is manual (position), kept by the board", () => {
     const cards = [
       boardCard({ cycleId: "c1", supplier: "Zulu", purchaseIsOverdue: false }),
       boardCard({ cycleId: "c2", supplier: "Aquario", purchaseIsOverdue: true }),
       boardCard({ cycleId: "c3", supplier: "Bravo", purchaseIsOverdue: false }),
-      boardCard({ cycleId: "c4", supplier: "Bravo", purchaseIsOverdue: false }),
     ];
     const result = buildSupplierBoardCards(cards);
     assert.deepEqual(
       result.map((r) => r.supplier),
-      ["Aquario", "Bravo", "Zulu"],
+      ["Zulu", "Aquario", "Bravo"],
     );
+  });
+
+  it("uses the smallest position among the supplier's cycles in the card's (weakest) column", () => {
+    const cards = [
+      boardCard({ cycleId: "c1", supplier: "MXT", columnPosition: 0, position: 2048 }),
+      boardCard({ cycleId: "c2", supplier: "MXT", columnPosition: 0, position: 1024 }),
+      // Ciclo mais adiantado (outra coluna) não conta pra posição do card.
+      boardCard({ cycleId: "c3", supplier: "MXT", columnPosition: 2, position: -9999 }),
+    ];
+    const [mxt] = buildSupplierBoardCards(cards);
+    assert.equal(mxt.columnId, "col-0");
+    assert.equal(mxt.position, 1024);
+  });
+});
+
+describe("reuseUnchangedSupplierCards", () => {
+  it("keeps the previous object for suppliers whose content did not change", () => {
+    const first = buildSupplierBoardCards([
+      boardCard({ cycleId: "c1", supplier: "MXT" }),
+      boardCard({ cycleId: "c2", supplier: "Aquario" }),
+    ]);
+    const rebuilt = buildSupplierBoardCards([
+      boardCard({ cycleId: "c1", supplier: "MXT" }),
+      boardCard({ cycleId: "c2", supplier: "Aquario", purchaseIsOverdue: true }),
+    ]);
+    const result = reuseUnchangedSupplierCards(first, rebuilt);
+    assert.equal(result.find((c) => c.supplier === "MXT"), first.find((c) => c.supplier === "MXT"));
+    assert.notEqual(
+      result.find((c) => c.supplier === "Aquario"),
+      first.find((c) => c.supplier === "Aquario"),
+    );
+    assert.equal(result.find((c) => c.supplier === "Aquario")?.hasOverdue, true);
   });
 });
 

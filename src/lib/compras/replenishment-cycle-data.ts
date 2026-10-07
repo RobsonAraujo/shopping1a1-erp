@@ -35,7 +35,6 @@ import {
   type KanbanColumnRow,
 } from "@/lib/compras/kanban-columns-data";
 import {
-  fetchItemById,
   fetchItemsByIdsBatched,
   fetchOperationalListingIds,
 } from "@/lib/mercadolibre/api";
@@ -55,6 +54,10 @@ import {
   upsertListingsFromItems,
 } from "@/lib/mercadolibre/listing-sync";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
+import {
+  KANBAN_POSITION_GAP,
+  renormalizedPositions,
+} from "@/lib/kanban/kanban-position";
 import { computeStockPlanningDisplay } from "@/lib/compras/stock-planning";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import type { StockPlanningDisplay } from "@/lib/compras/stock-planning";
@@ -111,6 +114,9 @@ export type OperationsBoardCard = {
    * pra decidir "fornecedor avançou ou regrediu" sem precisar conhecer o
    * board inteiro de novo. */
   columnPosition: number;
+  /** Ordem manual dentro da coluna (`ReplenishmentCycle.position`) —
+   * crescente = de cima pra baixo. Ver `lib/kanban/kanban-position.ts`. */
+  position: number;
   title: string;
   sku: string | null;
   supplier: string;
@@ -360,6 +366,34 @@ async function getLatestCyclesByItemAndKind(
   return map;
 }
 
+/**
+ * Card novo nasce **no topo** da primeira coluna, acima de tudo o que o
+ * usuário já organizou. O sync cria ciclos em paralelo
+ * (`mapWithConcurrency`), então ler o mínimo a cada criação daria a mesma
+ * posição pra dois cards: aqui o mínimo é lido uma vez só (e só se algum
+ * ciclo for de fato criado) e cada chamada reserva o próprio degrau de forma
+ * síncrona, antes do `await`.
+ */
+function topPositionAllocator(
+  organizationId: string,
+  kind: OperationCycleKind,
+  columnId: string,
+): () => Promise<number> {
+  let base: Promise<number> | null = null;
+  let taken = 0;
+  return async () => {
+    base ??= prisma.replenishmentCycle
+      .aggregate({
+        where: { organizationId, kind, columnId, status: { not: "completed" } },
+        _min: { position: true },
+      })
+      .then((result) => result._min.position ?? KANBAN_POSITION_GAP);
+    taken += 1;
+    const offset = taken;
+    return (await base) - offset * KANBAN_POSITION_GAP;
+  };
+}
+
 async function createCycleForItem(
   organizationId: string,
   kind: OperationCycleKind,
@@ -367,9 +401,11 @@ async function createCycleForItem(
   snapshot: ReplenishmentSnapshot,
   initialStatus: ReplenishmentStatus,
   columnId: string,
+  nextTopPosition: () => Promise<number>,
 ): Promise<void> {
   const mlItemId = ctx.item.id.trim();
   if (!mlItemId) return;
+  const position = await nextTopPosition();
 
   await prisma.$transaction(async (tx) => {
     await upsertListingFromItem(organizationId, { ...ctx.item, id: mlItemId }, tx);
@@ -380,6 +416,7 @@ async function createCycleForItem(
         kind,
         status: initialStatus,
         columnId,
+        position,
         triggerMlQty: snapshot.mlQty,
         triggerWarehouseQty: snapshot.warehouseQty,
         triggerLeadTimeDays: snapshot.leadTimeDays,
@@ -478,6 +515,7 @@ export async function syncPurchaseCyclesForItems(
     loadOrMaterializeKanbanColumns(organizationId, "purchase"),
   ]);
   const firstColumnId = firstColumn(columns)!.id;
+  const nextTopPosition = topPositionAllocator(organizationId, "purchase", firstColumnId);
 
   await mapWithConcurrency(contexts, SYNC_CONCURRENCY, async (ctx) => {
     const { active, latestCompleted } =
@@ -505,7 +543,15 @@ export async function syncPurchaseCyclesForItems(
 
     if (!shouldCreate || !ctx.item.id.trim()) return;
 
-    await createCycleForItem(organizationId, "purchase", ctx, snapshot, "attention", firstColumnId);
+    await createCycleForItem(
+      organizationId,
+      "purchase",
+      ctx,
+      snapshot,
+      "attention",
+      firstColumnId,
+      nextTopPosition,
+    );
   });
 }
 
@@ -541,6 +587,7 @@ export async function syncFullCyclesForItems(
     loadOrMaterializeKanbanColumns(organizationId, "full"),
   ]);
   const firstColumnId = firstColumn(columns)!.id;
+  const nextTopPosition = topPositionAllocator(organizationId, "full", firstColumnId);
 
   await mapWithConcurrency(contexts, SYNC_CONCURRENCY, async (ctx) => {
     const { active, latestCompleted } =
@@ -566,7 +613,15 @@ export async function syncFullCyclesForItems(
 
     if (!shouldCreate || !ctx.item.id.trim()) return;
 
-    await createCycleForItem(organizationId, "full", ctx, snapshot, "attention", firstColumnId);
+    await createCycleForItem(
+      organizationId,
+      "full",
+      ctx,
+      snapshot,
+      "attention",
+      firstColumnId,
+      nextTopPosition,
+    );
   });
 }
 
@@ -663,12 +718,35 @@ type CycleForCard = {
   kind: OperationCycleKind;
   status: ReplenishmentStatus;
   columnId: string | null;
+  position: number;
   suggestedQty: number | null;
   notes: string | null;
   warehouseQtyAtOrder: number | null;
   mlQtyAtCollection: number | null;
   updatedAt: Date;
 };
+
+/** Ordem do board: a manual (`position`), com o mais novo primeiro como
+ * desempate estável. Nunca `updatedAt` — qualquer escrita no ciclo (um sync
+ * mudando `suggestedQty`) faria o card pular pro topo. */
+const BOARD_CYCLE_ORDER: Prisma.ReplenishmentCycleOrderByWithRelationInput[] = [
+  { position: "asc" },
+  { createdAt: "desc" },
+];
+
+const BOARD_CYCLE_SELECT = {
+  id: true,
+  mlItemId: true,
+  kind: true,
+  status: true,
+  columnId: true,
+  position: true,
+  suggestedQty: true,
+  notes: true,
+  warehouseQtyAtOrder: true,
+  mlQtyAtCollection: true,
+  updatedAt: true,
+} satisfies Prisma.ReplenishmentCycleSelect;
 
 /** Resolve a coluna de um ciclo pro card — cai na primeira coluna do kind
  * (fallback defensivo) se `columnId` estiver nulo ou apontar pra uma coluna
@@ -703,6 +781,7 @@ function buildCardFromCycle(
     columnId: column.id,
     columnLabel: column.label,
     columnPosition: column.position,
+    position: cycle.position,
     title: item.title,
     sku,
     supplier: supplierNames.get(item.id) ?? getSkuSupplier(sku),
@@ -783,42 +862,6 @@ function buildBoardCardsFromCycles(
   }
 
   return { purchaseCards, fullCards };
-}
-
-async function resolveCycleSnapshot(
-  cycle: {
-    mlItemId: string;
-    triggerMlQty: number;
-    triggerWarehouseQty: number;
-    triggerLeadTimeDays: number | null;
-  },
-  accessToken?: string,
-): Promise<ReplenishmentSnapshot> {
-  // mlItemId já é único por org (item ML pertence a 1 seller, que pertence a
-  // no máximo 1 org) — sem risco de cross-tenant mesmo sem filtro aqui.
-  const warehouse = await prisma.warehouseStock.findUnique({
-    where: { mlItemId: cycle.mlItemId },
-    select: { quantity: true, purchaseLeadTimeDays: true },
-  });
-
-  if (accessToken) {
-    const item = await fetchItemById(accessToken, cycle.mlItemId);
-    if (item) {
-      return {
-        mlQty: mlAvailableStockUnits(item),
-        warehouseQty: warehouse?.quantity ?? cycle.triggerWarehouseQty,
-        leadTimeDays:
-          warehouse?.purchaseLeadTimeDays ?? cycle.triggerLeadTimeDays ?? 0,
-      };
-    }
-  }
-
-  return {
-    mlQty: cycle.triggerMlQty,
-    warehouseQty: warehouse?.quantity ?? cycle.triggerWarehouseQty,
-    leadTimeDays:
-      warehouse?.purchaseLeadTimeDays ?? cycle.triggerLeadTimeDays ?? 0,
-  };
 }
 
 /** Materializa as colunas do(s) kind(s) pedido(s) — sem `kind`, materializa
@@ -909,19 +952,8 @@ export async function loadOperationsBoards(
         status: { not: "completed" },
         ...(kind ? { kind } : {}),
       },
-      orderBy: { updatedAt: "desc" },
-      select: {
-        id: true,
-        mlItemId: true,
-        kind: true,
-        status: true,
-        columnId: true,
-        suggestedQty: true,
-        notes: true,
-        warehouseQtyAtOrder: true,
-        mlQtyAtCollection: true,
-        updatedAt: true,
-      },
+      orderBy: BOARD_CYCLE_ORDER,
+      select: BOARD_CYCLE_SELECT,
     }),
     loadColumnsByKind(organizationId, kind),
   ]);
@@ -983,22 +1015,15 @@ export async function loadOperationsBoardsFast(
   organizationId: string,
   token: string,
   kind: OperationCycleKind,
+  /** Colunas que a página já está carregando — sem isso a página e este
+   * loader materializavam as colunas duas vezes em paralelo (e, numa org
+   * nova, concorriam para criar as colunas padrão). */
+  columnsPromise?: Promise<KanbanColumnRow[]>,
 ): Promise<OperationsBoardsData> {
   const activeCycles = await prisma.replenishmentCycle.findMany({
     where: { organizationId, kind, status: { not: "completed" } },
-    orderBy: { updatedAt: "desc" },
-    select: {
-      id: true,
-      mlItemId: true,
-      kind: true,
-      status: true,
-      columnId: true,
-      suggestedQty: true,
-      notes: true,
-      warehouseQtyAtOrder: true,
-      mlQtyAtCollection: true,
-      updatedAt: true,
-    },
+    orderBy: BOARD_CYCLE_ORDER,
+    select: BOARD_CYCLE_SELECT,
   });
 
   if (activeCycles.length === 0) return emptyOperationsBoardsData();
@@ -1021,7 +1046,9 @@ export async function loadOperationsBoardsFast(
       loadSupplierNamesByMlItemId(organizationId, mlItemIds),
       readCachedUnitsSoldForItemsInWindow(organizationId, mlItemIds, windowDays, dateField),
       loadInactiveProductMlItemIds(organizationId, mlItemIds),
-      loadColumnsByKind(organizationId, kind),
+      columnsPromise
+        ? columnsPromise.then((columns) => new Map([[kind, columns]]))
+        : loadColumnsByKind(organizationId, kind),
     ]);
   const items = rawItems.filter(
     (item) => !isKitItem(item) && !inactiveIds.has(item.id),
@@ -1093,7 +1120,10 @@ export async function streamOperationsBoardResync(
   organizationId: string,
   kind: OperationCycleKind,
   onCardPatch: (mlItemId: string, patch: OperationsCardSalesPatch) => void,
-): Promise<SingleBoardData> {
+  /** Cliente desistiu (fechou a página, StrictMode remontou): pula o sync de
+   * ciclos e o snapshot final — o próximo load do board refaz tudo. */
+  signal?: AbortSignal,
+): Promise<SingleBoardData | null> {
   const operationalSettings = await loadOperationalSettings(organizationId);
   const stockPlanning = toStockPlanningValues(operationalSettings);
   const purchaseAnalysisValues = toPurchaseAnalysisValues(operationalSettings);
@@ -1148,6 +1178,12 @@ export async function streamOperationsBoardResync(
     windowDays,
     dateField,
     (mlItemId, unitsSold) => {
+      // Só itens que já são card neste board: a varredura cobre o catálogo
+      // inteiro, e um evento por anúncio sem card era só tráfego e
+      // re-render à toa no client. Ciclo criado pelo sync abaixo chega
+      // completo no evento `done`.
+      const status = cycleStatusById.get(mlItemId);
+      if (!status) return;
       const item = itemById.get(mlItemId);
       if (!item) return;
       const warehouse = warehouseById[mlItemId];
@@ -1159,8 +1195,7 @@ export async function streamOperationsBoardResync(
         stockPlanning,
         purchaseAnalysisValues,
       );
-      const status = cycleStatusById.get(mlItemId);
-      const suppressOverdue = status ? isOverdueBadgeSuppressed(kind, status) : false;
+      const suppressOverdue = isOverdueBadgeSuppressed(kind, status);
       onCardPatch(mlItemId, {
         purchaseIsOverdue: suppressOverdue ? false : ctx.purchasePlan.purchaseIsOverdue,
         searchIsOverdue: suppressOverdue ? false : ctx.fullPlan.searchIsOverdue,
@@ -1172,6 +1207,8 @@ export async function streamOperationsBoardResync(
       });
     },
   );
+
+  if (signal?.aborted) return null;
 
   await syncOperationCyclesForItems(
     organizationId,
@@ -1190,19 +1227,8 @@ export async function streamOperationsBoardResync(
         status: { not: "completed" },
         kind,
       },
-      orderBy: { updatedAt: "desc" },
-      select: {
-        id: true,
-        mlItemId: true,
-        kind: true,
-        status: true,
-        columnId: true,
-        suggestedQty: true,
-        notes: true,
-        warehouseQtyAtOrder: true,
-        mlQtyAtCollection: true,
-        updatedAt: true,
-      },
+      orderBy: BOARD_CYCLE_ORDER,
+      select: BOARD_CYCLE_SELECT,
     }),
     loadColumnsByKind(organizationId, kind),
   ]);
@@ -1235,144 +1261,233 @@ export async function loadOperationsSummaryFromDb(
   return summarizeOperationsCounts(cycles);
 }
 
-/**
- * Move o ciclo pra `columnId` (drag-and-drop do card entre colunas do
- * board). Resolve o `status` internamente a partir da coluna alvo: entrar na
- * última coluna (travada) do kind dispara a mesma captura de snapshot de
- * sempre (`buildStatusTransition`); qualquer outra coluna (primeira ou do
- * meio, padrão ou custom) vira `"attention"` — ver comentário no schema.
- */
-export async function transitionReplenishmentCycle(
-  organizationId: string,
-  cycleId: string,
-  columnId: string,
-  options?: { notes?: string | null; accessToken?: string },
-): Promise<void> {
-  const cycle = await prisma.replenishmentCycle.findFirst({
-    where: { id: cycleId, organizationId },
-  });
-  if (!cycle) {
-    throw new Error("Cycle not found");
-  }
-  if (!isActiveReplenishmentStatus(cycle.status)) {
-    throw new Error("Cycle already completed");
-  }
-
-  const columns = await loadOrMaterializeKanbanColumns(organizationId, cycle.kind);
-  const targetColumn = columns.find((c) => c.id === columnId);
-  if (!targetColumn) {
-    throw new Error("Column not found");
-  }
-  const nextStatus =
-    targetColumn.id === lastColumn(columns)?.id
-      ? finalStatusForKind(cycle.kind)
-      : "attention";
-
-  const snapshot = await resolveCycleSnapshot(cycle, options?.accessToken);
-
-  const patch = buildStatusTransition(
-    toCycleRecord(cycle),
-    nextStatus,
-    snapshot,
-  );
-
-  await prisma.replenishmentCycle.update({
-    where: { id: cycleId, organizationId },
-    data: {
-      ...patch,
-      columnId: targetColumn.id,
-      ...(options?.notes !== undefined ? { notes: options.notes } : {}),
-    },
-  });
-}
-
-export type BatchTransitionResult = {
+export type MovedCycleRow = {
   cycleId: string;
+  columnId: string;
   status: ReplenishmentStatus;
-  columnId: string | null;
+  position: number;
+  updatedAt: string;
   warehouseQtyAtOrder: number | null;
   mlQtyAtCollection: number | null;
 };
 
+export type MoveCyclesResult =
+  | { ok: true; rows: MovedCycleRow[] }
+  | { ok: false; error: "not_found" | "mixed_kinds" | "invalid_column" };
+
+type CycleRow = NonNullable<Awaited<ReturnType<typeof prisma.replenishmentCycle.findFirst>>>;
+
 /**
- * Transiciona vários ciclos de uma vez (drag-and-drop do card de
- * fornecedor em Compras — arrastar move todos os ciclos daquele fornecedor
- * de uma vez). Diferente de `transitionReplenishmentCycle`, nunca busca
- * estoque ao vivo no Mercado Livre — as transições entre as colunas do
- * board só precisam do estoque do galpão (sempre atualizado no banco), então
- * o lote inteiro roda sem nenhuma chamada de rede externa. Ciclos já
- * completados ou não encontrados são ignorados silenciosamente (podem ter
- * sido concluídos por outra aba entre o carregamento do board e o drag).
- * Assume que todos os ciclos do lote são do mesmo `kind` (validado pelo
- * caller, `PATCH /api/replenishment-cycles/batch`).
+ * Escreve o movimento de `cycles` para `target` — o núcleo comum do drag
+ * (`moveReplenishmentCycles`) e da exclusão de coluna
+ * (`relocateColumnCycles`), pra regra de status nunca divergir entre os dois:
+ *
+ * - Ciclo que **já está** na coluna alvo: só `position` (reordenar dentro da
+ *   coluna nunca reescreve status — inclusive na coluna final).
+ * - Ciclo que **muda** de coluna: entrar na última coluna (travada) do kind
+ *   vira o status final e captura o snapshot (`buildStatusTransition`);
+ *   qualquer outra coluna vira `"attention"` — ver comentário no schema.
+ *
+ * O snapshot sai do banco (estoque do galpão), sem rede. A única exceção é o
+ * Full entrando na coluna final pela primeira vez: `mlQtyAtCollection` é a
+ * linha de base que detecta a chegada no Full, então vale o estoque ML ao
+ * vivo — e só dos itens que precisam disso.
+ *
+ * Fecha renumerando a coluna alvo quando o ponto médio ficou apertado demais
+ * (`renormalizedPositions`), na mesma transação.
  */
-export async function transitionReplenishmentCyclesBatch(
+async function writeCycleMoves(
   organizationId: string,
-  updates: { cycleId: string; columnId: string }[],
-): Promise<BatchTransitionResult[]> {
-  if (updates.length === 0) return [];
+  kind: OperationCycleKind,
+  cycles: CycleRow[],
+  columns: KanbanColumnRow[],
+  target: KanbanColumnRow,
+  positionFor: (cycle: CycleRow, index: number) => number,
+  accessToken?: string,
+): Promise<MovedCycleRow[]> {
+  const isFinal = target.id === lastColumn(columns)?.id;
+  const nextStatus = isFinal ? finalStatusForKind(kind) : "attention";
+  const changing = cycles.filter((c) => c.columnId !== target.id);
+  const changingItemIds = [...new Set(changing.map((c) => c.mlItemId))];
 
-  const cycleIds = [...new Set(updates.map((u) => u.cycleId))];
-  const cycles = await prisma.replenishmentCycle.findMany({
-    where: { id: { in: cycleIds }, organizationId },
-  });
-  if (cycles.length === 0) return [];
-  const cycleById = new Map(cycles.map((c) => [c.id, c]));
-
-  const columns = await loadOrMaterializeKanbanColumns(organizationId, cycles[0].kind);
-  const columnById = new Map(columns.map((c) => [c.id, c]));
-  const finalColumnId = lastColumn(columns)?.id;
-
-  const mlItemIds = [...new Set(cycles.map((c) => c.mlItemId))];
-  const warehouseRows =
-    mlItemIds.length > 0
-      ? await prisma.warehouseStock.findMany({
-          where: { organizationId, mlItemId: { in: mlItemIds } },
+  const needsLiveMlQty =
+    kind === "full" && isFinal && Boolean(accessToken) &&
+    changing.some((c) => c.mlQtyAtCollection === null);
+  const [warehouseRows, liveItems] = await Promise.all([
+    changingItemIds.length > 0
+      ? prisma.warehouseStock.findMany({
+          where: { organizationId, mlItemId: { in: changingItemIds } },
           select: { mlItemId: true, quantity: true, purchaseLeadTimeDays: true },
         })
-      : [];
+      : Promise.resolve([]),
+    needsLiveMlQty && accessToken
+      ? fetchItemsByIdsBatched(
+          accessToken,
+          changing.filter((c) => c.mlQtyAtCollection === null).map((c) => c.mlItemId),
+        )
+      : Promise.resolve([] as ItemBody[]),
+  ]);
   const warehouseByItem = new Map(warehouseRows.map((w) => [w.mlItemId, w]));
+  const liveMlQtyByItem = new Map(liveItems.map((item) => [item.id, mlAvailableStockUnits(item)]));
 
-  const targetByCycleId = new Map(updates.map((u) => [u.cycleId, u.columnId]));
+  const touchedIds = await prisma.$transaction(async (tx) => {
+    await Promise.all(
+      cycles.map((cycle, index) => {
+        const position = positionFor(cycle, index);
+        if (cycle.columnId === target.id) {
+          return tx.replenishmentCycle.update({
+            where: { id: cycle.id, organizationId },
+            data: { position },
+          });
+        }
+        const warehouse = warehouseByItem.get(cycle.mlItemId);
+        const snapshot: ReplenishmentSnapshot = {
+          mlQty: liveMlQtyByItem.get(cycle.mlItemId) ?? cycle.triggerMlQty,
+          warehouseQty: warehouse?.quantity ?? cycle.triggerWarehouseQty,
+          leadTimeDays: warehouse?.purchaseLeadTimeDays ?? cycle.triggerLeadTimeDays ?? 0,
+        };
+        return tx.replenishmentCycle.update({
+          where: { id: cycle.id, organizationId },
+          data: {
+            ...buildStatusTransition(toCycleRecord(cycle), nextStatus, snapshot),
+            columnId: target.id,
+            position,
+          },
+        });
+      }),
+    );
 
-  const writes = cycleIds
-    .map((cycleId) => {
-      const cycle = cycleById.get(cycleId);
-      const targetColumnId = targetByCycleId.get(cycleId);
-      if (
-        !cycle ||
-        !targetColumnId ||
-        !columnById.has(targetColumnId) ||
-        !isActiveReplenishmentStatus(cycle.status)
-      ) {
-        return null;
-      }
-      const nextStatus =
-        targetColumnId === finalColumnId ? finalStatusForKind(cycle.kind) : "attention";
-      const warehouse = warehouseByItem.get(cycle.mlItemId);
-      const snapshot: ReplenishmentSnapshot = {
-        mlQty: cycle.triggerMlQty,
-        warehouseQty: warehouse?.quantity ?? cycle.triggerWarehouseQty,
-        leadTimeDays:
-          warehouse?.purchaseLeadTimeDays ?? cycle.triggerLeadTimeDays ?? 0,
-      };
-      const patch = buildStatusTransition(toCycleRecord(cycle), nextStatus, snapshot);
-      return prisma.replenishmentCycle.update({
-        where: { id: cycleId, organizationId },
-        data: { ...patch, columnId: targetColumnId },
-      });
-    })
-    .filter((write): write is NonNullable<typeof write> => write !== null);
+    const ids = new Set(cycles.map((c) => c.id));
+    const inColumn = await tx.replenishmentCycle.findMany({
+      where: { organizationId, columnId: target.id, status: { not: "completed" } },
+      select: { id: true, position: true },
+    });
+    const renumbered = renormalizedPositions(inColumn.map((c) => c.position));
+    if (renumbered) {
+      const changed = inColumn.filter((c) => renumbered.get(c.position) !== c.position);
+      await Promise.all(
+        changed.map((c) =>
+          tx.replenishmentCycle.update({
+            where: { id: c.id, organizationId },
+            data: { position: renumbered.get(c.position)! },
+          }),
+        ),
+      );
+      for (const c of changed) ids.add(c.id);
+    }
+    return [...ids];
+  });
 
-  if (writes.length === 0) return [];
-
-  const updated = await prisma.$transaction(writes);
-
-  return updated.map((cycle) => ({
-    cycleId: cycle.id,
-    status: cycle.status,
-    columnId: cycle.columnId,
-    warehouseQtyAtOrder: cycle.warehouseQtyAtOrder,
-    mlQtyAtCollection: cycle.mlQtyAtCollection,
+  const rows = await prisma.replenishmentCycle.findMany({
+    where: { organizationId, id: { in: touchedIds } },
+    select: {
+      id: true,
+      columnId: true,
+      status: true,
+      position: true,
+      updatedAt: true,
+      warehouseQtyAtOrder: true,
+      mlQtyAtCollection: true,
+    },
+  });
+  return rows.map((row) => ({
+    cycleId: row.id,
+    columnId: row.columnId ?? target.id,
+    status: row.status,
+    position: row.position,
+    updatedAt: row.updatedAt.toISOString(),
+    warehouseQtyAtOrder: row.warehouseQtyAtOrder,
+    mlQtyAtCollection: row.mlQtyAtCollection,
   }));
+}
+
+/**
+ * Drag-and-drop no board: põe `cycleIds` na coluna `columnId`, na posição
+ * `position` (já calculada pelo client entre os vizinhos visíveis — ver
+ * `kanban-dnd.ts`). Em Operações Full é 1 ciclo; em Compras são os ciclos do
+ * fornecedor que terminam naquela coluna (todos compartilham a posição, o
+ * card do fornecedor é o agregado deles). Ciclos já completados ou de outra
+ * org são ignorados — podem ter sido concluídos por outra aba entre o load e
+ * o drag.
+ */
+export async function moveReplenishmentCycles(
+  organizationId: string,
+  cycleIds: string[],
+  columnId: string,
+  position: number,
+  options?: { accessToken?: string },
+): Promise<MoveCyclesResult> {
+  const cycles = (
+    await prisma.replenishmentCycle.findMany({
+      where: { id: { in: [...new Set(cycleIds)] }, organizationId },
+    })
+  ).filter((c) => isActiveReplenishmentStatus(c.status));
+  if (cycles.length === 0) return { ok: false, error: "not_found" };
+
+  const kind = cycles[0].kind;
+  if (!cycles.every((c) => c.kind === kind)) return { ok: false, error: "mixed_kinds" };
+
+  const columns = await loadOrMaterializeKanbanColumns(organizationId, kind);
+  const target = columns.find((c) => c.id === columnId);
+  if (!target) return { ok: false, error: "invalid_column" };
+
+  const rows = await writeCycleMoves(
+    organizationId,
+    kind,
+    cycles,
+    columns,
+    target,
+    () => position,
+    options?.accessToken,
+  );
+  return { ok: true, rows };
+}
+
+/**
+ * Antes de excluir uma coluna: leva os cards dela pro **fim** de `toColumnId`,
+ * na mesma ordem relativa, aplicando a mesma regra de status do drag —
+ * realocar para a última coluna vira o status final, como se cada card
+ * tivesse sido arrastado. Sem isso, os cards chegavam na coluna final ainda
+ * como `"attention"` (badge Urgente e auto-complete inconsistentes).
+ */
+export async function relocateColumnCycles(
+  organizationId: string,
+  fromColumnId: string,
+  toColumnId: string,
+  options?: { accessToken?: string },
+): Promise<MoveCyclesResult> {
+  if (fromColumnId === toColumnId) return { ok: false, error: "invalid_column" };
+  const from = await prisma.kanbanColumn.findFirst({
+    where: { id: fromColumnId, organizationId },
+    select: { kind: true },
+  });
+  if (!from) return { ok: false, error: "invalid_column" };
+
+  const columns = await loadOrMaterializeKanbanColumns(organizationId, from.kind);
+  const target = columns.find((c) => c.id === toColumnId);
+  if (!target) return { ok: false, error: "invalid_column" };
+
+  const [cycles, destination] = await Promise.all([
+    prisma.replenishmentCycle.findMany({
+      where: { organizationId, columnId: fromColumnId, status: { not: "completed" } },
+      orderBy: BOARD_CYCLE_ORDER,
+    }),
+    prisma.replenishmentCycle.aggregate({
+      where: { organizationId, columnId: toColumnId, status: { not: "completed" } },
+      _max: { position: true },
+    }),
+  ]);
+  if (cycles.length === 0) return { ok: true, rows: [] };
+
+  const base = destination._max.position ?? 0;
+  const rows = await writeCycleMoves(
+    organizationId,
+    from.kind,
+    cycles,
+    columns,
+    target,
+    (_cycle, index) => base + (index + 1) * KANBAN_POSITION_GAP,
+    options?.accessToken,
+  );
+  return { ok: true, rows };
 }

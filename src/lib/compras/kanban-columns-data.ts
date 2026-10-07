@@ -61,7 +61,11 @@ async function materializeDefaultColumns(
 
   return prisma.$transaction(async (tx) => {
     // Corrida entre 2 requests concorrentes materializando a mesma org+kind
-    // pela primeira vez: quem chegar segundo encontra as linhas já criadas.
+    // pela primeira vez. Só reler dentro da transação não basta: em READ
+    // COMMITTED as duas enxergam "nenhuma coluna" e as duas criam. A trava
+    // (liberada no fim da transação) serializa — quem chega segundo espera e
+    // aí sim encontra as linhas já criadas.
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`kanban-columns:${organizationId}:${kind}`}))`;
     const existing = await tx.kanbanColumn.findMany({
       where: { organizationId, kind },
       orderBy: { position: "asc" },
@@ -201,16 +205,17 @@ export async function reorderKanbanColumns(
 
 export type DeleteKanbanColumnResult =
   | { ok: true }
-  | { ok: false; error: "locked" | "not_found" | "needs_destination" | "invalid_destination" };
+  | { ok: false; error: "locked" | "not_found" | "needs_destination" };
 
-/** Exclui uma coluna não travada. Se tiver cards, exige `moveCardsToColumnId`
- * (outra coluna do mesmo org+kind) e move todo `ReplenishmentCycle` que
- * apontava pra ela antes de excluir — numa transação, pra nunca deixar um
- * ciclo "órfão" mesmo que a exclusão falhe no meio. */
+/** Exclui uma coluna não travada **vazia**. Com cards, devolve
+ * `needs_destination`: quem chama realoca antes com `relocateColumnCycles`
+ * (em `replenishment-cycle-data.ts`), que aplica a mesma regra de status do
+ * drag — mover cards pra coluna final sem passar por ela deixava o status
+ * inconsistente. Ciclos já completados que ainda apontam pra coluna ficam
+ * com `columnId` nulo (`onDelete: SetNull`). */
 export async function deleteKanbanColumn(
   organizationId: string,
   id: string,
-  moveCardsToColumnId?: string,
 ): Promise<DeleteKanbanColumnResult> {
   const column = await prisma.kanbanColumn.findFirst({ where: { id, organizationId } });
   if (!column) return { ok: false, error: "not_found" };
@@ -219,24 +224,9 @@ export async function deleteKanbanColumn(
   const cardCount = await prisma.replenishmentCycle.count({
     where: { organizationId, columnId: id, status: { not: "completed" } },
   });
-
-  if (cardCount > 0) {
-    if (!moveCardsToColumnId) return { ok: false, error: "needs_destination" };
-    const destination = await prisma.kanbanColumn.findFirst({
-      where: { id: moveCardsToColumnId, organizationId, kind: column.kind },
-    });
-    if (!destination || destination.id === id) {
-      return { ok: false, error: "invalid_destination" };
-    }
-  }
+  if (cardCount > 0) return { ok: false, error: "needs_destination" };
 
   await prisma.$transaction(async (tx) => {
-    if (cardCount > 0 && moveCardsToColumnId) {
-      await tx.replenishmentCycle.updateMany({
-        where: { organizationId, columnId: id },
-        data: { columnId: moveCardsToColumnId },
-      });
-    }
     await tx.kanbanColumn.delete({ where: { id, organizationId } });
     // Fecha o buraco na sequência de posições, senão "criar coluna" (que
     // insere em `columns.length - 1`) pode colidir com uma posição livre.

@@ -96,7 +96,7 @@ function HomeWidgetColumn({
 /**
  * A grade: faixas de largura cheia no topo, depois as colunas.
  *
- * Usa **Pragmatic drag and drop**, não dnd-kit (que segue nos kanbans). Ela é
+ * Usa **Pragmatic drag and drop** (como os Kanbans e Fornecedores). Ela é
  * construída sobre o drag-and-drop nativo do HTML5, então nenhum card se desloca
  * sozinho — o destino é uma **sombra** do tamanho do card arrastado, que cada
  * card abre na própria borda (`attachClosestEdge` no slot). Era essa mecânica que
@@ -206,8 +206,8 @@ export function HomeWidgetGrid() {
     });
   }, [commit]);
 
-  // Sem isto não dá pra arrastar até um card abaixo da dobra: o dnd-kit fazia
-  // autoscroll por padrão, o pdnd exige o pacote.
+  // Sem isto não dá pra arrastar até um card abaixo da dobra: o pdnd não faz
+  // autoscroll sozinho, exige o pacote.
   useEffect(
     () =>
       autoScrollWindowForElements({

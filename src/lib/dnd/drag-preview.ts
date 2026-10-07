@@ -1,6 +1,6 @@
 /**
- * O fantasma do arrasto da Home: o **card inteiro**, não uma etiqueta com o
- * título.
+ * O fantasma do arrasto (Home e Kanbans): o **card inteiro**, não uma etiqueta
+ * com o título.
  *
  * É uma cópia **estática** do DOM do card, e isso é a decisão central do arquivo.
  * O caminho óbvio seria `createRoot(container).render(<Widget/>)`, como o exemplo

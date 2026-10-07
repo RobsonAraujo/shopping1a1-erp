@@ -5,6 +5,10 @@ import {
   renameKanbanColumn,
   setKanbanColumnCollapsed,
 } from "@/lib/compras/kanban-columns-data";
+import {
+  relocateColumnCycles,
+  type MovedCycleRow,
+} from "@/lib/compras/replenishment-cycle-data";
 import { requireOrganization } from "@/lib/api/api-auth";
 import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 import { parseJsonBody } from "@/lib/api/api-validation";
@@ -70,25 +74,39 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   if (!auth.ok) {
     return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
-  const { organizationId } = auth.ctx;
+  const { organizationId, token } = auth.ctx;
   const { id } = await context.params;
 
   const parsedBody = await parseJsonBody(request, deleteBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
+  const destinationId = parsedBody.data?.moveCardsToColumnId;
 
   try {
-    const result = await deleteKanbanColumn(
-      organizationId,
-      id,
-      parsedBody.data?.moveCardsToColumnId,
-    );
+    // Realoca primeiro (mesma regra de status do drag), depois exclui a
+    // coluna já vazia. Se a exclusão falhar, os cards já estão no destino —
+    // nada fica órfão. As linhas realocadas voltam pro client aplicar sem
+    // esperar um resync.
+    let relocated: MovedCycleRow[] = [];
+    if (destinationId) {
+      const moved = await relocateColumnCycles(organizationId, id, destinationId, {
+        accessToken: token,
+      });
+      if (!moved.ok) {
+        return NextResponse.json(
+          { error: DELETE_ERROR_MESSAGES.invalid_destination, code: "invalid_destination" },
+          { status: 400 },
+        );
+      }
+      relocated = moved.rows;
+    }
+    const result = await deleteKanbanColumn(organizationId, id);
     if (!result.ok) {
       return NextResponse.json(
         { error: DELETE_ERROR_MESSAGES[result.error], code: result.error },
         { status: result.error === "not_found" ? 404 : 400 },
       );
     }
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, relocated });
   } catch (e) {
     logServerError("api/kanban-columns/[id] DELETE", e);
     return NextResponse.json(apiErrorPayload(e, "kanban_column_delete_failed"), {
