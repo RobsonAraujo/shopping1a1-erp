@@ -135,7 +135,7 @@ export function TargetMarginPopover({
               autoComplete="off"
               value={draftText}
               aria-invalid={showInvalid}
-              inputClassName="pr-9 text-base font-semibold tabular-nums"
+              inputClassName="pr-9 tabular-nums"
               onFocus={(event) => event.currentTarget.select()}
               onChange={(event) =>
                 setDraftText(event.target.value.replace(/[^\d.,]/g, ""))
