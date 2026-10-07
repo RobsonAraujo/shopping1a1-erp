@@ -457,49 +457,57 @@ export function FinancialEvaluationClient({
             />
           </div>
 
-          <div
-            role="group"
-            aria-label="Filtrar anúncios"
-            className="flex flex-wrap items-center gap-2"
-          >
-            {(
-              [
-                { id: "all", label: "Todos", count: rows.length },
-                { id: "below", label: "Abaixo da meta", count: belowTargetCount },
-                {
-                  id: "excluded",
-                  label: "Fora da média",
-                  count: summary.excluded.count,
-                },
-              ] as const
-            ).map((filter) => {
-              const tone = QUICK_FILTER_TONE[filter.id];
-              const active = quickFilter === filter.id;
-              return (
-                <button
-                  key={filter.id}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => setQuickFilter(filter.id)}
-                  className={cn(
-                    "inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-150",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1",
-                    active ? tone.active : tone.idle,
-                  )}
-                >
-                  <span className={cn("size-2 rounded-full", tone.dot)} aria-hidden />
-                  {filter.label}
-                  <span
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div
+              role="group"
+              aria-label="Filtrar anúncios"
+              className="flex flex-wrap items-center gap-2"
+            >
+              {(
+                [
+                  { id: "all", label: "Todos", count: rows.length },
+                  { id: "below", label: "Abaixo da meta", count: belowTargetCount },
+                  {
+                    id: "excluded",
+                    label: "Fora da média",
+                    count: summary.excluded.count,
+                  },
+                ] as const
+              ).map((filter) => {
+                const tone = QUICK_FILTER_TONE[filter.id];
+                const active = quickFilter === filter.id;
+                return (
+                  <button
+                    key={filter.id}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setQuickFilter(filter.id)}
                     className={cn(
-                      "rounded-full px-1.5 font-semibold tabular-nums",
-                      tone.count,
+                      "inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-150",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1",
+                      active ? tone.active : tone.idle,
                     )}
                   >
-                    {filter.count.toLocaleString("pt-BR")}
-                  </span>
-                </button>
-              );
-            })}
+                    <span className={cn("size-2 rounded-full", tone.dot)} aria-hidden />
+                    {filter.label}
+                    <span
+                      className={cn(
+                        "rounded-full px-1.5 font-semibold tabular-nums",
+                        tone.count,
+                      )}
+                    >
+                      {filter.count.toLocaleString("pt-BR")}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            {showTable && visibleRows.length > 0 ? (
+              <p className="flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)]">
+                <MousePointerClick className="size-3" aria-hidden />
+                Clique em um anúncio para ver de onde vem a margem e o preço p/ meta.
+              </p>
+            ) : null}
           </div>
 
           {overlay.error ? (
@@ -540,13 +548,6 @@ export function FinancialEvaluationClient({
               targetCellFor={targetCellFor}
               onSelect={setSelectedId}
             />
-          ) : null}
-
-          {stream.status === "done" && showTable ? (
-            <p className="flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)]">
-              <MousePointerClick className="size-3" aria-hidden />
-              Clique em um anúncio para ver de onde vem a margem e o preço p/ meta.
-            </p>
           ) : null}
         </Card>
 
