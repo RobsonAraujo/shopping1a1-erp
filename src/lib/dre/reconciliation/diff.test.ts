@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildReconciliationDiff } from "./diff";
+import {
+  buildReconciliationDiff,
+  compareReconciliation,
+  resolveReconciledLineKeys,
+} from "./diff";
 import type { ReconciliationLineAggregation } from "./types";
 import type { DreMonthSnapshotPayload } from "@/lib/dre/dre-calculations";
 
@@ -93,5 +97,47 @@ describe("buildReconciliationDiff", () => {
       diffs.map((d) => d.label),
       ["Frete vendedor", "Tarifa de devolução", "Tarifa ML"],
     );
+  });
+});
+
+describe("compareReconciliation", () => {
+  it("lists governed lines that already match as `matched`, not as diff", () => {
+    const { diff, matched } = compareReconciliation(
+      payload({ saleFeeMl: -100, sellerShippingMl: -30 }),
+      aggregation({ saleFeeMl: -100, sellerShippingMl: -45, revenueMl: 5 }),
+    );
+    assert.deepEqual(matched.map((m) => m.lineKey), ["saleFeeMl"]);
+    assert.deepEqual(diff.map((d) => d.lineKey), ["sellerShippingMl"]);
+  });
+
+  it("restricts to candidate keys (legacy review) and still drops non-governed ones", () => {
+    const { diff, matched } = compareReconciliation(
+      payload(),
+      aggregation({ saleFeeMl: -10, returnFeeMl: -5, adsCost: -99 }),
+      ["saleFeeMl", "adsCost"],
+    );
+    assert.deepEqual(diff.map((d) => d.lineKey), ["saleFeeMl"]);
+    assert.deepEqual(matched, []);
+  });
+});
+
+describe("resolveReconciledLineKeys", () => {
+  it("governs matched lines plus accepted diffs; unchecked diffs stay out", () => {
+    const comparison = compareReconciliation(
+      payload({ saleFeeMl: -100 }),
+      aggregation({ saleFeeMl: -100, sellerShippingMl: -45, returnFeeMl: -7 }),
+    );
+    assert.deepEqual(
+      resolveReconciledLineKeys(comparison, ["sellerShippingMl"]).sort(),
+      ["saleFeeMl", "sellerShippingMl"],
+    );
+  });
+
+  it("returns nothing when no line matches and none is accepted", () => {
+    const comparison = compareReconciliation(
+      payload(),
+      aggregation({ saleFeeMl: -10 }),
+    );
+    assert.deepEqual(resolveReconciledLineKeys(comparison, []), []);
   });
 });

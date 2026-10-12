@@ -36,7 +36,7 @@ function relativeLabel(iso: string | null, timezone: string): string {
 
 /**
  * Pendências operacionais do sistema — fechamento de estoque que falhou,
- * conciliação de DRE esperando, meses sem sincronizar e o monitoramento de
+ * meses de DRE sem conciliação ou sem sincronizar e o monitoramento de
  * catálogo. Tudo já vem do snapshot de servidor: nenhum request extra.
  */
 export function HomeWidgetPendings() {
@@ -66,25 +66,26 @@ export function HomeWidgetPendings() {
     });
   }
 
-  if (pendings.pendingDreImports > 0) {
+  const unreconciled = pendings.unreconciledDreMonths;
+  if (unreconciled.length > 0) {
     // `full`, sem corte: este card é a superfície onde se lê a lista inteira. Se
     // o pill da zona de atenção (que corta em "+N") e o card cortassem, não
     // sobraria lugar nenhum pra ver todos os meses antes de ir pro DRE.
-    const months = formatDreMonthList(pendings.pendingDreImportMonths, {
+    const months = formatDreMonthList(unreconciled, {
       currentYear: pendings.year,
     });
     rows.push({
       id: "reconciliation",
       label:
-        pendings.pendingDreImports === 1
-          ? "1 conciliação de DRE pendente"
-          : `${pendings.pendingDreImports} conciliações de DRE pendentes`,
+        unreconciled.length === 1
+          ? "1 mês fechado sem conciliação"
+          : `${unreconciled.length} meses fechados sem conciliação`,
       // Sem ponto final depois da lista: os rótulos de mês já terminam em ponto.
       detail: months.full
-        ? `Esperando confirmação: ${months.full}`
-        : "Há uma planilha importada esperando confirmação.",
-      href: dreHref(pendings.pendingDreImportMonths, pendings.year),
-      tone: "warning",
+        ? `Concilie com a planilha Por Vendas: ${months.full}`
+        : "Concilie com a planilha Por Vendas para fechar o mês.",
+      href: dreHref(unreconciled, pendings.year),
+      tone: "neutral",
     });
   }
 

@@ -12,8 +12,7 @@ function pendings(
 ): NonNullable<HomeCoreSnapshot["pendings"]> {
   return {
     failedInventoryRuns: 0,
-    pendingDreImports: 0,
-    pendingDreImportMonths: [],
+    unreconciledDreMonths: [],
     dreMonths: [],
     closedInventoryMonths: [],
     year: 2026,
@@ -42,7 +41,7 @@ async function renderWidget(core: HomeCoreSnapshot) {
 describe("HomeWidgetPendings", () => {
   afterEach(() => mock.restoreAll());
 
-  it("lista TODOS os meses da conciliação, sem cortar em +N", async () => {
+  it("lista TODOS os meses sem conciliação, sem cortar em +N", async () => {
     // O pill da zona de atenção corta; este card é a superfície onde se lê a
     // lista inteira. Se os dois cortassem, não sobraria lugar nenhum pra ver
     // todos os meses antes de ir pro DRE.
@@ -53,14 +52,13 @@ describe("HomeWidgetPendings", () => {
     const { container, unmount } = await renderWidget(
       coreSnapshot({
         pendings: pendings({
-          pendingDreImportMonths: months,
-          pendingDreImports: months.length,
+          unreconciledDreMonths: months,
         }),
       }),
     );
 
     const text = container.textContent ?? "";
-    assert.match(text, /Esperando confirmação: dez\.\/2025, jan\./);
+    assert.match(text, /Concilie com a planilha Por Vendas: dez\.\/2025, jan\./);
     assert.match(text, /e jun\./, "o último mês aparece");
     assert.ok(!text.includes("+"), "nada de corte neste card");
     unmount();
@@ -71,14 +69,13 @@ describe("HomeWidgetPendings", () => {
     const { container, unmount } = await renderWidget(
       coreSnapshot({
         pendings: pendings({
-          pendingDreImportMonths: [{ year: 2026, month: 2 }],
-          pendingDreImports: 1,
+          unreconciledDreMonths: [{ year: 2026, month: 2 }],
         }),
       }),
     );
 
     const text = container.textContent ?? "";
-    assert.match(text, /Esperando confirmação: fev\./);
+    assert.match(text, /Concilie com a planilha Por Vendas: fev\./);
     assert.ok(!text.includes(".."), text);
     unmount();
   });
@@ -88,9 +85,9 @@ describe("HomeWidgetPendings", () => {
       coreSnapshot({
         pendings: pendings({
           dreMonths: [
-            { year: 2026, month: 1, syncedAt: "2026-02-01T00:00:00.000Z" },
-            { year: 2026, month: 2, syncedAt: null },
-            { year: 2026, month: 3, syncedAt: null },
+            { year: 2026, month: 1, syncedAt: "2026-02-01T00:00:00.000Z", reconciled: false },
+            { year: 2026, month: 2, syncedAt: null, reconciled: false },
+            { year: 2026, month: 3, syncedAt: null, reconciled: false },
           ],
         }),
       }),
@@ -103,13 +100,13 @@ describe("HomeWidgetPendings", () => {
     unmount();
   });
 
-  it("sem pendência de conciliação, o card não inventa a linha", async () => {
+  it("sem mês sem conciliação, o card não inventa a linha", async () => {
     const { container, unmount } = await renderWidget(
       coreSnapshot({ pendings: pendings({ failedInventoryRuns: 1 }) }),
     );
 
     const text = container.textContent ?? "";
-    assert.ok(!text.includes("Esperando confirmação"), text);
+    assert.ok(!text.includes("Concilie com a planilha Por Vendas"), text);
     assert.match(text, /fechamento de estoque/);
     unmount();
   });

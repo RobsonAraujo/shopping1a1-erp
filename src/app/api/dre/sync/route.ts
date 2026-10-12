@@ -31,6 +31,8 @@ const syncBodySchema = z.object({
     )
     .optional()
     .default([]),
+  /** Ausente = manter: só descarta a conciliação quando o usuário pede. */
+  keepReconciliation: z.boolean().optional().default(true),
 });
 
 function sseLine(data: unknown): string {
@@ -51,10 +53,19 @@ async function runDreSync(args: {
   year: number;
   month: number;
   preserveLineKeys: DreEditableLineKey[];
+  keepReconciliation: boolean;
   onProgress?: (progress: DreSyncProgress) => void;
 }): Promise<DreSyncCompletePayload> {
-  const { token, userId, organizationId, year, month, preserveLineKeys, onProgress } =
-    args;
+  const {
+    token,
+    userId,
+    organizationId,
+    year,
+    month,
+    preserveLineKeys,
+    keepReconciliation,
+    onProgress,
+  } = args;
 
   onProgress?.({
     phase: "billing",
@@ -77,7 +88,7 @@ async function runDreSync(args: {
     year,
     month,
     payload,
-    preserveLineKeys,
+    { keepReconciliation, preserveLineKeys },
   );
   const yearView = await loadDreYearView(organizationId, year);
   const monthView = yearView.months.find((row) => row.month === month);
@@ -104,7 +115,8 @@ export async function POST(request: NextRequest) {
 
   const parsedBody = await parseJsonBody(request, syncBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
-  const { year, month, preserveLineKeys } = parsedBody.data;
+  const { year, month, preserveLineKeys, keepReconciliation } =
+    parsedBody.data;
 
   if (!isDreMonthSyncable(year, month)) {
     return NextResponse.json(
@@ -133,6 +145,7 @@ export async function POST(request: NextRequest) {
             year,
             month,
             preserveLineKeys,
+            keepReconciliation,
             onProgress: (progress) => {
               send({ type: "progress", ...progress });
             },
@@ -171,6 +184,7 @@ export async function POST(request: NextRequest) {
       year,
       month,
       preserveLineKeys,
+      keepReconciliation,
     });
     return NextResponse.json(result);
   } catch (e) {

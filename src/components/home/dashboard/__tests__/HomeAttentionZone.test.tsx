@@ -12,8 +12,7 @@ function basePendings(
 ): NonNullable<HomeCoreSnapshot["pendings"]> {
   return {
     failedInventoryRuns: 0,
-    pendingDreImports: 0,
-    pendingDreImportMonths: [],
+    unreconciledDreMonths: [],
     dreMonths: [],
     closedInventoryMonths: [],
     year: 2026,
@@ -31,8 +30,7 @@ function withPendingMonths(count: number) {
     })),
   ];
   return basePendings({
-    pendingDreImportMonths: months,
-    pendingDreImports: months.length,
+    unreconciledDreMonths: months,
   });
 }
 
@@ -66,17 +64,17 @@ describe("HomeAttentionZone", () => {
   afterEach(() => mock.restoreAll());
 
   it("nomeia os meses da pendência no pill", async () => {
-    // Era o problema: «3 conciliações de DRE pendentes» sem dizer onde agir.
+    // Contagem sem mês («3 meses fechados sem conciliação») não diz onde agir.
     const { container, unmount } = await renderZone(
       coreSnapshot({ pendings: withPendingMonths(3) }),
     );
 
-    const pill = pillFor(container, /conciliações de DRE pendentes/);
+    const pill = pillFor(container, /meses fechados sem conciliação/);
     assert.ok(pill, "o pill precisa existir");
     // O espaço entre contagem e rótulo é `gap` do flex, não texto: em
     // `textContent` eles ficam colados. O nome acessível é onde a frase existe
     // de verdade.
-    assert.match(pill.getAttribute("aria-label") ?? "", /^3 conciliações de DRE pendentes:/);
+    assert.match(pill.getAttribute("aria-label") ?? "", /^3 meses fechados sem conciliação:/);
 
     const visible = pill.textContent ?? "";
     assert.match(visible, /dez\.\/2025/, "mês de outro ano leva o ano");
@@ -89,7 +87,7 @@ describe("HomeAttentionZone", () => {
       coreSnapshot({ pendings: withPendingMonths(7) }),
     );
 
-    const pill = pillFor(container, /conciliações de DRE pendentes/);
+    const pill = pillFor(container, /meses fechados sem conciliação/);
     assert.ok(pill, "o pill precisa existir");
     assert.match(pill.textContent ?? "", /\+4/, "o visível é cortado");
 
@@ -102,7 +100,7 @@ describe("HomeAttentionZone", () => {
 
     // `aria-label` substitui o texto visível, então repete contagem e rótulo.
     const label = pill.getAttribute("aria-label") ?? "";
-    assert.match(label, /7 conciliações de DRE pendentes/);
+    assert.match(label, /7 meses fechados sem conciliação/);
     assert.match(label, /jun\./);
     unmount();
   });
@@ -148,13 +146,12 @@ describe("HomeAttentionZone", () => {
     const { container, unmount } = await renderZone(
       coreSnapshot({
         pendings: basePendings({
-          pendingDreImportMonths: [{ year: 2025, month: 12 }],
-          pendingDreImports: 1,
+          unreconciledDreMonths: [{ year: 2025, month: 12 }],
         }),
       }),
     );
 
-    const pill = pillFor(container, /conciliação de DRE pendente/);
+    const pill = pillFor(container, /mês fechado sem conciliação/);
     assert.equal(pill?.getAttribute("href"), "/dashboard/dre?ano=2025");
     unmount();
   });

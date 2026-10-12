@@ -33,8 +33,7 @@ function pendings(
 ): NonNullable<HomeCoreSnapshot["pendings"]> {
   const base = {
     failedInventoryRuns: 0,
-    pendingDreImports: 0,
-    pendingDreImportMonths: [],
+    unreconciledDreMonths: [],
     dreMonths: [],
     closedInventoryMonths: [],
     /** Ano de referência fixo: o rótulo de mês depende dele, e um teste que
@@ -42,12 +41,7 @@ function pendings(
     year: 2026,
     ...overrides,
   };
-  // A contagem acompanha a lista, como no loader — senão o teste afirmaria um
-  // estado que o produto não consegue produzir.
-  return overrides.pendingDreImports === undefined &&
-    base.pendingDreImportMonths.length > 0
-    ? { ...base, pendingDreImports: base.pendingDreImportMonths.length }
-    : base;
+  return base;
 }
 
 function operations(purchaseInProgress: number, fullInProgress: number) {
@@ -97,8 +91,11 @@ describe("buildHomeAttentionSignals", () => {
         catalog: { productCount: 10, needsCostReviewCount: 3, activeListingCount: 8 },
         pendings: pendings({
           failedInventoryRuns: 1,
-          pendingDreImports: 2,
-          dreMonths: [{ year: 2026, month: 3, syncedAt: null }],
+          unreconciledDreMonths: [
+            { year: 2026, month: 1 },
+            { year: 2026, month: 2 },
+          ],
+          dreMonths: [{ year: 2026, month: 3, syncedAt: null, reconciled: false }],
         }),
       }),
     );
@@ -108,8 +105,8 @@ describe("buildHomeAttentionSignals", () => {
       [
         "inventory-runs-failed",
         "catalog-losing",
-        "dre-reconciliation-pending",
         "products-need-cost-review",
+        "dre-months-unreconciled",
         "dre-months-unsynced",
       ],
     );
@@ -133,13 +130,24 @@ describe("buildHomeAttentionSignals", () => {
     const signals = buildHomeAttentionSignals(
       snapshot({
         catalogLosing: losing(1),
-        pendings: pendings({ failedInventoryRuns: 1, dreMonths: [{ year: 2026, month: 1, syncedAt: null }] }),
+        pendings: pendings({ failedInventoryRuns: 1, dreMonths: [{ year: 2026, month: 1, syncedAt: null, reconciled: false }] }),
       }),
     );
     const byId = new Map(signals.map((s) => [s.id, s]));
     assert.equal(byId.get("inventory-runs-failed")?.tone, "danger");
     assert.equal(byId.get("catalog-losing")?.tone, "danger");
     assert.equal(byId.get("dre-months-unsynced")?.tone, "neutral");
+  });
+
+  it("mês fechado sem conciliação é neutro (fechamento, não erro)", () => {
+    const signals = buildHomeAttentionSignals(
+      snapshot({
+        pendings: pendings({ unreconciledDreMonths: [{ year: 2026, month: 4 }] }),
+      }),
+    );
+    const signal = signals.find((s) => s.id === "dre-months-unreconciled");
+    assert.equal(signal?.tone, "neutral");
+    assert.equal(signal?.label, "mês fechado sem conciliação");
   });
 
   it("emite exatamente um sinal quando o monitoramento não rodou hoje", () => {
@@ -167,9 +175,9 @@ describe("buildHomeAttentionSignals", () => {
       snapshot({
         pendings: pendings({
           dreMonths: [
-            { year: 2026, month: 1, syncedAt: "2026-02-01T00:00:00.000Z" },
-            { year: 2026, month: 2, syncedAt: null },
-            { year: 2026, month: 3, syncedAt: null },
+            { year: 2026, month: 1, syncedAt: "2026-02-01T00:00:00.000Z", reconciled: false },
+            { year: 2026, month: 2, syncedAt: null, reconciled: false },
+            { year: 2026, month: 3, syncedAt: null, reconciled: false },
           ],
         }),
       }),
@@ -206,8 +214,8 @@ describe("buildHomeAttentionSignals", () => {
         catalogPoll: { todayCount: 0, lastRunAt: null, lastRunSource: null, timezone: "America/Sao_Paulo" },
         pendings: pendings({
           failedInventoryRuns: 1,
-          pendingDreImports: 1,
-          dreMonths: [{ year: 2026, month: 1, syncedAt: null }],
+          unreconciledDreMonths: [{ year: 2026, month: 2 }],
+          dreMonths: [{ year: 2026, month: 1, syncedAt: null, reconciled: false }],
         }),
       }),
     );
@@ -223,19 +231,19 @@ describe("meses das pendências de DRE", () => {
     return buildHomeAttentionSignals(core).find((s) => s.id === id);
   }
 
-  it("o sinal de conciliação nomeia os meses", () => {
-    // É a regressão deste pedido: antes dizia só "5 conciliações de DRE
-    // pendentes" e o usuário não sabia onde agir.
+  it("o sinal de meses sem conciliação nomeia os meses", () => {
+    // Contagem sem mês deixa o usuário perdido: «5 meses sem conciliação» não
+    // diz onde agir.
     const signal = signalById(
       snapshot({
         pendings: pendings({
-          pendingDreImportMonths: [
+          unreconciledDreMonths: [
             { year: 2026, month: 2 },
             { year: 2026, month: 3 },
           ],
         }),
       }),
-      "dre-reconciliation-pending",
+      "dre-months-unreconciled",
     );
 
     assert.equal(signal?.detail, "fev. e mar.");
@@ -243,16 +251,15 @@ describe("meses das pendências de DRE", () => {
   });
 
   it("a contagem vem da lista de meses, nunca de outra leitura", () => {
-    // Pega a volta de um `count()` separado: o número do pill e a lista ao lado
-    // dele não podem divergir.
+    // O número do pill e a lista ao lado dele não podem divergir.
     const months = [
       { year: 2026, month: 1 },
       { year: 2026, month: 2 },
       { year: 2026, month: 3 },
     ];
     const signal = signalById(
-      snapshot({ pendings: pendings({ pendingDreImportMonths: months }) }),
-      "dre-reconciliation-pending",
+      snapshot({ pendings: pendings({ unreconciledDreMonths: months }) }),
+      "dre-months-unreconciled",
     );
     assert.equal(signal?.count, months.length);
   });
@@ -264,17 +271,17 @@ describe("meses das pendências de DRE", () => {
 
     const asOf2026 = signalById(
       snapshot({
-        pendings: pendings({ pendingDreImportMonths: month, year: 2026 }),
+        pendings: pendings({ unreconciledDreMonths: month, year: 2026 }),
       }),
-      "dre-reconciliation-pending",
+      "dre-months-unreconciled",
     );
     assert.equal(asOf2026?.detail, "dez./2025", "ano diferente: leva o ano");
 
     const asOf2025 = signalById(
       snapshot({
-        pendings: pendings({ pendingDreImportMonths: month, year: 2025 }),
+        pendings: pendings({ unreconciledDreMonths: month, year: 2025 }),
       }),
-      "dre-reconciliation-pending",
+      "dre-months-unreconciled",
     );
     assert.equal(asOf2025?.detail, "dez.", "mesmo ano: sem o ano");
   });
@@ -285,19 +292,19 @@ describe("meses das pendências de DRE", () => {
       month: i + 1,
     }));
     const signal = signalById(
-      snapshot({ pendings: pendings({ pendingDreImportMonths: months }) }),
-      "dre-reconciliation-pending",
+      snapshot({ pendings: pendings({ unreconciledDreMonths: months }) }),
+      "dre-months-unreconciled",
     );
 
     assert.match(signal?.detail ?? "", /\+4$/);
     assert.match(signal?.detailFull ?? "", /jul\.$/);
   });
 
-  it("o link leva pro ano quando todas as pendências são de um ano só", () => {
+  it("o link leva pro ano quando todos os meses são de um ano só", () => {
     const of = (months: { year: number; month: number }[]) =>
       signalById(
-        snapshot({ pendings: pendings({ pendingDreImportMonths: months }) }),
-        "dre-reconciliation-pending",
+        snapshot({ pendings: pendings({ unreconciledDreMonths: months }) }),
+        "dre-months-unreconciled",
       )?.href;
 
     assert.equal(
@@ -317,9 +324,9 @@ describe("meses das pendências de DRE", () => {
       snapshot({
         pendings: pendings({
           dreMonths: [
-            { year: 2026, month: 1, syncedAt: "2026-02-01T00:00:00.000Z" },
-            { year: 2026, month: 2, syncedAt: null },
-            { year: 2026, month: 3, syncedAt: null },
+            { year: 2026, month: 1, syncedAt: "2026-02-01T00:00:00.000Z", reconciled: false },
+            { year: 2026, month: 2, syncedAt: null, reconciled: false },
+            { year: 2026, month: 3, syncedAt: null, reconciled: false },
           ],
         }),
       }),

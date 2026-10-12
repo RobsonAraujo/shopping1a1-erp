@@ -135,6 +135,43 @@ export function isDreEditableLineKey(key: string): key is DreEditableLineKey {
   return (DRE_EDITABLE_LINE_KEYS as readonly string[]).includes(key);
 }
 
+/**
+ * Linhas que a planilha "Por Vendas" nunca governa: vêm do sync (faturamento,
+ * canceladas, devoluções parciais, Full envios, ADS) ou do ERP (custo,
+ * imposto). Imports antigos podem trazer essas chaves em `acceptedLineKeys` —
+ * são filtradas em todo lugar que aplica conciliação.
+ */
+const RECONCILIATION_SKIPPED_LINE_KEYS = new Set<DreEditableLineKey>([
+  "productCostErp",
+  "taxErp",
+  "adsCost",
+  "fullShippingMl",
+  "revenueMl",
+  "cancelledSalesMl",
+  "partialReturnsMl",
+]);
+
+export function isReconciliationGovernedLineKey(
+  key: DreEditableLineKey,
+): boolean {
+  return !RECONCILIATION_SKIPPED_LINE_KEYS.has(key);
+}
+
+/**
+ * Conciliação confirmada do mês. Fica no payload (e não só no import) para o
+ * sync conseguir reaplicar os valores da planilha sem reler o import.
+ * Invariante: existe ⇔ o import `confirmed` do mês tem o mesmo `importId`.
+ */
+export type DreMonthReconciliation = {
+  importId: string;
+  reconciledAt: string;
+  fileName: string;
+  /** Linhas cujo valor vem da planilha (aceitas no diff + as que já conferiam). */
+  lineKeys: DreEditableLineKey[];
+  /** Valores da planilha para `lineKeys`. */
+  amounts: Partial<Record<DreEditableLineKey, number>>;
+};
+
 export type DreMonthSnapshotPayload = DreLineAmounts & {
   adsCost: number;
   billingSource: DreBillingSource;
@@ -179,6 +216,8 @@ export type DreMonthSnapshotPayload = DreLineAmounts & {
    * vez de para um valor de sync de verdade.
    */
   hasRealSyncBaseline?: boolean;
+  /** Presente só quando o mês está conciliado com a planilha Por Vendas. */
+  reconciliation?: DreMonthReconciliation;
 };
 
 export const DRE_LINE_KEY_TO_BREAKDOWN_FIELD: Partial<
@@ -308,36 +347,122 @@ export function withSyncLineBaseline(
 }
 
 /**
- * Após um sync fresco, reaplica valores manuais escolhidos pelo usuário.
- * O baseline passa a ser o valor recém-sincronizado (para “restaurar” depois).
+ * Grava os valores da planilha Por Vendas nas linhas governadas e marca o mês
+ * como conciliado. O valor conciliado vira o baseline (valor e auditoria), então
+ * "Restaurar" numa linha conciliada volta para o valor da planilha, não da API.
+ * Chaves fora das governadas ou sem valor na planilha são ignoradas.
  */
-export function mergePreservedManualLines(
-  fresh: DreMonthSnapshotPayload,
-  previous: DreMonthSnapshotPayload | null | undefined,
-  preserveKeys: readonly DreEditableLineKey[],
+export function applyReconciliationToPayload(
+  payload: DreMonthSnapshotPayload,
+  source: {
+    amounts: Partial<Record<DreEditableLineKey, number>>;
+    breakdowns: Partial<Record<DreEditableLineKey, DreLineBreakdownItem[]>>;
+  },
+  lineKeys: readonly DreEditableLineKey[],
+  meta: Pick<DreMonthReconciliation, "importId" | "reconciledAt" | "fileName">,
 ): DreMonthSnapshotPayload {
-  const baseline = buildSyncedLineBaseline(fresh);
-  const freshBreakdowns = captureSyncedBreakdowns(fresh);
-  if (!previous || preserveKeys.length === 0) {
-    return {
-      ...fresh,
-      syncedLineBaseline: baseline,
-      syncedBreakdownBaseline: freshBreakdowns,
-      manuallyEditedLineKeys: [],
-      hasRealSyncBaseline: true,
-    };
+  const next: DreMonthSnapshotPayload = { ...payload };
+  const baseline: Partial<Record<DreEditableLineKey, number>> = {
+    ...(payload.syncedLineBaseline ?? {}),
+  };
+  const breakdownBaseline: DreSyncedBreakdownBaseline = {
+    ...(payload.syncedBreakdownBaseline ?? {}),
+  };
+  const edited = new Set(payload.manuallyEditedLineKeys ?? []);
+  const reconciledKeys: DreEditableLineKey[] = [];
+  const reconciledAmounts: Partial<Record<DreEditableLineKey, number>> = {};
+
+  for (const key of new Set(lineKeys)) {
+    if (!isReconciliationGovernedLineKey(key)) continue;
+    const raw = source.amounts[key];
+    if (raw === undefined || !Number.isFinite(raw)) continue;
+    const amount = roundMoney(raw);
+    next[key] = amount;
+    baseline[key] = amount;
+    edited.delete(key);
+    reconciledKeys.push(key);
+    reconciledAmounts[key] = amount;
+    const field = DRE_LINE_KEY_TO_BREAKDOWN_FIELD[key];
+    if (field) {
+      const items = source.breakdowns[key] ?? [];
+      (next as Record<string, unknown>)[field] = items;
+      (breakdownBaseline as Record<string, unknown>)[field] = items;
+    }
   }
 
-  const prevEdited = new Set(previous.manuallyEditedLineKeys ?? []);
-  const next: DreMonthSnapshotPayload = {
-    ...fresh,
+  return {
+    ...next,
     syncedLineBaseline: baseline,
-    syncedBreakdownBaseline: freshBreakdowns,
+    syncedBreakdownBaseline: breakdownBaseline,
+    manuallyEditedLineKeys: [...edited],
+    reconciliation: {
+      ...meta,
+      lineKeys: reconciledKeys,
+      amounts: reconciledAmounts,
+    },
+  };
+}
+
+export type MergeSyncedSnapshotOptions = {
+  /** Reaplica a conciliação do mês por cima do sync (padrão seguro: true). */
+  keepReconciliation: boolean;
+  /** Ajustes manuais a manter — só valem chaves marcadas como editadas antes. */
+  preserveLineKeys: readonly DreEditableLineKey[];
+};
+
+/**
+ * Junta um sync fresco com o snapshot anterior:
+ * 1. baseline = valores do sync;
+ * 2. se `keepReconciliation`, reaplica os valores da planilha (e a auditoria
+ *    deles) nas linhas conciliadas — senão o mês deixa de estar conciliado;
+ * 3. ajustes manuais escolhidos entram por cima (manual vence o conciliado).
+ */
+export function mergeSyncedSnapshot(
+  fresh: DreMonthSnapshotPayload,
+  previous: DreMonthSnapshotPayload | null | undefined,
+  options: MergeSyncedSnapshotOptions,
+): DreMonthSnapshotPayload {
+  let next: DreMonthSnapshotPayload = {
+    ...fresh,
+    syncedLineBaseline: buildSyncedLineBaseline(fresh),
+    syncedBreakdownBaseline: captureSyncedBreakdowns(fresh),
+    manuallyEditedLineKeys: [],
     hasRealSyncBaseline: true,
   };
+  delete next.reconciliation;
+
+  const reconciliation = previous?.reconciliation;
+  if (previous && reconciliation && options.keepReconciliation) {
+    const breakdowns: Partial<Record<DreEditableLineKey, DreLineBreakdownItem[]>> =
+      {};
+    for (const key of reconciliation.lineKeys) {
+      const field = DRE_LINE_KEY_TO_BREAKDOWN_FIELD[key];
+      if (!field) continue;
+      breakdowns[key] = (previous.syncedBreakdownBaseline?.[field] ??
+        previous[field] ??
+        []) as DreLineBreakdownItem[];
+    }
+    next = applyReconciliationToPayload(
+      next,
+      { amounts: reconciliation.amounts, breakdowns },
+      reconciliation.lineKeys,
+      {
+        importId: reconciliation.importId,
+        reconciledAt: reconciliation.reconciledAt,
+        fileName: reconciliation.fileName,
+      },
+    );
+  }
+
+  if (!previous || options.preserveLineKeys.length === 0) {
+    return next;
+  }
+
+  const baseline = next.syncedLineBaseline ?? {};
+  const prevEdited = new Set(previous.manuallyEditedLineKeys ?? []);
   const edited: DreEditableLineKey[] = [];
 
-  for (const key of preserveKeys) {
+  for (const key of new Set(options.preserveLineKeys)) {
     if (!prevEdited.has(key)) continue;
     const amount = getEditableLineAmount(previous, key);
     next[key] = amount;
@@ -346,7 +471,7 @@ export function mergePreservedManualLines(
       (next as Record<string, unknown>)[breakdownField] =
         previous[breakdownField];
     }
-    if (!amountsMatch(amount, baseline[key])) {
+    if (!amountsMatch(amount, baseline[key] ?? 0)) {
       edited.push(key);
     }
   }
@@ -458,29 +583,6 @@ export function applyRestoreLineFromSync(
   return next;
 }
 
-/**
- * Após conciliação aceita: os valores atuais das chaves viram a nova verdade
- * (baseline) e deixam de aparecer como “ajustado”.
- */
-export function commitReconciledLinesAsTruth(
-  payload: DreMonthSnapshotPayload,
-  lineKeys: readonly DreEditableLineKey[],
-): DreMonthSnapshotPayload {
-  const baseline: Partial<Record<DreEditableLineKey, number>> = {
-    ...(payload.syncedLineBaseline ?? {}),
-  };
-  const edited = new Set(payload.manuallyEditedLineKeys ?? []);
-  for (const key of lineKeys) {
-    baseline[key] = getEditableLineAmount(payload, key);
-    edited.delete(key);
-  }
-  return {
-    ...payload,
-    syncedLineBaseline: baseline,
-    manuallyEditedLineKeys: [...edited],
-  };
-}
-
 export type DreManualCostInput = {
   costItemId: string;
   amount: number;
@@ -552,6 +654,7 @@ const LEAN_SNAPSHOT_FIELDS = {
   syncedLineBaseline: "keep",
   manuallyEditedLineKeys: "keep",
   hasRealSyncBaseline: "keep",
+  reconciliation: "keep",
   // Auditoria por SKU/linha — o peso da coluna.
   productCostBreakdown: "omit",
   taxBreakdown: "omit",

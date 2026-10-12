@@ -471,8 +471,7 @@ describe("HomeWidgetGrid", () => {
         },
         pendings: {
           failedInventoryRuns: 1,
-          pendingDreImports: 0,
-          pendingDreImportMonths: [],
+          unreconciledDreMonths: [],
           dreMonths: [],
           closedInventoryMonths: [],
           year: 2026,

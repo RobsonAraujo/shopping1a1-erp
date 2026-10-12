@@ -1,3 +1,4 @@
+import { reportsConfig } from "@/config/reports";
 import { stockPlanningConfig } from "@/config/stock-planning";
 import { prisma } from "@/lib/db/db";
 import { roundMoney } from "@/lib/pricing/financial-margin";
@@ -343,6 +344,11 @@ export async function fetchOrdersInDateRange(
   return orders;
 }
 
+/**
+ * Dia civil do pedido no fuso do relatório (São Paulo) — usado para casar o
+ * pedido com o período do nivelamento de custo. Não usar `getDate()`: no
+ * servidor (UTC) um pedido das 21h–24h BRT caía no dia seguinte.
+ */
 function orderDateYmdFromOrder(order: {
   date_closed?: string;
   date_created?: string;
@@ -351,10 +357,9 @@ function orderDateYmdFromOrder(order: {
   if (!raw) return null;
   const date = new Date(raw);
   if (Number.isNaN(date.getTime())) return null;
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  return date.toLocaleDateString("en-CA", {
+    timeZone: reportsConfig.catalogCompetitionTimezone,
+  });
 }
 
 export function paidOrderLinesFromOrders(orders: OrderSearchOrder[]): PaidOrderLine[] {

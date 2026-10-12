@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { ArrowDownRight, ArrowUpRight, CheckCircle2, Layers, TrendingUp, Wallet, X } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, CheckCircle2, FileCheck2, Layers, TrendingUp, Wallet, X } from "lucide-react";
 import {
   formatFinancialMoney,
   formatFinancialPercent,
@@ -9,6 +9,7 @@ import {
 import { dreMonthShortLabel } from "@/lib/dre/dre-table-rows";
 import type { DreMonthView, DreYearView } from "@/lib/dre/dre-year-data";
 import { Sparkline, type SparklineTone } from "@/components/shared/Sparkline";
+import { reconciliationStatusLabel } from "@/components/dre/DreYearTableShared";
 import { cn } from "@/lib/utils";
 
 function trendPercent(
@@ -134,7 +135,16 @@ export function DreOverview({
   const period =
     monthView != null ? dreMonthShortLabel(monthView.month) : String(data.year);
   const syncedCount = data.months.filter((m) => m.syncedAt).length;
-  const syncComplete = syncedCount === 12;
+  // Mês em andamento ainda não tem planilha fechada: a conta é sobre meses
+  // fechados já sincronizados.
+  const closedSynced = data.months.filter(
+    (m) => m.syncedAt && !m.isCurrentMonth && !m.isFutureMonth,
+  );
+  const reconciledCount = closedSynced.filter(
+    (m) => m.reconciliation.status === "reconciled",
+  ).length;
+  const reconciliationComplete =
+    closedSynced.length > 0 && reconciledCount === closedSynced.length;
   const profitSeries = data.months.map((m) => m.totals?.lucroOperacional ?? null);
   const revenueSeries = data.months.map((m) => m.totals?.totalEntrada ?? null);
   const marginSeries = data.months.map(
@@ -218,28 +228,31 @@ export function DreOverview({
         />
         <KpiCard
           icon={
-            syncComplete ? (
+            reconciliationComplete ? (
               <CheckCircle2 className="size-4" aria-hidden />
             ) : (
-              <Layers className="size-4" aria-hidden />
+              <FileCheck2 className="size-4" aria-hidden />
             )
           }
-          tone={syncComplete ? "emerald" : "primary"}
-          label="Sincronização"
+          tone={reconciliationComplete ? "emerald" : "primary"}
+          label="Conciliação"
           period="ano"
-          value={`${syncedCount} / 12`}
-          hint="Meses com dados importados do Mercado Livre"
+          value={`${reconciledCount} / ${closedSynced.length}`}
+          hint={`Meses fechados conciliados com a planilha Por Vendas · ${syncedCount}/12 sincronizados`}
           footer={
             <div
-              className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--muted)]"
+              className="flex h-1.5 w-full overflow-hidden rounded-full bg-[var(--muted)]"
               aria-hidden
             >
               <div
-                className={cn(
-                  "h-full rounded-full transition-[width]",
-                  syncComplete ? "bg-emerald-500" : "bg-[var(--primary)]",
-                )}
-                style={{ width: `${(syncedCount / 12) * 100}%` }}
+                className="h-full bg-emerald-500 transition-[width]"
+                style={{ width: `${(reconciledCount / 12) * 100}%` }}
+              />
+              <div
+                className="h-full bg-[var(--primary)]/40 transition-[width]"
+                style={{
+                  width: `${((syncedCount - reconciledCount) / 12) * 100}%`,
+                }}
               />
             </div>
           }
@@ -249,13 +262,17 @@ export function DreOverview({
       <div className="flex gap-1.5 overflow-x-auto pb-1">
         {data.months.map((month) => {
           const active = selectedMonth === month.month;
+          const status = month.reconciliation.status;
+          const statusLabel = reconciliationStatusLabel(month);
           return (
             <button
               key={month.month}
               type="button"
               onClick={() => onSelectMonth(active ? null : month.month)}
+              title={statusLabel}
+              aria-label={`${month.label} — ${statusLabel}`}
               className={cn(
-                "shrink-0 cursor-pointer rounded-lg px-3 py-1.5 text-[11px] font-semibold tracking-wide transition-colors",
+                "inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-lg px-3 py-1.5 text-[11px] font-semibold tracking-wide transition-colors",
                 month.isFutureMonth && "opacity-60",
                 active
                   ? "bg-[var(--primary)] text-white shadow-sm"
@@ -265,6 +282,20 @@ export function DreOverview({
               )}
             >
               {dreMonthShortLabel(month.month)}
+              {status === "reconciled" ? (
+                <CheckCircle2
+                  className={cn(
+                    "size-3",
+                    active ? "text-white" : "text-emerald-600",
+                  )}
+                  aria-hidden
+                />
+              ) : status === "review" ? (
+                <span
+                  className="size-1.5 rounded-full bg-amber-500"
+                  aria-hidden
+                />
+              ) : null}
             </button>
           );
         })}

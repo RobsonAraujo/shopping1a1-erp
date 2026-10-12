@@ -1,7 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, CheckCircle2, FileCheck2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
@@ -13,6 +14,7 @@ import {
   getCalendarMonthRange,
 } from "@/lib/mercadolibre/revenue-periods";
 import type { DreMonthView } from "@/lib/dre/dre-year-data";
+import { cn } from "@/lib/utils";
 
 /**
  * Esmaece e desativa a interação das células que não estão em foco.
@@ -35,19 +37,42 @@ export function formatSyncTime(iso: string | null): string {
   }).format(new Date(iso));
 }
 
+/** Data curta (dd/mm/aaaa) de quando o mês foi conciliado. */
+export function formatReconciledAt(iso: string | null): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
+}
+
+/** Texto curto do status de conciliação (tooltip/aria das pílulas e cabeçalhos). */
+export function reconciliationStatusLabel(month: DreMonthView): string {
+  const { reconciliation } = month;
+  if (reconciliation.status === "reconciled") {
+    const when = formatReconciledAt(reconciliation.reconciledAt);
+    return when ? `Conciliado em ${when}` : "Conciliado";
+  }
+  if (reconciliation.status === "review") {
+    return "Conciliação salva para revisar";
+  }
+  return month.syncedAt ? "Não conciliado" : "Sem dados";
+}
+
 export function getMonthAlertMessages(month: DreMonthView): string[] {
   const messages: string[] = [];
 
-  // Conciliação pendente era o único aviso que a Home mostrava e esta tela não:
-  // o banner do `DreClient` exige mês selecionado **e** estado da própria sessão,
-  // então uma conciliação importada em outra aba (ou por outra pessoa) ficava
-  // invisível aqui — quem clicava no aviso da Home não achava nada. O dado já vem
-  // no `DreMonthView` (modo não-lean), então isto não custa query nenhuma.
-  if (month.pendingReconciliationImportId) {
+  if (month.reconciliation.status === "review") {
     messages.push(
-      month.pendingReconciliationApplied
-        ? "Conciliação aplicada e não salva — revise e salve ou descarte."
-        : "Conciliação importada esperando confirmação.",
+      "Conciliação salva para revisar — abra “Revisar conciliação” e concilie ou descarte.",
+    );
+  }
+  if (month.levelingChangedAfterSync) {
+    messages.push(
+      "Nivelamento de custo alterado depois da última sincronização — sincronize o mês.",
     );
   }
 
@@ -138,6 +163,11 @@ export function MonthSyncTooltip({
         <p className="mt-1 text-[var(--muted-foreground)]">
           Sync: {formatSyncTime(month.syncedAt)}
         </p>
+        {month.syncedAt || month.reconciliation.status !== "none" ? (
+          <p className="mt-1 text-[var(--muted-foreground)]">
+            {reconciliationStatusLabel(month)}
+          </p>
+        ) : null}
         {month.isCurrentMonth ? (
           <p className="mt-1 text-[var(--muted-foreground)]">Mês atual</p>
         ) : null}
@@ -146,5 +176,62 @@ export function MonthSyncTooltip({
         ) : null}
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+/** Status de conciliação do mês selecionado (painel do mês, desktop e mobile). */
+export function MonthReconciliationBadge({ month }: { month: DreMonthView }) {
+  const status = month.reconciliation.status;
+  if (status === "none" && !month.syncedAt) return null;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1",
+        status === "reconciled" && "text-emerald-700",
+        status === "review" && "text-amber-700",
+      )}
+      title={month.reconciliation.fileName ?? undefined}
+    >
+      {status === "reconciled" ? (
+        <CheckCircle2 className="size-3.5" aria-hidden />
+      ) : null}
+      {reconciliationStatusLabel(month)}
+    </span>
+  );
+}
+
+/**
+ * Atalho de conciliação do mês. Destaque (primário) quando o mês já tem dados
+ * e ainda não está conciliado — é o próximo passo do fechamento.
+ */
+export function MonthReconcileButton({
+  month,
+  onReconcile,
+  className,
+}: {
+  month: DreMonthView;
+  onReconcile: (month: number) => void;
+  className?: string;
+}) {
+  if (month.isFutureMonth) return null;
+  const status = month.reconciliation.status;
+  const label =
+    status === "review"
+      ? "Revisar conciliação"
+      : status === "reconciled"
+        ? "Reconciliar"
+        : "Conciliar mês";
+  const highlight = status === "review" || (status === "none" && Boolean(month.syncedAt));
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant={highlight ? "default" : "outline"}
+      className={cn("cursor-pointer gap-1.5", className)}
+      onClick={() => onReconcile(month.month)}
+    >
+      <FileCheck2 className="size-3.5" aria-hidden />
+      {label}
+    </Button>
   );
 }

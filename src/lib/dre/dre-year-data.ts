@@ -68,8 +68,13 @@ export type DreMonthView = {
   fullNonComplianceBreakdown: DreLineBreakdownItem[] | null;
   minhaPaginaBreakdown: DreLineBreakdownItem[] | null;
   affiliateFeeBreakdown: DreLineBreakdownItem[] | null;
-  pendingReconciliationImportId: string | null;
-  pendingReconciliationApplied: boolean;
+  /** Conciliação com a planilha Por Vendas (ver `resolveMonthReconciliation`). */
+  reconciliation: DreMonthReconciliationView;
+  /**
+   * true quando algum nivelamento de custo que cobre o mês foi criado/editado
+   * depois da última sync — o Custo produto do snapshot está desatualizado.
+   */
+  levelingChangedAfterSync: boolean;
   /**
    * true quando o Relatório Full já tem envios para o mês (import ML ou
    * manual) — usado só para o alerta de UI; o valor na célula ainda vem do
@@ -93,6 +98,97 @@ export type DreMonthView = {
   nonOperationalInOverrides: Record<string, number | null>;
   totals: DreComputedTotals | null;
 };
+
+export type DreMonthReconciliationStatus = "reconciled" | "review" | "none";
+
+export type DreMonthReconciliationView = {
+  status: DreMonthReconciliationStatus;
+  reconciledAt: string | null;
+  fileName: string | null;
+  lineKeys: DreEditableLineKey[];
+  /** Import salvo pelo fluxo antigo que precisa de revisão (status `review`). */
+  reviewImportId: string | null;
+};
+
+export type DreReconciliationImportSummary = {
+  id: string;
+  month: number;
+  status: "pending" | "confirmed" | "superseded";
+  appliedAt: Date | null;
+  fileName: string;
+};
+
+/**
+ * Status de conciliação do mês:
+ * - `reconciled`: o snapshot tem `payload.reconciliation` (o sync reaplica);
+ * - `review`: sobrou estado do fluxo antigo — `pending` aplicado e nunca salvo,
+ *   ou `confirmed` sem a marca no snapshot (conciliação que um sync antigo
+ *   apagou). Não dá pra afirmar que o mês está conciliado sem o usuário revisar;
+ * - `none`: nada.
+ */
+export function resolveMonthReconciliation(
+  payload: Pick<DreMonthSnapshotPayload, "reconciliation"> | null,
+  monthImports: readonly DreReconciliationImportSummary[],
+): DreMonthReconciliationView {
+  const marker = payload?.reconciliation ?? null;
+  const legacyPending = monthImports.find(
+    (row) => row.status === "pending" && row.appliedAt !== null,
+  );
+  const confirmed = monthImports.find((row) => row.status === "confirmed");
+  const reviewRow =
+    legacyPending ??
+    (confirmed && marker?.importId !== confirmed.id ? confirmed : undefined);
+
+  if (reviewRow) {
+    return {
+      status: "review",
+      reconciledAt: null,
+      fileName: reviewRow.fileName,
+      lineKeys: [],
+      reviewImportId: reviewRow.id,
+    };
+  }
+  if (marker) {
+    return {
+      status: "reconciled",
+      reconciledAt: marker.reconciledAt || null,
+      fileName: marker.fileName || null,
+      lineKeys: marker.lineKeys,
+      reviewImportId: null,
+    };
+  }
+  return {
+    status: "none",
+    reconciledAt: null,
+    fileName: null,
+    lineKeys: [],
+    reviewImportId: null,
+  };
+}
+
+export type DreLevelingChangeSummary = {
+  startDate: Date;
+  endDate: Date;
+  updatedAt: Date;
+};
+
+/** Algum nivelamento que cobre o mês mudou depois da última sync do mês. */
+export function levelingChangedAfterSync(
+  levelings: readonly DreLevelingChangeSummary[],
+  year: number,
+  month: number,
+  syncedAt: Date | null,
+): boolean {
+  if (!syncedAt) return false;
+  const monthStart = Date.UTC(year, month - 1, 1);
+  const monthEnd = Date.UTC(year, month, 0);
+  return levelings.some(
+    (row) =>
+      row.startDate.getTime() <= monthEnd &&
+      row.endDate.getTime() >= monthStart &&
+      row.updatedAt.getTime() > syncedAt.getTime(),
+  );
+}
 
 export type DreYearView = {
   year: number;
@@ -280,10 +376,11 @@ export async function loadDreYearView(
      * Modo Home: duas economias de uma vez.
      *
      * 1. Lê os snapshots sem os arrays de breakdown (~390× menos egress).
-     * 2. **Pula as três leituras que só alimentam campo de auditoria**
-     *    (`fullReportSourced`, `pendingReconciliation*`) — e duas delas são
-     *    proporcionais ao volume: uma varre todo envio do ano, a outra todo
-     *    envio `ml_billing` **sem limite de ano**. 6 queries viram 3.
+     * 2. **Pula as leituras que só alimentam campo de auditoria**
+     *    (`fullReportSourced`, revisão de conciliação, nivelamento alterado) —
+     *    e duas delas são proporcionais ao volume: uma varre todo envio do
+     *    ano, a outra todo envio `ml_billing` **sem limite de ano**. Na Home a
+     *    conciliação sai só da marca no snapshot (`reconciled` ou `none`).
      *
      * O que a Home consome está em `HomeFinanceSlice`: 14 campos, nenhum
      * derivado dessas leituras — então quem garante que isto é seguro é o
@@ -301,7 +398,8 @@ export async function loadDreYearView(
     monthValues,
     fullShipmentMonths,
     importedBillingPeriods,
-    pendingReconciliationImports,
+    reconciliationImports,
+    levelingChanges,
   ] = await Promise.all([
     prisma.dreCostItem.findMany({
       where: { organizationId, active: true },
@@ -323,9 +421,9 @@ export async function loadDreYearView(
       where: { organizationId, year: { in: [year, year - 1] } },
       select: { costItemId: true, year: true, month: true, amount: true },
     }),
-    // As três abaixo existem só para `fullReportSourced` e
-    // `pendingReconciliation*`, que são avisos da tela do DRE. No modo Home elas
-    // nem saem — ver o comentário da opção.
+    // As de baixo existem só para avisos da tela do DRE (`fullReportSourced`,
+    // revisão de conciliação, nivelamento alterado). No modo Home elas nem
+    // saem — ver o comentário da opção.
     lean
       ? Promise.resolve(new Set<number>())
       : listFullShipmentActivityMonthsForYear(organizationId, year),
@@ -333,18 +431,47 @@ export async function loadDreYearView(
       ? Promise.resolve<Array<{ year: number; month: number }>>([])
       : listImportedBillingPeriods(organizationId),
     lean
-      ? Promise.resolve<
-          Array<{ id: string; month: number; appliedAt: Date | null }>
-        >([])
+      ? Promise.resolve<DreReconciliationImportSummary[]>([])
       : prisma.dreReconciliationImport.findMany({
-          where: { organizationId, year, status: "pending" },
-          select: { id: true, month: true, appliedAt: true },
+          // Prévias não aplicadas (`pending` sem `appliedAt`) são rascunho:
+          // não contam para status nenhum.
+          where: {
+            organizationId,
+            year,
+            OR: [
+              { status: "confirmed" },
+              { status: "pending", appliedAt: { not: null } },
+            ],
+          },
+          select: {
+            id: true,
+            month: true,
+            status: true,
+            appliedAt: true,
+            fileName: true,
+          },
+        }),
+    lean
+      ? Promise.resolve<DreLevelingChangeSummary[]>([])
+      : prisma.dreProductCostLeveling.findMany({
+          where: {
+            organizationId,
+            startDate: { lte: new Date(Date.UTC(year, 11, 31)) },
+            endDate: { gte: new Date(Date.UTC(year, 0, 1)) },
+          },
+          select: { startDate: true, endDate: true, updatedAt: true },
         }),
   ]);
 
-  const pendingReconciliationByMonth = new Map(
-    pendingReconciliationImports.map((row) => [row.month, row]),
-  );
+  const reconciliationImportsByMonth = new Map<
+    number,
+    DreReconciliationImportSummary[]
+  >();
+  for (const row of reconciliationImports) {
+    const list = reconciliationImportsByMonth.get(row.month) ?? [];
+    list.push(row);
+    reconciliationImportsByMonth.set(row.month, list);
+  }
 
   const importedBillingMonths = new Set(
     importedBillingPeriods
@@ -495,10 +622,15 @@ export async function loadDreYearView(
       fullNonComplianceBreakdown: payload?.fullNonComplianceBreakdown ?? null,
       minhaPaginaBreakdown: payload?.minhaPaginaBreakdown ?? null,
       affiliateFeeBreakdown: payload?.affiliateFeeBreakdown ?? null,
-      pendingReconciliationImportId:
-        pendingReconciliationByMonth.get(month)?.id ?? null,
-      pendingReconciliationApplied: Boolean(
-        pendingReconciliationByMonth.get(month)?.appliedAt,
+      reconciliation: resolveMonthReconciliation(
+        payload,
+        reconciliationImportsByMonth.get(month) ?? [],
+      ),
+      levelingChangedAfterSync: levelingChangedAfterSync(
+        levelingChanges,
+        year,
+        month,
+        snapshot?.syncedAt ?? null,
       ),
       // Checagem ao vivo (não só o flag do snapshot): snapshots antigos não
       // tinham `fullReportSourced`, e importar depois da sync também conta.

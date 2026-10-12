@@ -67,6 +67,8 @@ import {
   DIM_CLASS,
   formatSyncTime,
   getMonthAlertMessages,
+  MonthReconcileButton,
+  MonthReconciliationBadge,
 } from "@/components/dre/DreYearTableShared";
 import type { DreMonthView, DreYearView } from "@/lib/dre/dre-year-data";
 import {
@@ -229,6 +231,8 @@ type DreYearTableProps = {
   /** Mensagem de estágio SSE por mês (ex.: "Importando Relatório Full…"). */
   syncingMonthMessages?: Record<number, string>;
   onSyncMonth: (month: number) => void;
+  /** Abre a conciliação (ou a revisão, se for legado) do mês. */
+  onReconcileMonth?: (month: number) => void;
   onLineChange: (
     lineKey: DreEditableLineKey,
     month: number,
@@ -1405,6 +1409,7 @@ function DreYearTableMobile({
   syncingMonths,
   syncingMonthMessages = {},
   onSyncMonth,
+  onReconcileMonth,
   onLineChange,
   onLineRestore,
   onFixedCostChange,
@@ -1550,6 +1555,7 @@ function DreYearTableMobile({
       {selectedMonth ? (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--muted)]/20 px-3 py-2 text-xs text-[var(--muted-foreground)]">
           <span>Sync: {formatSyncTime(selectedMonth.syncedAt)}</span>
+          <MonthReconciliationBadge month={selectedMonth} />
           {alertMessages.length > 0 ? (
             <span className="inline-flex items-center gap-1 text-amber-700">
               <AlertCircle className="size-3.5" aria-hidden />
@@ -1583,6 +1589,13 @@ function DreYearTableMobile({
                   "Sincronizando…")
                 : "Sincronizar"}
             </Button>
+          ) : null}
+          {onReconcileMonth ? (
+            <MonthReconcileButton
+              month={selectedMonth}
+              onReconcile={onReconcileMonth}
+              className={selectedMonth.canSync ? undefined : "ml-auto"}
+            />
           ) : null}
         </div>
       ) : (
@@ -1831,6 +1844,7 @@ function DreStatementPanel({
   syncingMonths,
   syncingMonthMessages,
   onSyncMonth,
+  onReconcileMonth,
   onLineChange,
   onLineRestore,
   onFixedCostChange,
@@ -1848,6 +1862,7 @@ function DreStatementPanel({
   syncingMonths: Set<number>;
   syncingMonthMessages: Record<number, string>;
   onSyncMonth: (month: number) => void;
+  onReconcileMonth?: (month: number) => void;
   onLineChange: DreYearTableProps["onLineChange"];
   onLineRestore?: DreYearTableProps["onLineRestore"];
   onFixedCostChange: DreYearTableProps["onFixedCostChange"];
@@ -1983,28 +1998,43 @@ function DreStatementPanel({
               ? "Totais do ano. Escolha um mês nas pílulas acima para editar valores."
               : `Sync: ${formatSyncTime(month.syncedAt)}`}
           </p>
+          {month ? (
+            <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+              <MonthReconciliationBadge month={month} />
+            </p>
+          ) : null}
         </div>
-        {month?.canSync ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-9 cursor-pointer gap-1.5 rounded-full"
-            disabled={syncingMonths.has(month.month)}
-            onClick={() => onSyncMonth(month.month)}
-          >
-            <RefreshCw
-              className={cn(
-                "size-3.5",
-                syncingMonths.has(month.month) && "animate-spin",
-              )}
-              aria-hidden
+        {/* Ordem do fechamento: sincronizar, depois conciliar. */}
+        <div className="flex flex-wrap items-center gap-2">
+          {month?.canSync ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9 cursor-pointer gap-1.5 rounded-full"
+              disabled={syncingMonths.has(month.month)}
+              onClick={() => onSyncMonth(month.month)}
+            >
+              <RefreshCw
+                className={cn(
+                  "size-3.5",
+                  syncingMonths.has(month.month) && "animate-spin",
+                )}
+                aria-hidden
+              />
+              {syncingMonths.has(month.month)
+                ? (syncingMonthMessages[month.month] ?? "Sincronizando…")
+                : "Sincronizar mês"}
+            </Button>
+          ) : null}
+          {month && onReconcileMonth ? (
+            <MonthReconcileButton
+              month={month}
+              onReconcile={onReconcileMonth}
+              className="h-9 rounded-full"
             />
-            {syncingMonths.has(month.month)
-              ? (syncingMonthMessages[month.month] ?? "Sincronizando…")
-              : "Sincronizar mês"}
-          </Button>
-        ) : null}
+          ) : null}
+        </div>
       </div>
       {alertMessages.length > 0 ? (
         <p className="mb-4 flex items-start gap-2 text-xs text-amber-800">
@@ -2176,6 +2206,7 @@ function DreYearTableDesktop({
   syncingMonths,
   syncingMonthMessages = {},
   onSyncMonth,
+  onReconcileMonth,
   onLineChange,
   onLineRestore,
   onFixedCostChange,
@@ -2319,6 +2350,7 @@ function DreYearTableDesktop({
               syncingMonths={syncingMonths}
               syncingMonthMessages={syncingMonthMessages}
               onSyncMonth={onSyncMonth}
+              onReconcileMonth={onReconcileMonth}
               onLineChange={onLineChange}
               onLineRestore={onLineRestore}
               onFixedCostChange={onFixedCostChange}

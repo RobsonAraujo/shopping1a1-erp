@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
 import {
   CalendarRange,
   ChevronDown,
@@ -10,7 +9,6 @@ import {
   FileSpreadsheet,
   FolderPlus,
   HelpCircle,
-  Info,
   MousePointerClick,
   Plus,
   Scale,
@@ -27,6 +25,7 @@ import { DreProductCostLevelingModal } from "@/components/dre/DreProductCostLeve
 import { DreSyncOverlay } from "@/components/dre/DreSyncOverlay";
 import { DreYearTable } from "@/components/dre/DreYearTable";
 import { DreReconciliationModal } from "@/components/dre/DreReconciliationModal";
+import { formatReconciledAt } from "@/components/dre/DreYearTableShared";
 import { useDreSync } from "@/components/dre/use-dre-sync";
 import {
   AlertDialog,
@@ -54,7 +53,10 @@ import {
 } from "@/lib/pricing/financial-margin";
 import type { DreEditableLineKey } from "@/lib/dre/dre-calculations";
 import { downloadDreYearCsv } from "@/lib/dre/dre-export-csv";
-import type { DreVisibilitySettings } from "@/lib/dre/dre-table-rows";
+import {
+  dreEditableLineLabel,
+  type DreVisibilitySettings,
+} from "@/lib/dre/dre-table-rows";
 import type { DreYearView } from "@/lib/dre/dre-year-data";
 import { getZonedYearMonth } from "@/lib/mercadolibre/revenue-periods";
 import { cn } from "@/lib/utils";
@@ -151,7 +153,11 @@ export function DreClient({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [displaySettings, setDisplaySettings] =
     useState<DreVisibilitySettings>(initialDisplaySettings);
-  const [reconciliationBusy, setReconciliationBusy] = useState(false);
+  /** Mês aberto no modal de conciliação e, se for legado, o import a revisar. */
+  const [reconcileTarget, setReconcileTarget] = useState<{
+    month: number;
+    reviewImportId: string | null;
+  } | null>(null);
   /** Ano inicial já chega via prop (carregado no servidor) — só refaz a busca
    * quando o usuário troca o ano. */
   const skipNextYearFetch = useRef(true);
@@ -177,16 +183,13 @@ export function DreClient({
   }, [data, sessionAdjustedByMonth]);
 
   /**
-   * Os meses com conciliação pendente, **independente de sessão**.
-   *
-   * O banner logo abaixo depende de `sessionAdjustedByMonth`, que só existe na
-   * aba onde a conciliação foi aplicada. Quem abre o DRE depois (outro
-   * navegador, outro dia, outra pessoa) não via nada — e era justamente quem
-   * chegava clicando no aviso da Home. O `pendingReconciliationImportId` vem do
-   * servidor, então vale pra qualquer sessão.
+   * Meses com conciliação salva pelo fluxo antigo que precisam de revisão
+   * (vem do servidor — vale pra qualquer sessão). Some quando não houver mais.
    */
-  const pendingReconciliationMonths = useMemo(
-    () => viewData?.months.filter((m) => m.pendingReconciliationImportId) ?? [],
+  const reviewReconciliationMonths = useMemo(
+    () =>
+      viewData?.months.filter((m) => m.reconciliation.status === "review") ??
+      [],
     [viewData],
   );
 
@@ -207,6 +210,31 @@ export function DreClient({
     }
   }, []);
 
+  /**
+   * Abre a conciliação de um mês. Mês em revisão (legado) abre direto a
+   * revisão do import salvo, sem pedir planilha de novo.
+   */
+  const openReconcile = useCallback(
+    (month?: number | null) => {
+      const months = data?.months ?? [];
+      const target =
+        month ??
+        months.find((item) => item.isCurrentMonth)?.month ??
+        months.find((item) => !item.isFutureMonth)?.month ??
+        1;
+      const row = months.find((item) => item.month === target);
+      setReconcileTarget({
+        month: target,
+        reviewImportId:
+          row?.reconciliation.status === "review"
+            ? row.reconciliation.reviewImportId
+            : null,
+      });
+      setActiveModal("reconcile");
+    },
+    [data],
+  );
+
   const {
     syncingMonths,
     syncingMonthMessages,
@@ -215,8 +243,9 @@ export function DreClient({
     setSyncConfirm,
     preserveAdjustmentIds,
     setPreserveAdjustmentIds,
-    reconcileAfterSync,
-    setReconcileAfterSync,
+    keepReconciliation,
+    setKeepReconciliation,
+    syncConfirmMonthView,
     syncAdjustments,
     requestSyncMonth,
     syncAffectedMonths,
@@ -230,6 +259,7 @@ export function DreClient({
     setSessionAdjustedByMonth,
     loadYear,
     setError,
+    onRequestReconcile: openReconcile,
   });
 
   useEffect(() => {
@@ -407,88 +437,35 @@ export function DreClient({
     [year],
   );
 
-  const handleReconciliationApplied = useCallback(
-    (
-      yearView: DreYearView,
-      acceptedLineKeys: DreEditableLineKey[],
-      appliedMonth: number,
-    ) => {
+  /**
+   * Depois de conciliar/descartar: as linhas conciliadas deixam de ser
+   * "ajustadas" — mantém na marca da sessão só o que o servidor ainda
+   * considera ajuste manual.
+   */
+  const handleReconciliationChanged = useCallback(
+    (yearView: DreYearView, month: number) => {
       setData(yearView);
-      setSessionAdjustedByMonth((prev) => ({
-        ...prev,
-        [appliedMonth]: acceptedLineKeys,
-      }));
+      const serverKeys =
+        yearView.months.find((m) => m.month === month)
+          ?.manuallyEditedLineKeys ?? [];
+      setSessionAdjustedByMonth((prev) => {
+        if (!(month in prev)) return prev;
+        return {
+          ...prev,
+          [month]: prev[month].filter((key) => serverKeys.includes(key)),
+        };
+      });
     },
     [],
   );
 
-  const handleCommitReconciliation = useCallback(
-    async (importId: string) => {
-      setReconciliationBusy(true);
-      setError(null);
-      try {
-        const res = await fetch(
-          `/api/dre/reconciliation/${importId}/commit`,
-          { method: "POST" },
-        );
-        if (!res.ok) {
-          setError(await readApiError(res, "dre_reconciliation_commit_failed"));
-          return;
-        }
-        const json = (await res.json()) as { year?: DreYearView };
-        if (json.year) {
-          setData(json.year);
-          if (selectedMonth !== null) {
-            setSessionAdjustedByMonth((prev) => ({
-              ...prev,
-              [selectedMonth]: [],
-            }));
-          }
-          toast.success("Conciliação aplicada ao DRE.");
-        }
-      } finally {
-        setReconciliationBusy(false);
-      }
-    },
-    [selectedMonth],
-  );
-
-  const handleDiscardReconciliation = useCallback(
-    async (importId: string) => {
-      setReconciliationBusy(true);
-      setError(null);
-      try {
-        const res = await fetch(`/api/dre/reconciliation/${importId}`, {
-          method: "DELETE",
-        });
-        if (!res.ok) {
-          setError(
-            await readApiError(res, "dre_reconciliation_discard_failed"),
-          );
-          return;
-        }
-        const json = (await res.json()) as { year?: DreYearView };
-        if (json.year) {
-          setData(json.year);
-          if (selectedMonth !== null) {
-            setSessionAdjustedByMonth((prev) => ({
-              ...prev,
-              [selectedMonth]: [],
-            }));
-          }
-          toast.success("Conciliação descartada.");
-        }
-      } finally {
-        setReconciliationBusy(false);
-      }
-    },
-    [selectedMonth],
-  );
-
   const syncConfirmMonthLabel =
     syncConfirm !== null
-      ? (data?.months.find((m) => m.month === syncConfirm)?.label ??
-        `mês ${syncConfirm}`)
+      ? (syncConfirmMonthView?.label ?? `mês ${syncConfirm}`)
+      : null;
+  const syncConfirmReconciliation =
+    syncConfirmMonthView?.reconciliation.status === "reconciled"
+      ? syncConfirmMonthView.reconciliation
       : null;
 
   return (
@@ -704,10 +681,7 @@ export function DreClient({
                   size="sm"
                   className="h-10 gap-1.5 rounded-xl"
                   disabled={!data || loading}
-                  onClick={() => {
-                    setReconcileAfterSync(false);
-                    setActiveModal("reconcile");
-                  }}
+                  onClick={() => openReconcile(selectedMonth)}
                 >
                   <Upload className="size-3.5" aria-hidden />
                   Conciliar ML
@@ -754,51 +728,6 @@ export function DreClient({
         ) : null}
 
         {viewData ? (
-          <div
-            className={
-              reconcileAfterSync
-                ? "flex flex-wrap items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950"
-                : "flex flex-wrap items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 text-sm text-[var(--foreground)]"
-            }
-          >
-            <Info
-              className={
-                reconcileAfterSync
-                  ? "size-4 shrink-0 text-amber-700"
-                  : "size-4 shrink-0 text-[var(--muted-foreground)]"
-              }
-              aria-hidden
-            />
-            <span className="min-w-0 flex-1">
-              {reconcileAfterSync
-                ? "Dados atualizados. Concilie com a planilha oficial Por Vendas — a API de faturamento do Mercado Livre não é a fonte da verdade."
-                : "A API de faturamento do Mercado Livre pode oscilar. Depois de sincronizar, concilie o mês com a planilha Por Vendas."}
-            </span>
-            <Button
-              type="button"
-              size="sm"
-              variant={reconcileAfterSync ? "default" : "outline"}
-              onClick={() => {
-                setReconcileAfterSync(false);
-                setActiveModal("reconcile");
-              }}
-            >
-              Conciliar agora
-            </Button>
-            {reconcileAfterSync ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={() => setReconcileAfterSync(false)}
-              >
-                Depois
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
-
-        {viewData ? (
           <DreOverview
             data={viewData}
             selectedMonth={selectedMonth}
@@ -810,77 +739,33 @@ export function DreClient({
           <UserFeedback onDismiss={() => setError(null)}>{error}</UserFeedback>
         ) : null}
 
-        {pendingReconciliationMonths.length > 0 ? (
+        {reviewReconciliationMonths.length > 0 ? (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
             <FileSpreadsheet className="size-4 shrink-0" aria-hidden />
             <span>
-              {pendingReconciliationMonths.length === 1
-                ? "Conciliação pendente em"
-                : "Conciliações pendentes em"}
+              {reviewReconciliationMonths.length === 1
+                ? "Conciliação salva para revisar em"
+                : "Conciliações salvas para revisar em"}
             </span>
-            {/* Cada mês é um atalho: clicar destaca a coluna, que é o mesmo
-                `setSelectedMonth` do cabeçalho da tabela. Chip e não texto
-                corrido porque aqui o mês não é só informação, é pra onde ir. */}
-            {pendingReconciliationMonths.map((month) => (
+            {/* Conciliações do fluxo antigo: o sync de antes podia apagá-las,
+                então não dá pra afirmar que o mês está conciliado sem revisar.
+                Cada chip abre a revisão do import salvo (sem novo upload). */}
+            {reviewReconciliationMonths.map((month) => (
               <button
                 key={month.month}
                 type="button"
-                onClick={() => setSelectedMonth(month.month)}
-                aria-label={`Destacar ${month.label}, com conciliação pendente`}
+                onClick={() => openReconcile(month.month)}
+                aria-label={`Revisar conciliação de ${month.label}`}
                 className="cursor-pointer rounded-full bg-amber-200/70 px-2 py-0.5 font-medium underline-offset-2 hover:bg-amber-200 hover:underline"
               >
                 {month.label}
               </button>
             ))}
             <span className="text-amber-900">
-              — revise o mês e salve ou descarte.
+              — confira a diferença e concilie ou descarte.
             </span>
           </div>
         ) : null}
-
-        {viewData && selectedMonth
-          ? (() => {
-              const month = viewData.months.find(
-                (item) => item.month === selectedMonth,
-              );
-              if (!month?.pendingReconciliationApplied) return null;
-              if (!(month.month in sessionAdjustedByMonth)) return null;
-              return (
-                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-                  <span className="flex-1">
-                    Conciliação aplicada em {month.label} — números em âmbar.
-                    Salvar tudo grava como verdade do mês (preto). Descartar
-                    volta ao valor anterior.
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={reconciliationBusy}
-                    onClick={() =>
-                      void handleDiscardReconciliation(
-                        month.pendingReconciliationImportId!,
-                      )
-                    }
-                  >
-                    Descartar
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={reconciliationBusy}
-                    onClick={() =>
-                      void handleCommitReconciliation(
-                        month.pendingReconciliationImportId!,
-                      )
-                    }
-                  >
-                    Salvar tudo
-                  </Button>
-                </div>
-              );
-            })()
-          : null}
 
         {loading && !data ? (
           <p className="text-sm text-[var(--muted-foreground)]">Carregando…</p>
@@ -897,6 +782,7 @@ export function DreClient({
             syncingMonths={syncingMonths}
             syncingMonthMessages={syncingMonthMessages}
             onSyncMonth={requestSyncMonth}
+            onReconcileMonth={openReconcile}
             onLineChange={handleLineChange}
             onLineRestore={handleLineRestore}
             onFixedCostChange={handleManualCostChange}
@@ -980,15 +866,54 @@ export function DreClient({
               </AlertDialogTitle>
               <AlertDialogDescription>
                 {syncAdjustments.length > 0
-                  ? "Há valores ajustados manualmente. Escolha o que deseja manter; o restante será atualizado com os dados importados."
-                  : "Já existem valores salvos neste mês. A sincronização busca os dados novamente e substitui as linhas importadas."}{" "}
+                  ? "Há valores ajustados manualmente. Escolha o que deseja manter; o restante será atualizado com os dados do Mercado Livre."
+                  : "A sincronização busca os dados do mês novamente no Mercado Livre."}{" "}
                 Custos fixos, operacionais e investimentos cadastrados não são
                 apagados.
               </AlertDialogDescription>
             </AlertDialogHeader>
 
+            {syncConfirmReconciliation ? (
+              <div
+                className={cn(
+                  "space-y-2 rounded-lg border px-3 py-2.5",
+                  keepReconciliation
+                    ? "border-emerald-200 bg-emerald-50/60"
+                    : "border-amber-300 bg-amber-50",
+                )}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <label
+                    htmlFor="dre-sync-keep-reconciliation"
+                    className="text-sm font-medium text-[var(--foreground)]"
+                  >
+                    Manter valores conciliados
+                  </label>
+                  <Switch
+                    id="dre-sync-keep-reconciliation"
+                    checked={keepReconciliation}
+                    onCheckedChange={setKeepReconciliation}
+                  />
+                </div>
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  {keepReconciliation
+                    ? `${syncConfirmReconciliation.lineKeys.length} linha(s) seguem com o valor da planilha Por Vendas${
+                        syncConfirmReconciliation.reconciledAt
+                          ? ` (conciliada em ${formatReconciledAt(syncConfirmReconciliation.reconciledAt)})`
+                          : ""
+                      }: ${syncConfirmReconciliation.lineKeys
+                        .map((key) => dreEditableLineLabel(key))
+                        .join(", ")}. As demais linhas são atualizadas com os dados do Mercado Livre.`
+                    : "Todas as linhas voltam ao valor do Mercado Livre e o mês deixa de estar conciliado."}
+                </p>
+              </div>
+            ) : null}
+
             {syncAdjustments.length > 0 ? (
               <div className="space-y-3">
+                <p className="text-sm font-medium text-[var(--foreground)]">
+                  Ajustes manuais
+                </p>
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
                     type="button"
@@ -1055,49 +980,27 @@ export function DreClient({
               <AlertDialogCancel className="w-full sm:w-full">
                 Cancelar
               </AlertDialogCancel>
-              {syncAdjustments.length > 0 ? (
-                <>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    className="w-full"
-                    onClick={() => confirmSyncOverwrite(false)}
-                  >
-                    Atualizar todos (sem manter)
-                  </Button>
-                  <Button
-                    type="button"
-                    className="w-full"
-                    onClick={() => confirmSyncOverwrite(true)}
-                  >
-                    Sincronizar mantendo selecionados
-                  </Button>
-                </>
-              ) : (
-                <AlertDialogAction
-                  variant="destructive"
-                  className="w-full"
-                  onClick={() => confirmSyncOverwrite(false)}
-                >
-                  Substituir e sincronizar
-                </AlertDialogAction>
-              )}
+              <AlertDialogAction
+                className="w-full"
+                onClick={() => confirmSyncOverwrite()}
+              >
+                Sincronizar
+              </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-        {activeModal === "reconcile" && data ? (
+        {activeModal === "reconcile" && data && reconcileTarget ? (
           <DreReconciliationModal
             open
             year={year}
             months={data.months}
-            defaultMonth={
-              selectedMonth ??
-              data.months.find((item) => item.isCurrentMonth)?.month ??
-              data.months.find((item) => !item.isFutureMonth)?.month ??
-              1
-            }
-            onClose={() => setActiveModal(null)}
-            onApplied={handleReconciliationApplied}
+            defaultMonth={reconcileTarget.month}
+            reviewImportId={reconcileTarget.reviewImportId}
+            onClose={() => {
+              setActiveModal(null);
+              setReconcileTarget(null);
+            }}
+            onChanged={handleReconciliationChanged}
             onError={setError}
           />
         ) : null}

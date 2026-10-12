@@ -4,6 +4,7 @@ import { loadCatalogLosingAlerts } from "@/lib/home/catalog-losing-data";
 import { loadOperationsSummaryFromDb } from "@/lib/compras/replenishment-cycle-data";
 import { getOnboardingChecklistState } from "@/lib/onboarding/onboarding-checklist";
 import { logServerError } from "@/lib/infra/server-public-error";
+import { getZonedYearMonth } from "@/lib/mercadolibre/revenue-periods";
 import {
   emptyHomeCoreSnapshot,
   type HomeCatalogHealth,
@@ -64,9 +65,10 @@ async function loadCatalogHealth(
 
 async function loadPendings(
   organizationId: string,
-  year: number,
+  now: Date,
 ): Promise<HomePendings> {
-  const [failedInventoryRuns, pendingDreImportMonths, dreMonths] = await Promise.all([
+  const { year, month: currentMonth } = getZonedYearMonth(now);
+  const [failedInventoryRuns, snapshots] = await Promise.all([
     // `InventoryMonthSnapshotRun` está FORA do tenant guard de propósito (é a
     // tabela de fan-out do cron). O filtro por organizationId aqui é
     // obrigatório e não é verificado em runtime — sem ele, contaríamos as
@@ -74,45 +76,43 @@ async function loadPendings(
     prisma.inventoryMonthSnapshotRun.count({
       where: { organizationId, status: "failed" },
     }),
-    // Era um `count`. Devolver os meses **não acrescenta query** (continuam 3
-    // aqui, 11 no snapshot) e o plano é o mesmo: `@@index([organizationId, year,
-    // month, status])` só é usado pelo prefixo `organizationId` nos dois casos, e
-    // `year`/`month` já estão no índice — segue index-only, sem ida ao heap. O
-    // count simplesmente jogava fora dado que já vinha.
-    //
-    // A cardinalidade é limitada por regra de negócio, não por `take`:
-    // `createPendingReconciliationImport` apaga os pendentes do mesmo
-    // (org, ano, mês) antes de inserir, então são ≤12 linhas por ano. `take`
-    // aqui seria errado — faria a contagem sub-reportar.
-    //
-    // **Sem filtro de ano, de propósito:** filtrar esconderia pendência real de
-    // ano anterior. É por isso que o rótulo tem que carregar o ano quando difere
-    // (ver `formatDreMonthList`).
-    prisma.dreReconciliationImport.findMany({
-      where: { organizationId, status: "pending" },
-      select: { year: true, month: true },
-      orderBy: [{ year: "asc" }, { month: "asc" }],
-    }),
-    // Só year/month/syncedAt: o `payload` de cada snapshot tem o DRE inteiro
-    // do mês e não pode entrar num carregamento de Home.
-    prisma.dreMonthSnapshot.findMany({
-      where: { organizationId, year },
-      select: { year: true, month: true, syncedAt: true },
-      orderBy: { month: "asc" },
-    }),
+    // Só mês, syncedAt e um booleano da marca de conciliação: o `payload` de
+    // cada snapshot tem o DRE inteiro do mês e não pode entrar na Home.
+    // `$queryRaw` NÃO passa pelo tenant guard — o filtro por organization_id é
+    // obrigatório e não tem rede de proteção.
+    prisma.$queryRaw<
+      Array<{ month: number; syncedAt: Date; reconciled: boolean }>
+    >`select month,
+             synced_at as "syncedAt",
+             (payload -> 'reconciliation') is not null as reconciled
+      from dre_month_snapshots
+      where organization_id = ${organizationId} and year = ${year}`,
   ]);
+
+  // Todos os meses até o corrente, com ou sem snapshot. Antes só vinham os
+  // meses com snapshot — e como `syncedAt` é obrigatório no banco, o aviso de
+  // "mês sem sincronizar" nunca disparava.
+  const byMonth = new Map(snapshots.map((row) => [row.month, row]));
+  const dreMonths: HomePendings["dreMonths"] = [];
+  for (let month = 1; month <= currentMonth; month += 1) {
+    const row = byMonth.get(month);
+    dreMonths.push({
+      year,
+      month,
+      syncedAt: row ? new Date(row.syncedAt).toISOString() : null,
+      reconciled: Boolean(row?.reconciled),
+    });
+  }
 
   return {
     failedInventoryRuns,
-    // Uma fonte de verdade só: o número do pill não pode divergir da lista de
-    // meses que aparece ao lado dele.
-    pendingDreImports: pendingDreImportMonths.length,
-    pendingDreImportMonths,
-    dreMonths: dreMonths.map((month) => ({
-      year: month.year,
-      month: month.month,
-      syncedAt: month.syncedAt?.toISOString() ?? null,
-    })),
+    unreconciledDreMonths: dreMonths
+      .filter(
+        (row) =>
+          row.month < currentMonth && row.syncedAt !== null && !row.reconciled,
+      )
+      .map(({ year: y, month }) => ({ year: y, month })),
+    dreMonths,
     closedInventoryMonths: [],
     year,
   };
@@ -140,7 +140,7 @@ export async function loadHomeCoreSnapshot(
       guard("catalogLosing", loadCatalogLosingAlerts(organizationId)),
       guard("catalogPoll", getCatalogPollStats(organizationId)),
       guard("catalog", loadCatalogHealth(organizationId)),
-      guard("pendings", loadPendings(organizationId, now.getFullYear())),
+      guard("pendings", loadPendings(organizationId, now)),
     ]);
 
   return {

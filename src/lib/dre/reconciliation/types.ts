@@ -99,3 +99,26 @@ export type DreReconciliationLineDiff = {
   proposedAmount: number;
   delta: number;
 };
+
+export type DreReconciliationLineMatch = {
+  lineKey: DreEditableLineKey;
+  label: string;
+  amount: number;
+};
+
+/** Revisão de uma conciliação (prévia nova ou import salvo) contra o DRE atual. */
+export type DreReconciliationReview = {
+  importId: string;
+  month: number;
+  fileName: string;
+  sheetName: string;
+  rowCount: number;
+  /** `pending` = prévia nova ou legado aplicado e não salvo; `confirmed` = legado sem marca no snapshot. */
+  status: "pending" | "confirmed";
+  /** true para import salvo antes do fluxo de um passo (revisão, não prévia). */
+  legacy: boolean;
+  diff: DreReconciliationLineDiff[];
+  matched: DreReconciliationLineMatch[];
+  unrecognizedFees: UnrecognizedFeeSummary[];
+  warnings: ReconciliationParseWarning[];
+};

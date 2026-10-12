@@ -1,6 +1,6 @@
 "use client";
 
-import { RefreshCw } from "lucide-react";
+import { CheckCircle2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { dreMonthShortLabel } from "@/lib/dre/dre-table-rows";
 import type { DreMonthView } from "@/lib/dre/dre-year-data";
@@ -10,6 +10,7 @@ import {
   getMonthAlertMessages,
   MonthAlertsTooltip,
   MonthSyncTooltip,
+  reconciliationStatusLabel,
 } from "@/components/dre/DreYearTableShared";
 
 export function DreMonthHeaderCell({
@@ -67,6 +68,17 @@ export function DreMonthHeaderCell({
             )}
           >
             {dreMonthShortLabel(month.month)}
+            {month.reconciliation.status === "reconciled" ? (
+              <>
+                <CheckCircle2
+                  className="ml-0.5 inline size-3 align-[-2px] text-emerald-600"
+                  aria-hidden
+                />
+                <span className="sr-only">
+                  {` — ${reconciliationStatusLabel(month)}`}
+                </span>
+              </>
+            ) : null}
           </span>
         </MonthSyncTooltip>
         {hasAlert ? (

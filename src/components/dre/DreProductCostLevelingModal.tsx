@@ -56,6 +56,8 @@ type DreProductCostLevelingModalProps = {
   onSyncAffectedMonths: (months: number[]) => void;
 };
 
+type DateRange = { startDate: string; endDate: string };
+
 type FormState = DreProductCostLevelingFormValues & {
   sku: string;
   /** Identidade do produto selecionado — é ela que resolve o nivelamento no
@@ -262,10 +264,17 @@ export function DreProductCostLevelingModal({
   const [form, setForm] = useState<FormState>(() => emptyForm(year));
   const [pendingDelete, setPendingDelete] =
     useState<DreProductCostLevelingView | null>(null);
-  const [pendingResync, setPendingResync] = useState<{
-    startDate: string;
-    endDate: string;
-  } | null>(null);
+  /**
+   * Faixas alteradas desde a última re-sincronização — acumulam (salvar dois
+   * nivelamentos seguidos não pode esquecer o primeiro) e, na edição, incluem a
+   * faixa antiga: os meses que saíram do período também mudam de custo.
+   */
+  const [pendingResyncRanges, setPendingResyncRanges] = useState<DateRange[]>(
+    [],
+  );
+  /** Faixa original do nivelamento em edição. */
+  const [editingRange, setEditingRange] = useState<DateRange | null>(null);
+  const [confirmCloseOpen, setConfirmCloseOpen] = useState(false);
 
   type ProductSummary = {
     mlItemId: string;
@@ -359,8 +368,10 @@ export function DreProductCostLevelingModal({
   useEffect(() => {
     if (!open) return;
     setEditingId(null);
+    setEditingRange(null);
     setForm(emptyForm(year));
-    setPendingResync(null);
+    setPendingResyncRanges([]);
+    setConfirmCloseOpen(false);
     setItems([]);
   }, [open, year]);
 
@@ -374,6 +385,7 @@ export function DreProductCostLevelingModal({
   // depois de salvar dá pra continuar cadastrando outro período do mesmo SKU.
   function resetForm() {
     setEditingId(null);
+    setEditingRange(null);
     setForm((f) => ({
       ...emptyForm(year),
       sku: f.sku,
@@ -431,10 +443,11 @@ export function DreProductCostLevelingModal({
         return;
       }
       onError(null);
-      setPendingResync({
-        startDate: body.startDate,
-        endDate: body.endDate,
-      });
+      const changed: DateRange[] = [
+        { startDate: body.startDate, endDate: body.endDate },
+      ];
+      if (editingId && editingRange) changed.push(editingRange);
+      setPendingResyncRanges((prev) => [...prev, ...changed]);
       resetForm();
       await loadItems(form.productMlItemId, sku);
       toast.success("Nivelamento de custo salvo.");
@@ -458,10 +471,10 @@ export function DreProductCostLevelingModal({
         return;
       }
       onError(null);
-      setPendingResync({
-        startDate: pendingDelete.startDate,
-        endDate: pendingDelete.endDate,
-      });
+      setPendingResyncRanges((prev) => [
+        ...prev,
+        { startDate: pendingDelete.startDate, endDate: pendingDelete.endDate },
+      ]);
       if (editingId === pendingDelete.id) resetForm();
       setPendingDelete(null);
       await loadItems(form.productMlItemId, form.sku);
@@ -473,34 +486,53 @@ export function DreProductCostLevelingModal({
     }
   }
 
+  const pendingMonths = useMemo(
+    () =>
+      pendingResyncRanges.flatMap((range) =>
+        enumerateMonthsOverlappingDateRange(range.startDate, range.endDate),
+      ),
+    [pendingResyncRanges],
+  );
+  const affectedMonths = useMemo(
+    () =>
+      [
+        ...new Set(
+          pendingMonths
+            .filter(
+              (m) => m.year === year && isDreMonthSyncable(m.year, m.month),
+            )
+            .map((m) => m.month),
+        ),
+      ].sort((a, b) => a - b),
+    [pendingMonths, year],
+  );
+  const hasOtherYearMonths = pendingMonths.some((m) => m.year !== year);
+
   function syncAffected() {
-    if (!pendingResync) return;
-    const months = enumerateMonthsOverlappingDateRange(
-      pendingResync.startDate,
-      pendingResync.endDate,
-    )
-      .filter((m) => m.year === year && isDreMonthSyncable(m.year, m.month))
-      .map((m) => m.month);
-    if (months.length > 0) {
-      onSyncAffectedMonths(months);
+    if (affectedMonths.length > 0) {
+      onSyncAffectedMonths(affectedMonths);
     }
-    setPendingResync(null);
+    setPendingResyncRanges([]);
+    setConfirmCloseOpen(false);
     onClose();
   }
 
-  const otherYearMonths = pendingResync
-    ? enumerateMonthsOverlappingDateRange(
-        pendingResync.startDate,
-        pendingResync.endDate,
-      ).filter((m) => m.year !== year)
-    : [];
+  /** Fechar com nivelamento não aplicado pergunta antes — senão o DRE fica com custo antigo sem ninguém perceber. */
+  function requestClose() {
+    if (busy) return;
+    if (affectedMonths.length > 0) {
+      setConfirmCloseOpen(true);
+      return;
+    }
+    onClose();
+  }
 
   return (
     <>
       <Sheet
         open={open}
         onOpenChange={(next) => {
-          if (!next) onClose();
+          if (!next) requestClose();
         }}
       >
         <SheetContent className="flex h-[92vh] flex-col sm:max-h-[92vh] sm:w-[95vw] sm:max-w-3xl">
@@ -515,19 +547,18 @@ export function DreProductCostLevelingModal({
           </SheetHeader>
 
           <SheetBody className="flex flex-1 flex-col gap-4 overflow-y-auto">
-            {pendingResync ? (
+            {pendingResyncRanges.length > 0 ? (
               <div className="rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs text-amber-900">
                 <p className="font-medium">
                   Nivelamento salvo. Re-sincronize para aplicar no DRE.
                 </p>
                 <p className="mt-1">
-                  Período:{" "}
-                  {periodLabel(
-                    pendingResync.startDate,
-                    pendingResync.endDate,
-                  )}
+                  {pendingResyncRanges.length === 1 ? "Período: " : "Períodos: "}
+                  {pendingResyncRanges
+                    .map((range) => periodLabel(range.startDate, range.endDate))
+                    .join("; ")}
                   .
-                  {otherYearMonths.length > 0
+                  {hasOtherYearMonths
                     ? ` Há meses em outros anos — troque o ano do DRE e sincronize também.`
                     : null}
                 </p>
@@ -535,6 +566,7 @@ export function DreProductCostLevelingModal({
                   type="button"
                   size="sm"
                   className="mt-2 h-8 gap-1 text-xs"
+                  disabled={affectedMonths.length === 0}
                   onClick={syncAffected}
                 >
                   <RefreshCw className="size-3.5" aria-hidden />
@@ -642,6 +674,10 @@ export function DreProductCostLevelingModal({
                           disabled={busy}
                           onClick={() => {
                             setEditingId(item.id);
+                            setEditingRange({
+                              startDate: item.startDate,
+                              endDate: item.endDate,
+                            });
                             setForm(formFromItem(item));
                           }}
                         >
@@ -666,12 +702,40 @@ export function DreProductCostLevelingModal({
           </SheetBody>
 
           <SheetFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={requestClose}>
               Fechar
             </Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      <AlertDialog open={confirmCloseOpen} onOpenChange={setConfirmCloseOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sincronizar meses afetados agora?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`O nivelamento só entra no DRE depois de re-sincronizar ${
+                affectedMonths.length === 1
+                  ? "1 mês"
+                  : `${affectedMonths.length} meses`
+              } de ${year}. As conciliações desses meses são mantidas. Se deixar para depois, sincronize esses meses manualmente (nivelamento criado ou editado fica sinalizado no mês até a sincronização; exclusão não).`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                setPendingResyncRanges([]);
+                onClose();
+              }}
+            >
+              Depois
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={syncAffected}>
+              Sincronizar agora
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={pendingDelete !== null}

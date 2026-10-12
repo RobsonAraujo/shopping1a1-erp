@@ -1,12 +1,12 @@
 import { Prisma } from "@/generated/prisma";
+import type { DreReconciliationImport } from "@/generated/prisma";
 import { prisma } from "@/lib/db/db";
 import {
-  applyManualLineEdit,
-  commitReconciledLinesAsTruth,
-  DRE_LINE_KEY_TO_BREAKDOWN_FIELD,
+  applyReconciliationToPayload,
+  applyRestoreLineFromSync,
+  getEditableLineAmount,
   isDreEditableLineKey,
   type DreEditableLineKey,
-  type DreLineBreakdownItem,
   type DreMonthSnapshotPayload,
 } from "@/lib/dre/dre-calculations";
 import {
@@ -15,21 +15,52 @@ import {
 } from "@/lib/dre/dre-month-data";
 import { loadDreYearView } from "@/lib/dre/dre-year-data";
 import { aggregateReconciliationRows } from "@/lib/dre/reconciliation/aggregate";
-import { buildReconciliationDiff } from "@/lib/dre/reconciliation/diff";
+import {
+  compareReconciliation,
+  resolveReconciledLineKeys,
+} from "@/lib/dre/reconciliation/diff";
 import type {
-  DreReconciliationLineDiff,
+  DreReconciliationReview,
   ReconciliationLineAggregation,
   ReconciliationParseResult,
   ReconciliationParseWarning,
-  UnrecognizedFeeSummary,
 } from "@/lib/dre/reconciliation/types";
+
+/**
+ * Ciclo de vida de um import (`DreReconciliationImport.status`):
+ *
+ * - `pending` sem `appliedAt` → prévia (rascunho). Nunca mexeu no snapshot;
+ *   é apagada ao cancelar, ao subir outra planilha do mês ou ao confirmar outra.
+ * - `confirmed` → conciliação do mês. O snapshot carrega `payload.reconciliation`
+ *   com o mesmo `importId`, e o sync reaplica esses valores.
+ * - `superseded` → histórico (substituída por outra conciliação, ou descartada
+ *   num sync sem manter).
+ *
+ * Legado do fluxo de dois passos: `pending` com `appliedAt` (aplicado e nunca
+ * salvo) e `confirmed` sem marca no snapshot (conciliação que o sync antigo
+ * apagou). Os dois aparecem como "revisar" e se resolvem pelo mesmo
+ * `confirmReconciliationImport` / `discardReconciliationImport`.
+ */
+
+type ImportRow = DreReconciliationImport;
+
+/** Erro de regra com mensagem pronta para o usuário (rota responde 400). */
+export class DreReconciliationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DreReconciliationError";
+  }
+}
+
+const NOT_FOUND_MESSAGE =
+  "Esta conciliação não existe mais ou já foi substituída. Recarregue o DRE.";
 
 function asJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
 function parseAggregation(raw: unknown): ReconciliationLineAggregation {
-  const value = raw as ReconciliationLineAggregation;
+  const value = (raw ?? {}) as Partial<ReconciliationLineAggregation>;
   return {
     amounts: value.amounts ?? {},
     breakdowns: value.breakdowns ?? {},
@@ -46,6 +77,42 @@ function parseAcceptedKeys(raw: unknown): DreEditableLineKey[] {
   );
 }
 
+function parseWarnings(raw: unknown): ReconciliationParseWarning[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (item): item is ReconciliationParseWarning =>
+      Boolean(item) &&
+      typeof item === "object" &&
+      typeof (item as ReconciliationParseWarning).code === "string",
+  );
+}
+
+/** Import salvo pelo fluxo antigo que ainda precisa de revisão. */
+function isLegacyImport(
+  row: Pick<ImportRow, "id" | "status" | "appliedAt">,
+  payload: DreMonthSnapshotPayload | null,
+): boolean {
+  if (row.status === "pending") return row.appliedAt !== null;
+  if (row.status === "confirmed") {
+    return payload?.reconciliation?.importId !== row.id;
+  }
+  return false;
+}
+
+/**
+ * Chaves candidatas da comparação. No legado, só o que o usuário aceitou na
+ * época (filtrado depois pelas linhas governadas — imports antigos chegaram a
+ * aceitar ADS/faturamento). Na prévia nova, todas as linhas da planilha.
+ */
+function candidateKeysFor(
+  row: Pick<ImportRow, "id" | "status" | "appliedAt" | "acceptedLineKeysJson">,
+  payload: DreMonthSnapshotPayload | null,
+): DreEditableLineKey[] | undefined {
+  return isLegacyImport(row, payload)
+    ? parseAcceptedKeys(row.acceptedLineKeysJson)
+    : undefined;
+}
+
 async function loadMonthPayload(
   organizationId: string,
   year: number,
@@ -58,38 +125,63 @@ async function loadMonthPayload(
   return parseSnapshotPayload(snapshot.payload);
 }
 
+function buildReview(
+  row: ImportRow,
+  payload: DreMonthSnapshotPayload | null,
+  aggregation: ReconciliationLineAggregation,
+  extraWarnings: ReconciliationParseWarning[] = [],
+): DreReconciliationReview {
+  const comparison = compareReconciliation(
+    payload,
+    aggregation,
+    candidateKeysFor(row, payload),
+  );
+  return {
+    importId: row.id,
+    month: row.month,
+    fileName: row.fileName,
+    sheetName: row.sheetName,
+    rowCount: row.rowCount,
+    status: row.status === "confirmed" ? "confirmed" : "pending",
+    legacy: isLegacyImport(row, payload),
+    diff: comparison.diff,
+    matched: comparison.matched,
+    unrecognizedFees: aggregation.unrecognizedFees,
+    warnings: [
+      ...extraWarnings,
+      ...parseWarnings(row.parseWarningsJson),
+      ...aggregation.warnings,
+    ],
+  };
+}
+
 export async function createPendingReconciliationImport(input: {
   organizationId: string;
   year: number;
   month: number;
   fileName: string;
   parsed: ReconciliationParseResult;
-}): Promise<{
-  importId: string;
-  sheetName: string;
-  rowCount: number;
-  diff: DreReconciliationLineDiff[];
-  unrecognizedFees: UnrecognizedFeeSummary[];
-  warnings: ReconciliationParseWarning[];
-}> {
+}): Promise<DreReconciliationReview> {
   const aggregation = aggregateReconciliationRows(input.parsed.rows);
   const currentPayload = await loadMonthPayload(
     input.organizationId,
     input.year,
     input.month,
   );
-  const diff = buildReconciliationDiff(currentPayload, aggregation);
 
-  const importId = await prisma.$transaction(async (tx) => {
+  const created = await prisma.$transaction(async (tx) => {
+    // Só rascunhos: um `pending` já aplicado (legado) carrega histórico e é
+    // resolvido quando esta prévia for confirmada.
     await tx.dreReconciliationImport.deleteMany({
       where: {
         organizationId: input.organizationId,
         year: input.year,
         month: input.month,
         status: "pending",
+        appliedAt: null,
       },
     });
-    const created = await tx.dreReconciliationImport.create({
+    const row = await tx.dreReconciliationImport.create({
       data: {
         organizationId: input.organizationId,
         year: input.year,
@@ -103,37 +195,37 @@ export async function createPendingReconciliationImport(input: {
       },
     });
     const chunks: Prisma.DreReconciliationEntryCreateManyInput[] = [];
-    for (const row of input.parsed.rows) {
+    for (const parsedRow of input.parsed.rows) {
       chunks.push({
-        importId: created.id,
+        importId: row.id,
         organizationId: input.organizationId,
-        rowIndex: row.rowIndex,
-        operationDate: row.operationDate,
-        operationId: row.operationId,
-        operationType: row.operationType,
-        operationStatus: row.operationStatus,
-        sku: row.sku,
-        itemTitle: row.itemTitle,
-        quantity: row.quantity,
+        rowIndex: parsedRow.rowIndex,
+        operationDate: parsedRow.operationDate,
+        operationId: parsedRow.operationId,
+        operationType: parsedRow.operationType,
+        operationStatus: parsedRow.operationStatus,
+        sku: parsedRow.sku,
+        itemTitle: parsedRow.itemTitle,
+        quantity: parsedRow.quantity,
         grossValue:
-          row.grossValue === null
+          parsedRow.grossValue === null
             ? null
-            : new Prisma.Decimal(row.grossValue.toFixed(2)),
+            : new Prisma.Decimal(parsedRow.grossValue.toFixed(2)),
         totalFees:
-          row.totalFees === null
+          parsedRow.totalFees === null
             ? null
-            : new Prisma.Decimal(row.totalFees.toFixed(2)),
+            : new Prisma.Decimal(parsedRow.totalFees.toFixed(2)),
         totalPostpaidFees:
-          row.totalPostpaidFees === null
+          parsedRow.totalPostpaidFees === null
             ? null
-            : new Prisma.Decimal(row.totalPostpaidFees.toFixed(2)),
+            : new Prisma.Decimal(parsedRow.totalPostpaidFees.toFixed(2)),
         sellerPaidShipping:
-          row.sellerPaidShipping === null
+          parsedRow.sellerPaidShipping === null
             ? null
-            : new Prisma.Decimal(row.sellerPaidShipping.toFixed(2)),
+            : new Prisma.Decimal(parsedRow.sellerPaidShipping.toFixed(2)),
         mappedLineKey: null,
         mappedAmount: null,
-        rawJson: asJson(row.raw),
+        rawJson: asJson(parsedRow.raw),
       });
     }
     for (let i = 0; i < chunks.length; i += 500) {
@@ -141,184 +233,216 @@ export async function createPendingReconciliationImport(input: {
         data: chunks.slice(i, i + 500),
       });
     }
-    return created.id;
+    return row;
   }, { timeout: 120_000 });
 
-  return {
-    importId,
-    sheetName: input.parsed.sheetName,
-    rowCount: input.parsed.rows.length,
-    diff,
-    unrecognizedFees: aggregation.unrecognizedFees,
-    warnings: [...input.parsed.warnings, ...aggregation.warnings],
-  };
+  return buildReview(created, currentPayload, aggregation);
 }
 
-function applyAggregationToPayload(
-  payload: DreMonthSnapshotPayload,
-  aggregation: ReconciliationLineAggregation,
-  acceptedLineKeys: DreEditableLineKey[],
-): DreMonthSnapshotPayload {
-  let next = payload;
-  for (const lineKey of acceptedLineKeys) {
-    const amount = aggregation.amounts[lineKey];
-    if (amount === undefined) continue;
-    next = applyManualLineEdit(next, lineKey, amount);
-    const field = DRE_LINE_KEY_TO_BREAKDOWN_FIELD[lineKey];
-    const items = aggregation.breakdowns[lineKey] as
-      | DreLineBreakdownItem[]
-      | undefined;
-    if (field && items && field !== "productCostBreakdown" && field !== "taxBreakdown") {
-      next = { ...next, [field]: items };
-    }
+/** Revisão de um import já salvo (prévia aberta de novo ou legado). */
+export async function getReconciliationReview(input: {
+  organizationId: string;
+  importId: string;
+}): Promise<DreReconciliationReview> {
+  const row = await prisma.dreReconciliationImport.findFirst({
+    where: { id: input.importId, organizationId: input.organizationId },
+  });
+  if (!row || row.status === "superseded") {
+    throw new DreReconciliationError(NOT_FOUND_MESSAGE);
   }
-  return next;
+  const payload = await loadMonthPayload(
+    input.organizationId,
+    row.year,
+    row.month,
+  );
+  return buildReview(row, payload, parseAggregation(row.aggregationJson));
 }
 
-export async function applyReconciliationImport(input: {
+/**
+ * Conciliação em um passo: grava os valores da planilha nas linhas governadas
+ * (as que já conferiam + as divergentes aceitas), marca o mês como conciliado e
+ * aposenta qualquer outra conciliação do mês — tudo numa transação, lendo o
+ * snapshot dentro dela.
+ */
+export async function confirmReconciliationImport(input: {
   organizationId: string;
   importId: string;
   acceptedLineKeys: DreEditableLineKey[];
 }): Promise<{ year: Awaited<ReturnType<typeof loadDreYearView>> }> {
-  const current = await prisma.dreReconciliationImport.findFirst({
-    where: { id: input.importId, organizationId: input.organizationId },
-  });
-  if (!current || current.status !== "pending") {
-    throw new Error("Importação de conciliação não encontrada ou já concluída.");
-  }
-  const aggregation = parseAggregation(current.aggregationJson);
-  const existing = await prisma.dreMonthSnapshot.findUnique({
-    where: {
-      organizationId_year_month: {
-        organizationId: input.organizationId,
-        year: current.year,
-        month: current.month,
-      },
-    },
-  });
-  const previousPayload =
-    (existing ? parseSnapshotPayload(existing.payload) : null) ??
-    emptyDreMonthSnapshotPayload();
-  const nextPayload = applyAggregationToPayload(
-    previousPayload,
-    aggregation,
-    input.acceptedLineKeys,
-  );
-  const syncedAt = existing?.syncedAt ?? new Date();
-
-  await prisma.$transaction(async (tx) => {
-    await tx.dreMonthSnapshot.upsert({
-      where: {
+  const { organizationId } = input;
+  const year = await prisma.$transaction(
+    async (tx) => {
+      const row = await tx.dreReconciliationImport.findFirst({
+        where: { id: input.importId, organizationId },
+      });
+      if (!row || row.status === "superseded") {
+        throw new DreReconciliationError(NOT_FOUND_MESSAGE);
+      }
+      const where = {
         organizationId_year_month: {
-          organizationId: input.organizationId,
-          year: current.year,
-          month: current.month,
+          organizationId,
+          year: row.year,
+          month: row.month,
         },
-      },
-      create: {
-        organizationId: input.organizationId,
-        year: current.year,
-        month: current.month,
-        syncedAt,
-        payload: nextPayload as object,
-      },
-      update: { payload: nextPayload as object },
-    });
-    await tx.dreReconciliationImport.update({
-      where: { id: current.id },
-      data: {
-        previousPayloadJson: asJson(previousPayload),
-        acceptedLineKeysJson: asJson(input.acceptedLineKeys),
-        appliedAt: new Date(),
-      },
-    });
-  });
+      };
+      const existing = await tx.dreMonthSnapshot.findUnique({ where });
+      const previousPayload =
+        (existing ? parseSnapshotPayload(existing.payload) : null) ??
+        emptyDreMonthSnapshotPayload();
+      const aggregation = parseAggregation(row.aggregationJson);
+      const comparison = compareReconciliation(
+        existing ? previousPayload : null,
+        aggregation,
+        candidateKeysFor(row, existing ? previousPayload : null),
+      );
+      const lineKeys = resolveReconciledLineKeys(
+        comparison,
+        input.acceptedLineKeys,
+      );
+      if (lineKeys.length === 0) {
+        throw new DreReconciliationError(
+          "Nenhuma linha da planilha seria conciliada. Marque ao menos uma linha.",
+        );
+      }
 
-  return {
-    year: await loadDreYearView(input.organizationId, current.year),
-  };
-}
+      const now = new Date();
+      const nextPayload = applyReconciliationToPayload(
+        previousPayload,
+        aggregation,
+        lineKeys,
+        {
+          importId: row.id,
+          reconciledAt: now.toISOString(),
+          fileName: row.fileName,
+        },
+      );
 
-export async function commitReconciliationImport(input: {
-  organizationId: string;
-  importId: string;
-}): Promise<{ year: Awaited<ReturnType<typeof loadDreYearView>> }> {
-  const current = await prisma.dreReconciliationImport.findFirst({
-    where: { id: input.importId, organizationId: input.organizationId },
-  });
-  if (!current || current.status !== "pending" || !current.appliedAt) {
-    throw new Error("Não há conciliação aplicada pendente para confirmar.");
-  }
-  const accepted = parseAcceptedKeys(current.acceptedLineKeysJson);
-  const existing = await prisma.dreMonthSnapshot.findUnique({
-    where: {
-      organizationId_year_month: {
-        organizationId: input.organizationId,
-        year: current.year,
-        month: current.month,
-      },
+      await tx.dreMonthSnapshot.upsert({
+        where,
+        create: {
+          organizationId,
+          year: row.year,
+          month: row.month,
+          syncedAt: now,
+          payload: nextPayload as object,
+        },
+        update: { payload: nextPayload as object },
+      });
+
+      const sameMonth = {
+        organizationId,
+        year: row.year,
+        month: row.month,
+        id: { not: row.id },
+      };
+      await tx.dreReconciliationImport.deleteMany({
+        where: { ...sameMonth, status: "pending", appliedAt: null },
+      });
+      await tx.dreReconciliationImport.updateMany({
+        where: {
+          ...sameMonth,
+          OR: [
+            { status: "confirmed" },
+            { status: "pending", appliedAt: { not: null } },
+          ],
+        },
+        data: { status: "superseded" },
+      });
+      await tx.dreReconciliationImport.update({
+        where: { id: row.id },
+        data: {
+          status: "confirmed",
+          appliedAt: row.appliedAt ?? now,
+          confirmedAt: now,
+          acceptedLineKeysJson: asJson(lineKeys),
+          previousPayloadJson: asJson(previousPayload),
+        },
+      });
+      return row.year;
     },
-  });
-  if (!existing) throw new Error("Snapshot do mês não encontrado.");
-  const payload = parseSnapshotPayload(existing.payload);
-  if (!payload) throw new Error("Snapshot inválido.");
-  const committed = commitReconciledLinesAsTruth(payload, accepted);
+    { timeout: 60_000 },
+  );
 
-  await prisma.$transaction(async (tx) => {
-    await tx.dreMonthSnapshot.update({
-      where: { id: existing.id },
-      data: { payload: committed as object },
-    });
-    await tx.dreReconciliationImport.updateMany({
-      where: {
-        organizationId: input.organizationId,
-        year: current.year,
-        month: current.month,
-        status: "confirmed",
-      },
-      data: { status: "superseded" },
-    });
-    await tx.dreReconciliationImport.update({
-      where: { id: current.id },
-      data: { status: "confirmed", confirmedAt: new Date() },
-    });
-  });
-
-  return {
-    year: await loadDreYearView(input.organizationId, current.year),
-  };
+  return { year: await loadDreYearView(organizationId, year) };
 }
 
+/**
+ * Descarta sem tocar no que não é da conciliação:
+ * - prévia: só apaga;
+ * - legado aplicado e não salvo: devolve ao baseline **linha a linha** só o que
+ *   ainda é exatamente o valor da planilha (um sync posterior já pode ter
+ *   trocado o resto — restaurar o payload inteiro desfaria esse sync);
+ * - confirmada: mês deixa de estar conciliado; valores ficam como estão.
+ */
 export async function discardReconciliationImport(input: {
   organizationId: string;
   importId: string;
 }): Promise<{ year: Awaited<ReturnType<typeof loadDreYearView>> }> {
-  const current = await prisma.dreReconciliationImport.findFirst({
-    where: { id: input.importId, organizationId: input.organizationId },
-  });
-  if (!current || current.status !== "pending") {
-    throw new Error("Importação de conciliação não encontrada ou já concluída.");
-  }
-  const year = current.year;
+  const { organizationId } = input;
+  const year = await prisma.$transaction(
+    async (tx) => {
+      const row = await tx.dreReconciliationImport.findFirst({
+        where: { id: input.importId, organizationId },
+      });
+      if (!row || row.status === "superseded") {
+        throw new DreReconciliationError(NOT_FOUND_MESSAGE);
+      }
+      const where = {
+        organizationId_year_month: {
+          organizationId,
+          year: row.year,
+          month: row.month,
+        },
+      };
 
-  await prisma.$transaction(async (tx) => {
-    if (current.appliedAt && current.previousPayloadJson) {
-      const previous = parseSnapshotPayload(current.previousPayloadJson);
-      if (previous) {
+      if (row.status === "pending" && row.appliedAt === null) {
+        await tx.dreReconciliationImport.delete({ where: { id: row.id } });
+        return row.year;
+      }
+
+      const existing = await tx.dreMonthSnapshot.findUnique({ where });
+      const payload = existing ? parseSnapshotPayload(existing.payload) : null;
+
+      if (row.status === "pending") {
+        if (payload) {
+          const aggregation = parseAggregation(row.aggregationJson);
+          let next = payload;
+          for (const key of parseAcceptedKeys(row.acceptedLineKeysJson)) {
+            const proposed = aggregation.amounts[key];
+            if (proposed === undefined) continue;
+            if (!(next.manuallyEditedLineKeys ?? []).includes(key)) continue;
+            if (Math.abs(getEditableLineAmount(next, key) - proposed) >= 0.005) {
+              continue;
+            }
+            next = applyRestoreLineFromSync(next, key) ?? next;
+          }
+          if (next !== payload) {
+            await tx.dreMonthSnapshot.update({
+              where,
+              data: { payload: next as object },
+            });
+          }
+        }
+        await tx.dreReconciliationImport.delete({ where: { id: row.id } });
+        return row.year;
+      }
+
+      if (payload?.reconciliation?.importId === row.id) {
+        const next = { ...payload };
+        delete next.reconciliation;
         await tx.dreMonthSnapshot.update({
-          where: {
-            organizationId_year_month: {
-              organizationId: input.organizationId,
-              year: current.year,
-              month: current.month,
-            },
-          },
-          data: { payload: previous as object },
+          where,
+          data: { payload: next as object },
         });
       }
-    }
-    await tx.dreReconciliationImport.delete({ where: { id: current.id } });
-  });
+      await tx.dreReconciliationImport.update({
+        where: { id: row.id },
+        data: { status: "superseded" },
+      });
+      return row.year;
+    },
+    { timeout: 60_000 },
+  );
 
-  return { year: await loadDreYearView(input.organizationId, year) };
+  return { year: await loadDreYearView(organizationId, year) };
 }

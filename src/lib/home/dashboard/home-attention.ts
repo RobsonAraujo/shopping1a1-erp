@@ -117,25 +117,6 @@ export function buildHomeAttentionSignals(
     severity: 90,
   });
 
-  if (pendings) {
-    const months = formatDreMonthList(pendings.pendingDreImportMonths, {
-      currentYear: pendings.year,
-    });
-    push({
-      id: "dre-reconciliation-pending",
-      count: pendings.pendingDreImports,
-      label: plural(
-        pendings.pendingDreImports,
-        "conciliação de DRE pendente",
-        "conciliações de DRE pendentes",
-      ),
-      tone: "warning",
-      href: dreHref(pendings.pendingDreImportMonths, pendings.year),
-      severity: 80,
-      ...monthDetail(months),
-    });
-  }
-
   if (core.catalog) {
     push({
       id: "products-need-cost-review",
@@ -184,6 +165,25 @@ export function buildHomeAttentionSignals(
         formatDreMonthList(unsyncedMonths, { currentYear: pendings.year }),
       ),
       severity: 40,
+    });
+
+    // Neutro: conciliar é o fechamento do mês, não um erro. Só meses fechados
+    // e já sincronizados (sem dados, o aviso de cima é o que vale).
+    const unreconciled = pendings.unreconciledDreMonths;
+    push({
+      id: "dre-months-unreconciled",
+      count: unreconciled.length,
+      label: plural(
+        unreconciled.length,
+        "mês fechado sem conciliação",
+        "meses fechados sem conciliação",
+      ),
+      tone: "neutral",
+      href: dreHref(unreconciled, pendings.year),
+      ...monthDetail(
+        formatDreMonthList(unreconciled, { currentYear: pendings.year }),
+      ),
+      severity: 45,
     });
   }
 

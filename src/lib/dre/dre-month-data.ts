@@ -9,16 +9,18 @@ import {
   computeDreTotals,
   isDreEditableLineKey,
   mergeLineBreakdowns,
-  mergePreservedManualLines,
   mergeProductCostBreakdowns,
+  mergeSyncedSnapshot,
   mergeTaxBreakdowns,
   productCostAuditKey,
   type DreCancelledIncludeOverlay,
   type DreEditableLineKey,
   type DreLineBreakdownItem,
+  type DreMonthReconciliation,
   type DreMonthSnapshotPayload,
   type DreProductCostBreakdownItem,
   type DreTaxBreakdownItem,
+  type MergeSyncedSnapshotOptions,
 } from "@/lib/dre/dre-calculations";
 import { loadProductsMapBySku } from "@/lib/products/product-data";
 import { resolveEffectiveSkuByItemId } from "@/lib/products/product-resolver";
@@ -1321,40 +1323,62 @@ export async function buildDreMonthSnapshot(
   };
 }
 
+/**
+ * Grava o sync do mês por cima do snapshot anterior (ver `mergeSyncedSnapshot`).
+ * Ler, mesclar e gravar acontecem na mesma transação: uma conciliação
+ * confirmada no meio do caminho não é sobrescrita por um payload lido antes.
+ * Se o usuário escolheu não manter a conciliação, o import dela vira
+ * `superseded` junto — o mês volta a "não conciliado" de forma consistente.
+ */
 export async function persistDreMonthSnapshot(
   organizationId: string,
   year: number,
   month: number,
   payload: DreMonthSnapshotPayload,
-  preserveLineKeys: readonly DreEditableLineKey[] = [],
+  options: MergeSyncedSnapshotOptions = {
+    keepReconciliation: true,
+    preserveLineKeys: [],
+  },
 ): Promise<Date> {
   const syncedAt = new Date();
 
-  const existing = await prisma.dreMonthSnapshot.findUnique({
-    where: { organizationId_year_month: { organizationId, year, month } },
-    select: { payload: true },
-  });
-  const previous = existing ? parseSnapshotPayload(existing.payload) : null;
-  const merged = mergePreservedManualLines(
-    payload,
-    previous,
-    preserveLineKeys,
-  );
+  await prisma.$transaction(
+    async (tx) => {
+      const existing = await tx.dreMonthSnapshot.findUnique({
+        where: { organizationId_year_month: { organizationId, year, month } },
+        select: { payload: true },
+      });
+      const previous = existing ? parseSnapshotPayload(existing.payload) : null;
+      const merged = mergeSyncedSnapshot(payload, previous, options);
 
-  await prisma.dreMonthSnapshot.upsert({
-    where: { organizationId_year_month: { organizationId, year, month } },
-    create: {
-      organizationId,
-      year,
-      month,
-      syncedAt,
-      payload: merged as object,
+      await tx.dreMonthSnapshot.upsert({
+        where: { organizationId_year_month: { organizationId, year, month } },
+        create: {
+          organizationId,
+          year,
+          month,
+          syncedAt,
+          payload: merged as object,
+        },
+        update: {
+          syncedAt,
+          payload: merged as object,
+        },
+      });
+
+      const droppedImportId =
+        previous?.reconciliation && !merged.reconciliation
+          ? previous.reconciliation.importId
+          : null;
+      if (droppedImportId) {
+        await tx.dreReconciliationImport.updateMany({
+          where: { id: droppedImportId, organizationId, status: "confirmed" },
+          data: { status: "superseded" },
+        });
+      }
     },
-    update: {
-      syncedAt,
-      payload: merged as object,
-    },
-  });
+    { timeout: 60_000 },
+  );
   return syncedAt;
 }
 
@@ -1683,6 +1707,8 @@ export function parseSnapshotPayload(raw: unknown): DreMonthSnapshotPayload | nu
     };
   }
 
+  const reconciliation = parseReconciliationMeta(p.reconciliation);
+
   const manuallyEditedLineKeys = Array.isArray(p.manuallyEditedLineKeys)
     ? p.manuallyEditedLineKeys.filter(
         (key): key is DreEditableLineKey =>
@@ -1734,5 +1760,40 @@ export function parseSnapshotPayload(raw: unknown): DreMonthSnapshotPayload | nu
     syncedBreakdownBaseline,
     manuallyEditedLineKeys,
     hasRealSyncBaseline: Boolean(p.hasRealSyncBaseline),
+    reconciliation,
+  };
+}
+
+function parseReconciliationMeta(
+  raw: unknown,
+): DreMonthReconciliation | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.importId !== "string" || !r.importId) return undefined;
+
+  const amounts: Partial<Record<DreEditableLineKey, number>> = {};
+  if (r.amounts && typeof r.amounts === "object" && !Array.isArray(r.amounts)) {
+    for (const [key, value] of Object.entries(r.amounts)) {
+      if (!isDreEditableLineKey(key)) continue;
+      const n = Number(value);
+      if (Number.isFinite(n)) amounts[key] = n;
+    }
+  }
+  // Só chaves com valor: sem o valor da planilha não há o que reaplicar.
+  const lineKeys = Array.isArray(r.lineKeys)
+    ? r.lineKeys.filter(
+        (key): key is DreEditableLineKey =>
+          typeof key === "string" &&
+          isDreEditableLineKey(key) &&
+          amounts[key] !== undefined,
+      )
+    : [];
+
+  return {
+    importId: r.importId,
+    reconciledAt: typeof r.reconciledAt === "string" ? r.reconciledAt : "",
+    fileName: typeof r.fileName === "string" ? r.fileName : "",
+    lineKeys,
+    amounts,
   };
 }

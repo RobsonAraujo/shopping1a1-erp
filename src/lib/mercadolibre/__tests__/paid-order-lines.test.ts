@@ -30,6 +30,21 @@ describe("paidOrderLinesFromOrders", () => {
   });
 });
 
+describe("paidOrderLinesFromOrders — orderDateYmd", () => {
+  it("uses the São Paulo calendar day, not the server's (late-evening BRT order stays on its day)", () => {
+    const lines = paidOrderLinesFromOrders([
+      {
+        id: 30,
+        status: "paid",
+        // 22:30 BRT do dia 31 = 01:30 UTC do dia 1º.
+        date_closed: "2026-03-31T22:30:00.000-03:00",
+        order_items: [{ quantity: 1, unit_price: 10, item: { id: "MLB3" } }],
+      },
+    ]);
+    assert.equal(lines[0]?.orderDateYmd, "2026-03-31");
+  });
+});
+
 describe("splitOrderLinesByCancelledOrderIds", () => {
   it("moves paid lines whose orderId or packId is on the invoice cancelled set", () => {
     const { activeLines, returnedOnInvoiceLines } =

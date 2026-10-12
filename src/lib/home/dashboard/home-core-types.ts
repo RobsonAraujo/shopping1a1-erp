@@ -37,20 +37,22 @@ export type HomeYearMonth = { year: number; month: number };
 
 export type HomeDreMonthStatus = HomeYearMonth & {
   syncedAt: string | null;
+  /** O snapshot do mês carrega a marca de conciliação (`payload.reconciliation`). */
+  reconciled: boolean;
 };
 
 export type HomePendings = {
   failedInventoryRuns: number;
   /**
-   * Derivado de `pendingDreImportMonths.length` — **nunca** uma segunda
-   * contagem. Com duas leituras, o número do pill e a lista de meses poderiam
-   * divergir (bastaria uma filtrar por ano e a outra não).
+   * Meses **fechados** do ano já sincronizados e sem conciliação com a planilha
+   * Por Vendas. Derivado de `dreMonths` no loader — uma fonte só, para o número
+   * do pill não divergir da lista de meses.
    */
-  pendingDreImports: number;
-  /** O mês de cada conciliação pendente, **sem filtro de ano** (ver
-   * `loadPendings`). No máximo 1 pendente por mês, por invariante do banco. */
-  pendingDreImportMonths: HomeYearMonth[];
-  /** Só `{year, month, syncedAt}` — nunca o `payload` do snapshot. */
+  unreconciledDreMonths: HomeYearMonth[];
+  /**
+   * Um item por mês do ano até o mês corrente (inclusive), com ou sem
+   * snapshot — `syncedAt: null` = nunca sincronizado. Nunca o `payload`.
+   */
   dreMonths: HomeDreMonthStatus[];
   closedInventoryMonths: HomeYearMonth[];
   /**

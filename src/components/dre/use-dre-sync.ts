@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { toast } from "sonner";
 import { consumeSSEStream } from "@/hooks/use-sse-stream";
 import { formatApiErrorMessage, readApiError } from "@/lib/api/api-client-error";
 import { dreEditableLineLabel } from "@/lib/dre/dre-table-rows";
 import type { DreEditableLineKey } from "@/lib/dre/dre-calculations";
-import type { DreYearView } from "@/lib/dre/dre-year-data";
+import type { DreMonthView, DreYearView } from "@/lib/dre/dre-year-data";
 import type { DreSyncProgressPhase } from "@/lib/dre/dre-month-data";
 import { isDreMonthSyncable } from "@/lib/mercadolibre/revenue-periods";
 
@@ -81,6 +82,10 @@ function collectSyncAdjustments(
  * Não existe (de propósito) um "sincronizar todos os meses de uma vez" — só
  * um mês por confirmação, ou o re-sync escopado disparado pelo nivelamento
  * de custo (`syncAffectedMonths`, que só toca os meses realmente afetados).
+ *
+ * Conciliação: o sync manda `keepReconciliation` e o servidor reaplica os
+ * valores da planilha (ver `mergeSyncedSnapshot`). Só o diálogo de confirmação
+ * permite descartar; o re-sync do nivelamento sempre mantém.
  */
 export function useDreSync({
   year,
@@ -89,6 +94,7 @@ export function useDreSync({
   setSessionAdjustedByMonth,
   loadYear,
   setError,
+  onRequestReconcile,
 }: {
   year: number;
   data: DreYearView | null;
@@ -98,6 +104,8 @@ export function useDreSync({
   >;
   loadYear: (targetYear: number) => Promise<void>;
   setError: (message: string | null) => void;
+  /** Abre a conciliação do mês (ação do toast pós-sync). */
+  onRequestReconcile: (month: number) => void;
 }) {
   const [syncingMonths, setSyncingMonths] = useState<Set<number>>(new Set());
   const [syncingMonthMessages, setSyncingMonthMessages] = useState<
@@ -108,7 +116,8 @@ export function useDreSync({
   const [preserveAdjustmentIds, setPreserveAdjustmentIds] = useState<
     Set<string>
   >(new Set());
-  const [reconcileAfterSync, setReconcileAfterSync] = useState(false);
+  /** Switch "Manter valores conciliados" do diálogo — liga a cada abertura. */
+  const [keepReconciliation, setKeepReconciliation] = useState(true);
   /** Um AbortController por mês em sincronização (sync-affected roda concorrência 2). */
   const syncControllersRef = useRef<Map<number, AbortController>>(new Map());
 
@@ -119,6 +128,18 @@ export function useDreSync({
         : [],
     [data, syncConfirm],
   );
+
+  const syncConfirmMonthView = useMemo<DreMonthView | null>(
+    () =>
+      syncConfirm === null
+        ? null
+        : (data?.months.find((m) => m.month === syncConfirm) ?? null),
+    [data, syncConfirm],
+  );
+
+  useEffect(() => {
+    setKeepReconciliation(true);
+  }, [syncConfirm]);
 
   useEffect(() => {
     if (syncConfirm === null) {
@@ -134,7 +155,10 @@ export function useDreSync({
     async (
       month: number,
       preserveLineKeys: DreEditableLineKey[] = [],
+      options: { keepReconciliation?: boolean; notify?: boolean } = {},
     ): Promise<boolean> => {
+      const keep = options.keepReconciliation ?? true;
+      const notify = options.notify ?? true;
       if (!isDreMonthSyncable(year, month)) {
         return true;
       }
@@ -150,7 +174,12 @@ export function useDreSync({
         const res = await fetch("/api/dre/sync?stream=1", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ year, month, preserveLineKeys }),
+          body: JSON.stringify({
+            year,
+            month,
+            preserveLineKeys,
+            keepReconciliation: keep,
+          }),
           signal: controller.signal,
         });
         if (!res.ok) {
@@ -209,7 +238,22 @@ export function useDreSync({
               }
               return { ...prev, [month]: [...preserveLineKeys] };
             });
-            setReconcileAfterSync(true);
+            if (notify) {
+              const row = event.yearView.months.find((m) => m.month === month);
+              const label = row?.label ?? `Mês ${month}`;
+              if (row?.reconciliation.status === "reconciled") {
+                toast.success(`${label} sincronizado — conciliação mantida.`);
+              } else {
+                toast.success(`${label} sincronizado.`, {
+                  description:
+                    "Concilie com a planilha Por Vendas para fechar o mês.",
+                  action: {
+                    label: "Conciliar",
+                    onClick: () => onRequestReconcile(month),
+                  },
+                });
+              }
+            }
           }
         });
 
@@ -240,7 +284,7 @@ export function useDreSync({
         });
       }
     },
-    [year, setData, setSessionAdjustedByMonth, setError],
+    [year, setData, setSessionAdjustedByMonth, setError, onRequestReconcile],
   );
 
   const cancelSyncingMonths = useCallback(() => {
@@ -269,7 +313,11 @@ export function useDreSync({
     [year, monthHasSnapshot, syncMonth],
   );
 
-  /** Re-sync após nivelamento: atualiza Custo produto sem preservar edições manuais dessa linha. */
+  /**
+   * Re-sync após nivelamento: atualiza Custo produto sem preservar edições
+   * manuais dessa linha. Mantém sempre a conciliação — Custo produto nunca é
+   * linha da planilha, então não há conflito.
+   */
   const syncAffectedMonths = useCallback(
     async (months: number[]) => {
       const unique = [...new Set(months)]
@@ -290,7 +338,10 @@ export function useDreSync({
               data?.months.find((m) => m.month === month)
                 ?.manuallyEditedLineKeys ?? []
             ).filter((key) => key !== "productCostErp");
-            const ok = await syncMonth(month, preserve);
+            const ok = await syncMonth(month, preserve, {
+              keepReconciliation: true,
+              notify: false,
+            });
             if (!ok) failures.push(month);
           }
         }
@@ -307,6 +358,11 @@ export function useDreSync({
           );
         } else {
           await loadYear(year);
+          toast.success(
+            unique.length === 1
+              ? "Mês afetado re-sincronizado com o nivelamento."
+              : `${unique.length} meses afetados re-sincronizados com o nivelamento.`,
+          );
         }
       } finally {
         setSyncingAll(false);
@@ -326,19 +382,14 @@ export function useDreSync({
     return map;
   }, [syncAdjustments, preserveAdjustmentIds]);
 
-  const confirmSyncOverwrite = useCallback(
-    (preserveSelected: boolean) => {
-      const pendingMonth = syncConfirm;
-      setSyncConfirm(null);
-      if (pendingMonth === null) return;
+  const confirmSyncOverwrite = useCallback(() => {
+    const pendingMonth = syncConfirm;
+    setSyncConfirm(null);
+    if (pendingMonth === null) return;
 
-      const keys = preserveSelected
-        ? (buildPreserveByMonth().get(pendingMonth) ?? [])
-        : [];
-      void syncMonth(pendingMonth, keys);
-    },
-    [syncConfirm, syncMonth, buildPreserveByMonth],
-  );
+    const keys = buildPreserveByMonth().get(pendingMonth) ?? [];
+    void syncMonth(pendingMonth, keys, { keepReconciliation });
+  }, [syncConfirm, syncMonth, buildPreserveByMonth, keepReconciliation]);
 
   const togglePreserveAdjustment = useCallback((id: string) => {
     setPreserveAdjustmentIds((prev) => {
@@ -357,8 +408,9 @@ export function useDreSync({
     setSyncConfirm,
     preserveAdjustmentIds,
     setPreserveAdjustmentIds,
-    reconcileAfterSync,
-    setReconcileAfterSync,
+    keepReconciliation,
+    setKeepReconciliation,
+    syncConfirmMonthView,
     syncAdjustments,
     requestSyncMonth,
     syncAffectedMonths,

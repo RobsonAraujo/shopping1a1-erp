@@ -3,20 +3,21 @@ import { describe, it } from "node:test";
 import {
   applyDreIncludeCancelledView,
   applyManualLineEdit,
+  applyReconciliationToPayload,
   applyRestoreLineFromSync,
   breakdownIdentityKey,
   buildSyncedLineBaseline,
   captureSyncedBreakdowns,
-  commitReconciledLinesAsTruth,
   computeDreTotals,
   getEditableLineAmount,
   getYearLineBreakdown,
   getYearProductCostBreakdown,
   getYearTaxBreakdown,
   isDreEditableLineKey,
+  isReconciliationGovernedLineKey,
   mergeLineBreakdowns,
-  mergePreservedManualLines,
   mergeProductCostBreakdowns,
+  mergeSyncedSnapshot,
   mergeTaxBreakdowns,
   normalizeProductCostAuditMergeKey,
   percentOfRevenue,
@@ -370,7 +371,9 @@ describe("manual line edit / restore from sync", () => {
   });
 });
 
-describe("mergePreservedManualLines", () => {
+const KEEP_NOTHING = { keepReconciliation: false, preserveLineKeys: [] } as const;
+
+describe("mergeSyncedSnapshot — manual adjustments", () => {
   it("keeps selected manual values and refreshes baseline from sync", () => {
     const previous = applyManualLineEdit(
       withSyncLineBaseline(emptyPayload({ revenueMl: 1000, saleFeeMl: -100 })),
@@ -380,9 +383,10 @@ describe("mergePreservedManualLines", () => {
     const previousBoth = applyManualLineEdit(previous, "saleFeeMl", -40);
     const fresh = emptyPayload({ revenueMl: 1500, saleFeeMl: -110 });
 
-    const merged = mergePreservedManualLines(fresh, previousBoth, [
-      "revenueMl",
-    ]);
+    const merged = mergeSyncedSnapshot(fresh, previousBoth, {
+      keepReconciliation: true,
+      preserveLineKeys: ["revenueMl"],
+    });
 
     assert.equal(merged.revenueMl, 1200);
     assert.equal(merged.saleFeeMl, -110);
@@ -398,7 +402,7 @@ describe("mergePreservedManualLines", () => {
       1200,
     );
     const fresh = emptyPayload({ revenueMl: 1500 });
-    const merged = mergePreservedManualLines(fresh, previous, []);
+    const merged = mergeSyncedSnapshot(fresh, previous, KEEP_NOTHING);
     assert.equal(merged.revenueMl, 1500);
     assert.deepEqual(merged.manuallyEditedLineKeys, []);
   });
@@ -535,20 +539,206 @@ describe("normalizeProductCostAuditMergeKey", () => {
   });
 });
 
-describe("commitReconciledLinesAsTruth", () => {
-  it("moves the current value of the given keys into the baseline and clears their manual-edit mark", () => {
-    const edited = applyManualLineEdit(
-      withSyncLineBaseline(emptyPayload({ revenueMl: 1000, saleFeeMl: -100 })),
-      "revenueMl",
-      1250,
-    );
-    assert.deepEqual(edited.manuallyEditedLineKeys, ["revenueMl"]);
+const RECON_META = {
+  importId: "imp-1",
+  reconciledAt: "2026-07-05T12:00:00.000Z",
+  fileName: "Relatorio_conciliacao_por_vendas.xlsx",
+};
 
-    const committed = commitReconciledLinesAsTruth(edited, ["revenueMl"]);
-    assert.equal(committed.syncedLineBaseline?.revenueMl, 1250);
-    assert.deepEqual(committed.manuallyEditedLineKeys, []);
-    // Untouched keys keep their existing baseline.
-    assert.equal(committed.syncedLineBaseline?.saleFeeMl, -100);
+const sheetBreakdown = (amount: number): DreLineBreakdownItem[] => [
+  { key: "op-1", sku: null, title: "Planilha", quantity: 1, amount },
+];
+
+/** Mês sincronizado (API) e depois conciliado com a planilha. */
+function reconciledMonth() {
+  const synced = withSyncLineBaseline(
+    emptyPayload({
+      revenueMl: 1000,
+      saleFeeMl: -100,
+      sellerShippingMl: -40,
+      fullStorageMl: -10,
+      saleFeeBreakdown: [
+        { key: "api", sku: null, title: "API", quantity: null, amount: -100 },
+      ],
+    }),
+  );
+  return applyReconciliationToPayload(
+    synced,
+    {
+      amounts: { saleFeeMl: -120, sellerShippingMl: -40, revenueMl: 999 },
+      breakdowns: {
+        saleFeeMl: sheetBreakdown(-120),
+        sellerShippingMl: sheetBreakdown(-40),
+      },
+    },
+    ["saleFeeMl", "sellerShippingMl", "revenueMl"],
+    RECON_META,
+  );
+}
+
+describe("isReconciliationGovernedLineKey", () => {
+  it("excludes lines that come from the sync/ERP", () => {
+    for (const key of [
+      "revenueMl",
+      "cancelledSalesMl",
+      "partialReturnsMl",
+      "productCostErp",
+      "taxErp",
+      "adsCost",
+      "fullShippingMl",
+    ] as const) {
+      assert.equal(isReconciliationGovernedLineKey(key), false, key);
+    }
+    assert.equal(isReconciliationGovernedLineKey("saleFeeMl"), true);
+    assert.equal(isReconciliationGovernedLineKey("fullStorageMl"), true);
+  });
+});
+
+describe("applyReconciliationToPayload", () => {
+  it("writes sheet values, makes them the baseline and records the reconciliation", () => {
+    const month = reconciledMonth();
+    assert.equal(month.saleFeeMl, -120);
+    assert.equal(month.syncedLineBaseline?.saleFeeMl, -120);
+    assert.equal(month.saleFeeBreakdown?.[0]?.title, "Planilha");
+    assert.equal(month.syncedBreakdownBaseline?.saleFeeBreakdown?.[0]?.title, "Planilha");
+    assert.deepEqual(month.reconciliation?.lineKeys, ["saleFeeMl", "sellerShippingMl"]);
+    assert.deepEqual(month.reconciliation?.amounts, {
+      saleFeeMl: -120,
+      sellerShippingMl: -40,
+    });
+    assert.equal(month.reconciliation?.importId, "imp-1");
+  });
+
+  it("never touches lines outside the governed set (legacy imports accepted revenue/ADS)", () => {
+    const month = reconciledMonth();
+    assert.equal(month.revenueMl, 1000);
+    assert.ok(!month.reconciliation?.lineKeys.includes("revenueMl"));
+  });
+
+  it("clears the manual-edit mark of reconciled lines and keeps other edits", () => {
+    const edited = applyManualLineEdit(
+      applyManualLineEdit(
+        withSyncLineBaseline(emptyPayload({ saleFeeMl: -100, revenueMl: 1000 })),
+        "saleFeeMl",
+        -90,
+      ),
+      "revenueMl",
+      1100,
+    );
+    const month = applyReconciliationToPayload(
+      edited,
+      { amounts: { saleFeeMl: -120 }, breakdowns: {} },
+      ["saleFeeMl"],
+      RECON_META,
+    );
+    assert.equal(month.saleFeeMl, -120);
+    assert.deepEqual(month.manuallyEditedLineKeys, ["revenueMl"]);
+    assert.deepEqual(month.saleFeeBreakdown, []);
+  });
+
+  it("restore after a manual edit on a reconciled line goes back to the sheet value", () => {
+    const edited = applyManualLineEdit(reconciledMonth(), "saleFeeMl", -50);
+    const restored = applyRestoreLineFromSync(edited, "saleFeeMl");
+    assert.ok(restored);
+    assert.equal(restored.saleFeeMl, -120);
+    assert.equal(restored.saleFeeBreakdown?.[0]?.title, "Planilha");
+    assert.deepEqual(restored.manuallyEditedLineKeys, []);
+  });
+});
+
+describe("mergeSyncedSnapshot — reconciliation", () => {
+  const fresh = () =>
+    emptyPayload({
+      revenueMl: 1500,
+      saleFeeMl: -101,
+      sellerShippingMl: -35,
+      fullStorageMl: -12,
+      saleFeeBreakdown: [
+        { key: "api2", sku: null, title: "API nova", quantity: null, amount: -101 },
+      ],
+    });
+
+  it("keeping the reconciliation: sheet lines stay, every other line refreshes", () => {
+    const merged = mergeSyncedSnapshot(fresh(), reconciledMonth(), {
+      keepReconciliation: true,
+      preserveLineKeys: [],
+    });
+    assert.equal(merged.saleFeeMl, -120);
+    assert.equal(merged.sellerShippingMl, -40);
+    assert.equal(merged.saleFeeBreakdown?.[0]?.title, "Planilha");
+    assert.equal(merged.revenueMl, 1500);
+    assert.equal(merged.fullStorageMl, -12);
+    assert.equal(merged.syncedLineBaseline?.saleFeeMl, -120);
+    assert.equal(merged.syncedLineBaseline?.revenueMl, 1500);
+    assert.equal(merged.reconciliation?.importId, "imp-1");
+    assert.deepEqual(merged.manuallyEditedLineKeys, []);
+  });
+
+  it("a line that already matched the API is protected too (API oscillation later)", () => {
+    // sellerShippingMl conferia (-40) na conciliação; o sync novo diz -35.
+    const merged = mergeSyncedSnapshot(fresh(), reconciledMonth(), {
+      keepReconciliation: true,
+      preserveLineKeys: [],
+    });
+    assert.equal(merged.sellerShippingMl, -40);
+  });
+
+  it("survives repeated syncs (the original bug: the second sync wiped it)", () => {
+    const keep = { keepReconciliation: true, preserveLineKeys: [] };
+    const once = mergeSyncedSnapshot(fresh(), reconciledMonth(), keep);
+    const twice = mergeSyncedSnapshot(fresh(), once, keep);
+    assert.equal(twice.saleFeeMl, -120);
+    assert.equal(twice.reconciliation?.importId, "imp-1");
+  });
+
+  it("not keeping it: API values everywhere and the month is no longer reconciled", () => {
+    const merged = mergeSyncedSnapshot(fresh(), reconciledMonth(), KEEP_NOTHING);
+    assert.equal(merged.saleFeeMl, -101);
+    assert.equal(merged.saleFeeBreakdown?.[0]?.title, "API nova");
+    assert.equal(merged.reconciliation, undefined);
+  });
+
+  it("a kept manual edit wins over the reconciled value", () => {
+    const previous = applyManualLineEdit(reconciledMonth(), "saleFeeMl", -130);
+    const merged = mergeSyncedSnapshot(fresh(), previous, {
+      keepReconciliation: true,
+      preserveLineKeys: ["saleFeeMl"],
+    });
+    assert.equal(merged.saleFeeMl, -130);
+    assert.deepEqual(merged.manuallyEditedLineKeys, ["saleFeeMl"]);
+    assert.equal(merged.syncedLineBaseline?.saleFeeMl, -120);
+  });
+
+  it("dropping the manual edit but keeping the reconciliation goes back to the sheet value", () => {
+    const previous = applyManualLineEdit(reconciledMonth(), "saleFeeMl", -130);
+    const merged = mergeSyncedSnapshot(fresh(), previous, {
+      keepReconciliation: true,
+      preserveLineKeys: [],
+    });
+    assert.equal(merged.saleFeeMl, -120);
+    assert.deepEqual(merged.manuallyEditedLineKeys, []);
+  });
+
+  it("keeping a manual edit while dropping the reconciliation compares it to the API baseline", () => {
+    const previous = applyManualLineEdit(reconciledMonth(), "saleFeeMl", -130);
+    const merged = mergeSyncedSnapshot(fresh(), previous, {
+      keepReconciliation: false,
+      preserveLineKeys: ["saleFeeMl"],
+    });
+    assert.equal(merged.saleFeeMl, -130);
+    assert.equal(merged.syncedLineBaseline?.saleFeeMl, -101);
+    assert.deepEqual(merged.manuallyEditedLineKeys, ["saleFeeMl"]);
+    assert.equal(merged.reconciliation, undefined);
+  });
+
+  it("a legacy payload (no reconciliation field) just refreshes", () => {
+    const legacy = withSyncLineBaseline(emptyPayload({ saleFeeMl: -120 }));
+    const merged = mergeSyncedSnapshot(fresh(), legacy, {
+      keepReconciliation: true,
+      preserveLineKeys: [],
+    });
+    assert.equal(merged.saleFeeMl, -101);
+    assert.equal(merged.reconciliation, undefined);
   });
 });
 
@@ -587,10 +777,13 @@ describe("cancelledIncludeOverlay invalidation", () => {
     assert.equal(edited.cancelledIncludeOverlay?.revenueGross, 100);
   });
 
-  it("mergePreservedManualLines clears the overlay when a preserved key is revenueMl/productCostErp/taxErp", () => {
+  it("mergeSyncedSnapshot clears the overlay when a preserved key is revenueMl/productCostErp/taxErp", () => {
     const previous = applyManualLineEdit(withOverlay(), "revenueMl", 1300);
     const fresh = emptyPayload({ revenueMl: 1500 });
-    const merged = mergePreservedManualLines(fresh, previous, ["revenueMl"]);
+    const merged = mergeSyncedSnapshot(fresh, previous, {
+      keepReconciliation: true,
+      preserveLineKeys: ["revenueMl"],
+    });
     assert.equal(merged.cancelledIncludeOverlay, undefined);
   });
 
@@ -602,7 +795,7 @@ describe("cancelledIncludeOverlay invalidation", () => {
   });
 });
 
-describe("mergePreservedManualLines — baseline-drift edge case", () => {
+describe("mergeSyncedSnapshot — baseline-drift edge case", () => {
   it("stops marking a key as adjusted once the new sync's baseline happens to match the preserved manual value", () => {
     // User edited revenueMl from 1000 -> 1200 (old baseline 1000).
     const previous = applyManualLineEdit(
@@ -614,7 +807,10 @@ describe("mergePreservedManualLines — baseline-drift edge case", () => {
     // the user had manually set. The preserved value must be compared
     // against the NEW baseline (1200), not the old one (1000).
     const fresh = emptyPayload({ revenueMl: 1200 });
-    const merged = mergePreservedManualLines(fresh, previous, ["revenueMl"]);
+    const merged = mergeSyncedSnapshot(fresh, previous, {
+      keepReconciliation: true,
+      preserveLineKeys: ["revenueMl"],
+    });
     assert.equal(merged.revenueMl, 1200);
     assert.equal(merged.syncedLineBaseline?.revenueMl, 1200);
     assert.deepEqual(merged.manuallyEditedLineKeys, []);

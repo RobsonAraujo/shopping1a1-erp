@@ -6,10 +6,14 @@ import {
 } from "@/lib/dre/dre-calculations";
 import { requireOrganization } from "@/lib/api/api-auth";
 import { parseJsonBody } from "@/lib/api/api-validation";
-import { applyReconciliationImport } from "@/lib/dre/reconciliation/reconciliation-data";
+import {
+  DreReconciliationError,
+  confirmReconciliationImport,
+} from "@/lib/dre/reconciliation/reconciliation-data";
 import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 
-const applySchema = z.object({
+const confirmSchema = z.object({
+  /** Linhas divergentes aceitas; as que já conferem entram sempre. */
   acceptedLineKeys: z.array(
     z.enum(
       DRE_EDITABLE_LINE_KEYS as unknown as [
@@ -29,20 +33,23 @@ export async function POST(
     return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
   const { importId } = await context.params;
-  const parsedBody = await parseJsonBody(request, applySchema);
+  const parsedBody = await parseJsonBody(request, confirmSchema);
   if (!parsedBody.ok) return parsedBody.response;
 
   try {
-    const result = await applyReconciliationImport({
+    const result = await confirmReconciliationImport({
       organizationId: auth.ctx.organizationId,
       importId,
       acceptedLineKeys: parsedBody.data.acceptedLineKeys,
     });
     return NextResponse.json({ year: result.year });
   } catch (error) {
-    logServerError("api/dre/reconciliation/apply POST", error);
+    if (error instanceof DreReconciliationError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    logServerError("api/dre/reconciliation/confirm POST", error);
     return NextResponse.json(
-      apiErrorPayload(error, "dre_reconciliation_apply_failed"),
+      apiErrorPayload(error, "dre_reconciliation_confirm_failed"),
       { status: 502 },
     );
   }

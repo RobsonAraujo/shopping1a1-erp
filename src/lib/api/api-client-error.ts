@@ -34,6 +34,10 @@ const API_ERROR_MESSAGES: Record<string, string> = {
   dre_product_cost_leveling_delete_failed:
     "Não foi possível excluir o nivelamento de custo.",
   dre_line_patch_failed: "Não foi possível atualizar esta linha do DRE.",
+  dre_reconciliation_preview_failed: "Não foi possível ler a planilha de conciliação.",
+  dre_reconciliation_review_failed: "Não foi possível carregar a conciliação salva.",
+  dre_reconciliation_confirm_failed: "Não foi possível conciliar o mês.",
+  dre_reconciliation_discard_failed: "Não foi possível descartar a conciliação.",
   products_load_failed: "Não foi possível carregar os produtos.",
   product_load_failed: "Não foi possível carregar o produto.",
   product_create_failed: "Não foi possível criar o produto.",
