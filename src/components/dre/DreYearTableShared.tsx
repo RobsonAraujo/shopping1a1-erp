@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { AlertCircle, CheckCircle2, FileCheck2 } from "lucide-react";
+import { CheckCircle2, FileCheck2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -37,7 +37,14 @@ export function formatSyncTime(iso: string | null): string {
   }).format(new Date(iso));
 }
 
-/** Data curta (dd/mm/aaaa) de quando o mês foi conciliado. */
+/**
+ * Data curta (dd/mm/aaaa) de quando o mês foi conciliado.
+ *
+ * Fuso fixo de propósito: este texto vai no `title`/`aria-label` das pílulas,
+ * que saem no HTML do servidor. Sem fuso, o servidor (UTC em produção) e o
+ * navegador formatariam dias diferentes para uma conciliação feita à noite —
+ * e o React não corrige atributo divergente na hidratação.
+ */
 export function formatReconciledAt(iso: string | null): string {
   if (!iso) return "";
   const date = new Date(iso);
@@ -46,6 +53,7 @@ export function formatReconciledAt(iso: string | null): string {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
+    timeZone: reportsConfig.catalogCompetitionTimezone,
   }).format(date);
 }
 
@@ -91,6 +99,12 @@ export function getMonthAlertMessages(month: DreMonthView): string[] {
   return messages;
 }
 
+/**
+ * Avisos do mês sob demanda — material de auditoria, não alarme: ícone de
+ * informação cinza e apagado, que só ganha contraste no hover/foco. O que pede
+ * ação (conciliação a revisar) já tem destaque próprio nas pílulas e no botão
+ * do mês.
+ */
 export function MonthAlertsTooltip({
   month,
   messages,
@@ -105,11 +119,11 @@ export function MonthAlertsTooltip({
       <TooltipTrigger asChild>
         <button
           type="button"
-          className="inline-flex size-5 shrink-0 items-center justify-center rounded-full p-1 text-amber-500/70 opacity-60 hover:opacity-100 hover:text-amber-600 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]"
+          className="inline-flex size-4 shrink-0 items-center justify-center rounded-full text-[var(--muted-foreground)] opacity-50 hover:text-[var(--foreground)] hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]"
           aria-label={`Ver avisos de ${month.label}`}
           onClick={(e) => e.stopPropagation()}
         >
-          <AlertCircle className="size-2.5" aria-hidden />
+          <Info className="size-3" aria-hidden />
         </button>
       </TooltipTrigger>
       <TooltipContent

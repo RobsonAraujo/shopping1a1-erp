@@ -76,7 +76,7 @@ export function normalizeProductCostAuditMergeKey(
   return productCostAuditKey(item.key, Boolean(item.leveled));
 }
 
-/** Auditoria do Imposto ML: faturamento, % de imposto aplicado e imposto total por SKU/anúncio no mês. */
+/** Auditoria dos Impostos sobre vendas: faturamento, % de imposto aplicado e imposto total por SKU/anúncio no mês. */
 export type DreTaxBreakdownItem = {
   key: string;
   sku: string | null;
@@ -821,7 +821,7 @@ export function computeDreTotals(
  * Inclui vendas canceladas no faturamento bruto (como o painel ML), mantendo
  * a linha de canceladas nos custos variáveis para abater o resultado.
  *
- * Custo produto e Imposto ML NÃO são ajustados aqui: o cálculo base já exclui
+ * Custo produto e Impostos sobre vendas NÃO são ajustados aqui: o cálculo base já exclui
  * pedidos cancelados e devolvidas ligadas à fatura CXC, então não há
  * custo/imposto a neutralizar — diferente da receita, que precisa da
  * linha `cancelledSalesMl` para abater o valor bruto incluído acima.
@@ -934,7 +934,7 @@ export function getYearProductCostBreakdown(
   return mergeProductCostBreakdowns(lists);
 }
 
-/** Combina listas de auditoria do Imposto ML (ex.: pedidos pagos + cancelados, ou vários meses), somando por SKU/anúncio. */
+/** Combina listas de auditoria dos Impostos sobre vendas (ex.: pedidos pagos + cancelados, ou vários meses), somando por SKU/anúncio. */
 export function mergeTaxBreakdowns(
   lists: DreTaxBreakdownItem[][],
 ): DreTaxBreakdownItem[] {
@@ -969,7 +969,7 @@ export function mergeTaxBreakdowns(
   return [...byKey.values()].sort((a, b) => b.totalTax - a.totalTax);
 }
 
-/** Junta a auditoria do Imposto ML de todos os meses do ano em uma única lista por SKU/anúncio. */
+/** Junta a auditoria dos Impostos sobre vendas de todos os meses do ano em uma única lista por SKU/anúncio. */
 export function getYearTaxBreakdown(
   months: Array<{ taxBreakdown: DreTaxBreakdownItem[] | null }>,
 ): DreTaxBreakdownItem[] {

@@ -122,7 +122,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     kind: "custo-total",
     label: "(-) Custos Variáveis",
     methodology:
-      "Soma de todas as linhas abaixo (Canceladas, Devoluções parciais, Tarifa de devolução, Tarifa ML, Tarifas especiais, Custo produto, Imposto, Frete vendedor, Full envios/armazém/inconformidades, Campanhas ADS, Minha Página, Comissão Afiliados) mais os custos operacionais manuais cadastrados.",
+      "Soma de todas as linhas abaixo (Canceladas, Devoluções parciais, Tarifa de devolução, Tarifa ML, Tarifas especiais, Custo produto, Impostos sobre vendas, Frete vendedor, Full envios/armazém/inconformidades, Campanhas ADS, Minha Página, Comissão Afiliados) mais os custos operacionais manuais cadastrados.",
   },
   {
     type: "static",
@@ -193,7 +193,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     type: "static",
     id: "taxErp",
     kind: "custo-detail",
-    label: "Imposto ML",
+    label: "Impostos sobre vendas",
     source: "erp",
     indent: true,
     lineKey: "taxErp",

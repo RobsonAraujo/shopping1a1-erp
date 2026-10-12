@@ -122,10 +122,13 @@ export function DreOverview({
   data,
   selectedMonth,
   onSelectMonth,
+  onReviewReconciliation,
 }: {
   data: DreYearView;
   selectedMonth: number | null;
   onSelectMonth: (month: number | null) => void;
+  /** Abre a revisão de uma conciliação salva pelo fluxo antigo. */
+  onReviewReconciliation?: (month: number) => void;
 }) {
   const monthView: DreMonthView | null =
     selectedMonth !== null
@@ -145,6 +148,9 @@ export function DreOverview({
   ).length;
   const reconciliationComplete =
     closedSynced.length > 0 && reconciledCount === closedSynced.length;
+  const reviewMonths = data.months.filter(
+    (m) => m.reconciliation.status === "review",
+  );
   const profitSeries = data.months.map((m) => m.totals?.lucroOperacional ?? null);
   const revenueSeries = data.months.map((m) => m.totals?.totalEntrada ?? null);
   const marginSeries = data.months.map(
@@ -259,46 +265,68 @@ export function DreOverview({
         />
       </div>
 
-      <div className="flex gap-1.5 overflow-x-auto pb-1">
-        {data.months.map((month) => {
-          const active = selectedMonth === month.month;
-          const status = month.reconciliation.status;
-          const statusLabel = reconciliationStatusLabel(month);
-          return (
-            <button
-              key={month.month}
-              type="button"
-              onClick={() => onSelectMonth(active ? null : month.month)}
-              title={statusLabel}
-              aria-label={`${month.label} — ${statusLabel}`}
-              className={cn(
-                "inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-lg px-3 py-1.5 text-[11px] font-semibold tracking-wide transition-colors",
-                month.isFutureMonth && "opacity-60",
-                active
-                  ? "bg-[var(--primary)] text-white shadow-sm"
-                  : month.syncedAt
-                    ? "bg-[var(--card)] text-[var(--foreground)] ring-1 ring-[var(--border)] hover:ring-[var(--primary)]/40"
-                    : "bg-[var(--muted)] text-[var(--muted-foreground)]",
-              )}
-            >
-              {dreMonthShortLabel(month.month)}
-              {status === "reconciled" ? (
-                <CheckCircle2
-                  className={cn(
-                    "size-3",
-                    active ? "text-white" : "text-emerald-600",
-                  )}
-                  aria-hidden
-                />
-              ) : status === "review" ? (
-                <span
-                  className="size-1.5 rounded-full bg-amber-500"
-                  aria-hidden
-                />
-              ) : null}
-            </button>
-          );
-        })}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <div className="flex min-w-0 max-w-full gap-1.5 overflow-x-auto pb-1">
+          {data.months.map((month) => {
+            const active = selectedMonth === month.month;
+            const status = month.reconciliation.status;
+            const statusLabel = reconciliationStatusLabel(month);
+            return (
+              <button
+                key={month.month}
+                type="button"
+                onClick={() => onSelectMonth(active ? null : month.month)}
+                title={statusLabel}
+                aria-label={`${month.label} — ${statusLabel}`}
+                className={cn(
+                  "inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-lg px-3 py-1.5 text-[11px] font-semibold tracking-wide transition-colors",
+                  month.isFutureMonth && "opacity-60",
+                  active
+                    ? "bg-[var(--primary)] text-white shadow-sm"
+                    : month.syncedAt
+                      ? "bg-[var(--card)] text-[var(--foreground)] ring-1 ring-[var(--border)] hover:ring-[var(--primary)]/40"
+                      : "bg-[var(--muted)] text-[var(--muted-foreground)]",
+                )}
+              >
+                {dreMonthShortLabel(month.month)}
+                {status === "reconciled" ? (
+                  <CheckCircle2
+                    className={cn(
+                      "size-3",
+                      active ? "text-white" : "text-emerald-600",
+                    )}
+                    aria-hidden
+                  />
+                ) : status === "review" ? (
+                  <span
+                    className="size-1.5 rounded-full bg-amber-500"
+                    aria-hidden
+                  />
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+        {onReviewReconciliation && reviewMonths.length > 0 ? (
+          // Conciliação salva pelo fluxo antigo (o sync de antes podia
+          // apagá-la): só revisando dá pra afirmar que o mês está conciliado.
+          // O ponto âmbar na pílula já marca o mês; aqui fica só o atalho.
+          <p className="flex shrink-0 items-center gap-1.5 pb-1 text-xs text-amber-800">
+            <span className="size-1.5 rounded-full bg-amber-500" aria-hidden />
+            Revisar conciliação:
+            {reviewMonths.map((month) => (
+              <button
+                key={month.month}
+                type="button"
+                onClick={() => onReviewReconciliation(month.month)}
+                aria-label={`Revisar conciliação de ${month.label}`}
+                className="cursor-pointer rounded-md bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold tracking-wide hover:bg-amber-200"
+              >
+                {dreMonthShortLabel(month.month)}
+              </button>
+            ))}
+          </p>
+        ) : null}
       </div>
     </section>
   );

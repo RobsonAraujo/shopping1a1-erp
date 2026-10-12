@@ -57,11 +57,14 @@ export function DreMonthHeaderCell({
         }
       }}
     >
-      <div className="flex items-center justify-center gap-0.5">
+      {/* Coluna estreita (12 meses em ~7% cada): rótulo + ✓ são um bloco que
+          nunca quebra, e info + sync outro bloco — se faltar espaço, desce o
+          bloco de ações inteiro, nunca o ✓ sozinho. */}
+      <div className="flex flex-wrap items-center justify-center gap-0.5">
         <MonthSyncTooltip year={year} month={month}>
           <span
             className={cn(
-              "cursor-pointer text-[11px] font-semibold tracking-wide text-[var(--muted-foreground)]",
+              "inline-flex cursor-pointer items-center gap-0.5 whitespace-nowrap text-[11px] font-semibold tracking-wide text-[var(--muted-foreground)]",
               month.isCurrentMonth && "text-[var(--primary)]",
               !month.syncedAt && !month.isFutureMonth && "text-amber-700",
               selected && "text-[var(--primary)]",
@@ -71,7 +74,7 @@ export function DreMonthHeaderCell({
             {month.reconciliation.status === "reconciled" ? (
               <>
                 <CheckCircle2
-                  className="ml-0.5 inline size-3 align-[-2px] text-emerald-600"
+                  className="size-3 shrink-0 text-emerald-600"
                   aria-hidden
                 />
                 <span className="sr-only">
@@ -81,36 +84,40 @@ export function DreMonthHeaderCell({
             ) : null}
           </span>
         </MonthSyncTooltip>
-        {hasAlert ? (
-          <MonthAlertsTooltip month={month} messages={alertMessages} />
-        ) : null}
-        {month.canSync ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="size-6 shrink-0 rounded-sm border border-[var(--border)] p-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-            aria-label={
-              syncing
-                ? `Sincronizando ${month.label}: ${syncMessage ?? "em andamento"}`
-                : `Sincronizar ${month.label}`
-            }
-            title={
-              syncing
-                ? (syncMessage ?? "Sincronizando…")
-                : `Sincronizar ${month.label}`
-            }
-            disabled={syncing}
-            onClick={(e) => {
-              e.stopPropagation();
-              onSync();
-            }}
-          >
-            <RefreshCw
-              className={cn("size-3", syncing && "animate-spin")}
-              aria-hidden
-            />
-          </Button>
+        {hasAlert || month.canSync ? (
+          <span className="inline-flex items-center gap-0.5">
+            {hasAlert ? (
+              <MonthAlertsTooltip month={month} messages={alertMessages} />
+            ) : null}
+            {month.canSync ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="size-5 shrink-0 rounded-sm border border-[var(--border)] p-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                aria-label={
+                  syncing
+                    ? `Sincronizando ${month.label}: ${syncMessage ?? "em andamento"}`
+                    : `Sincronizar ${month.label}`
+                }
+                title={
+                  syncing
+                    ? (syncMessage ?? "Sincronizando…")
+                    : `Sincronizar ${month.label}`
+                }
+                disabled={syncing}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSync();
+                }}
+              >
+                <RefreshCw
+                  className={cn("size-3", syncing && "animate-spin")}
+                  aria-hidden
+                />
+              </Button>
+            ) : null}
+          </span>
         ) : null}
       </div>
     </th>

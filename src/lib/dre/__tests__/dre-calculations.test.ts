@@ -205,7 +205,7 @@ describe("applyDreIncludeCancelledView", () => {
     });
     assert.equal(adjusted.revenueMl, 1150);
     assert.equal(adjusted.cancelledSalesMl, -150);
-    // Custo produto e Imposto ML de pedidos cancelados já foram excluídos do
+    // Custo produto e Impostos sobre vendas de pedidos cancelados já foram excluídos do
     // cálculo base — não há custo/imposto a somar de volta aqui.
     assert.equal(adjusted.productCostErp, -400);
     assert.equal(adjusted.taxErp, -100);

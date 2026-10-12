@@ -118,7 +118,7 @@ export function DreTaxAuditModal({
     >
       <SheetContent className="flex h-[92vh] flex-col sm:max-h-[92vh] sm:w-[95vw] sm:max-w-4xl">
         <SheetHeader>
-          <SheetTitle>Auditoria — Imposto ML</SheetTitle>
+          <SheetTitle>Auditoria — Impostos sobre vendas</SheetTitle>
           <SheetDescription>
             {title}. Para cada anúncio: valor de venda × % de imposto (ICMS/ST)
             apurado no relatório tributário do produto naquele mês.

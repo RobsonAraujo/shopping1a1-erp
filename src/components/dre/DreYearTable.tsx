@@ -12,12 +12,12 @@ import {
 import { createPortal } from "react-dom";
 import { NumericFormat } from "react-number-format";
 import {
-  AlertCircle,
   Banknote,
   Check,
   ChevronLeft,
   ChevronRight,
   Columns3,
+  Info,
   Landmark,
   List,
   Pencil,
@@ -67,6 +67,7 @@ import {
   DIM_CLASS,
   formatSyncTime,
   getMonthAlertMessages,
+  MonthAlertsTooltip,
   MonthReconcileButton,
   MonthReconciliationBadge,
 } from "@/components/dre/DreYearTableShared";
@@ -1479,6 +1480,10 @@ function DreYearTableMobile({
 
   const selectedMonth = selection === "total" ? null : data.months[selection];
   const alertMessages = selectedMonth ? getMonthAlertMessages(selectedMonth) : [];
+  /** Avisos são auditoria sob demanda: fechados até o usuário pedir, e voltam a fechar ao trocar de mês. */
+  const [alertsOpenFor, setAlertsOpenFor] = useState<number | null>(null);
+  const alertsOpen =
+    selectedMonth !== null && alertsOpenFor === selectedMonth.month;
 
   const selectOptions = [
     ...data.months.map((month, index) => ({
@@ -1557,10 +1562,17 @@ function DreYearTableMobile({
           <span>Sync: {formatSyncTime(selectedMonth.syncedAt)}</span>
           <MonthReconciliationBadge month={selectedMonth} />
           {alertMessages.length > 0 ? (
-            <span className="inline-flex items-center gap-1 text-amber-700">
-              <AlertCircle className="size-3.5" aria-hidden />
+            <button
+              type="button"
+              className="inline-flex cursor-pointer items-center gap-1 opacity-70 hover:opacity-100"
+              aria-expanded={alertsOpen}
+              onClick={() =>
+                setAlertsOpenFor(alertsOpen ? null : selectedMonth.month)
+              }
+            >
+              <Info className="size-3.5" aria-hidden />
               {alertMessages.length} aviso{alertMessages.length === 1 ? "" : "s"}
-            </span>
+            </button>
           ) : null}
           {selectedMonth.canSync ? (
             <Button
@@ -1604,8 +1616,8 @@ function DreYearTableMobile({
         </div>
       )}
 
-      {alertMessages.length > 0 ? (
-        <ul className="space-y-1 rounded-lg border border-amber-200 bg-amber-50/50 px-3 py-2 text-xs text-amber-900">
+      {alertsOpen && alertMessages.length > 0 ? (
+        <ul className="space-y-1 rounded-lg border border-[var(--border)] bg-[var(--muted)]/20 px-3 py-2 text-xs text-[var(--muted-foreground)]">
           {alertMessages.map((message) => (
             <li key={message}>• {message}</li>
           ))}
@@ -1993,10 +2005,13 @@ function DreStatementPanel({
           <h2 className="mt-1 text-2xl font-semibold tracking-tight">
             {month ? month.label : `Ano ${data.year}`}
           </h2>
-          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+          <p className="mt-1 flex items-center gap-1 text-xs text-[var(--muted-foreground)]">
             {isYear
               ? "Totais do ano. Escolha um mês nas pílulas acima para editar valores."
               : `Sync: ${formatSyncTime(month.syncedAt)}`}
+            {month ? (
+              <MonthAlertsTooltip month={month} messages={alertMessages} />
+            ) : null}
           </p>
           {month ? (
             <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
@@ -2036,12 +2051,6 @@ function DreStatementPanel({
           ) : null}
         </div>
       </div>
-      {alertMessages.length > 0 ? (
-        <p className="mb-4 flex items-start gap-2 text-xs text-amber-800">
-          <AlertCircle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-          {alertMessages[0]}
-        </p>
-      ) : null}
 
       <div className="space-y-3">
         <DreRevenuePie totals={totals} visibility={visibility} />

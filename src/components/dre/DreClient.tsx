@@ -6,7 +6,6 @@ import {
   ChevronDown,
   Download,
   FileCheck2,
-  FileSpreadsheet,
   FolderPlus,
   HelpCircle,
   MousePointerClick,
@@ -181,17 +180,6 @@ export function DreClient({
       })),
     };
   }, [data, sessionAdjustedByMonth]);
-
-  /**
-   * Meses com conciliação salva pelo fluxo antigo que precisam de revisão
-   * (vem do servidor — vale pra qualquer sessão). Some quando não houver mais.
-   */
-  const reviewReconciliationMonths = useMemo(
-    () =>
-      viewData?.months.filter((m) => m.reconciliation.status === "review") ??
-      [],
-    [viewData],
-  );
 
   const loadYear = useCallback(async (targetYear: number) => {
     setLoading(true);
@@ -732,39 +720,12 @@ export function DreClient({
             data={viewData}
             selectedMonth={selectedMonth}
             onSelectMonth={setSelectedMonth}
+            onReviewReconciliation={openReconcile}
           />
         ) : null}
 
         {error ? (
           <UserFeedback onDismiss={() => setError(null)}>{error}</UserFeedback>
-        ) : null}
-
-        {reviewReconciliationMonths.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-            <FileSpreadsheet className="size-4 shrink-0" aria-hidden />
-            <span>
-              {reviewReconciliationMonths.length === 1
-                ? "Conciliação salva para revisar em"
-                : "Conciliações salvas para revisar em"}
-            </span>
-            {/* Conciliações do fluxo antigo: o sync de antes podia apagá-las,
-                então não dá pra afirmar que o mês está conciliado sem revisar.
-                Cada chip abre a revisão do import salvo (sem novo upload). */}
-            {reviewReconciliationMonths.map((month) => (
-              <button
-                key={month.month}
-                type="button"
-                onClick={() => openReconcile(month.month)}
-                aria-label={`Revisar conciliação de ${month.label}`}
-                className="cursor-pointer rounded-full bg-amber-200/70 px-2 py-0.5 font-medium underline-offset-2 hover:bg-amber-200 hover:underline"
-              >
-                {month.label}
-              </button>
-            ))}
-            <span className="text-amber-900">
-              — confira a diferença e concilie ou descarte.
-            </span>
-          </div>
         ) : null}
 
         {loading && !data ? (

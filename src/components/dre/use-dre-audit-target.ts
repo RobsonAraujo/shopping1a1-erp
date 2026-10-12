@@ -53,7 +53,7 @@ export function getAuditKindForRow(row: DreTableRow): AuditKind | null {
   return row.type === "static" ? (ROW_ID_TO_AUDIT_KIND[row.id] ?? null) : null;
 }
 
-/** Textos do modal de auditoria genérica, por tipo de linha (exceto Custo produto/Imposto ML, que têm modal próprio). */
+/** Textos do modal de auditoria genérica, por tipo de linha (exceto Custo produto/Impostos sobre vendas, que têm modal próprio). */
 const LINE_AUDIT_TEXT: Partial<
   Record<AuditKind, { rowLabel: string; amountLabel: string; description: string }>
 > = {
@@ -173,7 +173,7 @@ export type LineAuditState = {
   needsResync: boolean;
 };
 
-/** Resolve itens/estado do modal de auditoria genérica para as linhas que não são Custo produto/Imposto ML. */
+/** Resolve itens/estado do modal de auditoria genérica para as linhas que não são Custo produto/Impostos sobre vendas. */
 function resolveLineAuditState(
   data: DreYearView,
   target: AuditTarget,
@@ -227,7 +227,7 @@ export function auditTargetNeedsResync(
 }
 
 /**
- * Deriva tudo que os modais de auditoria (Custo produto, Imposto ML, e o
+ * Deriva tudo que os modais de auditoria (Custo produto, Impostos sobre vendas, e o
  * genérico) precisam a partir de um `AuditTarget` — mesma lógica antes
  * duplicada byte a byte entre `DreYearTableMobile` e `DreYearTableDesktop`.
  * Cada chamador mantém seu próprio estado de `auditTarget` (mobile/desktop
