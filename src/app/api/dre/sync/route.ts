@@ -72,7 +72,7 @@ async function runDreSync(args: {
     message: "Iniciando sincronização do mês…",
   });
 
-  const payload = await buildDreMonthSnapshot(
+  const { payload, unavailableLineKeys } = await buildDreMonthSnapshot(
     token,
     userId,
     organizationId,
@@ -88,7 +88,11 @@ async function runDreSync(args: {
     year,
     month,
     payload,
-    { keepReconciliation, preserveLineKeys },
+    {
+      keepReconciliation,
+      preserveLineKeys,
+      keepPreviousLineKeys: unavailableLineKeys,
+    },
   );
   const yearView = await loadDreYearView(organizationId, year);
   const monthView = yearView.months.find((row) => row.month === month);

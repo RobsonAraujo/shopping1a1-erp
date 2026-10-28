@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   CalendarRange,
   ChevronDown,
@@ -26,6 +27,13 @@ import { DreYearTable } from "@/components/dre/DreYearTable";
 import { DreReconciliationModal } from "@/components/dre/DreReconciliationModal";
 import { formatReconciledAt } from "@/components/dre/DreYearTableShared";
 import { useDreSync } from "@/components/dre/use-dre-sync";
+import { useDreTaxActions } from "@/components/dre/use-dre-tax-actions";
+import { TaxRecalcConfirmDialog } from "@/components/relatorio-tributario/TaxRecalcConfirmDialog";
+import {
+  TaxActionOverlay,
+  TaxReportGenerationOverlay,
+} from "@/components/relatorio-tributario/TaxReportGenerationOverlay";
+import { useBeforeUnloadGuard } from "@/hooks/use-before-unload-guard";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -248,7 +256,31 @@ export function DreClient({
     loadYear,
     setError,
     onRequestReconcile: openReconcile,
+    onRequestTaxAction: (month, action) => runTaxActionRef.current?.(month, action),
   });
+
+  const {
+    taxOperation,
+    taxBusyMonths,
+    cancelTaxOperation,
+    requestTaxAction,
+    requestRecomputeReports,
+    confirmDialogProps,
+    labelFor: taxMonthLabel,
+  } = useDreTaxActions({ year, setData, loadYear, setError, requestSyncMonth });
+  // Sync ou recálculo em andamento: fechar/recarregar a aba pede confirmação.
+  useBeforeUnloadGuard(syncingMonths.size > 0 || taxOperation !== null);
+  // O toast pós-sync (dentro de useDreSync) chama a ação do imposto: ref evita
+  // a dependência circular entre os dois hooks.
+  const runTaxActionRef = useRef(requestTaxAction);
+  useEffect(() => {
+    runTaxActionRef.current = requestTaxAction;
+  }, [requestTaxAction]);
+  /** Último `data` para callbacks que rodam depois de um sync em lote. */
+  const dataRef = useRef(data);
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
 
   useEffect(() => {
     if (skipNextYearFetch.current) {
@@ -469,6 +501,28 @@ export function DreClient({
               message: syncingMonthMessages[month] ?? "Sincronizando…",
             }))}
           onCancel={cancelSyncingMonths}
+        />
+      ) : null}
+      {taxOperation?.kind === "regenerate" ? (
+        <TaxReportGenerationOverlay
+          title={`Recalculando o tributário de ${taxMonthLabel(taxOperation.month)}`}
+          progress={taxOperation.progress}
+          note="Buscando os pedidos no Mercado Livre e recalculando o imposto venda a venda — meses com muitos pedidos levam alguns minutos. No fim, o imposto do DRE do mês é atualizado. Cancelar antes de “Salvando” não altera nada."
+          onCancel={cancelTaxOperation}
+        />
+      ) : taxOperation?.kind === "recompute" ? (
+        <TaxActionOverlay
+          title={
+            taxOperation.months.length > 1
+              ? `Atualizando o cálculo do tributário (${taxOperation.months.indexOf(taxOperation.current) + 1} de ${taxOperation.months.length})`
+              : `Atualizando o cálculo do tributário de ${taxMonthLabel(taxOperation.current)}`
+          }
+          message={`Recalculando ${taxMonthLabel(taxOperation.current)} com as vendas já salvas e atualizando o imposto do DRE — sem buscar nada no Mercado Livre.`}
+        />
+      ) : taxOperation?.kind === "refresh" ? (
+        <TaxActionOverlay
+          title={`Atualizando o imposto de ${taxMonthLabel(taxOperation.month)}`}
+          message="Aplicando o % de cada produto do relatório tributário salvo à receita do mês."
         />
       ) : null}
       <div className="space-y-5 [&_button]:cursor-pointer [&_a]:cursor-pointer [&_[role=button]]:cursor-pointer [&_label]:cursor-pointer">
@@ -744,6 +798,8 @@ export function DreClient({
             syncingMonthMessages={syncingMonthMessages}
             onSyncMonth={requestSyncMonth}
             onReconcileMonth={openReconcile}
+            onTaxAction={requestTaxAction}
+            taxBusyMonths={taxBusyMonths}
             onLineChange={handleLineChange}
             onLineRestore={handleLineRestore}
             onFixedCostChange={handleManualCostChange}
@@ -804,13 +860,37 @@ export function DreClient({
           onChanged={(change) => applyCostItemChange("nonOperationalInItems", change)}
           onError={setError}
         />
+        <TaxRecalcConfirmDialog {...confirmDialogProps} />
         <DreProductCostLevelingModal
           open={activeModal === "leveling"}
           year={year}
           onClose={() => setActiveModal(null)}
           onError={setError}
           onSyncAffectedMonths={(months) => {
-            void syncAffectedMonths(months);
+            void (async () => {
+              await syncAffectedMonths(months);
+              // O nivelamento também muda o % de imposto do tributário
+              // (créditos da compra). Recalcular é só banco, e o imposto do
+              // DRE acompanha.
+              const withReport = months.filter((month) =>
+                Boolean(
+                  dataRef.current?.months.find((row) => row.month === month)
+                    ?.taxStatus?.report,
+                ),
+              );
+              if (withReport.length === 0) return;
+              toast("O nivelamento também muda o imposto do tributário.", {
+                description:
+                  withReport.length === 1
+                    ? "Atualizar o cálculo do mês afetado — sem buscar nada no Mercado Livre; o imposto do DRE acompanha."
+                    : `Atualizar o cálculo dos ${withReport.length} meses afetados — sem buscar nada no Mercado Livre; o imposto do DRE acompanha.`,
+                action: {
+                  label: "Ver e atualizar",
+                  onClick: () => requestRecomputeReports(withReport),
+                },
+                duration: 15_000,
+              });
+            })();
           }}
         />
 

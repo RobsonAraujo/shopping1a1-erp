@@ -38,6 +38,7 @@ const API_ERROR_MESSAGES: Record<string, string> = {
   dre_reconciliation_review_failed: "Não foi possível carregar a conciliação salva.",
   dre_reconciliation_confirm_failed: "Não foi possível conciliar o mês.",
   dre_reconciliation_discard_failed: "Não foi possível descartar a conciliação.",
+  dre_tax_refresh_failed: "Não foi possível atualizar o imposto do mês.",
   products_load_failed: "Não foi possível carregar os produtos.",
   product_load_failed: "Não foi possível carregar o produto.",
   product_create_failed: "Não foi possível criar o produto.",

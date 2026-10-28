@@ -25,7 +25,8 @@
       "Bash(cd \"/Users/robsonaraujocarmo/Documents/Robson - Repos/shopping Um a Um/shopping1a1-erp\" && rm src/components/home/DashboardAttentionPanel.tsx src/components/home/DashboardAttentionPurchasePanel.tsx src/components/home/AttentionPanelCollapseToggle.tsx src/components/compras/SupplierGroupHeader.tsx && git status --short | head -20)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/dre-mercado-livre)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(node --env-file=.env --experimental-test-module-mocks --import tsx --import ./src/test-setup/jsdom-setup.ts --test src/hooks/__tests__/use-before-unload-guard.test.tsx)"
     ],
     "additionalDirectories": [
       "/Users/robsonaraujocarmo/Documents/Robson - Repos/shopping Um a Um/shopping1a1-erp/src/components/home"

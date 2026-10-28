@@ -183,6 +183,11 @@ export function consolidarRelatorio(
   const margemOperacional = roundMoney(
     faturamento - cmvTotal - impostosOperacionais,
   );
+  const faturamentoSemDadosFiscais = roundMoney(
+    excluidas
+      .filter((t) => t.transacao.dadosFiscaisIndisponiveis)
+      .reduce((s, t) => s + t.transacao.receitaBruta, 0),
+  );
 
   return {
     faturamento,
@@ -195,6 +200,9 @@ export function consolidarRelatorio(
     creditoCustosFixosBaseRegistrada,
     creditoCustosFixosBaseCreditavel,
     icmsDifalTotal,
+    icmsCreditoCompraTotal,
+    impostoOperacionalTotal: impostosOperacionais,
+    faturamentoSemDadosFiscais,
     cbsIbsInformativoTotal,
     margemOperacional,
     transacoesIncluidas: incluidas.length,

@@ -219,6 +219,30 @@ export function resolveLevelingCostForOrderDate(
   year: number,
   month: number,
 ): number | null {
+  return (
+    findLevelingForOrderDate(levelings, mlItemId, sku, orderDateYmd, year, month)
+      ?.pricingCost ?? null
+  );
+}
+
+/**
+ * O nivelamento que vale para o pedido — mesma regra de casamento de
+ * `resolveLevelingCostForOrderDate`, devolvendo o registro inteiro (o
+ * relatório tributário usa o histórico completo do cadastro, não só o custo).
+ */
+export function findLevelingForOrderDate<
+  T extends Pick<
+    DreProductCostLevelingPricing,
+    "sku" | "productMlItemId" | "startDate" | "endDate"
+  >,
+>(
+  levelings: readonly T[],
+  mlItemId: string | null,
+  sku: string,
+  orderDateYmd: string | null,
+  year: number,
+  month: number,
+): T | null {
   const key = normalizeProductSku(sku);
   const matches = levelings.filter((row) =>
     mlItemId && row.productMlItemId
@@ -228,18 +252,30 @@ export function resolveLevelingCostForOrderDate(
   if (matches.length === 0) return null;
 
   if (orderDateYmd && isValidYmd(orderDateYmd)) {
-    const hit = matches.find(
-      (row) => orderDateYmd >= row.startDate && orderDateYmd <= row.endDate,
+    return (
+      matches.find(
+        (row) => orderDateYmd >= row.startDate && orderDateYmd <= row.endDate,
+      ) ?? null
     );
-    return hit?.pricingCost ?? null;
   }
 
   const monthBounds = civilMonthBounds(year, month);
-  const hit = matches.find((row) =>
-    dateRangesOverlap(row, monthBounds),
-  );
-  return hit?.pricingCost ?? null;
+  return matches.find((row) => dateRangesOverlap(row, monthBounds)) ?? null;
 }
+
+/** Nivelamento com o histórico completo do cadastro — usado pelo relatório tributário. */
+export type DreProductCostLevelingRecord = DreProductCostLevelingPricing & {
+  hasIcmsSt: boolean;
+  unitCostNf: number;
+  purchaseCostWithSt: number | null;
+  ipiPercent: number;
+  /** null = não informado no nivelamento (registro antigo): vale o cadastro atual. */
+  purchaseIcmsPercent: number | null;
+  extraCosts: number | null;
+  isMonophasic: boolean | null;
+  isImported: boolean | null;
+  saleIcmsPercent: number | null;
+};
 
 /**
  * Monta um mapa de pricing com overrides de nivelamento para a data do pedido.

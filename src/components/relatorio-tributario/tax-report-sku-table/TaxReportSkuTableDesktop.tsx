@@ -9,6 +9,7 @@ import { formatFinancialMoney, formatFinancialPercent } from "@/lib/pricing/fina
 import {
   skuImpostoOperacionalMedio,
   skuImpostoOperacionalPercentual,
+  skuImpostoOperacionalTotal,
 } from "@/lib/tax-report/imposto-operacional";
 import type { TaxReportSkuTableProps } from "@/components/relatorio-tributario/tax-report-sku-table/types";
 
@@ -116,7 +117,41 @@ export function TaxReportSkuTableDesktop({
             ))
           )}
         </tbody>
+        {rows.length > 0 ? <TaxReportSkuTotalRow rows={rows} searchQuery={searchQuery} /> : null}
       </table>
     </div>
+  );
+}
+
+/**
+ * Total das linhas da tabela — o % é a média ponderada pelo valor das vendas
+ * (imposto ÷ receita), o mesmo do "Imposto do mês" quando não há filtro.
+ */
+function TaxReportSkuTotalRow({
+  rows,
+  searchQuery,
+}: Pick<TaxReportSkuTableProps, "rows" | "searchQuery">) {
+  const vendas = rows.reduce((sum, row) => sum + row.quantidadeVendas, 0);
+  const unidades = rows.reduce((sum, row) => sum + row.unidadesVendidas, 0);
+  const receita = rows.reduce((sum, row) => sum + row.receitaTotal, 0);
+  const imposto = rows.reduce((sum, row) => sum + skuImpostoOperacionalTotal(row), 0);
+  return (
+    <tfoot>
+      <tr className="border-t-2 border-[var(--border)] font-semibold">
+        <td className="py-2 pr-3">Total{searchQuery.trim() ? " (filtrado)" : ""}</td>
+        <td className="py-2 pr-3 text-right tabular-nums">{vendas}</td>
+        <td className="py-2 pr-3 text-right tabular-nums">{unidades}</td>
+        <td className="py-2 pr-3 text-right tabular-nums">
+          {formatFinancialMoney(receita)}
+        </td>
+        <td className="py-2 pr-3 text-right tabular-nums">
+          {formatFinancialMoney(vendas > 0 ? imposto / vendas : null)}
+        </td>
+        <td className="py-2 pr-3 text-right tabular-nums">
+          {formatFinancialPercent(receita > 0 ? (imposto / receita) * 100 : null)}
+        </td>
+        <td className="py-2" aria-hidden />
+      </tr>
+    </tfoot>
   );
 }

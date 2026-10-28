@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { lineAuditNote } from "@/components/dre/DreYearTableShared";
 import {
   getYearLineBreakdown,
   getYearProductCostBreakdown,
   getYearTaxBreakdown,
+  type DreEditableLineKey,
   type DreLineBreakdownItem,
 } from "@/lib/dre/dre-calculations";
 import type { DreMonthView, DreYearView } from "@/lib/dre/dre-year-data";
@@ -47,6 +49,25 @@ const ROW_ID_TO_AUDIT_KIND: Partial<Record<DreStaticRowId, AuditKind>> = {
   fullNonComplianceMl: "fullNonCompliance",
   minhaPaginaMl: "minhaPagina",
   affiliateFeeMl: "affiliateFee",
+};
+
+/** Linha do snapshot que cada auditoria explica. */
+const AUDIT_KIND_TO_LINE_KEY: Record<AuditKind, DreEditableLineKey> = {
+  productCost: "productCostErp",
+  tax: "taxErp",
+  revenue: "revenueMl",
+  cancelledSales: "cancelledSalesMl",
+  saleFee: "saleFeeMl",
+  sellerShipping: "sellerShippingMl",
+  adsCost: "adsCost",
+  partialReturns: "partialReturnsMl",
+  returnFee: "returnFeeMl",
+  specialFees: "specialFeesMl",
+  fullShipping: "fullShippingMl",
+  fullStorage: "fullStorageMl",
+  fullNonCompliance: "fullNonComplianceMl",
+  minhaPagina: "minhaPaginaMl",
+  affiliateFee: "affiliateFeeMl",
 };
 
 export function getAuditKindForRow(row: DreTableRow): AuditKind | null {
@@ -265,6 +286,18 @@ export function useDreAuditTarget(data: DreYearView) {
     data.year,
     auditTarget,
   );
+  const auditMonth =
+    auditTarget !== null && auditTarget.period !== "year"
+      ? (data.months.find((m) => m.month === auditTarget.period) ?? null)
+      : null;
+  /** Nota de conferência (valor mantido do sync anterior / lista ≠ linha). */
+  const auditNote =
+    auditTarget !== null
+      ? lineAuditNote(auditMonth, AUDIT_KIND_TO_LINE_KEY[auditTarget.kind])
+      : null;
+  /** Versão do tributário usada no imposto do mês (conta de conferência). */
+  const taxAuditSource =
+    auditTarget?.kind === "tax" ? (auditMonth?.taxSource ?? null) : null;
 
   return {
     auditTarget,
@@ -275,5 +308,7 @@ export function useDreAuditTarget(data: DreYearView) {
     lineAuditState,
     lineAuditText,
     specialFeesExternalLink,
+    auditNote,
+    taxAuditSource,
   };
 }

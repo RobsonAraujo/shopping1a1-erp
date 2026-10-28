@@ -5,6 +5,10 @@ import { toast } from "sonner";
 import { consumeSSEStream } from "@/hooks/use-sse-stream";
 import { formatApiErrorMessage, readApiError } from "@/lib/api/api-client-error";
 import { dreEditableLineLabel } from "@/lib/dre/dre-table-rows";
+import {
+  monthTaxStatusMessage,
+  type DreTaxAction,
+} from "@/components/dre/DreYearTableShared";
 import type { DreEditableLineKey } from "@/lib/dre/dre-calculations";
 import type { DreMonthView, DreYearView } from "@/lib/dre/dre-year-data";
 import type { DreSyncProgressPhase } from "@/lib/dre/dre-month-data";
@@ -95,6 +99,7 @@ export function useDreSync({
   loadYear,
   setError,
   onRequestReconcile,
+  onRequestTaxAction,
 }: {
   year: number;
   data: DreYearView | null;
@@ -106,6 +111,8 @@ export function useDreSync({
   setError: (message: string | null) => void;
   /** Abre a conciliação do mês (ação do toast pós-sync). */
   onRequestReconcile: (month: number) => void;
+  /** Resolve o imposto do mês (ação do toast pós-sync: recalcular tributário…). */
+  onRequestTaxAction?: (month: number, action: DreTaxAction) => void;
 }) {
   const [syncingMonths, setSyncingMonths] = useState<Set<number>>(new Set());
   const [syncingMonthMessages, setSyncingMonthMessages] = useState<
@@ -120,6 +127,8 @@ export function useDreSync({
   const [keepReconciliation, setKeepReconciliation] = useState(true);
   /** Um AbortController por mês em sincronização (sync-affected roda concorrência 2). */
   const syncControllersRef = useRef<Map<number, AbortController>>(new Map());
+  /** "Sincronizar de novo" do toast pós-sync (declarado depois de `syncMonth`). */
+  const requestSyncRef = useRef<((month: number) => void) | null>(null);
 
   const syncAdjustments = useMemo(
     () =>
@@ -253,6 +262,43 @@ export function useDreSync({
                   },
                 });
               }
+              // Linha que veio zerada fora do padrão: quase sempre falha da
+              // API do ML — sincronizar de novo costuma resolver.
+              if (row && row.zeroLineAnomalies.length > 0) {
+                toast.warning(
+                  `${row.zeroLineAnomalies
+                    .map((anomaly) => dreEditableLineLabel(anomaly.lineKey))
+                    .join(", ")} veio zerada em ${label} — fora do padrão dos outros meses.`,
+                  {
+                    description: "Pode ser falha da API do Mercado Livre.",
+                    action: {
+                      label: "Sincronizar de novo",
+                      onClick: () => requestSyncRef.current?.(month),
+                    },
+                    duration: 15_000,
+                  },
+                );
+              }
+              // Tributário do mês fora de dia (ex.: atualizado antes do
+              // fechamento): o imposto do DRE herdaria o problema.
+              const taxMessage = row
+                ? monthTaxStatusMessage(row, event.yearView.year)
+                : null;
+              if (
+                taxMessage?.action &&
+                taxMessage.action !== "refresh" &&
+                taxMessage.action !== "sync" &&
+                onRequestTaxAction
+              ) {
+                const action = taxMessage.action;
+                toast.warning(taxMessage.text, {
+                  action: {
+                    label: taxMessage.actionLabel ?? "Resolver",
+                    onClick: () => onRequestTaxAction(month, action),
+                  },
+                  duration: 15_000,
+                });
+              }
             }
           }
         });
@@ -284,7 +330,14 @@ export function useDreSync({
         });
       }
     },
-    [year, setData, setSessionAdjustedByMonth, setError, onRequestReconcile],
+    [
+      year,
+      setData,
+      setSessionAdjustedByMonth,
+      setError,
+      onRequestReconcile,
+      onRequestTaxAction,
+    ],
   );
 
   const cancelSyncingMonths = useCallback(() => {
@@ -312,6 +365,9 @@ export function useDreSync({
     },
     [year, monthHasSnapshot, syncMonth],
   );
+  useEffect(() => {
+    requestSyncRef.current = requestSyncMonth;
+  }, [requestSyncMonth]);
 
   /**
    * Re-sync após nivelamento: atualiza Custo produto sem preservar edições

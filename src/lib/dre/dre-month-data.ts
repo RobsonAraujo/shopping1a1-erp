@@ -11,23 +11,39 @@ import {
   mergeLineBreakdowns,
   mergeProductCostBreakdowns,
   mergeSyncedSnapshot,
-  mergeTaxBreakdowns,
   productCostAuditKey,
   type DreCancelledIncludeOverlay,
   type DreEditableLineKey,
+  type DreKeptFromPrevious,
+  type DreLineAuditMismatch,
   type DreLineBreakdownItem,
   type DreMonthReconciliation,
   type DreMonthSnapshotPayload,
   type DreProductCostBreakdownItem,
   type DreTaxBreakdownItem,
+  type DreTaxRateSource,
+  type DreTaxSource,
   type MergeSyncedSnapshotOptions,
 } from "@/lib/dre/dre-calculations";
+import { checkLineAuditConsistency } from "@/lib/dre/dre-line-audit";
+import {
+  buildDreTaxSource,
+  computeDreSalesTax,
+  taxLinesFromBreakdown,
+  type DreTaxLine,
+  type DreTaxLineKind,
+  type DreTaxRates,
+} from "@/lib/dre/dre-sales-tax";
+import { loadDreTaxRates } from "@/lib/dre/dre-sales-tax-data";
 import { loadProductsMapBySku } from "@/lib/products/product-data";
 import { resolveEffectiveSkuByItemId } from "@/lib/products/product-resolver";
-import { loadProductTaxFromLatestReport } from "@/lib/products/product-tax-from-report";
 import { roundMoney } from "@/lib/pricing/financial-margin";
 import { getItemSku, isKitItem } from "@/lib/mercadolibre/item-sku";
-import { loadKitsByMlItemId, resolveKitPricing } from "@/lib/products/kit-data";
+import {
+  loadKitsByMlItemId,
+  resolveKitPricing,
+  type KitComponent,
+} from "@/lib/products/kit-data";
 import {
   normalizeProductSku,
   type ResolvedProductPricing,
@@ -36,6 +52,7 @@ import {
   applyLevelingsForOrderDate,
   loadLevelingsOverlappingMonth,
   resolveLevelingCostForOrderDate,
+  type DreProductCostLevelingPricing,
 } from "@/lib/dre/dre-product-cost-leveling";
 import {
   fetchCancelledOrderLinesInDateRange,
@@ -45,7 +62,10 @@ import {
   splitOrderLinesByCancelledOrderIds,
   returnedPaidOrderIdsFromOrders,
   orderIdentityKeys,
+  type PaidOrderLine,
 } from "@/lib/mercadolibre/api";
+import type { ItemBody } from "@/lib/mercadolibre/types";
+import type { TaxReportPayload } from "@/lib/tax-report/types";
 import {
   fetchMlBillingSummaryForMonth,
   isBillingSummaryEmpty,
@@ -101,30 +121,54 @@ export type BuildDreMonthSnapshotOptions = {
   fullDetailsCache?: FullBillingDetailsCache;
 };
 
-async function computeErpCostsFromOrderLines(
+/**
+ * Busca anúncios no ML uma vez por sync. Antes o mesmo anúncio era pedido até
+ * 3× (custo dos pedidos pagos, dos cancelados e estimativa de tarifas).
+ */
+async function fetchItemsWithCache(
   accessToken: string,
-  sellerId: number,
-  organizationId: string,
-  orderLines: Array<{
-    itemId: string;
-    quantity: number;
-    revenue: number;
-    orderDateYmd?: string | null;
-  }>,
-  year: number,
-  month: number,
-): Promise<{
-  productCostErp: number;
-  taxErp: number;
-  incompleteProductCostCount: number;
-  missingTaxCount: number;
-  taxFromDifferentPeriodCount: number;
-  breakdown: DreProductCostBreakdownItem[];
-  taxBreakdown: DreTaxBreakdownItem[];
-  revenueBreakdown: DreLineBreakdownItem[];
-}> {
-  const itemIds = [...new Set(orderLines.map((line) => line.itemId))];
-  const items = await fetchItemsByIdsBatched(accessToken, itemIds);
+  ids: readonly string[],
+  cache: Map<string, ItemBody>,
+): Promise<ItemBody[]> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  const missing = unique.filter((id) => !cache.has(id));
+  if (missing.length > 0) {
+    const fetched = await fetchItemsByIdsBatched(accessToken, missing);
+    for (const item of fetched) cache.set(item.id, item);
+  }
+  return unique
+    .map((id) => cache.get(id))
+    .filter((item): item is ItemBody => item !== undefined);
+}
+
+/**
+ * Tudo que custo e imposto das linhas de pedido precisam — carregado uma vez
+ * por sync para pedidos pagos, cancelados e devolvidos juntos.
+ */
+type ErpCostContext = {
+  itemById: Map<string, ItemBody>;
+  skuByItemId: Map<string, string | null>;
+  kitsByMlItemId: Map<string, KitComponent[]>;
+  pricingByMlItemIdBase: Map<string, ResolvedProductPricing>;
+  pricingBySkuBase: Map<string, ResolvedProductPricing>;
+  levelings: DreProductCostLevelingPricing[];
+  taxRates: DreTaxRates;
+  /** % por SKU — componente de kit só tem SKU. */
+  kitTaxRateBySku: Map<string, number>;
+};
+
+async function loadErpCostContext(input: {
+  accessToken: string;
+  sellerId: number;
+  organizationId: string;
+  itemIds: readonly string[];
+  year: number;
+  month: number;
+  itemCache: Map<string, ItemBody>;
+}): Promise<ErpCostContext> {
+  const { accessToken, sellerId, organizationId, year, month } = input;
+  const itemIds = [...new Set(input.itemIds)];
+  const items = await fetchItemsWithCache(accessToken, itemIds, input.itemCache);
   const itemById = new Map(items.map((item) => [item.id, item]));
   // SKU "efetivo": segue o cadastro do Product vinculado ao anúncio via
   // mlItemId quando existe (estável mesmo se o SKU mudar no anúncio ML);
@@ -144,25 +188,63 @@ async function computeErpCostsFromOrderLines(
     .filter((sku): sku is string => Boolean(sku))
     .map((sku) => normalizeProductSku(sku))
     .concat(kitComponentSkus);
-  const [pricingLookup, taxFromReport, levelings] = await Promise.all([
+  const [pricingLookup, taxRates, levelings] = await Promise.all([
     loadProductsMapBySku(organizationId, skus, itemIds),
-    loadProductTaxFromLatestReport(sellerId, undefined, { year, month }),
+    loadDreTaxRates(organizationId, sellerId, year, month),
     loadLevelingsOverlappingMonth(organizationId, year, month),
   ]);
-  const { byMlItemId: pricingByMlItemIdBase, bySku: pricingBySkuBase } = pricingLookup;
-  const taxPercentBySku = new Map(
-    [...taxFromReport.bySku].map(([sku, entry]) => [sku, entry.taxPercent]),
-  );
+  return {
+    itemById,
+    skuByItemId,
+    kitsByMlItemId,
+    pricingByMlItemIdBase: pricingLookup.byMlItemId,
+    pricingBySkuBase: pricingLookup.bySku,
+    levelings,
+    taxRates,
+    kitTaxRateBySku: new Map(
+      [...taxRates.bySku].map(([sku, entry]) => [sku, entry.ratePercent]),
+    ),
+  };
+}
 
-  let productCostErp = 0;
-  let taxErp = 0;
-  let incompleteProductCostCount = 0;
-  const missingItems = new Set<string>();
-  const missingTaxItems = new Set<string>();
-  const differentPeriodTaxItems = new Set<string>();
+type ErpLineCosts = {
+  /** Soma positiva do custo das linhas com custo conhecido. */
+  productCost: number;
+  /** Anúncios sem custo cadastrado (nem nivelamento, nem kit completo). */
+  incompleteItemIds: Set<string>;
+  breakdown: DreProductCostBreakdownItem[];
+  revenueBreakdown: DreLineBreakdownItem[];
+  /** Entrada do imposto: uma por linha, com ou sem custo cadastrado. */
+  taxLines: DreTaxLine[];
+};
+
+/**
+ * Custo produto (cadastro, nivelamento ou kit) e as linhas do imposto de um
+ * grupo de pedidos. O imposto não depende de custo: antes, anúncio sem custo
+ * cadastrado ficava com imposto 0 mesmo tendo % no relatório tributário.
+ */
+function computeErpCostsForLines(
+  context: ErpCostContext,
+  orderLines: readonly PaidOrderLine[],
+  kind: DreTaxLineKind,
+  year: number,
+  month: number,
+): ErpLineCosts {
+  const {
+    itemById,
+    skuByItemId,
+    kitsByMlItemId,
+    pricingByMlItemIdBase,
+    pricingBySkuBase,
+    levelings,
+    kitTaxRateBySku,
+  } = context;
+
+  let productCost = 0;
+  const incompleteItemIds = new Set<string>();
   const breakdownByKey = new Map<string, DreProductCostBreakdownItem>();
-  const taxBreakdownByKey = new Map<string, DreTaxBreakdownItem>();
   const revenueBreakdownByKey = new Map<string, DreLineBreakdownItem>();
+  const taxLines: DreTaxLine[] = [];
 
   function addToRevenueBreakdown(
     key: string,
@@ -220,39 +302,6 @@ async function computeErpCostsFromOrderLines(
     });
   }
 
-  function addToTaxBreakdown(
-    key: string,
-    sku: string | null,
-    title: string,
-    quantity: number,
-    revenue: number,
-    tax: number,
-    missingTax: boolean,
-  ) {
-    const existing = taxBreakdownByKey.get(key);
-    if (existing) {
-      existing.quantity += quantity;
-      existing.revenue = roundMoney(existing.revenue + revenue);
-      existing.totalTax = roundMoney(existing.totalTax + tax);
-      existing.taxPercent =
-        existing.revenue > 0
-          ? roundMoney((existing.totalTax / existing.revenue) * 100)
-          : null;
-      existing.missingTax = existing.missingTax || missingTax;
-      return;
-    }
-    taxBreakdownByKey.set(key, {
-      key,
-      sku,
-      title,
-      quantity,
-      revenue: roundMoney(revenue),
-      taxPercent: revenue > 0 ? roundMoney((tax / revenue) * 100) : null,
-      totalTax: roundMoney(tax),
-      missingTax,
-    });
-  }
-
   for (const line of orderLines) {
     const sku = skuByItemId.get(line.itemId);
     const normalizedSku = sku ? normalizeProductSku(sku) : "";
@@ -287,14 +336,17 @@ async function computeErpCostsFromOrderLines(
         }
       : (pricingBaseForItem ??
         (normalizedSku ? pricingBySkuBase.get(normalizedSku) : undefined));
-    const taxEntry =
-      taxFromReport.byMlItemId.get(line.itemId) ??
-      (normalizedSku ? (taxFromReport.bySku.get(normalizedSku) ?? null) : null);
-    const taxPercent = taxEntry?.taxPercent ?? null;
     const item = itemById.get(line.itemId);
     const title = item?.title ?? line.itemId;
-
     const identityKey = breakdownIdentityKey(line.itemId, sku ?? null);
+    const taxLineBase = {
+      itemId: line.itemId,
+      sku: sku ?? null,
+      title,
+      quantity: line.quantity,
+      revenue: line.revenue,
+      kind,
+    };
 
     addToRevenueBreakdown(
       identityKey,
@@ -306,7 +358,7 @@ async function computeErpCostsFromOrderLines(
 
     if (pricing) {
       const cost = line.quantity * pricing.pricingCost;
-      productCostErp += cost;
+      productCost += cost;
       addToBreakdown(
         identityKey,
         sku ?? null,
@@ -316,34 +368,7 @@ async function computeErpCostsFromOrderLines(
         false,
         isLeveledForItem,
       );
-      if (taxPercent !== null && taxPercent > 0 && line.revenue > 0) {
-        const tax = line.revenue * (taxPercent / 100);
-        taxErp += tax;
-        addToTaxBreakdown(
-          identityKey,
-          sku ?? null,
-          title,
-          line.quantity,
-          line.revenue,
-          tax,
-          false,
-        );
-      } else {
-        addToTaxBreakdown(
-          identityKey,
-          sku ?? null,
-          title,
-          line.quantity,
-          line.revenue,
-          0,
-          taxEntry === null,
-        );
-      }
-      if (taxEntry === null) {
-        missingTaxItems.add(line.itemId);
-      } else if (taxEntry.year !== year || taxEntry.month !== month) {
-        differentPeriodTaxItems.add(line.itemId);
-      }
+      taxLines.push({ ...taxLineBase, key: identityKey });
       continue;
     }
 
@@ -352,11 +377,19 @@ async function computeErpCostsFromOrderLines(
       const resolved = resolveKitPricing(
         kitComponents,
         pricingBySku,
-        taxPercentBySku,
+        kitTaxRateBySku,
       );
+      // O % do kit vem primeiro do próprio anúncio no relatório tributário;
+      // a média dos componentes só entra quando o kit não tem % próprio.
+      taxLines.push({
+        ...taxLineBase,
+        key: `kit:${item.id}`,
+        sku: null,
+        kitComponentsRatePercent: resolved.taxRatePercent,
+      });
       if (resolved.missingSkus.length === 0) {
         const cost = line.quantity * resolved.productCost;
-        productCostErp += cost;
+        productCost += cost;
         const kitLeveled = kitComponents.some((c) =>
           leveledSkus.has(normalizeProductSku(c.sku)),
         );
@@ -369,32 +402,10 @@ async function computeErpCostsFromOrderLines(
           false,
           kitLeveled,
         );
-        if (resolved.taxRatePercent !== null && line.revenue > 0) {
-          const tax = line.revenue * (resolved.taxRatePercent / 100);
-          taxErp += tax;
-          addToTaxBreakdown(
-            `kit:${item.id}`,
-            null,
-            title,
-            line.quantity,
-            line.revenue,
-            tax,
-            false,
-          );
-        } else {
-          addToTaxBreakdown(
-            `kit:${item.id}`,
-            null,
-            title,
-            line.quantity,
-            line.revenue,
-            0,
-            true,
-          );
-          missingTaxItems.add(line.itemId);
-        }
         continue;
       }
+    } else {
+      taxLines.push({ ...taxLineBase, key: identityKey });
     }
 
     addToBreakdown(
@@ -405,49 +416,37 @@ async function computeErpCostsFromOrderLines(
       0,
       true,
     );
-    addToTaxBreakdown(
-      `missing:${line.itemId}`,
-      sku ?? null,
-      title,
-      line.quantity,
-      line.revenue,
-      0,
-      true,
-    );
-    missingItems.add(line.itemId);
+    incompleteItemIds.add(line.itemId);
   }
 
-  incompleteProductCostCount = missingItems.size;
-
   return {
-    productCostErp: roundMoney(-Math.max(0, productCostErp)),
-    taxErp: roundMoney(-Math.max(0, taxErp)),
-    incompleteProductCostCount,
-    missingTaxCount: missingTaxItems.size,
-    taxFromDifferentPeriodCount: differentPeriodTaxItems.size,
+    productCost,
+    incompleteItemIds,
     breakdown: [...breakdownByKey.values()].sort(
       (a, b) => b.totalCost - a.totalCost,
-    ),
-    taxBreakdown: [...taxBreakdownByKey.values()].sort(
-      (a, b) => b.totalTax - a.totalTax,
     ),
     revenueBreakdown: [...revenueBreakdownByKey.values()].sort(
       (a, b) => b.amount - a.amount,
     ),
+    taxLines,
   };
 }
 
+/**
+ * Tarifa e frete estimados pelos pedidos quando a fatura não serve. Canceladas
+ * não sai daqui: a linha vem dos mesmos pedidos que a auditoria lista (ver
+ * `buildDreMonthSnapshot`) — antes era uma segunda busca no ML, e quando só uma
+ * das duas voltava vazia a linha zerava com a auditoria cheia.
+ */
 async function estimateMlCostsFallback(
   accessToken: string,
   sellerId: number,
   organizationId: string,
-  from: Date,
-  to: Date,
   orderLines: Array<{ itemId: string; quantity: number; revenue: number }>,
+  itemCache: Map<string, ItemBody>,
 ): Promise<{
   saleFeeMl: number;
   sellerShippingMl: number;
-  cancelledSalesMl: number;
   partialReturnsMl: number;
   fullShippingMl: number;
   fullStorageMl: number;
@@ -455,19 +454,8 @@ async function estimateMlCostsFallback(
   saleFeeBreakdown: DreLineBreakdownItem[];
   sellerShippingBreakdown: DreLineBreakdownItem[];
 }> {
-  const cancelledLines = await fetchCancelledOrderLinesInDateRange(
-    accessToken,
-    sellerId,
-    from,
-    to,
-    stockPlanningConfig.salesWindowDateField,
-  );
-  const cancelledRevenue = roundMoney(
-    cancelledLines.reduce((sum, line) => sum + line.revenue, 0),
-  );
-
   const itemIds = [...new Set(orderLines.map((line) => line.itemId))];
-  const items = await fetchItemsByIdsBatched(accessToken, itemIds);
+  const items = await fetchItemsWithCache(accessToken, itemIds, itemCache);
   const itemById = new Map(items.map((item) => [item.id, item]));
   const skuByItemId = await resolveEffectiveSkuByItemId(
     organizationId,
@@ -621,7 +609,6 @@ async function estimateMlCostsFallback(
   return {
     saleFeeMl: roundMoney(-Math.max(0, saleFeeTotal)),
     sellerShippingMl: roundMoney(-Math.max(0, shippingTotal)),
-    cancelledSalesMl: roundMoney(-Math.max(0, cancelledRevenue)),
     partialReturnsMl: 0,
     fullShippingMl: 0,
     fullStorageMl: 0,
@@ -660,8 +647,60 @@ async function fetchOrderDataForRange(
     orderLines.reduce((sum, line) => sum + line.revenue, 0),
   );
 
-  return { orderLines, revenueMl, orderIds, returnedByTagIds };
+  return {
+    orderLines,
+    revenueMl,
+    orderIds,
+    returnedByTagIds,
+    paidOrderCount: orders.length,
+  };
 }
+
+/**
+ * Pedidos cancelados do mês — uma busca só, que alimenta a linha Canceladas e
+ * a auditoria dela. A busca do ML às vezes volta vazia sem erro; com vendas no
+ * mês isso é suspeito, então tenta mais uma vez. `failed` = não deu para saber
+ * (erro nas duas tentativas): a linha mantém o valor do sync anterior.
+ */
+async function fetchCancelledLinesForMonth(
+  accessToken: string,
+  sellerId: number,
+  range: CalendarDateRange,
+): Promise<{ lines: PaidOrderLine[]; failed: boolean }> {
+  try {
+    const lines = await fetchCancelledOrderLinesInDateRange(
+      accessToken,
+      sellerId,
+      range.from,
+      range.to,
+      stockPlanningConfig.salesWindowDateField,
+    );
+    return { lines, failed: false };
+  } catch (error) {
+    logServerError("dre-month-data cancelled orders", error);
+    return { lines: [], failed: true };
+  }
+}
+
+/** Linhas que só a fatura do ML traz — a estimativa pelos pedidos devolve 0 fixo nelas. */
+const BILLING_ONLY_LINE_KEYS: DreEditableLineKey[] = [
+  "partialReturnsMl",
+  "returnFeeMl",
+  "specialFeesMl",
+  "fullStorageMl",
+  "minhaPaginaMl",
+  "affiliateFeeMl",
+];
+
+export type DreMonthSyncResult = {
+  payload: DreMonthSnapshotPayload;
+  /**
+   * Linhas cuja fonte não respondeu neste sync (fatura fora do ar, ADS além
+   * dos 90 dias da API, pedidos cancelados com erro). Fonte indisponível não é
+   * zero: `persistDreMonthSnapshot` mantém o valor sincronizado anterior delas.
+   */
+  unavailableLineKeys: DreEditableLineKey[];
+};
 
 export async function buildDreMonthSnapshot(
   accessToken: string,
@@ -670,10 +709,12 @@ export async function buildDreMonthSnapshot(
   year: number,
   month: number,
   options: BuildDreMonthSnapshotOptions = {},
-): Promise<DreMonthSnapshotPayload> {
+): Promise<DreMonthSyncResult> {
   const timeZone = reportsConfig.catalogCompetitionTimezone;
   const calendarRange = getCalendarMonthRange(year, month, timeZone);
   const syncWarnings: string[] = [];
+  const unavailableLineKeys = new Set<DreEditableLineKey>();
+  const itemCache = new Map<string, ItemBody>();
   const fullDetailsCache =
     options.fullDetailsCache ?? createFullBillingDetailsCache();
   const report = (progress: DreSyncProgress) => {
@@ -682,7 +723,7 @@ export async function buildDreMonthSnapshot(
 
   report({ phase: "billing", message: "Buscando fatura e pedidos do ML…" });
 
-  const [billingResult, orderResult] = await Promise.all([
+  const [billingResult, orderResult, firstCancelledFetch] = await Promise.all([
     (async () => {
       try {
         // Popula fullDetailsCache com /full/details do mês — reutilizado no
@@ -699,12 +740,35 @@ export async function buildDreMonthSnapshot(
       }
     })(),
     fetchOrderDataForRange(accessToken, sellerId, calendarRange),
+    fetchCancelledLinesForMonth(accessToken, sellerId, calendarRange),
   ]);
 
   const billing = billingResult;
-  const { orderLines, revenueMl: ordersRevenueMl, orderIds, returnedByTagIds } =
-    orderResult;
+  const {
+    orderLines,
+    revenueMl: ordersRevenueMl,
+    orderIds,
+    returnedByTagIds,
+    paidOrderCount,
+  } = orderResult;
   const revenueMl = ordersRevenueMl;
+
+  // A busca de cancelados às vezes volta vazia sem erro. Com vendas no mês
+  // isso é suspeito (ou deu erro): mais uma tentativa antes de aceitar.
+  let cancelledFetch = firstCancelledFetch;
+  if (
+    cancelledFetch.failed ||
+    (cancelledFetch.lines.length === 0 && revenueMl > 0)
+  ) {
+    const retry = await fetchCancelledLinesForMonth(
+      accessToken,
+      sellerId,
+      calendarRange,
+    );
+    if (!retry.failed) cancelledFetch = retry;
+  }
+  const cancelledLines = cancelledFetch.lines;
+  const cancelledFetchFailed = cancelledFetch.failed;
 
   const billingAlignsWithCivil =
     billing?.billingPeriod !== null &&
@@ -725,86 +789,103 @@ export async function buildDreMonthSnapshot(
 
   report({ phase: "ads", message: "Carregando ADS e custos ERP…" });
 
-  const adsPromise = (async () => {
-      let adsCost = 0;
-      let adsCostBreakdown: DreLineBreakdownItem[] | undefined;
-      try {
-        const advertiserId = await fetchPadsAdvertiserId(accessToken);
-        if (advertiserId !== null) {
-          const { dateFrom, dateTo } = getProductAdsDateRangeForMonth(
-            year,
-            month,
-          );
-          if (!isProductAdsMetricsRangeAvailable(dateFrom)) {
-            if (billing && billing.adsCost > 0 && billingAlignsWithCivil) {
-              adsCost = billing.adsCost;
-              adsCostBreakdown = undefined;
-            } else {
-              syncWarnings.push(
-                "Campanhas ADS: a API do ML só cobre os últimos 90 dias; neste mês o detalhe por anúncio não está disponível.",
-              );
-            }
-            return { adsCost, adsCostBreakdown };
-          }
-          const adsMetrics = await fetchProductAdsMetricsByItem(accessToken, {
-            advertiserId,
-            siteId: "MLB",
-            dateFrom,
-            dateTo,
-          });
-          adsCost = roundMoney(
-            [...adsMetrics.values()].reduce((sum, row) => sum + row.cost, 0),
-          );
-          const adsItemIds = [...adsMetrics.keys()].filter(
-            (id) => (adsMetrics.get(id)?.cost ?? 0) !== 0,
-          );
-          const adsItems = await fetchItemsByIdsBatched(accessToken, adsItemIds);
-          const adsItemById = new Map(adsItems.map((item) => [item.id, item]));
-          const adsSkuByItemId = await resolveEffectiveSkuByItemId(
-            organizationId,
-            adsItems.map((item) => ({ id: item.id, sku: getItemSku(item) })),
-          );
-          adsCostBreakdown = adsItemIds
-            .map((itemId) => {
-              const metrics = adsMetrics.get(itemId)!;
-              const sku = adsSkuByItemId.get(itemId) ?? null;
-              const title = adsItemById.get(itemId)?.title ?? itemId;
-              return {
-                key: breakdownIdentityKey(itemId, sku),
-                sku,
-                title,
-                quantity: metrics.unitsQuantity,
-                amount: roundMoney(-metrics.cost),
-              };
-            })
-            .sort((a, b) => a.amount - b.amount);
-        }
-      } catch (error) {
-        const lookbackLimited = isProductAdsLookbackLimitError(error);
-        if (!lookbackLimited) {
-          logServerError("dre-month-data ads", error);
-        }
-        if (billing && billing.adsCost > 0 && billingAlignsWithCivil) {
-          adsCost = billing.adsCost;
-          adsCostBreakdown = undefined;
-        } else if (lookbackLimited) {
-          syncWarnings.push(
-            "Campanhas ADS: a API do ML só cobre os últimos 90 dias; neste mês o detalhe por anúncio não está disponível.",
-          );
-        } else {
-          syncWarnings.push(
-            "Não foi possível carregar o gasto com campanhas ADS neste mês.",
-          );
-        }
+  const adsPromise = (async (): Promise<{
+    adsCost: number;
+    adsCostBreakdown: DreLineBreakdownItem[] | undefined;
+    /** O valor veio da fatura (então a auditoria da fatura é a dele). */
+    fromBilling: boolean;
+    /** A API não cobriu o mês: o valor anterior continua valendo. */
+    unavailable: boolean;
+  }> => {
+    const fromBillingOrUnavailable = (warning: string) => {
+      if (billing && billing.adsCost > 0 && billingAlignsWithCivil) {
+        return {
+          adsCost: billing.adsCost,
+          adsCostBreakdown: undefined,
+          fromBilling: true,
+          unavailable: false,
+        };
       }
-      return { adsCost, adsCostBreakdown };
-    })();
+      syncWarnings.push(warning);
+      return {
+        adsCost: 0,
+        adsCostBreakdown: undefined,
+        fromBilling: false,
+        unavailable: true,
+      };
+    };
+    try {
+      const advertiserId = await fetchPadsAdvertiserId(accessToken);
+      if (advertiserId === null) {
+        return {
+          adsCost: 0,
+          adsCostBreakdown: undefined,
+          fromBilling: false,
+          unavailable: false,
+        };
+      }
+      const { dateFrom, dateTo } = getProductAdsDateRangeForMonth(year, month);
+      if (!isProductAdsMetricsRangeAvailable(dateFrom)) {
+        return fromBillingOrUnavailable(
+          "Campanhas ADS: a API do ML só cobre os últimos 90 dias; neste mês o detalhe por anúncio não está disponível.",
+        );
+      }
+      const adsMetrics = await fetchProductAdsMetricsByItem(accessToken, {
+        advertiserId,
+        siteId: "MLB",
+        dateFrom,
+        dateTo,
+      });
+      const adsCost = roundMoney(
+        [...adsMetrics.values()].reduce((sum, row) => sum + row.cost, 0),
+      );
+      const adsItemIds = [...adsMetrics.keys()].filter(
+        (id) => (adsMetrics.get(id)?.cost ?? 0) !== 0,
+      );
+      const adsItems = await fetchItemsWithCache(
+        accessToken,
+        adsItemIds,
+        itemCache,
+      );
+      const adsItemById = new Map(adsItems.map((item) => [item.id, item]));
+      const adsSkuByItemId = await resolveEffectiveSkuByItemId(
+        organizationId,
+        adsItems.map((item) => ({ id: item.id, sku: getItemSku(item) })),
+      );
+      const adsCostBreakdown = adsItemIds
+        .map((itemId) => {
+          const metrics = adsMetrics.get(itemId)!;
+          const sku = adsSkuByItemId.get(itemId) ?? null;
+          const title = adsItemById.get(itemId)?.title ?? itemId;
+          return {
+            key: breakdownIdentityKey(itemId, sku),
+            sku,
+            title,
+            quantity: metrics.unitsQuantity,
+            amount: roundMoney(-metrics.cost),
+          };
+        })
+        .sort((a, b) => a.amount - b.amount);
+      return { adsCost, adsCostBreakdown, fromBilling: false, unavailable: false };
+    } catch (error) {
+      const lookbackLimited = isProductAdsLookbackLimitError(error);
+      if (!lookbackLimited) {
+        logServerError("dre-month-data ads", error);
+      }
+      return fromBillingOrUnavailable(
+        lookbackLimited
+          ? "Campanhas ADS: a API do ML só cobre os últimos 90 dias; neste mês o detalhe por anúncio não está disponível."
+          : "Não foi possível carregar o gasto com campanhas ADS neste mês.",
+      );
+    }
+  })();
 
   report({ phase: "ml_costs", message: "Mapeando custos ML…" });
 
   let saleFeeMl = 0;
   let sellerShippingMl = 0;
-  let cancelledSalesMl = 0;
+  /** Canceladas segundo a fatura — só conferência ou plano B da linha. */
+  let billingCancelledSalesMl: number | null = null;
   let partialReturnsMl = 0;
   let returnFeeMl = 0;
   let specialFeesMl = 0;
@@ -828,7 +909,7 @@ export async function buildDreMonthSnapshot(
     billingSource = "billing";
     saleFeeMl = billing!.saleFee;
     sellerShippingMl = billing!.sellerShipping;
-    cancelledSalesMl = billing!.cancelledSales;
+    billingCancelledSalesMl = billing!.cancelledSales;
     partialReturnsMl = billing!.partialReturns;
     returnFeeMl = billing!.returnFee;
     specialFeesMl = billing!.specialFees;
@@ -887,7 +968,7 @@ export async function buildDreMonthSnapshot(
         returnFeeMl = civil.returnFeeMl;
         specialFeesMl = civil.specialFeesMl;
         if (civil.cancelledSalesMl !== 0) {
-          cancelledSalesMl = civil.cancelledSalesMl;
+          billingCancelledSalesMl = civil.cancelledSalesMl;
         }
         usedCivilDetails = true;
         billingAuditAgg = civil;
@@ -906,13 +987,11 @@ export async function buildDreMonthSnapshot(
           accessToken,
           sellerId,
           organizationId,
-          calendarRange.from,
-          calendarRange.to,
           orderLines,
+          itemCache,
         );
         saleFeeMl = fallback.saleFeeMl;
         sellerShippingMl = fallback.sellerShippingMl;
-        cancelledSalesMl = fallback.cancelledSalesMl;
         saleFeeBreakdown = fallback.saleFeeBreakdown;
         sellerShippingBreakdown = fallback.sellerShippingBreakdown;
         syncWarnings.push(
@@ -924,8 +1003,8 @@ export async function buildDreMonthSnapshot(
           "Não foi possível estimar tarifas e frete do Mercado Livre.",
         );
       }
-    } else if (cancelledSalesMl === 0) {
-      cancelledSalesMl = billing!.cancelledSales;
+    } else if (billingCancelledSalesMl === null) {
+      billingCancelledSalesMl = billing!.cancelledSales;
     }
 
     partialReturnsMl = billing!.partialReturns;
@@ -978,7 +1057,7 @@ export async function buildDreMonthSnapshot(
           sellerShippingMl = civil.sellerShippingMl;
           returnFeeMl = civil.returnFeeMl;
           specialFeesMl = civil.specialFeesMl;
-          cancelledSalesMl = civil.cancelledSalesMl;
+          billingCancelledSalesMl = civil.cancelledSalesMl;
           partialReturnsMl = civil.partialReturnsMl;
           fullShippingMl = civil.fullShippingMl;
           fullStorageMl = civil.fullStorageMl;
@@ -1016,13 +1095,11 @@ export async function buildDreMonthSnapshot(
           accessToken,
           sellerId,
           organizationId,
-          calendarRange.from,
-          calendarRange.to,
           orderLines,
+          itemCache,
         );
         saleFeeMl = fallback.saleFeeMl;
         sellerShippingMl = fallback.sellerShippingMl;
-        cancelledSalesMl = fallback.cancelledSalesMl;
         partialReturnsMl = fallback.partialReturnsMl;
         fullShippingMl = fallback.fullShippingMl;
         fullStorageMl = fallback.fullStorageMl;
@@ -1037,6 +1114,10 @@ export async function buildDreMonthSnapshot(
       }
     }
   }
+
+  // Sem fatura (nem detalhamento civil) a estimativa pelos pedidos não tem
+  // como saber estas linhas e devolve 0 — não é zero de verdade.
+  const billingOnlyUnavailable = !usedCivilDetails && !billingHasMappedLines;
 
   let partialReturnsBreakdown: DreLineBreakdownItem[] | undefined;
   let returnFeeBreakdown: DreLineBreakdownItem[] | undefined;
@@ -1057,19 +1138,53 @@ export async function buildDreMonthSnapshot(
   const { activeLines, returnedOnInvoiceLines } =
     splitOrderLinesByCancelledOrderIds(orderLines, cancelledBillingOrderIds);
 
-  const [adsResult, erpCosts] = await Promise.all([
+  // Um contexto só (anúncios, cadastro, nivelamentos, relatório tributário,
+  // kits) para pedidos pagos, devolvidos e cancelados.
+  const [adsResult, erpContext] = await Promise.all([
     adsPromise,
-    computeErpCostsFromOrderLines(
+    loadErpCostContext({
       accessToken,
       sellerId,
       organizationId,
-      activeLines,
+      itemIds: [...orderLines, ...cancelledLines].map((line) => line.itemId),
       year,
       month,
-    ),
+      itemCache,
+    }),
   ]);
   const { adsCost } = adsResult;
   let adsCostBreakdown = adsResult.adsCostBreakdown;
+  if (adsResult.unavailable) unavailableLineKeys.add("adsCost");
+
+  const activeCosts = computeErpCostsForLines(
+    erpContext,
+    activeLines,
+    "active",
+    year,
+    month,
+  );
+  const returnedCosts = computeErpCostsForLines(
+    erpContext,
+    returnedOnInvoiceLines,
+    "returned",
+    year,
+    month,
+  );
+  const cancelledCosts = computeErpCostsForLines(
+    erpContext,
+    cancelledLines,
+    "cancelled",
+    year,
+    month,
+  );
+  const salesTax = computeDreSalesTax(
+    [
+      ...activeCosts.taxLines,
+      ...returnedCosts.taxLines,
+      ...cancelledCosts.taxLines,
+    ],
+    erpContext.taxRates,
+  );
 
   const billingLineLists = billingAuditAgg?.lineBreakdowns;
   if (billingLineLists) {
@@ -1092,181 +1207,229 @@ export async function buildDreMonthSnapshot(
     fullNonComplianceBreakdown = billingLineLists.fullNonComplianceMl;
     minhaPaginaBreakdown = billingLineLists.minhaPaginaMl;
     affiliateFeeBreakdown = billingLineLists.affiliateFeeMl;
-    if (!adsCostBreakdown && (billingLineLists.adsCost?.length ?? 0) > 0) {
+    // A cobrança de Ads da fatura só é auditoria quando o valor também veio
+    // da fatura — senão a lista (do ciclo da fatura) não explica o valor.
+    if (
+      !adsCostBreakdown &&
+      adsResult.fromBilling &&
+      (billingLineLists.adsCost?.length ?? 0) > 0
+    ) {
       adsCostBreakdown = billingLineLists.adsCost;
     }
   }
 
+  const monthLabel = `${String(month).padStart(2, "0")}/${year}`;
+  if (activeCosts.incompleteItemIds.size > 0) {
+    syncWarnings.push(
+      `${activeCosts.incompleteItemIds.size} anúncio(s) sem preço de compra no estoque.`,
+    );
+  }
+  if (erpContext.taxRates.regime === "SIMPLES") {
+    if (erpContext.taxRates.simplesRatePercent === null && revenueMl > 0) {
+      syncWarnings.push(
+        "Impostos sobre vendas: configure a alíquota efetiva do Simples Nacional em Configurações tributárias — sem ela o imposto fica zerado.",
+      );
+    }
+  } else {
+    if (salesTax.missingItemCount > 0) {
+      syncWarnings.push(
+        `${salesTax.missingItemCount} anúncio(s) sem relatório tributário apurado até ${monthLabel} — linha de Imposto ficou subestimada para eles.`,
+      );
+    }
+    if (salesTax.fallbackItemCount > 0) {
+      syncWarnings.push(
+        `${salesTax.fallbackItemCount} anúncio(s) usaram % de imposto de um mês diferente (sem apuração tributária própria em ${monthLabel}).`,
+      );
+    }
+  }
+
+  // Canceladas / devolvidas: a linha é sempre a soma da própria auditoria —
+  // pedidos cancelados + pedidos pagos que voltaram, os mesmos que já saem do
+  // Custo produto e dos Impostos (e o mesmo bruto que a visão "painel ML" soma
+  // ao faturamento). Antes a linha vinha de outra busca/fonte e podia zerar
+  // com a auditoria cheia.
+  const overlayLines = [...cancelledLines, ...returnedOnInvoiceLines];
+  const overlayRevenueBreakdown = mergeLineBreakdowns([
+    cancelledCosts.revenueBreakdown,
+    returnedCosts.revenueBreakdown,
+  ]);
+  const ordersCancelledRevenue = roundMoney(
+    overlayLines.reduce((sum, line) => sum + line.revenue, 0),
+  );
+  const overlayTax = salesTax.taxBreakdown.reduce(
+    (sum, item) => sum + (item.cancelledTax ?? 0) + (item.returnedTax ?? 0),
+    0,
+  );
+  const ordersOverlay: DreCancelledIncludeOverlay = {
+    revenueGross: roundMoney(
+      cancelledLines.reduce((sum, line) => sum + line.revenue, 0),
+    ),
+    productCostErp: roundMoney(
+      -Math.max(0, cancelledCosts.productCost + returnedCosts.productCost),
+    ),
+    taxErp: overlayTax > 0 ? roundMoney(-overlayTax) : 0,
+  };
+  const billingCancelledList =
+    (cancelledSalesBreakdownFromBilling?.length ?? 0) > 0
+      ? cancelledSalesBreakdownFromBilling
+      : undefined;
+
+  let cancelledSalesMl = 0;
+  let cancelledSalesBreakdown: DreLineBreakdownItem[] | undefined;
+  let cancelledIncludeOverlay: DreCancelledIncludeOverlay | undefined;
+  if (overlayLines.length > 0 && !cancelledFetchFailed) {
+    cancelledSalesMl = -ordersCancelledRevenue;
+    cancelledSalesBreakdown = overlayRevenueBreakdown
+      .map((item) => ({ ...item, amount: roundMoney(-item.amount) }))
+      .sort((a, b) => a.amount - b.amount);
+    cancelledIncludeOverlay = ordersOverlay;
+    if (billingCancelledSalesMl !== null && billingCancelledSalesMl !== 0) {
+      const invoice = Math.abs(billingCancelledSalesMl);
+      if (
+        Math.abs(invoice - ordersCancelledRevenue) >
+        Math.max(50, ordersCancelledRevenue * 0.1)
+      ) {
+        syncWarnings.push(
+          `Canceladas / devolvidas: ${formatMoneyForWarning(ordersCancelledRevenue)} pelos pedidos do mês; a fatura ML mostra ${formatMoneyForWarning(invoice)} (a fatura também lança devoluções de vendas de outros meses).`,
+        );
+      }
+    }
+  } else if (
+    billingCancelledList ||
+    (billingCancelledSalesMl !== null && billingCancelledSalesMl !== 0)
+  ) {
+    // Nenhum pedido cancelado/devolvido no mês (ou a busca falhou), mas a
+    // fatura tem: vale a fatura, com linha e auditoria saindo da mesma lista.
+    cancelledSalesMl = billingCancelledList
+      ? roundMoney(billingCancelledList.reduce((sum, item) => sum + item.amount, 0))
+      : (billingCancelledSalesMl ?? 0);
+    cancelledSalesBreakdown = billingCancelledList;
+    if (cancelledFetchFailed) {
+      syncWarnings.push(
+        "Pedidos cancelados indisponíveis no ML; Canceladas / devolvidas veio da fatura.",
+      );
+    }
+  } else if (cancelledFetchFailed) {
+    unavailableLineKeys.add("cancelledSalesMl");
+    cancelledSalesMl = -ordersCancelledRevenue;
+    cancelledSalesBreakdown = overlayRevenueBreakdown.length
+      ? overlayRevenueBreakdown
+          .map((item) => ({ ...item, amount: roundMoney(-item.amount) }))
+          .sort((a, b) => a.amount - b.amount)
+      : undefined;
+    cancelledIncludeOverlay = ordersOverlay;
+    syncWarnings.push(
+      "Não foi possível buscar os pedidos cancelados no Mercado Livre.",
+    );
+  }
+
   report({
     phase: "full",
-    message:
-      "Conferindo Relatório Full (envios/inconformidade) e pedidos cancelados…",
+    message: "Conferindo Relatório Full (envios/inconformidade)…",
   });
 
-  if (erpCosts.incompleteProductCostCount > 0) {
-    syncWarnings.push(
-      `${erpCosts.incompleteProductCostCount} anúncio(s) sem preço de compra no estoque.`,
-    );
-  }
-  if (erpCosts.missingTaxCount > 0) {
-    syncWarnings.push(
-      `${erpCosts.missingTaxCount} anúncio(s) sem relatório tributário apurado até ${String(month).padStart(2, "0")}/${year} — linha de Imposto ficou subestimada para eles.`,
-    );
-  }
-  if (erpCosts.taxFromDifferentPeriodCount > 0) {
-    syncWarnings.push(
-      `${erpCosts.taxFromDifferentPeriodCount} anúncio(s) usaram % de imposto de um mês diferente (sem apuração tributária própria em ${String(month).padStart(2, "0")}/${year}).`,
-    );
-  }
-
   let fullReportSourced = false;
-  let cancelledIncludeOverlay: DreCancelledIncludeOverlay | undefined;
-  let cancelledBreakdown: DreProductCostBreakdownItem[] = [];
-  let cancelledTaxBreakdown: DreTaxBreakdownItem[] = [];
-  let cancelledOrderRevenueBreakdown: DreLineBreakdownItem[] = [];
+  try {
+    let fullShipmentRecords = await listFullShipmentsForPeriod(
+      organizationId,
+      year,
+      month,
+    );
+    let autoImported = false;
 
-  // "Full" e "cancelados" são independentes entre si (nenhum lê o resultado
-  // do outro) — rodam em paralelo pra reduzir o tempo total do sync.
-  await Promise.all([
-    (async () => {
+    if (fullShipmentRecords.length === 0) {
       try {
-        let fullShipmentRecords = await listFullShipmentsForPeriod(
+        report({
+          phase: "full",
+          message: "Importando Relatório Full automaticamente…",
+        });
+        const imported = await importFullCollectChargesFromBilling(
+          accessToken,
+          sellerId,
           organizationId,
           year,
           month,
+          { fullDetailsCache },
         );
-        let autoImported = false;
-
-        if (fullShipmentRecords.length === 0) {
-          try {
-            report({
-              phase: "full",
-              message: "Importando Relatório Full automaticamente…",
-            });
-            const imported = await importFullCollectChargesFromBilling(
-              accessToken,
-              sellerId,
-              organizationId,
-              year,
-              month,
-              { fullDetailsCache },
-            );
-            fullShipmentRecords = imported.shipments;
-            autoImported = imported.imported > 0;
-            if (autoImported) {
-              syncWarnings.push(
-                `Full envios/inconformidade: importamos automaticamente ${imported.imported} envio(s) pelo mesmo fluxo do Relatório Full.`,
-              );
-            }
-          } catch (importError) {
-            logServerError(
-              "dre-month-data full-report-auto-import",
-              importError,
-            );
-            syncWarnings.push(
-              "Falha ao importar envios Full automaticamente; usando total consolidado da fatura ML.",
-            );
-          }
-        }
-
-        if (fullShipmentRecords.length > 0) {
-          const totalFullCost = fullShipmentRecords.reduce(
-            (sum, s) => sum + s.totalCost,
-            0,
-          );
-          const totalNonCompliance = fullShipmentRecords.reduce(
-            (sum, s) => sum + s.nonComplianceCost,
-            0,
-          );
-          const totalCollect = roundMoney(totalFullCost - totalNonCompliance);
-          fullShippingMl = roundMoney(-Math.max(0, totalCollect));
-          fullNonComplianceMl = roundMoney(-Math.max(0, totalNonCompliance));
-          fullReportSourced = true;
-          fullShippingBreakdown = undefined;
-          fullNonComplianceBreakdown = undefined;
-          if (!autoImported) {
-            syncWarnings.push(
-              "Full envios/inconformidade vêm dos envios já importados no Relatório Full deste mês.",
-            );
-          }
-        } else {
+        fullShipmentRecords = imported.shipments;
+        autoImported = imported.imported > 0;
+        if (autoImported) {
           syncWarnings.push(
-            "Nenhum envio Full encontrado para este mês (Relatório Full / Fulfillment); Full envios/inconformidade usam o total consolidado da fatura ML.",
+            `Full envios/inconformidade: importamos automaticamente ${imported.imported} envio(s) pelo mesmo fluxo do Relatório Full.`,
           );
         }
-      } catch (error) {
-        logServerError("dre-month-data full-report", error);
+      } catch (importError) {
+        logServerError("dre-month-data full-report-auto-import", importError);
         syncWarnings.push(
-          "Não foi possível ler os envios Full importados; usando total consolidado da fatura ML.",
+          "Falha ao importar envios Full automaticamente; usando total consolidado da fatura ML.",
         );
       }
-    })(),
-    (async () => {
-      try {
-        const cancelledLines = await fetchCancelledOrderLinesInDateRange(
-          accessToken,
-          sellerId,
-          calendarRange.from,
-          calendarRange.to,
-          stockPlanningConfig.salesWindowDateField,
-        );
-        const overlayLines = [...cancelledLines, ...returnedOnInvoiceLines];
-        if (overlayLines.length > 0) {
-          const overlayErpCosts = await computeErpCostsFromOrderLines(
-            accessToken,
-            sellerId,
-            organizationId,
-            overlayLines,
-            year,
-            month,
-          );
-          if (cancelledLines.length > 0) {
-            const revenueGross = roundMoney(
-              cancelledLines.reduce((sum, line) => sum + line.revenue, 0),
-            );
-            cancelledIncludeOverlay = {
-              revenueGross,
-              productCostErp: overlayErpCosts.productCostErp,
-              taxErp: overlayErpCosts.taxErp,
-            };
-          }
-          // Anotados na mesma linha do produto (cancelledQuantity/cancelledCost),
-          // sem entrar em quantity/totalCost — ver applyDreIncludeCancelledView.
-          cancelledBreakdown = overlayErpCosts.breakdown.map((item) => ({
-            ...item,
-            quantity: 0,
-            totalCost: 0,
-            unitCost: 0,
-            cancelledQuantity: item.quantity,
-            cancelledCost: item.totalCost,
-          }));
-          cancelledTaxBreakdown = overlayErpCosts.taxBreakdown.map((item) => ({
-            ...item,
-            quantity: 0,
-            revenue: 0,
-            totalTax: 0,
-            taxPercent: null,
-            cancelledQuantity: item.quantity,
-            cancelledRevenue: item.revenue,
-            cancelledTax: item.totalTax,
-          }));
-          cancelledOrderRevenueBreakdown = overlayErpCosts.revenueBreakdown;
-        }
-      } catch (error) {
-        logServerError("dre-month-data cancelled overlay", error);
-      }
-    })(),
-  ]);
+    }
 
-  return {
+    if (fullShipmentRecords.length > 0) {
+      const totalFullCost = fullShipmentRecords.reduce(
+        (sum, s) => sum + s.totalCost,
+        0,
+      );
+      const totalNonCompliance = fullShipmentRecords.reduce(
+        (sum, s) => sum + s.nonComplianceCost,
+        0,
+      );
+      const totalCollect = roundMoney(totalFullCost - totalNonCompliance);
+      fullShippingMl = roundMoney(-Math.max(0, totalCollect));
+      fullNonComplianceMl = roundMoney(-Math.max(0, totalNonCompliance));
+      fullReportSourced = true;
+      fullShippingBreakdown = undefined;
+      fullNonComplianceBreakdown = undefined;
+      if (!autoImported) {
+        syncWarnings.push(
+          "Full envios/inconformidade vêm dos envios já importados no Relatório Full deste mês.",
+        );
+      }
+    } else {
+      syncWarnings.push(
+        "Nenhum envio Full encontrado para este mês (Relatório Full / Fulfillment); Full envios/inconformidade usam o total consolidado da fatura ML.",
+      );
+    }
+  } catch (error) {
+    logServerError("dre-month-data full-report", error);
+    syncWarnings.push(
+      "Não foi possível ler os envios Full importados; usando total consolidado da fatura ML.",
+    );
+  }
+
+  if (billingOnlyUnavailable) {
+    for (const key of BILLING_ONLY_LINE_KEYS) unavailableLineKeys.add(key);
+    if (!fullReportSourced) {
+      unavailableLineKeys.add("fullShippingMl");
+      unavailableLineKeys.add("fullNonComplianceMl");
+    }
+  }
+
+  const cancelledProductCostBreakdown = mergeProductCostBreakdowns([
+    cancelledCosts.breakdown,
+    returnedCosts.breakdown,
+  ]).map((item) => ({
+    // Anotados na mesma linha do produto (cancelledQuantity/cancelledCost),
+    // sem entrar em quantity/totalCost — ver applyDreIncludeCancelledView.
+    ...item,
+    quantity: 0,
+    totalCost: 0,
+    unitCost: 0,
+    cancelledQuantity: item.quantity,
+    cancelledCost: item.totalCost,
+  }));
+
+  const payload: DreMonthSnapshotPayload = {
     revenueMl,
     cancelledSalesMl,
     saleFeeMl,
     partialReturnsMl,
     returnFeeMl,
     specialFeesMl,
-    productCostErp: erpCosts.productCostErp,
-    taxErp: erpCosts.taxErp,
+    productCostErp:
+      activeCosts.productCost > 0 ? roundMoney(-activeCosts.productCost) : 0,
+    taxErp: salesTax.taxErp,
     sellerShippingMl,
     fullShippingMl,
     fullStorageMl,
@@ -1276,38 +1439,28 @@ export async function buildDreMonthSnapshot(
     adsCost,
     billingSource,
     isPartial,
-    incompleteProductCostCount: erpCosts.incompleteProductCostCount,
+    incompleteProductCostCount: activeCosts.incompleteItemIds.size,
     syncWarnings,
     cancelledIncludeOverlay,
     productCostBreakdown: mergeProductCostBreakdowns([
-      erpCosts.breakdown,
-      cancelledBreakdown,
+      activeCosts.breakdown,
+      cancelledProductCostBreakdown,
     ]),
-    taxBreakdown: mergeTaxBreakdowns([
-      erpCosts.taxBreakdown,
-      cancelledTaxBreakdown,
-    ]),
-    // A receita de pedidos cancelados conta normalmente em `amount` (o
-    // painel ML inclui canceladas no faturamento bruto — ver
+    taxBreakdown: salesTax.taxBreakdown,
+    // A receita de pedidos cancelados/devolvidos conta normalmente em
+    // `amount` (o painel ML inclui canceladas no faturamento bruto — ver
     // applyDreIncludeCancelledView) e fica também anotada em
     // `cancelledAmount`, na mesma linha do produto, só para transparência.
     // Sem isso a lista não bateria com o total de Faturamento ML exibido.
     revenueBreakdown: mergeLineBreakdowns([
-      erpCosts.revenueBreakdown,
-      cancelledOrderRevenueBreakdown.map((item) => ({
+      activeCosts.revenueBreakdown,
+      overlayRevenueBreakdown.map((item) => ({
         ...item,
         cancelledQuantity: item.quantity,
         cancelledAmount: item.amount,
       })),
     ]),
-    cancelledSalesBreakdown: cancelledOrderRevenueBreakdown.length
-      ? cancelledOrderRevenueBreakdown
-          .map((item) => ({
-            ...item,
-            amount: roundMoney(-item.amount),
-          }))
-          .sort((a, b) => a.amount - b.amount)
-      : cancelledSalesBreakdownFromBilling,
+    cancelledSalesBreakdown,
     saleFeeBreakdown,
     sellerShippingBreakdown,
     adsCostBreakdown,
@@ -1320,7 +1473,23 @@ export async function buildDreMonthSnapshot(
     minhaPaginaBreakdown,
     affiliateFeeBreakdown,
     fullReportSourced,
+    taxSource: buildDreTaxSource({
+      result: salesTax,
+      rates: erpContext.taxRates,
+      paidOrderCount,
+      previousTaxErp: null,
+      origin: "sync",
+    }),
   };
+
+  return { payload, unavailableLineKeys: [...unavailableLineKeys] };
+}
+
+function formatMoneyForWarning(value: number): string {
+  return `R$ ${value.toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 /**
@@ -1329,13 +1498,15 @@ export async function buildDreMonthSnapshot(
  * confirmada no meio do caminho não é sobrescrita por um payload lido antes.
  * Se o usuário escolheu não manter a conciliação, o import dela vira
  * `superseded` junto — o mês volta a "não conciliado" de forma consistente.
+ * Linhas cuja fonte falhou (`keepPreviousLineKeys`, vindo de
+ * `DreMonthSyncResult.unavailableLineKeys`) mantêm o valor do sync anterior.
  */
 export async function persistDreMonthSnapshot(
   organizationId: string,
   year: number,
   month: number,
   payload: DreMonthSnapshotPayload,
-  options: MergeSyncedSnapshotOptions = {
+  options: Omit<MergeSyncedSnapshotOptions, "previousSyncedAt"> = {
     keepReconciliation: true,
     preserveLineKeys: [],
   },
@@ -1346,10 +1517,22 @@ export async function persistDreMonthSnapshot(
     async (tx) => {
       const existing = await tx.dreMonthSnapshot.findUnique({
         where: { organizationId_year_month: { organizationId, year, month } },
-        select: { payload: true },
+        select: { payload: true, syncedAt: true },
       });
       const previous = existing ? parseSnapshotPayload(existing.payload) : null;
-      const merged = mergeSyncedSnapshot(payload, previous, options);
+      const merged = mergeSyncedSnapshot(payload, previous, {
+        ...options,
+        previousSyncedAt: existing?.syncedAt.toISOString() ?? null,
+      });
+      if (merged.taxSource) {
+        merged.taxSource = {
+          ...merged.taxSource,
+          previousTaxErp: previous ? previous.taxErp : null,
+        };
+      }
+      const mismatches = checkLineAuditConsistency(merged);
+      if (mismatches.length > 0) merged.lineAuditMismatches = mismatches;
+      else delete merged.lineAuditMismatches;
 
       await tx.dreMonthSnapshot.upsert({
         where: { organizationId_year_month: { organizationId, year, month } },
@@ -1380,6 +1563,191 @@ export async function persistDreMonthSnapshot(
     { timeout: 60_000 },
   );
   return syncedAt;
+}
+
+export type DreTaxRefreshStatus =
+  /** Imposto recalculado e gravado. */
+  | "updated"
+  /** Recalculado, mesmo valor. */
+  | "unchanged"
+  /** A linha tem ajuste manual: o valor fica; auditoria e baseline atualizam. */
+  | "manual_edit"
+  | "no_snapshot"
+  /** Snapshot antigo, sem auditoria por anúncio — só um sync completo resolve. */
+  | "needs_sync";
+
+export type DreTaxRefreshResult = {
+  status: DreTaxRefreshStatus;
+  previousTaxErp: number | null;
+  taxErp: number | null;
+};
+
+/** % do kit pela média dos componentes, para kits sem % próprio no tributário. */
+async function loadKitComponentsRates(
+  organizationId: string,
+  kitItemIds: readonly string[],
+  rates: DreTaxRates,
+): Promise<Map<string, number | null>> {
+  const out = new Map<string, number | null>();
+  if (kitItemIds.length === 0) return out;
+  const kitsByMlItemId = await loadKitsByMlItemId(organizationId, [
+    ...new Set(kitItemIds),
+  ]);
+  const componentSkus = [...kitsByMlItemId.values()].flatMap((components) =>
+    components.map((c) => c.sku),
+  );
+  const pricing = await loadProductsMapBySku(organizationId, componentSkus);
+  const rateBySku = new Map(
+    [...rates.bySku].map(([sku, entry]) => [sku, entry.ratePercent]),
+  );
+  for (const [itemId, components] of kitsByMlItemId) {
+    out.set(
+      itemId,
+      resolveKitPricing(components, pricing.bySku, rateBySku).taxRatePercent,
+    );
+  }
+  return out;
+}
+
+/**
+ * Recalcula só os Impostos sobre vendas do mês com a versão atual do relatório
+ * tributário, a partir da auditoria salva (receita por anúncio) — sem buscar
+ * nada no ML. É o que mantém DRE e tributário andando juntos: recalcular o
+ * tributário chama isto para o mesmo mês.
+ */
+export async function refreshDreSalesTax(
+  organizationId: string,
+  sellerId: number,
+  year: number,
+  month: number,
+  options: {
+    /** Só calcula e devolve o resultado — não grava (prévia antes de confirmar). */
+    dryRun?: boolean;
+    /** Relatório do mês ainda não gravado (prévia de recálculo do tributário). */
+    monthReportOverride?: TaxReportPayload;
+  } = {},
+): Promise<DreTaxRefreshResult> {
+  const initial = await prisma.dreMonthSnapshot.findUnique({
+    where: { organizationId_year_month: { organizationId, year, month } },
+    select: { payload: true },
+  });
+  const initialPayload = initial ? parseSnapshotPayload(initial.payload) : null;
+  if (!initialPayload) {
+    return { status: "no_snapshot", previousTaxErp: null, taxErp: null };
+  }
+  if (!initialPayload.taxBreakdown) {
+    return {
+      status: "needs_sync",
+      previousTaxErp: initialPayload.taxErp,
+      taxErp: null,
+    };
+  }
+
+  const rates = await loadDreTaxRates(organizationId, sellerId, year, month, {
+    monthReportOverride: options.monthReportOverride,
+  });
+  const kitItemIds = initialPayload.taxBreakdown
+    .filter((item) => item.key.startsWith("kit:"))
+    .map((item) => item.key.slice("kit:".length));
+  const kitRates = await loadKitComponentsRates(
+    organizationId,
+    kitItemIds,
+    rates,
+  );
+
+  if (options.dryRun) {
+    const result = computeDreSalesTax(
+      taxLinesFromBreakdown(initialPayload.taxBreakdown, kitRates),
+      rates,
+    );
+    const manualEdit = (initialPayload.manuallyEditedLineKeys ?? []).includes(
+      "taxErp",
+    );
+    return {
+      status: manualEdit
+        ? "manual_edit"
+        : Math.abs(result.taxErp - initialPayload.taxErp) < 0.005
+          ? "unchanged"
+          : "updated",
+      previousTaxErp: initialPayload.taxErp,
+      taxErp: manualEdit ? initialPayload.taxErp : result.taxErp,
+    };
+  }
+
+  return prisma.$transaction(
+    async (tx) => {
+      // Relê dentro da transação: um sync que gravou no meio do caminho ganha.
+      const existing = await tx.dreMonthSnapshot.findUnique({
+        where: { organizationId_year_month: { organizationId, year, month } },
+        select: { payload: true },
+      });
+      const current = existing ? parseSnapshotPayload(existing.payload) : null;
+      if (!current) {
+        return { status: "no_snapshot", previousTaxErp: null, taxErp: null };
+      }
+      if (!current.taxBreakdown) {
+        return {
+          status: "needs_sync",
+          previousTaxErp: current.taxErp,
+          taxErp: null,
+        };
+      }
+
+      const result = computeDreSalesTax(
+        taxLinesFromBreakdown(current.taxBreakdown, kitRates),
+        rates,
+      );
+      const manualEdit = (current.manuallyEditedLineKeys ?? []).includes(
+        "taxErp",
+      );
+      const next: DreMonthSnapshotPayload = {
+        ...current,
+        taxErp: manualEdit ? current.taxErp : result.taxErp,
+        taxBreakdown: result.taxBreakdown,
+        syncedLineBaseline: {
+          ...(current.syncedLineBaseline ?? {}),
+          taxErp: result.taxErp,
+        },
+        syncedBreakdownBaseline: {
+          ...(current.syncedBreakdownBaseline ?? {}),
+          taxBreakdown: result.taxBreakdown,
+        },
+        taxSource: buildDreTaxSource({
+          result,
+          rates,
+          paidOrderCount: current.taxSource?.paidOrderCount ?? null,
+          previousTaxErp: current.taxErp,
+          origin: "refresh",
+        }),
+      };
+      if (next.cancelledIncludeOverlay) {
+        const overlayTax = result.taxBreakdown.reduce(
+          (sum, item) => sum + (item.cancelledTax ?? 0) + (item.returnedTax ?? 0),
+          0,
+        );
+        next.cancelledIncludeOverlay = {
+          ...next.cancelledIncludeOverlay,
+          taxErp: overlayTax > 0 ? roundMoney(-overlayTax) : 0,
+        };
+      }
+      const mismatches = checkLineAuditConsistency(next);
+      if (mismatches.length > 0) next.lineAuditMismatches = mismatches;
+      else delete next.lineAuditMismatches;
+
+      await tx.dreMonthSnapshot.update({
+        where: { organizationId_year_month: { organizationId, year, month } },
+        data: { payload: next as object },
+      });
+
+      const status: DreTaxRefreshStatus = manualEdit
+        ? "manual_edit"
+        : Math.abs(result.taxErp - current.taxErp) < 0.005
+          ? "unchanged"
+          : "updated";
+      return { status, previousTaxErp: current.taxErp, taxErp: next.taxErp };
+    },
+    { timeout: 30_000 },
+  );
 }
 
 export function emptyDreMonthSnapshotPayload(): DreMonthSnapshotPayload {
@@ -1603,6 +1971,19 @@ export function parseSnapshotPayload(raw: unknown): DreMonthSnapshotPayload | nu
               item.cancelledTax !== undefined
                 ? numFrom(item.cancelledTax)
                 : undefined,
+            returnedQuantity:
+              item.returnedQuantity !== undefined
+                ? numFrom(item.returnedQuantity)
+                : undefined,
+            returnedRevenue:
+              item.returnedRevenue !== undefined
+                ? numFrom(item.returnedRevenue)
+                : undefined,
+            returnedTax:
+              item.returnedTax !== undefined
+                ? numFrom(item.returnedTax)
+                : undefined,
+            rateSource: parseTaxRateSource(item.rateSource),
           }))
       : undefined;
 
@@ -1761,7 +2142,112 @@ export function parseSnapshotPayload(raw: unknown): DreMonthSnapshotPayload | nu
     manuallyEditedLineKeys,
     hasRealSyncBaseline: Boolean(p.hasRealSyncBaseline),
     reconciliation,
+    taxSource: parseTaxSource(p.taxSource),
+    keptFromPrevious: parseKeptFromPrevious(p.keptFromPrevious),
+    lineAuditMismatches: parseLineAuditMismatches(p.lineAuditMismatches),
   };
+}
+
+function finiteOr(value: unknown, fallback: number): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function finiteOrNull(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function parseTaxRateSource(raw: unknown): DreTaxRateSource | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  if (r.kind === "kit_components") return { kind: "kit_components" };
+  if (r.kind === "simples") return { kind: "simples" };
+  if (r.kind === "report") {
+    const year = Number(r.year);
+    const month = Number(r.month);
+    if (Number.isInteger(year) && Number.isInteger(month)) {
+      return { kind: "report", year, month };
+    }
+  }
+  return undefined;
+}
+
+function parseTaxSource(raw: unknown): DreTaxSource | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  const reportRaw = r.report;
+  let report: DreTaxSource["report"] = null;
+  if (reportRaw && typeof reportRaw === "object" && !Array.isArray(reportRaw)) {
+    const rep = reportRaw as Record<string, unknown>;
+    if (typeof rep.generatedAt === "string") {
+      report = {
+        generatedAt: rep.generatedAt,
+        ordersFetchedAt:
+          typeof rep.ordersFetchedAt === "string"
+            ? rep.ordersFetchedAt
+            : rep.generatedAt,
+        revenue: finiteOr(rep.revenue, 0),
+        tax: finiteOr(rep.tax, 0),
+        orderCount: finiteOr(rep.orderCount, 0),
+        legacy: Boolean(rep.legacy),
+      };
+    }
+  }
+  return {
+    regime: r.regime === "SIMPLES" ? "SIMPLES" : "LUCRO_REAL",
+    report,
+    simplesRatePercent: finiteOrNull(r.simplesRatePercent),
+    paidOrderCount: finiteOrNull(r.paidOrderCount),
+    baseRevenue: finiteOr(r.baseRevenue, 0),
+    computedTax: finiteOr(r.computedTax, 0),
+    returnedPaidRevenue: finiteOr(r.returnedPaidRevenue, 0),
+    returnedPaidTax: finiteOr(r.returnedPaidTax, 0),
+    fallbackItemCount: finiteOr(r.fallbackItemCount, 0),
+    missingItemCount: finiteOr(r.missingItemCount, 0),
+    missingRevenue: finiteOr(r.missingRevenue, 0),
+    computedAt: typeof r.computedAt === "string" ? r.computedAt : "",
+    previousTaxErp: finiteOrNull(r.previousTaxErp),
+    origin: r.origin === "refresh" ? "refresh" : "sync",
+  };
+}
+
+function parseKeptFromPrevious(raw: unknown): DreKeptFromPrevious | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  const lineKeys = Array.isArray(r.lineKeys)
+    ? r.lineKeys.filter(
+        (key): key is DreEditableLineKey =>
+          typeof key === "string" && isDreEditableLineKey(key),
+      )
+    : [];
+  if (lineKeys.length === 0) return undefined;
+  return {
+    lineKeys,
+    syncedAt: typeof r.syncedAt === "string" ? r.syncedAt : null,
+  };
+}
+
+function parseLineAuditMismatches(
+  raw: unknown,
+): DreLineAuditMismatch[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: DreLineAuditMismatch[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const r = item as Record<string, unknown>;
+    if (typeof r.lineKey !== "string" || !isDreEditableLineKey(r.lineKey)) {
+      continue;
+    }
+    out.push({
+      lineKey: r.lineKey,
+      value: finiteOr(r.value, 0),
+      auditSum: finiteOr(r.auditSum, 0),
+      kind: r.kind === "zero_with_audit" ? "zero_with_audit" : "differs",
+    });
+  }
+  return out.length > 0 ? out : undefined;
 }
 
 function parseReconciliationMeta(

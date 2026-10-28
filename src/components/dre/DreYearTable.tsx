@@ -67,9 +67,14 @@ import {
   DIM_CLASS,
   formatSyncTime,
   getMonthAlertMessages,
+  CellIssueMarker,
   MonthAlertsTooltip,
   MonthReconcileButton,
   MonthReconciliationBadge,
+  MonthTaxStatusLine,
+  MonthZeroAnomalyLine,
+  cellIssueFor,
+  type DreTaxAction,
 } from "@/components/dre/DreYearTableShared";
 import type { DreMonthView, DreYearView } from "@/lib/dre/dre-year-data";
 import {
@@ -234,6 +239,10 @@ type DreYearTableProps = {
   onSyncMonth: (month: number) => void;
   /** Abre a conciliação (ou a revisão, se for legado) do mês. */
   onReconcileMonth?: (month: number) => void;
+  /** Resolve o status do imposto do mês (atualizar imposto, recalcular tributário…). */
+  onTaxAction?: (month: number, action: DreTaxAction) => void;
+  /** Meses com ação de imposto em andamento (o andamento fica no overlay). */
+  taxBusyMonths?: Set<number>;
   onLineChange: (
     lineKey: DreEditableLineKey,
     month: number,
@@ -864,6 +873,8 @@ function renderValueCell(
   onAuditClick?: (kind: AuditKind, month: number) => void,
   onEditingChange?: (editing: boolean, month: number, rowId: string) => void,
   onLineRestore?: DreYearTableProps["onLineRestore"],
+  /** Ano do DRE — para a marca da célula (imposto × tributário, linha zerada). */
+  year?: number,
 ) {
   // Meses futuros são editáveis manualmente (orçamento/planejamento antecipado);
   // só o sync automático via ML continua bloqueado pra mês futuro.
@@ -1034,10 +1045,15 @@ function renderValueCell(
     editableKey !== null &&
     month.syncedLineBaselineKeys.includes(editableKey) &&
     Boolean(onLineRestore);
+  const issue =
+    editableKey !== null && year !== undefined
+      ? cellIssueFor(month, editableKey, year)
+      : null;
 
   if (editableKey && canEditMonth) {
     return (
       <div className={cn(valueClassName, "inline-flex items-center justify-center gap-1.5")}>
+        {issue ? <CellIssueMarker tone={issue.tone} text={issue.text} /> : null}
         <DreInlineMoneyCell
           displayAmount={amount}
           label={`${row.label} (${month.label})`}
@@ -1099,6 +1115,7 @@ function renderValueCell(
       >
         {moneyLabel}
       </div>
+      {issue ? <CellIssueMarker tone={issue.tone} text={issue.text} /> : null}
       {isAdjusted ? (
         <AdjustedBadge
           onRestore={
@@ -1370,6 +1387,7 @@ function DreMobileRow({
       (kind, m) => onAuditClick(kind, m),
       undefined,
       onLineRestore,
+      data.year,
     )
   );
 
@@ -1411,6 +1429,8 @@ function DreYearTableMobile({
   syncingMonthMessages = {},
   onSyncMonth,
   onReconcileMonth,
+  onTaxAction,
+  taxBusyMonths,
   onLineChange,
   onLineRestore,
   onFixedCostChange,
@@ -1466,6 +1486,8 @@ function DreYearTableMobile({
     lineAuditState,
     lineAuditText,
     specialFeesExternalLink,
+    auditNote,
+    taxAuditSource,
   } = useDreAuditTarget(data);
 
   function updateSelection(next: DreMobileSelection) {
@@ -1616,6 +1638,22 @@ function DreYearTableMobile({
         </div>
       )}
 
+      {selectedMonth ? (
+        <div className="px-1">
+          <MonthTaxStatusLine
+            month={selectedMonth}
+            year={data.year}
+            busy={Boolean(taxBusyMonths?.has(selectedMonth.month))}
+            onTaxAction={onTaxAction}
+          />
+          <MonthZeroAnomalyLine
+            month={selectedMonth}
+            busy={syncingMonths.has(selectedMonth.month)}
+            onResync={onSyncMonth}
+          />
+        </div>
+      ) : null}
+
       {alertsOpen && alertMessages.length > 0 ? (
         <ul className="space-y-1 rounded-lg border border-[var(--border)] bg-[var(--muted)]/20 px-3 py-2 text-xs text-[var(--muted-foreground)]">
           {alertMessages.map((message) => (
@@ -1685,6 +1723,7 @@ function DreYearTableMobile({
         title={auditTitle}
         items={taxAuditItems}
         needsResync={auditTargetNeedsResync(data, auditTarget)}
+        taxSource={taxAuditSource}
         onClose={() => setAuditTarget(null)}
       />
       <DreLineAuditModal
@@ -1701,6 +1740,7 @@ function DreYearTableMobile({
         unavailable={lineAuditState.unavailable}
         needsResync={lineAuditState.needsResync}
         externalLink={specialFeesExternalLink}
+        note={auditNote}
         onClose={() => setAuditTarget(null)}
       />
     </div>
@@ -1857,6 +1897,8 @@ function DreStatementPanel({
   syncingMonthMessages,
   onSyncMonth,
   onReconcileMonth,
+  onTaxAction,
+  taxBusyMonths,
   onLineChange,
   onLineRestore,
   onFixedCostChange,
@@ -1875,6 +1917,8 @@ function DreStatementPanel({
   syncingMonthMessages: Record<number, string>;
   onSyncMonth: (month: number) => void;
   onReconcileMonth?: (month: number) => void;
+  onTaxAction?: DreYearTableProps["onTaxAction"];
+  taxBusyMonths?: Set<number>;
   onLineChange: DreYearTableProps["onLineChange"];
   onLineRestore?: DreYearTableProps["onLineRestore"];
   onFixedCostChange: DreYearTableProps["onFixedCostChange"];
@@ -1970,6 +2014,7 @@ function DreStatementPanel({
                   (kind, m) => onAuditClick(kind, m),
                   onEditingChange,
                   onLineRestore,
+                  data.year,
                 )}
               </div>
             ),
@@ -2017,6 +2062,21 @@ function DreStatementPanel({
             <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
               <MonthReconciliationBadge month={month} />
             </p>
+          ) : null}
+          {month ? (
+            <>
+              <MonthTaxStatusLine
+                month={month}
+                year={data.year}
+                busy={Boolean(taxBusyMonths?.has(month.month))}
+                onTaxAction={onTaxAction}
+              />
+              <MonthZeroAnomalyLine
+                month={month}
+                busy={syncingMonths.has(month.month)}
+                onResync={onSyncMonth}
+              />
+            </>
           ) : null}
         </div>
         {/* Ordem do fechamento: sincronizar, depois conciliar. */}
@@ -2216,6 +2276,8 @@ function DreYearTableDesktop({
   syncingMonthMessages = {},
   onSyncMonth,
   onReconcileMonth,
+  onTaxAction,
+  taxBusyMonths,
   onLineChange,
   onLineRestore,
   onFixedCostChange,
@@ -2253,6 +2315,8 @@ function DreYearTableDesktop({
     lineAuditState,
     lineAuditText,
     specialFeesExternalLink,
+    auditNote,
+    taxAuditSource,
   } = useDreAuditTarget(data);
   const isEditing = editingCell !== null;
   const columnFocusMonth = isEditing ? null : selectedMonth;
@@ -2358,6 +2422,8 @@ function DreYearTableDesktop({
               selectedMonth={selectedMonth}
               syncingMonths={syncingMonths}
               syncingMonthMessages={syncingMonthMessages}
+              onTaxAction={onTaxAction}
+              taxBusyMonths={taxBusyMonths}
               onSyncMonth={onSyncMonth}
               onReconcileMonth={onReconcileMonth}
               onLineChange={onLineChange}
@@ -2560,6 +2626,7 @@ function DreYearTableDesktop({
                                   editing ? { month: m, rowId } : null,
                                 ),
                               onLineRestore,
+                              data.year,
                             ),
                             getCellValue(row, month).amount,
                             month.totals?.totalEntrada,
@@ -2724,6 +2791,7 @@ function DreYearTableDesktop({
         title={auditTitle}
         items={taxAuditItems}
         needsResync={auditTargetNeedsResync(data, auditTarget)}
+        taxSource={taxAuditSource}
         onClose={() => setAuditTarget(null)}
       />
       <DreLineAuditModal
@@ -2740,6 +2808,7 @@ function DreYearTableDesktop({
         unavailable={lineAuditState.unavailable}
         needsResync={lineAuditState.needsResync}
         externalLink={specialFeesExternalLink}
+        note={auditNote}
         onClose={() => setAuditTarget(null)}
       />
     </TooltipProvider>

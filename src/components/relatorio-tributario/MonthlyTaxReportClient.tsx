@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { FileSearch, Info, RefreshCw, Scale, Wallet } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -25,14 +26,25 @@ import {
   type TaxFixedCostItemRow,
 } from "@/components/relatorio-tributario/TaxFixedCostsModal";
 import {
+  TaxActionOverlay,
   TaxReportGenerationOverlay,
   type TaxReportProgressState,
 } from "@/components/relatorio-tributario/TaxReportGenerationOverlay";
 import { TaxReportSkuTable } from "@/components/relatorio-tributario/tax-report-sku-table";
+import {
+  TaxMonthKpi,
+  TaxReportDreLine,
+  TaxReportStatusBanner,
+  dreFollowUpMessage,
+} from "@/components/relatorio-tributario/TaxReportStatusPanel";
+import { TaxRecalcConfirmDialog } from "@/components/relatorio-tributario/TaxRecalcConfirmDialog";
+import { useTaxRecalcConfirm } from "@/components/relatorio-tributario/use-tax-recalc-confirm";
 import { ItemListSearch } from "@/components/shared/ItemListSearch";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { readApiError } from "@/lib/api/api-client-error";
+import { reportsConfig } from "@/config/reports";
 import { useSSEStream } from "@/hooks/use-sse-stream";
+import { useBeforeUnloadGuard } from "@/hooks/use-before-unload-guard";
 import { lastDaysYmdRange, todayYmdLocal } from "@/lib/date-range";
 import { formatFinancialMoney } from "@/lib/pricing/financial-margin";
 import { filterByItemListSearch } from "@/lib/item-list-search";
@@ -42,12 +54,26 @@ import {
   taxReportSkuPath,
   taxReportSkuPeriodPath,
 } from "@/lib/tax-report/routes";
-import type { TaxReportPayload } from "@/lib/tax-report/types";
+import type {
+  TaxReportDreFollowUp,
+  TaxReportPayload,
+  TaxReportScreenStatus,
+} from "@/lib/tax-report/types";
 import { cn } from "@/lib/utils";
 
 function formatYmdBr(ymd: string): string {
   const [y, m, d] = ymd.split("-");
   return `${d}/${m}/${y}`;
+}
+
+/**
+ * Data e hora no fuso do relatório. Sem fuso fixo, o servidor (UTC em
+ * produção) e o navegador escreviam horários diferentes no mesmo HTML.
+ */
+function formatDateTimeBr(iso: string): string {
+  return new Date(iso).toLocaleString("pt-BR", {
+    timeZone: reportsConfig.catalogCompetitionTimezone,
+  });
 }
 
 function MetaChip({ children }: { children: ReactNode }) {
@@ -64,12 +90,14 @@ export function MonthlyTaxReportClient({
   initialCompanyTaxRegime,
   initialFixedCostItems,
   initialReport,
+  initialReportStatus,
 }: {
   initialYear: number;
   initialMonth: number;
   initialCompanyTaxRegime: string | null;
   initialFixedCostItems: TaxFixedCostItemRow[];
   initialReport: TaxReportPayload | null;
+  initialReportStatus: TaxReportScreenStatus | null;
 }) {
   const now = getZonedYearMonth();
   const [year, setYear] = useState(initialYear);
@@ -82,6 +110,16 @@ export function MonthlyTaxReportClient({
     { year: number; month: number }[]
   >([]);
   const [report, setReport] = useState<TaxReportPayload | null>(initialReport);
+  const [reportStatus, setReportStatus] =
+    useState<TaxReportScreenStatus | null>(initialReportStatus);
+  /** Ação curta em andamento (recálculo com vendas salvas, imposto do DRE): bloqueia a tela. */
+  const [actionOverlay, setActionOverlay] = useState<{
+    title: string;
+    message: string;
+  } | null>(null);
+  const actionBusy = actionOverlay !== null;
+  /** Custos fixos editados nesta tela depois do cálculo do mês. */
+  const [fixedCostsChanged, setFixedCostsChanged] = useState(false);
   const [loading, setLoading] = useState(false);
   const [generateProgress, setGenerateProgress] =
     useState<TaxReportProgressState | null>(null);
@@ -126,6 +164,10 @@ export function MonthlyTaxReportClient({
   }, [year, month]);
 
   useEffect(() => {
+    setFixedCostsChanged(false);
+  }, [year, month]);
+
+  useEffect(() => {
     // O ano/mês inicial já chega via prop (carregado no servidor) — só refaz
     // a busca quando o usuário troca o período.
     if (skipNextFixedCostFetch.current) {
@@ -147,6 +189,7 @@ export function MonthlyTaxReportClient({
       );
       if (res.status === 404) {
         setReport(null);
+        setReportStatus(null);
         return;
       }
       if (!res.ok) {
@@ -154,20 +197,36 @@ export function MonthlyTaxReportClient({
       }
       const data = (await res.json()) as TaxReportPayload & {
         missingMonths?: { year: number; month: number }[];
+        reportStatus?: TaxReportScreenStatus;
       };
       setMissingMonths(data.missingMonths ?? []);
       setReport(data);
+      setReportStatus(data.reportStatus ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao carregar relatório");
       setReport(null);
+      setReportStatus(null);
     } finally {
       setLoading(false);
     }
   }, [isPeriodMode, year, month, fromDate, toDate]);
 
+  const monthLabel = TAX_REPORT_MONTH_NAMES[month - 1]?.toLowerCase() ?? "";
+
+  const notifyDreFollowUp = useCallback(
+    (followUp: TaxReportDreFollowUp | undefined) => {
+      const message = dreFollowUpMessage(followUp, monthLabel);
+      if (!message) return;
+      if (message.tone === "success") toast.success(message.text);
+      else if (message.tone === "warning") toast.warning(message.text);
+      else toast(message.text);
+    },
+    [monthLabel],
+  );
+
   const generateSSE = useSSEStream<
     | ({ type: "progress" } & TaxReportProgressState)
-    | { type: "complete" }
+    | { type: "complete"; dreFollowUp?: TaxReportDreFollowUp }
     | { type: "error"; message: string }
   >(
     useCallback(
@@ -180,19 +239,78 @@ export function MonthlyTaxReportClient({
             total: event.total,
           });
         } else if (event.type === "complete") {
+          setFixedCostsChanged(false);
           await loadReport();
           setGenerateProgress({
             phase: "done",
             message: "Relatório gerado com sucesso.",
           });
+          notifyDreFollowUp(event.dreFollowUp);
         } else if (event.type === "error") {
           throw new Error(event.message);
         }
       },
-      [loadReport],
+      [loadReport, notifyDreFollowUp],
     ),
   );
+
+  /** Recalcula sobre as vendas já salvas — sem chamar o Mercado Livre. */
+  const recomputeSaved = useCallback(async () => {
+    setActionOverlay({
+      title: `Atualizando o cálculo de ${TAX_REPORT_MONTH_NAMES[month - 1]?.toLowerCase() ?? month}/${year}`,
+      message:
+        "Recalculando com as vendas já salvas e atualizando o imposto do DRE do mês — sem buscar nada no Mercado Livre.",
+    });
+    setError(null);
+    try {
+      const res = await fetch("/api/reports/monthly-tax", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ year, month, mode: "recompute" }),
+      });
+      if (!res.ok) {
+        throw new Error(await readApiError(res, "monthly_tax_generate_failed"));
+      }
+      const data = (await res.json()) as { dreFollowUp?: TaxReportDreFollowUp };
+      setFixedCostsChanged(false);
+      await loadReport();
+      toast.success("Relatório recalculado com as vendas salvas.");
+      notifyDreFollowUp(data.dreFollowUp);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao recalcular relatório");
+    } finally {
+      setActionOverlay(null);
+    }
+  }, [year, month, loadReport, notifyDreFollowUp]);
+
+  /** Atualiza só o imposto do DRE do mês com esta versão do relatório. */
+  const refreshDreTax = useCallback(async () => {
+    setActionOverlay({
+      title: `Atualizando o imposto do DRE de ${TAX_REPORT_MONTH_NAMES[month - 1]?.toLowerCase() ?? month}/${year}`,
+      message: "Aplicando o % de cada produto deste relatório à receita do mês no DRE.",
+    });
+    setError(null);
+    try {
+      const res = await fetch("/api/dre/tax/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ year, month }),
+      });
+      if (!res.ok) {
+        throw new Error(await readApiError(res, "dre_tax_refresh_failed"));
+      }
+      const data = (await res.json()) as { result: TaxReportDreFollowUp };
+      notifyDreFollowUp(data.result);
+      await loadReport();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao atualizar o DRE");
+    } finally {
+      setActionOverlay(null);
+    }
+  }, [year, month, loadReport, notifyDreFollowUp]);
   const generating = generateSSE.streaming;
+  // Geração ou recálculo em andamento: fechar/recarregar a aba pede confirmação.
+  useBeforeUnloadGuard(generating || actionBusy);
 
   useEffect(() => {
     if (generateSSE.error) setError(generateSSE.error);
@@ -214,6 +332,19 @@ export function MonthlyTaxReportClient({
     },
     [year, month, generateSSE],
   );
+
+  const labelFor = useCallback(
+    (m: number) => `${TAX_REPORT_MONTH_NAMES[m - 1]?.toLowerCase() ?? m}/${year}`,
+    [year],
+  );
+  const { requestConfirm, dialogProps: confirmDialogProps } = useTaxRecalcConfirm({
+    year,
+    labelFor,
+    onConfirmed: (kind) => {
+      if (kind === "refresh") void refreshDreTax();
+      else void recomputeSaved();
+    },
+  });
 
   useEffect(() => {
     // Idem: relatório do ano/mês inicial já vem via prop.
@@ -297,8 +428,17 @@ export function MonthlyTaxReportClient({
 
   return (
     <TooltipProvider delayDuration={200}>
+      <TaxRecalcConfirmDialog {...confirmDialogProps} />
       {generating && generateProgress ? (
-        <TaxReportGenerationOverlay progress={generateProgress} />
+        <TaxReportGenerationOverlay
+          progress={generateProgress}
+          note="Se este mês já tem DRE, o imposto dele é atualizado no fim."
+        />
+      ) : actionOverlay ? (
+        <TaxActionOverlay
+          title={actionOverlay.title}
+          message={actionOverlay.message}
+        />
       ) : null}
       <div className="space-y-4">
         <div className="flex flex-wrap items-end gap-3 rounded-lg border border-[var(--border)] bg-[var(--muted)]/10 px-3 py-2">
@@ -434,6 +574,7 @@ export function MonthlyTaxReportClient({
             onClose={() => setFixedCostModalOpen(false)}
             onChanged={() => {
               void loadFixedCostItems();
+              if (report) setFixedCostsChanged(true);
             }}
           />
         ) : null}
@@ -481,23 +622,58 @@ export function MonthlyTaxReportClient({
           </Card>
         ) : null}
 
+        {report && !isPeriodMode && fixedCostsChanged ? (
+          <UserFeedback tone="warning" title="Custos fixos alterados">
+            <span className="block">
+              O relatório de {monthLabel} ainda usa os custos fixos anteriores.
+              Atualizar refaz o cálculo com as vendas já salvas, sem buscar
+              nada no Mercado Livre.
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              className="mt-2"
+              disabled={actionBusy || generating}
+              onClick={() => requestConfirm("recompute", [month])}
+            >
+              Atualizar cálculo
+            </Button>
+          </UserFeedback>
+        ) : null}
+
+        {report && !isPeriodMode && reportStatus ? (
+          <TaxReportStatusBanner
+            status={reportStatus}
+            report={report}
+            monthLabel={monthLabel}
+            busy={actionBusy || generating}
+            onRecompute={() => requestConfirm("recompute", [month])}
+            onRegenerate={() => void generateReport()}
+          />
+        ) : null}
+
         {report ? (
           <>
             <Card className="overflow-hidden p-0">
               <div className="grid gap-0 md:grid-cols-[1fr_auto]">
                 <div className="p-5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
-                      Faturamento
-                    </p>
-                    <Badge variant="muted">{periodLabel}</Badge>
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+                          Faturamento
+                        </p>
+                        <Badge variant="muted">{periodLabel}</Badge>
+                      </div>
+                      <p className="mt-1 text-3xl font-semibold tracking-tight tabular-nums">
+                        {formatFinancialMoney(report.consolidado.faturamento)}
+                      </p>
+                      <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                        Receita bruta das vendas pagas incluídas na apuração
+                      </p>
+                    </div>
+                    <TaxMonthKpi report={report} />
                   </div>
-                  <p className="mt-1 text-3xl font-semibold tracking-tight tabular-nums">
-                    {formatFinancialMoney(report.consolidado.faturamento)}
-                  </p>
-                  <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-                    Receita bruta das vendas pagas incluídas na apuração
-                  </p>
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     <MetaChip>
                       {report.meta.pedidosProcessados.toLocaleString("pt-BR")} pedidos
@@ -588,17 +764,35 @@ export function MonthlyTaxReportClient({
 
               <div className="flex items-start gap-2 border-t border-[var(--border)] px-5 py-2.5 text-xs text-[var(--muted-foreground)]">
                 <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-                <p>
-                  Estimativa gerencial (Lucro Real), calculada venda a venda com
-                  UF de destino e tipo de comprador. Não substitui a apuração
-                  contábil oficial (LALUR/e-Lalur).{" "}
-                  {report.periodFrom && report.periodTo ? null : (
-                    <>
-                      Gerado em{" "}
-                      {new Date(report.meta.geradoEm).toLocaleString("pt-BR")}.
-                    </>
-                  )}
-                </p>
+                <div className="space-y-1">
+                  <p>
+                    Estimativa gerencial (Lucro Real), calculada venda a venda com
+                    UF de destino e tipo de comprador. Não substitui a apuração
+                    contábil oficial (LALUR/e-Lalur).{" "}
+                    {report.periodFrom && report.periodTo ? null : (
+                      <>
+                        Gerado em{" "}
+                        {formatDateTimeBr(report.meta.geradoEm)}
+                        {report.meta.origemCalculo === "dados_salvos" &&
+                        report.meta.pedidosBuscadosEm ? (
+                          <>
+                            {" "}com as vendas buscadas em{" "}
+                            {formatDateTimeBr(report.meta.pedidosBuscadosEm)}
+                          </>
+                        ) : null}
+                        .
+                      </>
+                    )}
+                  </p>
+                  {!isPeriodMode && reportStatus ? (
+                    <TaxReportDreLine
+                      status={reportStatus}
+                      monthLabel={monthLabel}
+                      busy={actionBusy || generating}
+                      onRefreshDre={() => requestConfirm("refresh", [month])}
+                    />
+                  ) : null}
+                </div>
               </div>
             </Card>
 

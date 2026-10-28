@@ -29,6 +29,11 @@ function month(overrides: Partial<DreMonthView> = {}): DreMonthView {
     syncWarnings: [],
     reconciliation: NO_RECONCILIATION,
     levelingChangedAfterSync: false,
+    taxStatus: null,
+    taxSource: null,
+    zeroLineAnomalies: [],
+    keptFromPrevious: null,
+    lineAuditMismatches: [],
     ...overrides,
   } as DreMonthView;
 }

@@ -1,13 +1,11 @@
 import { prisma } from "@/lib/db/db";
-import { normalizeProductSku } from "@/lib/pricing/product-pricing";
 import type { CustoLookup } from "@/lib/tax-report/enrichment/obter-custo-por-sku";
 import { loadCustoBySkuMap } from "@/lib/tax-report/enrichment/obter-custo-por-sku";
-import { calcularRelatorioFromTransacoes } from "@/lib/tax-report/service/compute-report";
 import {
-  loadCbsIbsVigencia,
-  loadIcmsRatesMap,
-  loadTaxCompanyConfig,
-} from "@/lib/tax-report/tax-config-data";
+  collectDetalhes,
+  enrichTransacao,
+  recomputeTaxReportPayload,
+} from "@/lib/tax-report/service/report-inputs";
 import type {
   DetalhamentoTributario,
   TaxReportPayload,
@@ -15,37 +13,7 @@ import type {
 } from "@/lib/tax-report/types";
 import { repairTaxReportPayloadSync } from "@/lib/tax-report/repair-snapshot-uf";
 
-export function collectDetalhes(payload: TaxReportPayload): DetalhamentoTributario[] {
-  const fromPorSku = payload.porSku.flatMap((sku) => sku.transacoes);
-  if (fromPorSku.length > 0) return fromPorSku;
-  return payload.transacoes ?? [];
-}
-
-export function enrichTransacao(
-  transacao: TransacaoVenda,
-  custoLookup: CustoLookup,
-): TransacaoVenda {
-  const custo =
-    (transacao.itemId
-      ? custoLookup.byMlItemId.get(transacao.itemId)
-      : undefined) ?? custoLookup.bySku.get(normalizeProductSku(transacao.sku));
-  if (!custo) return transacao;
-
-  return {
-    ...transacao,
-    custoAquisicaoUnitario: custo.pricingCost ?? transacao.custoAquisicaoUnitario,
-    unitCostNf: custo.unitCostNf ?? transacao.unitCostNf ?? null,
-    purchaseIcmsPercent: custo.purchaseIcmsPercent,
-    hasIcmsSt: custo.hasIcmsSt,
-    saleIcmsPercent: custo.saleIcmsPercent,
-    extraCostsUnitario: custo.extraCosts,
-    isMonophasic: custo.isMonophasic,
-    mercadoriaImportada: custo.isImported,
-    ipiPercent: custo.ipiPercent,
-    saleFee: transacao.saleFee ?? 0,
-    freightCost: transacao.freightCost ?? 0,
-  };
-}
+export { collectDetalhes, enrichTransacao };
 
 export function needsCostEnrichmentRepair(
   detalhes: DetalhamentoTributario[],
@@ -88,6 +56,11 @@ function needsApuracaoRepair(payload: TaxReportPayload): boolean {
 }
 
 /**
+ * Reparo **só de exibição** de relatórios antigos (campos que o motor de hoje
+ * calcula e o antigo não tinha) ou com venda sem custo que hoje tem cadastro.
+ * Não grava nada: a tela compara com o que está salvo e oferece "Salvar
+ * recálculo" — o salvo é o que o DRE usa.
+ *
  * `sellerId` (não `organizationId`) porque os snapshots de relatório
  * tributário (`TaxReportMonthSnapshot`) continuam escopados por seller ML,
  * não por organização — resolve a org internamente via `OrganizationMlSeller`
@@ -121,27 +94,11 @@ export async function repairTaxReportPayload(
 
   if (!needsApuracaoRepair(synced) && !needsCostRepair) return synced;
 
-  const [config, icmsRates, cbsIbsVigencia] = await Promise.all([
-    loadTaxCompanyConfig(organizationId),
-    loadIcmsRatesMap(),
-    loadCbsIbsVigencia(synced.year),
-  ]);
-
-  const transacoes = detalhes.map((d) => enrichTransacao(d.transacao, custoLookup));
-
-  const recomputed = calcularRelatorioFromTransacoes({
-    transacoes,
-    config,
-    icmsRates,
-    cbsIbsVigencia,
-    year: synced.year,
-    month: synced.month,
-    overrides: synced.overrides,
+  // Mesmo cálculo do "Salvar recálculo" (nivelamento, Ads e custos fixos
+  // inclusos), só que com a meta original — é uma prévia, não uma versão nova.
+  return recomputeTaxReportPayload({
+    organizationId,
+    payload: synced,
     meta: synced.meta,
   });
-
-  return {
-    ...recomputed,
-    transacoes: [],
-  };
 }

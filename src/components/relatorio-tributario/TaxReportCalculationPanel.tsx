@@ -253,7 +253,13 @@ export function TaxReportCalculationPanel({
         <MemoriaRow
           label="Custo unitário (NF)"
           value={
-            t.unitCostNf ? formatFinancialMoney(t.unitCostNf) : "não cadastrado"
+            t.unitCostNf
+              ? `${formatFinancialMoney(t.unitCostNf)}${
+                  t.custoFonte === "nivelamento"
+                    ? " · nivelado (cadastro do período no DRE)"
+                    : ""
+                }`
+              : "não cadastrado"
           }
           muted={!t.unitCostNf}
         />

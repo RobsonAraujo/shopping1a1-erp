@@ -12,13 +12,14 @@ import {
 import { getCalendarMonthRange } from "@/lib/mercadolibre/revenue-periods";
 import { getTaxReportBillingConcurrency } from "@/lib/tax-report/config";
 import { buildTransacoesFromOrder } from "@/lib/tax-report/enrichment/build-transacao-venda";
-import { resolveFixedCostCreditForMonth } from "@/lib/tax-report/fixed-cost-credit";
-import {
-  loadTaxFixedCostExcludedMonths,
-  loadTaxFixedCostExplicitValues,
-  loadTaxFixedCostItems,
-} from "@/lib/tax-report/tax-fixed-cost-data";
 import { loadCustoBySkuMap } from "@/lib/tax-report/enrichment/obter-custo-por-sku";
+import { loadLevelingRecordsOverlappingMonth } from "@/lib/dre/dre-product-cost-leveling";
+import {
+  buildReportInputsFromTransactions,
+  loadFixedCostResolutionForMonth,
+  recomputeTaxReportPayload,
+} from "@/lib/tax-report/service/report-inputs";
+import { taxReportOrdersFetchedAt } from "@/lib/tax-report/tax-report-meta";
 import {
   fetchOrderBillingInfo,
   mapWithConcurrency,
@@ -239,11 +240,16 @@ export async function generateMonthlyTaxReport(input: {
       ),
     ]),
   ];
-  const custoLookup = await loadCustoBySkuMap(
-    input.organizationId,
-    allSkus,
-    itemIds,
-  );
+  const [custoLookup, levelings] = await Promise.all([
+    loadCustoBySkuMap(input.organizationId, allSkus, itemIds),
+    // Na data de cada venda, o nivelamento do DRE (histórico do cadastro)
+    // vale no lugar do cadastro atual — mesma base de custo do DRE.
+    loadLevelingRecordsOverlappingMonth(
+      input.organizationId,
+      input.year,
+      input.month,
+    ),
+  ]);
 
   input.onProgress?.({
     phase: "compute",
@@ -294,19 +300,15 @@ export async function generateMonthlyTaxReport(input: {
         overrides,
         freightCostByOrderId,
         effectiveSkuByItemId,
+        levelings,
+        year: input.year,
+        month: input.month,
       }),
     );
   }
 
-  const receitaTotalByItem = new Map<string, number>();
-  let receitaTotalMes = 0;
-  for (const t of transacoes) {
-    receitaTotalByItem.set(
-      t.itemId,
-      (receitaTotalByItem.get(t.itemId) ?? 0) + t.receitaBruta,
-    );
-    receitaTotalMes += t.receitaBruta;
-  }
+  const { receitaTotalByItem, receitaTotalMes } =
+    buildReportInputsFromTransactions(transacoes);
 
   input.onProgress?.({
     phase: "compute",
@@ -342,25 +344,11 @@ export async function generateMonthlyTaxReport(input: {
     adsMetricsByItem = new Map();
   }
 
-  const [fixedCostItems, fixedCostExplicitValues, fixedCostExcludedMonths] =
-    await Promise.all([
-      loadTaxFixedCostItems(input.organizationId),
-      loadTaxFixedCostExplicitValues(input.organizationId, input.year),
-      loadTaxFixedCostExcludedMonths(input.organizationId, input.year),
-    ]);
-  const fixedCostResolution = resolveFixedCostCreditForMonth({
-    items: fixedCostItems.map((item) => ({
-      id: item.id,
-      active: true,
-      recurring: item.recurring,
-      endYear: item.endYear,
-      endMonth: item.endMonth,
-    })),
-    explicitValues: fixedCostExplicitValues,
-    excludedMonths: fixedCostExcludedMonths,
-    year: input.year,
-    month: input.month,
-  });
+  const fixedCostResolution = await loadFixedCostResolutionForMonth(
+    input.organizationId,
+    input.year,
+    input.month,
+  );
 
   input.onProgress?.({
     phase: "compute",
@@ -385,6 +373,10 @@ export async function generateMonthlyTaxReport(input: {
     creditoCustosFixosBaseCreditavel: fixedCostResolution.totalCreditavel,
     meta: {
       geradoEm: new Date().toISOString(),
+      // Os pedidos foram buscados no começo da geração — é essa data que diz
+      // se o relatório cobre o mês inteiro.
+      pedidosBuscadosEm: new Date(started).toISOString(),
+      origemCalculo: "ml",
       pedidosProcessados: orders.length,
       linhasProcessadas: transacoes.length,
       semBillingInfo: transacoes.filter((t) => t.dadosFiscaisIndisponiveis)
@@ -407,6 +399,53 @@ export async function generateMonthlyTaxReport(input: {
 
   input.onProgress?.({ phase: "done", message: "Relatório gerado." });
   return payload;
+}
+
+/**
+ * Recalcula o mês sobre as vendas já gravadas — cadastro, nivelamento,
+ * configuração e custos fixos atuais, sem nenhuma chamada ao ML. Resolve
+ * relatório de versão antiga e nivelamento/cadastro alterado depois; venda
+ * nova no ML só a geração completa traz. A versão (`geradoEm`) muda, a data
+ * dos pedidos (`pedidosBuscadosEm`) não.
+ */
+export async function recomputeTaxReportFromSavedSales(input: {
+  organizationId: string;
+  sellerId: number;
+  year: number;
+  month: number;
+}): Promise<TaxReportPayload | null> {
+  const row = await prisma.taxReportMonthSnapshot.findUnique({
+    where: {
+      sellerId_year_month: {
+        sellerId: input.sellerId,
+        year: input.year,
+        month: input.month,
+      },
+    },
+    select: { organizationId: true, payload: true },
+  });
+  if (!row || row.organizationId !== input.organizationId) return null;
+
+  const config = await loadTaxCompanyConfig(input.organizationId);
+  if (config.taxRegime !== "LUCRO_REAL") {
+    throw new Error(
+      "Apenas Lucro Real está habilitado na v1. Ajuste o regime em Configurações tributárias.",
+    );
+  }
+
+  const stored = row.payload as unknown as TaxReportPayload;
+  return recomputeTaxReportPayload({
+    organizationId: input.organizationId,
+    payload: stored,
+    meta: {
+      ...stored.meta,
+      geradoEm: new Date().toISOString(),
+      pedidosBuscadosEm: taxReportOrdersFetchedAt(stored.meta),
+      origemCalculo: "dados_salvos",
+      taxRegime: config.taxRegime,
+      originUf: config.originUf,
+    },
+  });
 }
 
 export async function saveTaxReportSnapshot(

@@ -69,24 +69,51 @@ describe("splitOrderLinesByCancelledOrderIds", () => {
 });
 
 describe("returnedPaidOrderIdsFromOrders", () => {
-  it("picks paid orders tagged not_delivered/returned, refunded, or with return request", () => {
-    const ids = returnedPaidOrderIdsFromOrders([
-      { id: 1, status: "paid", tags: ["paid", "delivered"] },
-      { id: 2, status: "paid", tags: ["paid", "not_delivered"] },
-      { id: 3, status: "cancelled", tags: ["not_delivered"] },
-      { id: 4, status: "paid", tags: ["returned"] },
-      {
-        id: 5,
-        pack_id: 99,
-        status: "paid",
-        payments: [{ status: "refunded" }],
-      },
-      {
-        id: 6,
-        status: "paid",
-        order_request: { return: { id: 1 } },
-      },
-    ]);
+  const now = new Date("2026-10-12T12:00:00.000Z");
+
+  it("picks paid orders tagged returned, refunded, with return request, or long undelivered", () => {
+    const ids = returnedPaidOrderIdsFromOrders(
+      [
+        { id: 1, status: "paid", tags: ["paid", "delivered"] },
+        {
+          id: 2,
+          status: "paid",
+          tags: ["paid", "not_delivered"],
+          date_closed: "2026-08-20T12:00:00.000Z",
+        },
+        { id: 3, status: "cancelled", tags: ["not_delivered"] },
+        { id: 4, status: "paid", tags: ["returned"] },
+        {
+          id: 5,
+          pack_id: 99,
+          status: "paid",
+          payments: [{ status: "refunded" }],
+        },
+        {
+          id: 6,
+          status: "paid",
+          order_request: { return: { id: 1 } },
+        },
+      ],
+      now,
+    );
     assert.deepEqual([...ids].sort(), ["2", "4", "5", "6", "99"]);
+  });
+
+  it("keeps a recent not_delivered order as a sale — it is just in transit", () => {
+    const ids = returnedPaidOrderIdsFromOrders(
+      [
+        {
+          id: 7,
+          status: "paid",
+          tags: ["paid", "not_delivered"],
+          date_closed: "2026-10-05T12:00:00.000Z",
+        },
+        // Sem data não dá para saber a idade: não conta como devolvido.
+        { id: 8, status: "paid", tags: ["paid", "not_delivered"] },
+      ],
+      now,
+    );
+    assert.deepEqual([...ids], []);
   });
 });

@@ -4,6 +4,7 @@ import {
   buildEffectiveCostMaps,
   buildMonthTotals,
   buildYearTotals,
+  resolveMonthTaxStatus,
   type DreCostItemView,
   type DreMonthView,
 } from "../dre-year-data";
@@ -79,6 +80,11 @@ function month(overrides: Partial<DreMonthView> = {}): DreMonthView {
       reviewImportId: null,
     },
     levelingChangedAfterSync: false,
+    taxStatus: null,
+    taxSource: null,
+    zeroLineAnomalies: [],
+    keptFromPrevious: null,
+    lineAuditMismatches: [],
     fullReportSourced: false,
     adsCost: null,
     manuallyEditedLineKeys: [],
@@ -261,5 +267,109 @@ describe("buildYearTotals", () => {
     assert.ok(totals);
     assert.equal(totals.totalEntrada, 0);
     assert.equal(totals.totalInvestimentoManual, 1000);
+  });
+});
+
+describe("resolveMonthTaxStatus", () => {
+  const NOW = new Date("2026-10-12T12:00:00.000Z");
+  const closedReport = {
+    generatedAt: "2026-10-02T10:00:00.000Z",
+    ordersFetchedAt: "2026-10-02T10:00:00.000Z",
+    legacy: false,
+  };
+  const base = {
+    year: 2026,
+    month: 9,
+    hasSnapshot: true,
+    regime: "LUCRO_REAL" as const,
+    hasTaxBreakdown: true,
+    levelingUpdatedAt: null,
+    now: NOW,
+  };
+
+  it("is ok when the DRE used the current version of a report fetched after the month closed", () => {
+    const status = resolveMonthTaxStatus({
+      ...base,
+      report: closedReport,
+      taxSource: { report: { ...closedReport, revenue: 0, tax: 0, orderCount: 0 } },
+    });
+    assert.equal(status?.kind, "ok");
+  });
+
+  it("asks to update the DRE tax when the report was recalculated after the DRE used it", () => {
+    const status = resolveMonthTaxStatus({
+      ...base,
+      report: closedReport,
+      taxSource: {
+        report: {
+          ...closedReport,
+          generatedAt: "2026-10-01T09:00:00.000Z",
+          revenue: 0,
+          tax: 0,
+          orderCount: 0,
+        },
+      },
+    });
+    assert.equal(status?.kind, "dre_outdated");
+    assert.equal(status?.canRefresh, true);
+  });
+
+  it("treats a DRE synced before tax tracking existed as outdated (one refresh fixes it)", () => {
+    const status = resolveMonthTaxStatus({ ...base, report: closedReport, taxSource: null });
+    assert.equal(status?.kind, "dre_outdated");
+  });
+
+  it("alerts when the month closed but the report's orders were fetched before (10/09 for September)", () => {
+    const status = resolveMonthTaxStatus({
+      ...base,
+      report: {
+        generatedAt: "2026-09-10T03:56:00.000Z",
+        ordersFetchedAt: "2026-09-10T03:56:00.000Z",
+        legacy: false,
+      },
+      taxSource: null,
+    });
+    assert.equal(status?.kind, "report_outdated");
+    assert.deepEqual(status?.reasons, ["incomplete"]);
+  });
+
+  it("only informs (partial) for the month still in progress", () => {
+    const report = {
+      generatedAt: "2026-10-06T10:00:00.000Z",
+      ordersFetchedAt: "2026-10-06T10:00:00.000Z",
+      legacy: false,
+    };
+    const status = resolveMonthTaxStatus({
+      ...base,
+      month: 10,
+      report,
+      taxSource: { report: { ...report, revenue: 0, tax: 0, orderCount: 0 } },
+    });
+    assert.equal(status?.kind, "partial");
+  });
+
+  it("flags a missing report, a leveling edited after the report and Simples", () => {
+    assert.equal(
+      resolveMonthTaxStatus({ ...base, report: null, taxSource: null })?.kind,
+      "report_missing",
+    );
+    const leveled = resolveMonthTaxStatus({
+      ...base,
+      report: closedReport,
+      taxSource: null,
+      levelingUpdatedAt: new Date("2026-10-05T00:00:00.000Z"),
+    });
+    assert.deepEqual(leveled?.reasons, ["leveling"]);
+    assert.equal(
+      resolveMonthTaxStatus({ ...base, regime: "SIMPLES", report: null, taxSource: null })?.kind,
+      "simples",
+    );
+  });
+
+  it("has no status for a month without data", () => {
+    assert.equal(
+      resolveMonthTaxStatus({ ...base, hasSnapshot: false, report: closedReport, taxSource: null }),
+      null,
+    );
   });
 });

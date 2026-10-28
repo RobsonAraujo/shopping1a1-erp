@@ -256,12 +256,35 @@ export function splitOrderLinesByCancelledOrderIds(
   return { activeLines, returnedOnInvoiceLines };
 }
 
-const PAID_RETURN_TAGS = new Set(["not_delivered", "returned"]);
+/**
+ * `not_delivered` é o estado normal de todo pedido ainda em trânsito — o ML só
+ * troca para `delivered` na entrega. Sozinho, ele só indica devolução quando o
+ * pedido já passou do prazo de qualquer entrega: antes disso, tratar como
+ * devolvido tirava do Custo produto/Impostos as vendas do fim do mês (no sync
+ * do mês corrente ou logo após o fechamento) e as jogava em Canceladas.
+ */
+const NOT_DELIVERED_RETURN_MIN_AGE_DAYS = 30;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
-function orderLooksReturnedWhilePaid(order: OrderSearchOrder): boolean {
+function orderAgeDays(order: OrderSearchOrder, now: Date): number | null {
+  const raw = order.date_closed || order.date_created;
+  if (!raw) return null;
+  const time = new Date(raw).getTime();
+  if (Number.isNaN(time)) return null;
+  return (now.getTime() - time) / DAY_MS;
+}
+
+function orderLooksReturnedWhilePaid(
+  order: OrderSearchOrder,
+  now: Date,
+): boolean {
   if (order.order_request?.return) return true;
-  const tags = order.tags ?? [];
-  if (tags.some((tag) => PAID_RETURN_TAGS.has(String(tag)))) return true;
+  const tags = (order.tags ?? []).map(String);
+  if (tags.includes("returned")) return true;
+  if (tags.includes("not_delivered")) {
+    const age = orderAgeDays(order, now);
+    if (age !== null && age >= NOT_DELIVERED_RETURN_MIN_AGE_DAYS) return true;
+  }
   return (order.payments ?? []).some(
     (payment) =>
       payment.status === "refunded" || payment.status === "charged_back",
@@ -270,11 +293,12 @@ function orderLooksReturnedWhilePaid(order: OrderSearchOrder): boolean {
 
 export function returnedPaidOrderIdsFromOrders(
   orders: OrderSearchOrder[],
+  now: Date = new Date(),
 ): Set<string> {
   const ids = new Set<string>();
   for (const order of orders) {
     if (order.status === "cancelled") continue;
-    if (!orderLooksReturnedWhilePaid(order)) continue;
+    if (!orderLooksReturnedWhilePaid(order, now)) continue;
     for (const key of orderIdentityKeys(order)) ids.add(key);
   }
   return ids;
@@ -349,7 +373,7 @@ export async function fetchOrdersInDateRange(
  * pedido com o período do nivelamento de custo. Não usar `getDate()`: no
  * servidor (UTC) um pedido das 21h–24h BRT caía no dia seguinte.
  */
-function orderDateYmdFromOrder(order: {
+export function orderDateYmdFromOrder(order: {
   date_closed?: string;
   date_created?: string;
 }): string | null {

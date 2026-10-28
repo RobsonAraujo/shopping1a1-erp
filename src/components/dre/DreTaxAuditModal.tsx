@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertTriangle, Ban, Search } from "lucide-react";
+import { AlertTriangle, Ban, CheckCircle2, Search, Undo2 } from "lucide-react";
 import {
   Sheet,
   SheetBody,
@@ -20,7 +20,14 @@ import {
   formatFinancialPercent,
 } from "@/lib/pricing/financial-margin";
 import { cn } from "@/lib/utils";
-import type { DreTaxBreakdownItem } from "@/lib/dre/dre-calculations";
+import { reportsConfig } from "@/config/reports";
+import type {
+  DreTaxBreakdownItem,
+  DreTaxRateSource,
+  DreTaxSource,
+} from "@/lib/dre/dre-calculations";
+import { buildDreTaxBridge } from "@/lib/dre/dre-sales-tax";
+import { dreMonthShortLabel } from "@/lib/dre/dre-table-rows";
 
 type DreTaxAuditSortKey =
   | "title"
@@ -35,8 +42,106 @@ type DreTaxAuditModalProps = {
   items: DreTaxBreakdownItem[];
   /** true quando algum mês do período não tem o detalhamento salvo (sincronizado antes desta funcionalidade). */
   needsResync?: boolean;
+  /** Versão do tributário usada no mês (só auditoria de um mês). */
+  taxSource?: DreTaxSource | null;
   onClose: () => void;
 };
+
+function rateSourceLabel(source: DreTaxRateSource | undefined): string | null {
+  if (!source) return null;
+  if (source.kind === "simples") return "Simples";
+  if (source.kind === "kit_components") return "média do kit";
+  return `de ${dreMonthShortLabel(source.month).toLowerCase()}/${String(source.year).slice(2)}`;
+}
+
+function formatDay(iso: string): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: reportsConfig.catalogCompetitionTimezone,
+  }).format(new Date(iso));
+}
+
+/**
+ * A conta que liga o DRE ao tributário: imposto do mês no tributário − imposto
+ * das devolvidas pagas (estão no tributário, saem do DRE) = Impostos sobre
+ * vendas. O que sobra tem motivo listado.
+ */
+function TaxBridge({ source }: { source: DreTaxSource }) {
+  if (source.regime === "SIMPLES") {
+    return (
+      <div className="mb-3 shrink-0 rounded-lg border border-[var(--border)] bg-[var(--muted)]/30 px-3 py-2 text-xs text-[var(--muted-foreground)]">
+        {source.simplesRatePercent === null
+          ? "Simples Nacional sem alíquota efetiva configurada — o imposto fica zerado até configurar em Configurações tributárias."
+          : `Simples Nacional: ${formatFinancialPercent(source.simplesRatePercent)} (alíquota efetiva do DAS) sobre ${formatFinancialMoney(source.baseRevenue)} de receita sem canceladas/devolvidas.`}
+      </div>
+    );
+  }
+  const bridge = buildDreTaxBridge(source);
+  if (!source.report || !bridge) {
+    return (
+      <div className="mb-3 flex shrink-0 items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs text-amber-900">
+        <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+        <span>
+          Este mês não tinha relatório tributário quando o imposto foi
+          calculado — os produtos usaram o % de outro mês ou ficaram sem
+          imposto. Gere o tributário do mês.
+        </span>
+      </div>
+    );
+  }
+  const reportRate =
+    source.report.revenue > 0 ? (source.report.tax / source.report.revenue) * 100 : null;
+  const dreRate =
+    source.baseRevenue > 0 ? (source.computedTax / source.baseRevenue) * 100 : null;
+  const reasons = [
+    source.fallbackItemCount > 0
+      ? `${source.fallbackItemCount} anúncio(s) com % de outro mês`
+      : null,
+    source.missingItemCount > 0
+      ? `${source.missingItemCount} anúncio(s) sem % (${formatFinancialMoney(source.missingRevenue)} de receita)`
+      : null,
+    source.paidOrderCount !== null && source.paidOrderCount !== source.report.orderCount
+      ? `pedidos pagos: ${source.paidOrderCount} no DRE × ${source.report.orderCount} no tributário`
+      : null,
+  ].filter(Boolean);
+
+  return (
+    <div className="mb-3 shrink-0 rounded-lg border border-[var(--border)] bg-[var(--muted)]/30 px-3 py-2 text-xs text-[var(--muted-foreground)]">
+      <p className="mb-1.5 font-medium text-[var(--foreground)]">
+        Conferência com o tributário (versão de {formatDay(source.report.generatedAt)})
+      </p>
+      <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-0.5 tabular-nums">
+        <dt>Imposto do mês no tributário ({formatFinancialPercent(reportRate)} de {formatFinancialMoney(source.report.revenue)})</dt>
+        <dd className="text-right">{formatFinancialMoney(bridge.reportTax)}</dd>
+        <dt>− Devolvidas pagas (estão no tributário, saem do DRE)</dt>
+        <dd className="text-right">{formatFinancialMoney(-bridge.returnedPaidTax)}</dd>
+        {Math.abs(bridge.other) >= 0.01 ? (
+          <>
+            <dt>± Outras diferenças{reasons.length ? `: ${reasons.join("; ")}` : ""}</dt>
+            <dd className="text-right">{formatFinancialMoney(bridge.other)}</dd>
+          </>
+        ) : null}
+        <dt className="font-medium text-[var(--foreground)]">
+          = Impostos sobre vendas ({formatFinancialPercent(dreRate)} de {formatFinancialMoney(source.baseRevenue)} sem canceladas/devolvidas)
+        </dt>
+        <dd className="text-right font-medium text-[var(--foreground)]">
+          {formatFinancialMoney(bridge.dreTax)}
+        </dd>
+      </dl>
+      <p className="mt-1.5 flex items-center gap-1">
+        {bridge.closes ? (
+          <>
+            <CheckCircle2 className="size-3.5 text-emerald-600" aria-hidden />
+            Bate com o tributário.
+          </>
+        ) : (
+          "A diferença some ao recalcular o tributário do mês com os pedidos atuais."
+        )}
+      </p>
+    </div>
+  );
+}
 
 function matchesQuery(item: DreTaxBreakdownItem, query: string): boolean {
   const q = query.trim().toLowerCase();
@@ -52,6 +157,7 @@ export function DreTaxAuditModal({
   title,
   items,
   needsResync,
+  taxSource,
   onClose,
 }: DreTaxAuditModalProps) {
   const [query, setQuery] = useState("");
@@ -92,17 +198,23 @@ export function DreTaxAuditModal({
     0,
   );
   const totalTax = filteredItems.reduce((sum, item) => sum + item.totalTax, 0);
-  const cancelledItems = items.filter((item) => (item.cancelledQuantity ?? 0) > 0);
+  const cancelledItems = items.filter(
+    (item) => (item.cancelledQuantity ?? 0) + (item.returnedQuantity ?? 0) > 0,
+  );
   const cancelledQuantityTotal = items.reduce(
     (sum, item) => sum + (item.cancelledQuantity ?? 0),
     0,
   );
+  const returnedQuantityTotal = items.reduce(
+    (sum, item) => sum + (item.returnedQuantity ?? 0),
+    0,
+  );
   const cancelledRevenueTotal = items.reduce(
-    (sum, item) => sum + (item.cancelledRevenue ?? 0),
+    (sum, item) => sum + (item.cancelledRevenue ?? 0) + (item.returnedRevenue ?? 0),
     0,
   );
   const cancelledTax = items.reduce(
-    (sum, item) => sum + (item.cancelledTax ?? 0),
+    (sum, item) => sum + (item.cancelledTax ?? 0) + (item.returnedTax ?? 0),
     0,
   );
 
@@ -120,18 +232,20 @@ export function DreTaxAuditModal({
         <SheetHeader>
           <SheetTitle>Auditoria — Impostos sobre vendas</SheetTitle>
           <SheetDescription>
-            {title}. Para cada anúncio: valor de venda × % de imposto (ICMS/ST)
-            apurado no relatório tributário do produto naquele mês.
+            {title}. Para cada anúncio: valor de venda × % de imposto
+            (PIS/COFINS + ICMS/DIFAL − créditos) apurado no relatório
+            tributário do produto naquele mês.
           </SheetDescription>
         </SheetHeader>
         <SheetBody className="flex flex-1 flex-col overflow-hidden">
+          {taxSource ? <TaxBridge source={taxSource} /> : null}
           {cancelledItems.length > 0 ? (
             <div className="mb-3 flex shrink-0 items-start gap-2 rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 text-xs leading-relaxed text-[var(--muted-foreground)]">
               <Ban className="mt-0.5 size-3.5 shrink-0" aria-hidden />
               <span>
-                {cancelledItems.length} produto(s) / {cancelledQuantityTotal}{" "}
-                un. canceladas/devolvidas neste período. A row Canceladas /
-                devolvidas mostra o valor de venda (
+                {cancelledItems.length} produto(s) com {cancelledQuantityTotal}{" "}
+                un. canceladas e {returnedQuantityTotal} un. devolvidas neste
+                período. A linha Canceladas / devolvidas mostra o valor de venda (
                 {formatFinancialMoney(cancelledRevenueTotal)}); o imposto
                 excluído da soma abaixo é {formatFinancialMoney(cancelledTax)}.
                 Marcados com{" "}
@@ -235,10 +349,18 @@ export function DreTaxAuditModal({
                       </tr>
                     ) : (
                       sortedRows.map((item) => {
-                        const cancelledQuantity = item.cancelledQuantity ?? 0;
+                        const cancelledQuantity =
+                          (item.cancelledQuantity ?? 0) +
+                          (item.returnedQuantity ?? 0);
                         const cancelledRevenueForItem =
-                          item.cancelledRevenue ?? 0;
-                        const cancelledTaxForItem = item.cancelledTax ?? 0;
+                          (item.cancelledRevenue ?? 0) +
+                          (item.returnedRevenue ?? 0);
+                        const cancelledTaxForItem =
+                          (item.cancelledTax ?? 0) + (item.returnedTax ?? 0);
+                        const returnedOnly =
+                          (item.returnedQuantity ?? 0) > 0 &&
+                          (item.cancelledQuantity ?? 0) === 0;
+                        const rateLabel = rateSourceLabel(item.rateSource);
                         const fullyCancelled =
                           item.quantity === 0 && cancelledQuantity > 0;
                         const displayQuantity = fullyCancelled
@@ -288,7 +410,7 @@ export function DreTaxAuditModal({
                                   ) : null}
                                   {fullyCancelled ? (
                                     <p className="text-[11px] font-medium text-[var(--muted-foreground)]">
-                                      Cancelado · não entra no total ·{" "}
+                                      {returnedOnly ? "Devolvido" : "Cancelado"} · não entra no total ·{" "}
                                       {cancelledQuantity} un.
                                     </p>
                                   ) : item.missingTax ? (
@@ -298,8 +420,13 @@ export function DreTaxAuditModal({
                                   ) : null}
                                   {!fullyCancelled && cancelledQuantity > 0 ? (
                                     <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-[var(--muted-foreground)]">
-                                      <Ban className="size-3 shrink-0" aria-hidden />+
-                                      {cancelledQuantity} un. cancelados (
+                                      {returnedOnly ? (
+                                        <Undo2 className="size-3 shrink-0" aria-hidden />
+                                      ) : (
+                                        <Ban className="size-3 shrink-0" aria-hidden />
+                                      )}
+                                      +{cancelledQuantity} un.{" "}
+                                      {returnedOnly ? "devolvidas" : "canceladas/devolvidas"} (
                                       {formatFinancialMoney(cancelledTaxForItem)}
                                       ) · não contam no total
                                     </p>
@@ -315,6 +442,11 @@ export function DreTaxAuditModal({
                             </td>
                             <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
                               {formatFinancialPercent(displayTaxPercent)}
+                              {rateLabel ? (
+                                <span className="block text-[10px] font-normal text-[var(--muted-foreground)]">
+                                  {rateLabel}
+                                </span>
+                              ) : null}
                             </td>
                             <td className="whitespace-nowrap px-3 py-2 text-right font-semibold tabular-nums">
                               {formatFinancialMoney(displayTotalTax)}

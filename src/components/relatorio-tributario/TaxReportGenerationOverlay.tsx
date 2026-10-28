@@ -1,8 +1,22 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+
+const emptySubscribe = () => () => {};
+
+/** O overlay vai num portal no `body` — só existe no navegador. */
+export function useIsClient() {
+  return useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
+}
 
 export type TaxReportProgressState = {
   phase: "orders" | "billing" | "compute" | "save" | "done" | "error";
@@ -51,11 +65,25 @@ function progressPercent(progress: TaxReportProgressState): number {
   return 50;
 }
 
+/**
+ * Bloqueia a tela enquanto o relatório é gerado (busca os pedidos no ML, pode
+ * levar minutos), com as etapas e o andamento — o usuário vê o que está
+ * acontecendo e não sai da tela no meio.
+ */
 export function TaxReportGenerationOverlay({
   progress,
+  title = "Gerando relatório tributário",
+  note,
+  onCancel,
 }: {
   progress: TaxReportProgressState;
+  title?: string;
+  /** Explicação curta do que acontece no fim (ex.: o DRE acompanha). */
+  note?: string;
+  /** Interrompe a geração — nada é gravado antes da etapa "Salvando". */
+  onCancel?: () => void;
 }) {
+  const mounted = useIsClient();
   const activeIndex = phaseIndex(progress.phase);
   const percent = progressPercent(progress);
   const showCounter =
@@ -64,16 +92,31 @@ export function TaxReportGenerationOverlay({
     progress.total > 0 &&
     progress.current != null;
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4 backdrop-blur-[2px]">
+  if (!mounted) return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[200] flex h-[100dvh] w-screen items-center justify-center bg-black/40 p-4 backdrop-blur-[2px]"
+      role="alertdialog"
+      aria-modal="true"
+      aria-busy="true"
+      aria-labelledby="tax-report-overlay-title"
+      aria-describedby="tax-report-overlay-desc"
+    >
       <Card className="w-full max-w-md p-6 shadow-xl">
         <div className="flex items-start gap-3">
           <Loader2 className="mt-0.5 size-5 shrink-0 animate-spin text-[var(--primary)]" />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-[var(--foreground)]">
-              Gerando relatório tributário
+            <p
+              id="tax-report-overlay-title"
+              className="text-sm font-semibold text-[var(--foreground)]"
+            >
+              {title}
             </p>
-            <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+            <p
+              id="tax-report-overlay-desc"
+              className="mt-1 text-sm text-[var(--muted-foreground)]"
+            >
               {progress.message}
             </p>
           </div>
@@ -126,7 +169,72 @@ export function TaxReportGenerationOverlay({
             );
           })}
         </ol>
+        {note ? (
+          <p className="mt-4 text-xs leading-relaxed text-[var(--muted-foreground)]">
+            {note}
+          </p>
+        ) : null}
+        {onCancel ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-3"
+            disabled={progress.phase === "save" || progress.phase === "done"}
+            onClick={onCancel}
+          >
+            Cancelar
+          </Button>
+        ) : null}
       </Card>
-    </div>
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * Bloqueia a tela durante as ações curtas (recálculo com as vendas salvas,
+ * atualização do imposto do DRE): alguns segundos, só no banco — mas o usuário
+ * precisa ver que está rodando e não pode mexer no mês no meio.
+ */
+export function TaxActionOverlay({
+  title,
+  message,
+}: {
+  title: string;
+  message: string;
+}) {
+  const mounted = useIsClient();
+  if (!mounted) return null;
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[200] flex h-[100dvh] w-screen items-center justify-center bg-black/40 p-4 backdrop-blur-[2px]"
+      role="alertdialog"
+      aria-modal="true"
+      aria-busy="true"
+      aria-labelledby="tax-action-overlay-title"
+      aria-describedby="tax-action-overlay-desc"
+    >
+      <Card className="w-full max-w-md p-6 shadow-xl">
+        <div className="flex items-start gap-3">
+          <Loader2 className="mt-0.5 size-5 shrink-0 animate-spin text-[var(--primary)]" />
+          <div className="min-w-0 flex-1">
+            <p
+              id="tax-action-overlay-title"
+              className="text-sm font-semibold text-[var(--foreground)]"
+            >
+              {title}
+            </p>
+            <p
+              id="tax-action-overlay-desc"
+              className="mt-1 text-sm text-[var(--muted-foreground)]"
+            >
+              {message}
+            </p>
+          </div>
+        </div>
+      </Card>
+    </div>,
+    document.body,
   );
 }

@@ -61,6 +61,27 @@ export function getZonedYearMonth(
   return { year: parts.year, month: parts.month };
 }
 
+export function getZonedYearMonthDay(
+  date: Date = new Date(),
+  timeZone: string = reportsConfig.catalogCompetitionTimezone,
+): { year: number; month: number; day: number } {
+  return getZonedParts(date, timeZone);
+}
+
+/**
+ * Primeiro instante do mês seguinte no fuso — a partir dele o mês civil está
+ * fechado (dados buscados antes disso não cobrem o mês inteiro).
+ */
+export function getCivilMonthClose(
+  year: number,
+  month: number,
+  timeZone: string = reportsConfig.catalogCompetitionTimezone,
+): Date {
+  const nextYear = month === 12 ? year + 1 : year;
+  const nextMonth = month === 12 ? 1 : month + 1;
+  return localDateTimeToUtc(nextYear, nextMonth, 1, 0, 0, 0, 0, timeZone);
+}
+
 export function isCurrentCalendarMonth(
   year: number,
   month: number,

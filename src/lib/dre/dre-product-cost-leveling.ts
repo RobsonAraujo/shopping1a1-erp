@@ -10,6 +10,7 @@ import {
   levelingScope,
   type DreProductCostLevelingInput,
   type DreProductCostLevelingPricing,
+  type DreProductCostLevelingRecord,
   type DreProductCostLevelingView,
 } from "@/lib/dre/dre-product-cost-leveling-shared";
 
@@ -21,12 +22,14 @@ export {
   dateRangesOverlap,
   DreProductCostLevelingError,
   enumerateMonthsOverlappingDateRange,
+  findLevelingForOrderDate,
   isValidDatePeriod,
   isValidYmd,
   levelingScope,
   resolveLevelingCostForOrderDate,
   type DreProductCostLevelingInput,
   type DreProductCostLevelingPricing,
+  type DreProductCostLevelingRecord,
   type DreProductCostLevelingView,
 } from "@/lib/dre/dre-product-cost-leveling-shared";
 
@@ -352,6 +355,30 @@ export async function loadLevelingsOverlappingMonth(
   year: number,
   month: number,
 ): Promise<DreProductCostLevelingPricing[]> {
+  const records = await loadLevelingRecordsOverlappingMonth(
+    organizationId,
+    year,
+    month,
+  );
+  return records.map(({ sku, productMlItemId, startDate, endDate, pricingCost }) => ({
+    sku,
+    productMlItemId,
+    startDate,
+    endDate,
+    pricingCost,
+  }));
+}
+
+/**
+ * Igual a `loadLevelingsOverlappingMonth`, com o histórico completo do
+ * cadastro (custo NF, ICMS de compra, ST, IPI…) — o relatório tributário
+ * calcula os créditos da compra com ele.
+ */
+export async function loadLevelingRecordsOverlappingMonth(
+  organizationId: string,
+  year: number,
+  month: number,
+): Promise<DreProductCostLevelingRecord[]> {
   if (!Number.isInteger(month) || month < 1 || month > 12) return [];
 
   const monthStart = new Date(Date.UTC(year, month - 1, 1));
@@ -376,5 +403,14 @@ export async function loadLevelingsOverlappingMonth(
       startDate: view.startDate,
       endDate: view.endDate,
       pricingCost: view.pricingCost,
+      hasIcmsSt: view.hasIcmsSt,
+      unitCostNf: view.unitCostNf,
+      purchaseCostWithSt: view.purchaseCostWithSt,
+      ipiPercent: view.ipiPercent,
+      purchaseIcmsPercent: view.purchaseIcmsPercent,
+      extraCosts: view.extraCosts,
+      isMonophasic: view.isMonophasic,
+      isImported: view.isImported,
+      saleIcmsPercent: view.saleIcmsPercent,
     }));
 }

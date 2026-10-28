@@ -1,3 +1,5 @@
+import type { TaxReportStaleness } from "@/lib/tax-report/tax-report-staleness";
+
 export type BuyerDocumentType = "CPF" | "CNPJ" | "UNKNOWN";
 
 export type TaxpayerSource =
@@ -38,6 +40,12 @@ export type TransacaoVenda = {
   freightCost: number;
   /** % de IPI cadastrado no produto — apenas exibição, não entra no cálculo tributário. */
   ipiPercent: number;
+  /**
+   * De onde vieram custo e créditos da compra: `nivelamento` quando um
+   * nivelamento do DRE cobre o dia da venda (histórico do cadastro naquele
+   * período); senão o cadastro atual. Ausente em relatórios antigos.
+   */
+  custoFonte?: "cadastro" | "nivelamento";
 };
 
 export type ManualFiscalOverride = {
@@ -218,6 +226,16 @@ export type RelatorioConsolidado = {
   /** Base efetivamente creditável (já rateada por dias corridos, se mês em andamento). */
   creditoCustosFixosBaseCreditavel?: number;
   icmsDifalTotal: number;
+  /** Crédito de ICMS da compra (NF de entrada + ST recuperável). Ausente em snapshots antigos. */
+  icmsCreditoCompraTotal?: number;
+  /**
+   * Imposto operacional do mês: PIS/COFINS líquido + ICMS/DIFAL − créditos.
+   * É o total que o DRE usa (por produto). Ausente em snapshots antigos — usar
+   * `impostoOperacionalTotalRelatorio`.
+   */
+  impostoOperacionalTotal?: number;
+  /** Receita das vendas sem dados fiscais do comprador (fora da apuração). */
+  faturamentoSemDadosFiscais?: number;
   cbsIbsInformativoTotal: number;
   margemOperacional: number;
   /** @deprecated Snapshots antigos — use margemOperacional */
@@ -243,7 +261,17 @@ export type TaxReportPayload = {
   transacoes?: DetalhamentoTributario[];
   overrides: Record<string, ManualFiscalOverride>;
   meta: {
+    /** Versão do relatório: quando este cálculo foi feito (= `generatedAt`). */
     geradoEm: string;
+    /**
+     * Quando os pedidos foram buscados no ML. Igual a `geradoEm` numa geração
+     * completa; o recálculo com os dados salvos mantém a data original. É ela
+     * que diz se o relatório cobre o mês inteiro. Ausente em relatórios antigos
+     * (lá a busca e o cálculo foram juntos: usar `geradoEm`).
+     */
+    pedidosBuscadosEm?: string;
+    /** `dados_salvos` = recalculado sobre as vendas já gravadas, sem chamar o ML. */
+    origemCalculo?: "ml" | "dados_salvos";
     pedidosProcessados: number;
     linhasProcessadas: number;
     semBillingInfo: number;
@@ -251,6 +279,44 @@ export type TaxReportPayload = {
     taxRegime: string;
     originUf: string;
   };
+};
+
+/**
+ * Estado do relatório do mês na tela do tributário: o que está gravado (é o
+ * que o DRE usa), se a tela recalculou algo diferente, se precisa recalcular e
+ * se o DRE do mês já usa esta versão.
+ */
+export type TaxReportScreenStatus = {
+  saved: { tax: number; revenue: number; generatedAt: string };
+  /** A tela recalculou (relatório antigo / custo cadastrado depois) e o resultado difere do gravado. */
+  unsavedRecalc: boolean;
+  staleness: TaxReportStaleness;
+  /** DRE do mesmo mês (null = mês sem DRE). */
+  dre: {
+    usesThisVersion: boolean;
+    taxErp: number;
+    /** Linha de imposto ajustada à mão — não é atualizada sozinha. */
+    manualEdit: boolean;
+  } | null;
+};
+
+/**
+ * Prévia de "Atualizar cálculo" (recálculo com as vendas salvas), antes de
+ * gravar: como fica o mês no tributário e o imposto do DRE que acompanha.
+ */
+export type TaxRecalcPreview = {
+  report: {
+    before: { tax: number; revenue: number };
+    after: { tax: number; revenue: number };
+  };
+  dre: TaxReportDreFollowUp;
+};
+
+/** Resultado de atualizar o imposto do DRE depois de recalcular o tributário. */
+export type TaxReportDreFollowUp = {
+  status: "updated" | "unchanged" | "manual_edit" | "no_snapshot" | "needs_sync" | "failed";
+  previousTaxErp: number | null;
+  taxErp: number | null;
 };
 
 export type TaxCompanyConfig = {

@@ -5,8 +5,9 @@ import { MonthlyTaxReportSkeleton } from "@/components/relatorio-tributario/Mont
 import { UserFeedback } from "@/components/ui/user-feedback";
 import { loadTaxCompanyConfig } from "@/lib/tax-report/tax-config-data";
 import { loadTaxFixedCostItemsWithMonthValue } from "@/lib/tax-report/tax-fixed-cost-data";
-import { loadTaxReportSnapshot } from "@/lib/tax-report/service/generate-monthly-report";
+import { loadTaxReportScreen } from "@/lib/tax-report/service/tax-report-screen";
 import { stripTransacoesForResponse } from "@/lib/tax-report/strip-transacoes-for-response";
+import type { TaxReportScreenStatus } from "@/lib/tax-report/types";
 import { getZonedYearMonth } from "@/lib/mercadolibre/revenue-periods";
 import { getOrganizationContext } from "@/lib/organizations/context";
 import { publicPageLoadMessage } from "@/lib/infra/server-public-error";
@@ -48,19 +49,22 @@ async function RelatorioTributarioDataSection({
         initialCompanyTaxRegime={companyTaxRegime}
         initialFixedCostItems={[]}
         initialReport={null}
+        initialReportStatus={null}
       />
     );
   }
 
   let fixedCostItems: Awaited<ReturnType<typeof loadTaxFixedCostItemsWithMonthValue>> = [];
   let report: ReturnType<typeof stripTransacoesForResponse> | null = null;
+  let reportStatus: TaxReportScreenStatus | null = null;
   try {
-    const [items, snapshot] = await Promise.all([
+    const [items, screen] = await Promise.all([
       loadTaxFixedCostItemsWithMonthValue(organizationId, year, month),
-      loadTaxReportSnapshot(userId, year, month),
+      loadTaxReportScreen({ organizationId, sellerId: userId, year, month }),
     ]);
     fixedCostItems = items;
-    report = snapshot ? stripTransacoesForResponse(snapshot) : null;
+    report = screen ? stripTransacoesForResponse(screen.payload) : null;
+    reportStatus = screen?.status ?? null;
   } catch (e) {
     loadError = publicPageLoadMessage(
       "dashboard/relatorio-tributario",
@@ -82,6 +86,7 @@ async function RelatorioTributarioDataSection({
       initialCompanyTaxRegime={companyTaxRegime}
       initialFixedCostItems={fixedCostItems}
       initialReport={report}
+      initialReportStatus={reportStatus}
     />
   );
 }

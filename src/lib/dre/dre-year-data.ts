@@ -5,13 +5,24 @@ import {
   type DreCancelledIncludeOverlay,
   type DreComputedTotals,
   type DreEditableLineKey,
+  type DreKeptFromPrevious,
   type DreLineAmounts,
+  type DreLineAuditMismatch,
   type DreLineBreakdownItem,
   type DreMonthSnapshotPayload,
   LEAN_SNAPSHOT_PAYLOAD_KEYS,
   type DreProductCostBreakdownItem,
   type DreTaxBreakdownItem,
+  type DreTaxSource,
 } from "@/lib/dre/dre-calculations";
+import {
+  detectZeroLineAnomalies,
+  type DreZeroLineAnomaly,
+} from "@/lib/dre/dre-line-anomalies";
+import {
+  taxReportStaleness,
+  type TaxReportStalenessReason,
+} from "@/lib/tax-report/tax-report-staleness";
 import { prisma } from "@/lib/db/db";
 import {
   parseSnapshotPayload,
@@ -75,6 +86,16 @@ export type DreMonthView = {
    * depois da última sync — o Custo produto do snapshot está desatualizado.
    */
   levelingChangedAfterSync: boolean;
+  /** Imposto × relatório tributário do mês (ver `resolveMonthTaxStatus`). null = mês sem dados ou Home. */
+  taxStatus: DreMonthTaxStatus | null;
+  /** Versão do relatório tributário que o imposto usou (conta de conferência). */
+  taxSource: DreTaxSource | null;
+  /** Linhas zeradas fora do padrão dos outros meses — provável falha da API do ML. */
+  zeroLineAnomalies: DreZeroLineAnomaly[];
+  /** Linhas cuja fonte falhou no último sync e que mantiveram o valor anterior. */
+  keptFromPrevious: DreKeptFromPrevious | null;
+  /** Linhas que não batem com a soma da própria auditoria. */
+  lineAuditMismatches: DreLineAuditMismatch[];
   /**
    * true quando o Relatório Full já tem envios para o mês (import ML ou
    * manual) — usado só para o alerta de UI; o valor na célula ainda vem do
@@ -188,6 +209,158 @@ export function levelingChangedAfterSync(
       row.endDate.getTime() >= monthStart &&
       row.updatedAt.getTime() > syncedAt.getTime(),
   );
+}
+
+/** Relatório tributário do mês como está no banco agora. */
+export type DreTaxReportMeta = {
+  /** Versão (`generatedAt`). */
+  generatedAt: string;
+  /** Quando os pedidos foram buscados no ML. */
+  ordersFetchedAt: string;
+  /** Versão antiga do cálculo (sem identidade do anúncio). */
+  legacy: boolean;
+};
+
+/**
+ * - `ok`: o DRE usou a versão atual de um relatório que cobre o mês inteiro;
+ * - `partial`: mês em andamento — só informativo;
+ * - `dre_outdated`: o relatório mudou depois → "Atualizar imposto" (só banco);
+ * - `report_outdated`: o relatório precisa ser recalculado (`reasons`);
+ * - `report_missing`: mês sem relatório tributário → imposto 0 ou % de outro mês;
+ * - `simples`: empresa no Simples, % da alíquota efetiva do DAS.
+ */
+export type DreMonthTaxStatusKind =
+  | "ok"
+  | "partial"
+  | "dre_outdated"
+  | "report_outdated"
+  | "report_missing"
+  | "simples";
+
+export type DreMonthTaxStatus = {
+  kind: DreMonthTaxStatusKind;
+  report: DreTaxReportMeta | null;
+  reasons: TaxReportStalenessReason[];
+  /** O mês tem auditoria por anúncio salva — dá para atualizar sem sync. */
+  canRefresh: boolean;
+};
+
+export function resolveMonthTaxStatus(input: {
+  year: number;
+  month: number;
+  hasSnapshot: boolean;
+  regime: "LUCRO_REAL" | "SIMPLES";
+  taxSource: Pick<DreTaxSource, "report"> | null;
+  hasTaxBreakdown: boolean;
+  report: DreTaxReportMeta | null;
+  levelingUpdatedAt: Date | null;
+  now?: Date;
+}): DreMonthTaxStatus | null {
+  if (!input.hasSnapshot) return null;
+  const canRefresh = input.hasTaxBreakdown;
+  if (input.regime === "SIMPLES") {
+    return { kind: "simples", report: null, reasons: [], canRefresh };
+  }
+  if (!input.report) {
+    return { kind: "report_missing", report: null, reasons: [], canRefresh };
+  }
+  const staleness = taxReportStaleness({
+    year: input.year,
+    month: input.month,
+    ordersFetchedAt: input.report.ordersFetchedAt,
+    generatedAt: input.report.generatedAt,
+    legacy: input.report.legacy,
+    levelingUpdatedAt: input.levelingUpdatedAt,
+    now: input.now,
+  });
+  if (staleness.reasons.length > 0) {
+    return {
+      kind: "report_outdated",
+      report: input.report,
+      reasons: staleness.reasons,
+      canRefresh,
+    };
+  }
+  const used = input.taxSource?.report?.generatedAt;
+  const sameVersion =
+    used !== undefined &&
+    Date.parse(used) === Date.parse(input.report.generatedAt);
+  if (!sameVersion) {
+    return { kind: "dre_outdated", report: input.report, reasons: [], canRefresh };
+  }
+  return {
+    kind: staleness.completeness === "partial" ? "partial" : "ok",
+    report: input.report,
+    reasons: [],
+    canRefresh,
+  };
+}
+
+/** Último `updatedAt` dos nivelamentos que cobrem o mês. */
+function levelingUpdatedAtForMonth(
+  levelings: readonly DreLevelingChangeSummary[],
+  year: number,
+  month: number,
+): Date | null {
+  const monthStart = Date.UTC(year, month - 1, 1);
+  const monthEnd = Date.UTC(year, month, 0);
+  let latest: Date | null = null;
+  for (const row of levelings) {
+    if (
+      row.startDate.getTime() <= monthEnd &&
+      row.endDate.getTime() >= monthStart &&
+      (!latest || row.updatedAt.getTime() > latest.getTime())
+    ) {
+      latest = row.updatedAt;
+    }
+  }
+  return latest;
+}
+
+/**
+ * Metadados do relatório tributário de cada mês do ano — sem trafegar o
+ * resumo inteiro: só a versão, quando os pedidos foram buscados e se é da
+ * versão antiga do cálculo. Mais de uma conta ML na organização: vale o mais
+ * recente do mês.
+ */
+async function loadTaxReportMetaForYear(
+  organizationId: string,
+  year: number,
+): Promise<Map<number, DreTaxReportMeta>> {
+  // `$queryRaw*` NÃO passa pelo tenant guard: o filtro por organization_id é
+  // obrigatório aqui.
+  const rows = await prisma.$queryRawUnsafe<
+    Array<{
+      month: number;
+      generatedAt: Date;
+      ordersFetchedAt: string | null;
+      geradoEm: string | null;
+      legacy: boolean | null;
+    }>
+  >(
+    `select month, generated_at as "generatedAt",
+            payload_summary->'meta'->>'pedidosBuscadosEm' as "ordersFetchedAt",
+            payload_summary->'meta'->>'geradoEm' as "geradoEm",
+            (payload_summary is null
+              or payload_summary->'consolidado'->'apuracao' is null
+              or jsonb_path_exists(payload_summary, '$.porSku[*] ? (!(exists(@.mlItemId)))')) as legacy
+     from tax_report_month_snapshots
+     where organization_id = $1 and year = $2
+     order by generated_at desc`,
+    organizationId,
+    year,
+  );
+  const byMonth = new Map<number, DreTaxReportMeta>();
+  for (const row of rows) {
+    if (byMonth.has(row.month)) continue;
+    const generatedAt = row.generatedAt.toISOString();
+    byMonth.set(row.month, {
+      generatedAt,
+      ordersFetchedAt: row.ordersFetchedAt ?? row.geradoEm ?? generatedAt,
+      legacy: Boolean(row.legacy),
+    });
+  }
+  return byMonth;
 }
 
 export type DreYearView = {
@@ -400,6 +573,8 @@ export async function loadDreYearView(
     importedBillingPeriods,
     reconciliationImports,
     levelingChanges,
+    taxReportMeta,
+    taxSettings,
   ] = await Promise.all([
     prisma.dreCostItem.findMany({
       where: { organizationId, active: true },
@@ -461,7 +636,17 @@ export async function loadDreYearView(
           },
           select: { startDate: true, endDate: true, updatedAt: true },
         }),
+    lean
+      ? Promise.resolve(new Map<number, DreTaxReportMeta>())
+      : loadTaxReportMetaForYear(organizationId, year),
+    lean
+      ? Promise.resolve(null)
+      : prisma.companyTaxSettings.findUnique({
+          where: { organizationId },
+          select: { taxRegime: true },
+        }),
   ]);
+  const taxRegime = taxSettings?.taxRegime === "SIMPLES" ? "SIMPLES" : "LUCRO_REAL";
 
   const reconciliationImportsByMonth = new Map<
     number,
@@ -632,6 +817,27 @@ export async function loadDreYearView(
         month,
         snapshot?.syncedAt ?? null,
       ),
+      taxStatus: lean
+        ? null
+        : resolveMonthTaxStatus({
+            year,
+            month,
+            hasSnapshot: Boolean(snapshot && payload),
+            regime: taxRegime,
+            taxSource: payload?.taxSource ?? null,
+            hasTaxBreakdown: Boolean(payload?.taxBreakdown),
+            report: taxReportMeta.get(month) ?? null,
+            levelingUpdatedAt: levelingUpdatedAtForMonth(
+              levelingChanges,
+              year,
+              month,
+            ),
+          }),
+      taxSource: payload?.taxSource ?? null,
+      // Preenchido depois do laço: compara com os outros meses do ano.
+      zeroLineAnomalies: [],
+      keptFromPrevious: payload?.keptFromPrevious ?? null,
+      lineAuditMismatches: payload?.lineAuditMismatches ?? [],
       // Checagem ao vivo (não só o flag do snapshot): snapshots antigos não
       // tinham `fullReportSourced`, e importar depois da sync também conta.
       fullReportSourced:
@@ -658,6 +864,11 @@ export async function loadDreYearView(
       nonOperationalInOverrides,
       totals,
     });
+  }
+
+  const anomalies = detectZeroLineAnomalies(months);
+  for (const row of months) {
+    row.zeroLineAnomalies = anomalies.get(row.month) ?? [];
   }
 
   const yearTotals = buildYearTotals(

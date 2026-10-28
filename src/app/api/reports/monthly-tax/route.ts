@@ -2,9 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   generateMonthlyTaxReport,
   loadTaxReportSnapshot,
+  recomputeTaxReportFromSavedSales,
   saveTaxReportSnapshot,
   type GenerateMonthlyReportProgress,
 } from "@/lib/tax-report/service/generate-monthly-report";
+import {
+  followUpDreTax,
+  loadTaxReportScreen,
+  previewTaxReportRecompute,
+} from "@/lib/tax-report/service/tax-report-screen";
 import type { ManualFiscalOverride } from "@/lib/tax-report/types";
 import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 import { requireOrganization } from "@/lib/api/api-auth";
@@ -35,7 +41,7 @@ export async function GET(request: NextRequest) {
   if (!auth.ok) {
     return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
-  const { userId } = auth.ctx;
+  const { userId, organizationId } = auth.ctx;
 
   const parsed = parseYearMonth(request.nextUrl.searchParams);
   if (!parsed) {
@@ -46,16 +52,20 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const snapshot = await loadTaxReportSnapshot(
-      userId,
-      parsed.year,
-      parsed.month,
-    );
-    if (!snapshot) {
+    const screen = await loadTaxReportScreen({
+      organizationId,
+      sellerId: userId,
+      year: parsed.year,
+      month: parsed.month,
+    });
+    if (!screen) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
     const sku = request.nextUrl.searchParams.get("sku") ?? undefined;
-    return NextResponse.json(stripTransacoesForResponse(snapshot, sku));
+    return NextResponse.json({
+      ...stripTransacoesForResponse(screen.payload, sku),
+      reportStatus: screen.status,
+    });
   } catch (e) {
     logServerError("api/reports/monthly-tax GET", e);
     return NextResponse.json(
@@ -70,6 +80,12 @@ type PostBody = {
   month?: number;
   force?: boolean;
   stream?: boolean;
+  /**
+   * `recompute` = recalcular sobre as vendas já salvas (cadastro, nivelamento,
+   * configuração e custos fixos atuais), sem chamar o ML. `preview` = o mesmo
+   * cálculo sem gravar nada (antes → depois, inclusive do imposto do DRE).
+   */
+  mode?: "recompute" | "preview";
   overrides?: Record<string, ManualFiscalOverride>;
 };
 
@@ -108,6 +124,39 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    if (body.mode === "preview") {
+      const preview = await previewTaxReportRecompute({
+        organizationId,
+        sellerId: userId,
+        year,
+        month,
+      });
+      if (!preview) {
+        return NextResponse.json({ error: "Not found" }, { status: 404 });
+      }
+      return NextResponse.json({ preview });
+    }
+
+    if (body.mode === "recompute") {
+      const payload = await recomputeTaxReportFromSavedSales({
+        organizationId,
+        sellerId: userId,
+        year,
+        month,
+      });
+      if (!payload) {
+        return NextResponse.json({ error: "Not found" }, { status: 404 });
+      }
+      await saveTaxReportSnapshot(organizationId, userId, payload);
+      const dreFollowUp = await followUpDreTax({
+        organizationId,
+        sellerId: userId,
+        year,
+        month,
+      });
+      return NextResponse.json({ ok: true, dreFollowUp });
+    }
+
     if (!body.force) {
       const existing = await loadTaxReportSnapshot(userId, year, month);
       if (existing) {
@@ -179,9 +228,20 @@ export async function POST(request: NextRequest) {
             });
 
             await saveTaxReportSnapshot(organizationId, userId, payload);
+            // O imposto do DRE do mês acompanha a nova versão (só banco).
+            sendProgress({
+              phase: "save",
+              message: "Atualizando o imposto do DRE do mês…",
+            });
+            const dreFollowUp = await followUpDreTax({
+              organizationId,
+              sellerId: userId,
+              year,
+              month,
+            });
 
             controller.enqueue(
-              encoder.encode(sseLine({ type: "complete" })),
+              encoder.encode(sseLine({ type: "complete", dreFollowUp })),
             );
           } catch (e) {
             logServerError("api/reports/monthly-tax POST stream", e);
@@ -215,7 +275,13 @@ export async function POST(request: NextRequest) {
     });
 
     await saveTaxReportSnapshot(organizationId, userId, payload);
-    return NextResponse.json(payload);
+    const dreFollowUp = await followUpDreTax({
+      organizationId,
+      sellerId: userId,
+      year,
+      month,
+    });
+    return NextResponse.json({ ...payload, dreFollowUp });
   } catch (e) {
     logServerError("api/reports/monthly-tax POST", e);
     const message = e instanceof Error ? e.message : "monthly_tax_generate_failed";

@@ -11,9 +11,10 @@ import {
   revenueFromOrderItemLine,
   skuFromOrderLineWithFallback,
 } from "@/lib/tax-report/ml/sku-from-order-line";
-import { normalizeProductSku } from "@/lib/pricing/product-pricing";
 import { roundMoney } from "@/lib/pricing/financial-margin";
 import type { CustoLookup } from "@/lib/tax-report/enrichment/obter-custo-por-sku";
+import { resolveCustoDaVenda } from "@/lib/tax-report/enrichment/aplicar-nivelamento";
+import type { DreProductCostLevelingRecord } from "@/lib/dre/dre-product-cost-leveling-shared";
 import type {
   ManualFiscalOverride,
   TransacaoVenda,
@@ -38,6 +39,14 @@ export function buildTransacoesFromOrder(input: {
    * pro item, cai no texto da linha como antes desta migração.
    */
   effectiveSkuByItemId?: Map<string, string | null>;
+  /**
+   * Nivelamentos do DRE que cobrem o mês: na data da venda, valem no lugar do
+   * cadastro atual (custo NF, ICMS da compra, ST…). Ausente = só cadastro.
+   */
+  levelings?: readonly DreProductCostLevelingRecord[];
+  /** Mês do relatório — casa o nivelamento quando o pedido vem sem data. */
+  year?: number;
+  month?: number;
 }): TransacaoVenda[] {
   const orderId = String(input.order.id ?? "");
   const orderDate =
@@ -74,9 +83,15 @@ export function buildTransacoesFromOrder(input: {
     const transactionKey = `${orderId}-${itemId}-${sku}`;
     const override = input.overrides?.[transactionKey];
 
-    const custo =
-      (itemId ? input.custoLookup.byMlItemId.get(itemId) : undefined) ??
-      input.custoLookup.bySku.get(normalizeProductSku(sku));
+    const { custo, fonte: custoFonte } = resolveCustoDaVenda({
+      itemId,
+      sku,
+      orderDate,
+      custoLookup: input.custoLookup,
+      levelings: input.levelings ?? [],
+      year: input.year ?? new Date(orderDate).getUTCFullYear(),
+      month: input.month ?? new Date(orderDate).getUTCMonth() + 1,
+    });
     const quantidade =
       typeof line.quantity === "number" && line.quantity > 0 ? line.quantity : 1;
 
@@ -136,6 +151,7 @@ export function buildTransacoesFromOrder(input: {
           : 0,
       freightCost,
       ipiPercent: custo?.ipiPercent ?? 0,
+      custoFonte,
     });
   }
 

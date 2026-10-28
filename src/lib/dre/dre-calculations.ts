@@ -76,6 +76,18 @@ export function normalizeProductCostAuditMergeKey(
   return productCostAuditKey(item.key, Boolean(item.leveled));
 }
 
+/**
+ * De onde veio o % de imposto de um item da auditoria. Ausente = relatório
+ * tributário do próprio mês (o caso normal).
+ */
+export type DreTaxRateSource =
+  /** Relatório tributário de outro mês (o anúncio não vendeu no mês do relatório). */
+  | { kind: "report"; year: number; month: number }
+  /** Kit sem % próprio no tributário: média dos componentes, ponderada pelo custo. */
+  | { kind: "kit_components" }
+  /** Empresa no Simples Nacional: alíquota efetiva do DAS configurada. */
+  | { kind: "simples" };
+
 /** Auditoria dos Impostos sobre vendas: faturamento, % de imposto aplicado e imposto total por SKU/anúncio no mês. */
 export type DreTaxBreakdownItem = {
   key: string;
@@ -90,6 +102,70 @@ export type DreTaxBreakdownItem = {
   cancelledQuantity?: number;
   cancelledRevenue?: number;
   cancelledTax?: number;
+  /**
+   * Pedidos **pagos** que voltaram (devolução na fatura, reembolso, tag
+   * `returned`). Também ficam fora do total — e, diferente dos cancelados,
+   * estão no relatório tributário: é a diferença esperada entre os dois.
+   */
+  returnedQuantity?: number;
+  returnedRevenue?: number;
+  returnedTax?: number;
+  rateSource?: DreTaxRateSource;
+};
+
+/**
+ * Versão do relatório tributário (e números do mês) que o imposto do DRE usou.
+ * Liga as duas telas: com ela o DRE sabe quando o tributário mudou depois e a
+ * auditoria mostra a conta "tributário − devolvidas = DRE".
+ */
+export type DreTaxSource = {
+  regime: "LUCRO_REAL" | "SIMPLES";
+  /** Relatório tributário do próprio mês; null quando o mês não tem relatório. */
+  report: {
+    /** Versão do relatório (`TaxReportMonthSnapshot.generatedAt`). */
+    generatedAt: string;
+    /** Quando os pedidos do relatório foram buscados no ML. */
+    ordersFetchedAt: string;
+    revenue: number;
+    /** Imposto operacional do mês (positivo = a pagar). */
+    tax: number;
+    orderCount: number;
+    /** Relatório de versão antiga do cálculo (linhas sem identidade do anúncio). */
+    legacy: boolean;
+  } | null;
+  simplesRatePercent: number | null;
+  /** Pedidos pagos encontrados pelo sync do DRE (null em atualização só do imposto). */
+  paidOrderCount: number | null;
+  /** Receita dos pedidos que entram no imposto do DRE. */
+  baseRevenue: number;
+  /** Imposto calculado, positivo, antes do piso em zero da linha. */
+  computedTax: number;
+  returnedPaidRevenue: number;
+  returnedPaidTax: number;
+  /** Anúncios com % de outro mês / sem % nenhum. */
+  fallbackItemCount: number;
+  missingItemCount: number;
+  missingRevenue: number;
+  computedAt: string;
+  /** `taxErp` antes deste cálculo (null no primeiro). */
+  previousTaxErp: number | null;
+  origin: "sync" | "refresh";
+};
+
+/** Linha cujo valor não bate com a soma da própria auditoria. */
+export type DreLineAuditMismatch = {
+  lineKey: DreEditableLineKey;
+  value: number;
+  auditSum: number;
+  /** `zero_with_audit`: a linha veio 0, mas a auditoria tem lançamentos. */
+  kind: "zero_with_audit" | "differs";
+};
+
+/** Linhas cuja fonte não respondeu no último sync e mantiveram o valor anterior. */
+export type DreKeptFromPrevious = {
+  lineKeys: DreEditableLineKey[];
+  /** `syncedAt` do snapshot de onde o valor veio. */
+  syncedAt: string | null;
 };
 
 /** Auditoria genérica (quantidade + valor) por SKU/anúncio, usada por linhas mais simples (faturamento, canceladas, tarifas, frete, ADS). */
@@ -218,6 +294,12 @@ export type DreMonthSnapshotPayload = DreLineAmounts & {
   hasRealSyncBaseline?: boolean;
   /** Presente só quando o mês está conciliado com a planilha Por Vendas. */
   reconciliation?: DreMonthReconciliation;
+  /** Versão do relatório tributário usada nos Impostos sobre vendas. */
+  taxSource?: DreTaxSource;
+  /** Fonte indisponível no último sync: estas linhas mantiveram o valor anterior. */
+  keptFromPrevious?: DreKeptFromPrevious;
+  /** Linhas que não batem com a soma da própria auditoria (checado ao gravar). */
+  lineAuditMismatches?: DreLineAuditMismatch[];
 };
 
 export const DRE_LINE_KEY_TO_BREAKDOWN_FIELD: Partial<
@@ -408,11 +490,69 @@ export type MergeSyncedSnapshotOptions = {
   keepReconciliation: boolean;
   /** Ajustes manuais a manter — só valem chaves marcadas como editadas antes. */
   preserveLineKeys: readonly DreEditableLineKey[];
+  /**
+   * Linhas cuja fonte não respondeu neste sync (API fora do ar, ADS além dos
+   * 90 dias da API do ML…). Fonte indisponível não é zero: o valor sincronizado
+   * anterior e a auditoria dele continuam valendo.
+   */
+  keepPreviousLineKeys?: readonly DreEditableLineKey[];
+  /** `syncedAt` do snapshot anterior, para dizer de quando é o valor mantido. */
+  previousSyncedAt?: string | null;
 };
 
 /**
+ * Copia o último valor **sincronizado** (baseline, não o ajuste manual nem a
+ * planilha — esses entram depois, pelas etapas normais do merge) das linhas
+ * cuja fonte falhou. Linha que já era zero não tem o que proteger.
+ */
+function keepPreviousSyncedLines(
+  next: DreMonthSnapshotPayload,
+  previous: DreMonthSnapshotPayload,
+  lineKeys: readonly DreEditableLineKey[],
+  previousSyncedAt: string | null,
+): DreMonthSnapshotPayload {
+  const out: DreMonthSnapshotPayload = { ...next };
+  const baseline = { ...(next.syncedLineBaseline ?? {}) };
+  const breakdownBaseline: DreSyncedBreakdownBaseline = {
+    ...(next.syncedBreakdownBaseline ?? {}),
+  };
+  const kept: DreEditableLineKey[] = [];
+
+  for (const key of new Set(lineKeys)) {
+    const synced =
+      previous.syncedLineBaseline?.[key] ?? getEditableLineAmount(previous, key);
+    if (!Number.isFinite(synced) || Math.abs(synced) < 0.005) continue;
+    const amount = key === "adsCost" ? Math.abs(synced) : synced;
+    out[key] = amount;
+    baseline[key] = amount;
+    const field = DRE_LINE_KEY_TO_BREAKDOWN_FIELD[key];
+    if (field) {
+      const items =
+        previous.syncedBreakdownBaseline?.[field] ?? previous[field];
+      (out as Record<string, unknown>)[field] = items;
+      (breakdownBaseline as Record<string, unknown>)[field] = items;
+    }
+    // O bruto cancelado que a visão "painel ML" soma ao faturamento anda junto
+    // com a linha que o abate.
+    if (key === "cancelledSalesMl") {
+      out.cancelledIncludeOverlay = previous.cancelledIncludeOverlay;
+    }
+    kept.push(key);
+  }
+
+  if (kept.length === 0) return next;
+  return {
+    ...out,
+    syncedLineBaseline: baseline,
+    syncedBreakdownBaseline: breakdownBaseline,
+    keptFromPrevious: { lineKeys: kept, syncedAt: previousSyncedAt },
+  };
+}
+
+/**
  * Junta um sync fresco com o snapshot anterior:
- * 1. baseline = valores do sync;
+ * 1. baseline = valores do sync — exceto as linhas cuja fonte falhou
+ *    (`keepPreviousLineKeys`), que mantêm o último valor sincronizado;
  * 2. se `keepReconciliation`, reaplica os valores da planilha (e a auditoria
  *    deles) nas linhas conciliadas — senão o mês deixa de estar conciliado;
  * 3. ajustes manuais escolhidos entram por cima (manual vence o conciliado).
@@ -430,6 +570,16 @@ export function mergeSyncedSnapshot(
     hasRealSyncBaseline: true,
   };
   delete next.reconciliation;
+  delete next.keptFromPrevious;
+
+  if (previous && (options.keepPreviousLineKeys?.length ?? 0) > 0) {
+    next = keepPreviousSyncedLines(
+      next,
+      previous,
+      options.keepPreviousLineKeys ?? [],
+      options.previousSyncedAt ?? null,
+    );
+  }
 
   const reconciliation = previous?.reconciliation;
   if (previous && reconciliation && options.keepReconciliation) {
@@ -655,6 +805,10 @@ const LEAN_SNAPSHOT_FIELDS = {
   manuallyEditedLineKeys: "keep",
   hasRealSyncBaseline: "keep",
   reconciliation: "keep",
+  // Só a tela do DRE lê (status do imposto, avisos de auditoria).
+  taxSource: "omit",
+  keptFromPrevious: "omit",
+  lineAuditMismatches: "omit",
   // Auditoria por SKU/linha — o peso da coluna.
   productCostBreakdown: "omit",
   taxBreakdown: "omit",
@@ -831,12 +985,15 @@ export function applyDreIncludeCancelledView(
   overlay?: DreCancelledIncludeOverlay | null,
 ): DreLineAmounts {
   const cancelledLine = lines.cancelledSalesMl ?? 0;
-  const revenueAdd =
-    overlay && overlay.revenueGross > 0
-      ? overlay.revenueGross
-      : cancelledLine < 0
-        ? Math.abs(cancelledLine)
-        : 0;
+  // Com o overlay, o bruto a somar é exatamente o dos pedidos cancelados (que
+  // não estão no faturamento pago) — mesmo zero: a linha pode ter só
+  // devolvidas, cuja receita já está no faturamento. Sem overlay (snapshot
+  // antigo, ou linha vinda da fatura), a linha inteira é tratada como bruto.
+  const revenueAdd = overlay
+    ? Math.max(0, overlay.revenueGross)
+    : cancelledLine < 0
+      ? Math.abs(cancelledLine)
+      : 0;
 
   if (revenueAdd <= 0) {
     return lines;
@@ -954,6 +1111,7 @@ export function mergeTaxBreakdowns(
           ? roundMoney((existing.totalTax / existing.revenue) * 100)
           : null;
       existing.missingTax = existing.missingTax || item.missingTax;
+      existing.rateSource = existing.rateSource ?? item.rateSource;
       if (item.cancelledQuantity || item.cancelledRevenue || item.cancelledTax) {
         existing.cancelledQuantity =
           (existing.cancelledQuantity ?? 0) + (item.cancelledQuantity ?? 0);
@@ -962,6 +1120,16 @@ export function mergeTaxBreakdowns(
         );
         existing.cancelledTax = roundMoney(
           (existing.cancelledTax ?? 0) + (item.cancelledTax ?? 0),
+        );
+      }
+      if (item.returnedQuantity || item.returnedRevenue || item.returnedTax) {
+        existing.returnedQuantity =
+          (existing.returnedQuantity ?? 0) + (item.returnedQuantity ?? 0);
+        existing.returnedRevenue = roundMoney(
+          (existing.returnedRevenue ?? 0) + (item.returnedRevenue ?? 0),
+        );
+        existing.returnedTax = roundMoney(
+          (existing.returnedTax ?? 0) + (item.returnedTax ?? 0),
         );
       }
     }

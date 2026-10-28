@@ -221,6 +221,28 @@ describe("applyDreIncludeCancelledView", () => {
     assert.equal(adjusted.revenueMl, 580);
     assert.equal(adjusted.cancelledSalesMl, -80);
   });
+
+  it("adds only the cancelled gross when the line also has paid orders that came back", () => {
+    // Linha = 50 cancelado + 120 devolvido. O devolvido já está no faturamento
+    // pago; só o cancelado volta ao bruto.
+    const lines = { ...BASE_LINES, revenueMl: 1000, cancelledSalesMl: -170 };
+    const adjusted = applyDreIncludeCancelledView(lines, {
+      revenueGross: 50,
+      productCostErp: 0,
+      taxErp: 0,
+    });
+    assert.equal(adjusted.revenueMl, 1050);
+  });
+
+  it("adds nothing when the month has only returns (overlay with zero cancelled gross)", () => {
+    const lines = { ...BASE_LINES, revenueMl: 1000, cancelledSalesMl: -120 };
+    const adjusted = applyDreIncludeCancelledView(lines, {
+      revenueGross: 0,
+      productCostErp: 0,
+      taxErp: 0,
+    });
+    assert.equal(adjusted.revenueMl, 1000);
+  });
 });
 
 describe("mapBillingSummaryToDreLines", () => {
@@ -969,5 +991,122 @@ describe("getYearProductCostBreakdown / getYearTaxBreakdown / getYearLineBreakdo
     ]);
     assert.equal(result.length, 1);
     assert.equal(result[0].amount, 30);
+  });
+});
+
+describe("mergeSyncedSnapshot — source unavailable keeps the previous value", () => {
+  const adsBreakdown: DreLineBreakdownItem[] = [
+    { key: "item:MLB1", sku: null, title: "Ads", quantity: 3, amount: -480 },
+  ];
+  const previousMonth = () =>
+    withSyncLineBaseline(
+      emptyPayload({
+        revenueMl: 10_000,
+        adsCost: 480,
+        adsCostBreakdown: adsBreakdown,
+        cancelledSalesMl: -500,
+        cancelledIncludeOverlay: { revenueGross: 300, productCostErp: -90, taxErp: -30 },
+        fullStorageMl: -75,
+      }),
+    );
+
+  it("keeps ADS and its audit when the ads API did not cover the month (re-sync after 90 days)", () => {
+    const fresh = emptyPayload({ revenueMl: 10_100, adsCost: 0 });
+    const merged = mergeSyncedSnapshot(fresh, previousMonth(), {
+      ...KEEP_NOTHING,
+      keepReconciliation: true,
+      keepPreviousLineKeys: ["adsCost"],
+      previousSyncedAt: "2026-07-05T12:00:00.000Z",
+    });
+    assert.equal(merged.adsCost, 480);
+    assert.deepEqual(merged.adsCostBreakdown, adsBreakdown);
+    assert.equal(merged.syncedLineBaseline?.adsCost, 480);
+    assert.equal(merged.revenueMl, 10_100);
+    assert.deepEqual(merged.keptFromPrevious, {
+      lineKeys: ["adsCost"],
+      syncedAt: "2026-07-05T12:00:00.000Z",
+    });
+  });
+
+  it("keeps the cancelled gross overlay together with the Canceladas line", () => {
+    const fresh = emptyPayload({ cancelledSalesMl: 0 });
+    const merged = mergeSyncedSnapshot(fresh, previousMonth(), {
+      ...KEEP_NOTHING,
+      keepPreviousLineKeys: ["cancelledSalesMl"],
+    });
+    assert.equal(merged.cancelledSalesMl, -500);
+    assert.equal(merged.cancelledIncludeOverlay?.revenueGross, 300);
+  });
+
+  it("restores the last synced value, not a manual edit — the edit comes back only if preserved", () => {
+    const edited = applyManualLineEdit(previousMonth(), "fullStorageMl", -999);
+    const fresh = emptyPayload({ fullStorageMl: 0 });
+    const notPreserved = mergeSyncedSnapshot(fresh, edited, {
+      ...KEEP_NOTHING,
+      keepPreviousLineKeys: ["fullStorageMl"],
+    });
+    assert.equal(notPreserved.fullStorageMl, -75);
+    assert.deepEqual(notPreserved.manuallyEditedLineKeys, []);
+
+    const preserved = mergeSyncedSnapshot(fresh, edited, {
+      keepReconciliation: true,
+      preserveLineKeys: ["fullStorageMl"],
+      keepPreviousLineKeys: ["fullStorageMl"],
+    });
+    assert.equal(preserved.fullStorageMl, -999);
+    assert.equal(preserved.syncedLineBaseline?.fullStorageMl, -75);
+    assert.deepEqual(preserved.manuallyEditedLineKeys, ["fullStorageMl"]);
+  });
+
+  it("does nothing for a line that was already zero (nothing to protect)", () => {
+    const fresh = emptyPayload();
+    const merged = mergeSyncedSnapshot(fresh, previousMonth(), {
+      ...KEEP_NOTHING,
+      keepPreviousLineKeys: ["minhaPaginaMl"],
+    });
+    assert.equal(merged.minhaPaginaMl, 0);
+    assert.equal(merged.keptFromPrevious, undefined);
+  });
+
+  it("still reapplies the reconciliation on top of a kept governed line", () => {
+    const fresh = emptyPayload({ saleFeeMl: 0, sellerShippingMl: 0 });
+    const merged = mergeSyncedSnapshot(fresh, reconciledMonth(), {
+      keepReconciliation: true,
+      preserveLineKeys: [],
+      keepPreviousLineKeys: ["fullStorageMl"],
+    });
+    assert.equal(merged.saleFeeMl, -120);
+    assert.equal(merged.fullStorageMl, -10);
+    assert.deepEqual(merged.keptFromPrevious?.lineKeys, ["fullStorageMl"]);
+  });
+
+  it("drops a stale keptFromPrevious marker when the source answered this time", () => {
+    const previous = { ...previousMonth(), keptFromPrevious: { lineKeys: ["adsCost" as const], syncedAt: null } };
+    const merged = mergeSyncedSnapshot(emptyPayload({ adsCost: 500 }), previous, KEEP_NOTHING);
+    assert.equal(merged.adsCost, 500);
+    assert.equal(merged.keptFromPrevious, undefined);
+  });
+});
+
+describe("mergeTaxBreakdowns — returned paid orders", () => {
+  it("sums returned annotations separately from cancelled ones", () => {
+    const base = {
+      key: "item:MLB1",
+      sku: null,
+      title: "A",
+      quantity: 0,
+      revenue: 0,
+      taxPercent: null,
+      totalTax: 0,
+      missingTax: false,
+    };
+    const [merged] = mergeTaxBreakdowns([
+      [{ ...base, returnedQuantity: 1, returnedRevenue: 100, returnedTax: 10 }],
+      [{ ...base, cancelledQuantity: 2, cancelledRevenue: 50, cancelledTax: 5, returnedQuantity: 1, returnedRevenue: 30, returnedTax: 3 }],
+    ]);
+    assert.equal(merged?.returnedQuantity, 2);
+    assert.equal(merged?.returnedRevenue, 130);
+    assert.equal(merged?.returnedTax, 13);
+    assert.equal(merged?.cancelledTax, 5);
   });
 });

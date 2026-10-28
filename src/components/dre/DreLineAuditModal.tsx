@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertTriangle, Ban, ExternalLink, Search } from "lucide-react";
+import { AlertTriangle, Ban, ExternalLink, Info, Search } from "lucide-react";
 import {
   Sheet,
   SheetBody,
@@ -33,6 +33,8 @@ type DreLineAuditModalProps = {
   needsResync?: boolean;
   /** Link externo opcional para o painel do ML (hoje só usado por "Tarifas especiais"). */
   externalLink?: { href: string; label: string; hint: string } | null;
+  /** Conferência: valor mantido do sync anterior, ou lista que não soma o valor da linha. */
+  note?: string | null;
   onClose: () => void;
 };
 
@@ -55,6 +57,7 @@ export function DreLineAuditModal({
   unavailable,
   needsResync,
   externalLink,
+  note,
   onClose,
 }: DreLineAuditModalProps) {
   const [query, setQuery] = useState("");
@@ -107,6 +110,12 @@ export function DreLineAuditModal({
           </SheetDescription>
         </SheetHeader>
         <SheetBody className="flex flex-1 flex-col overflow-hidden">
+          {note ? (
+            <p className="mb-3 flex shrink-0 items-start gap-2 rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 text-xs leading-relaxed text-[var(--muted-foreground)]">
+              <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              <span>{note}</span>
+            </p>
+          ) : null}
           {externalLink ? (
             <div className="mb-3 flex shrink-0 flex-col gap-2 rounded-xl border border-[var(--border)] p-3 text-xs leading-relaxed text-[var(--muted-foreground)]">
               <p>{externalLink.hint}</p>

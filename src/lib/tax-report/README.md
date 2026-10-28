@@ -39,27 +39,40 @@ O status de contribuinte ICMS vem do campo `taxpayer_type` do `billing_info` do 
 ## Pedidos considerados
 
 - Status **`paid`** apenas (`date_closed` no fuso `America/Sao_Paulo`)
-- Cancelados/devolvidos **fora** da apuração
+- Cancelados ficam fora (só pedidos `paid`); devolução pós-entrega que continua `paid` **entra** — o DRE tira essas vendas, e a conta de conferência do imposto mostra a diferença
 - Sem `billing_info`: marcado `dadosFiscaisIndisponiveis`, excluído dos totais (override manual via snapshot futuro)
 
 ## Snapshot mensal
 
 - `POST /api/reports/monthly-tax` gera e persiste
-- `POST` com `stream: true` envia progresso via SSE (`text/event-stream`); `complete` sem payload — o cliente recarrega via `GET`
-- `GET /api/reports/monthly-tax?year=&month=` lê snapshot
-- `force: true` no POST recalcula
+- `POST` com `stream: true` envia progresso via SSE (`text/event-stream`). O evento `complete` não traz o relatório (o cliente recarrega via `GET`); traz só `dreFollowUp`, o imposto do DRE do mês, que acompanha.
+- `GET /api/reports/monthly-tax?year=&month=` lê o snapshot e devolve também `reportStatus` (`loadTaxReportScreen`):
+  - o que está salvo (é o que o DRE usa);
+  - se a tela recalculou algo diferente;
+  - desatualização (`taxReportStaleness`);
+  - se o DRE do mês usa esta versão.
+- `force: true` no POST recalcula buscando os pedidos no ML
+- `mode: "recompute"` recalcula **sobre as vendas salvas**, sem ML (`recomputeTaxReportFromSavedSales`): cadastro, nivelamento, configuração e custos fixos atuais. A versão (`meta.geradoEm` = `generatedAt`) muda; a data dos pedidos (`meta.pedidosBuscadosEm`) não.
+- `mode: "preview"` faz o mesmo cálculo sem gravar e devolve antes → depois, inclusive do imposto do DRE. A tela sempre mostra essa prévia antes de confirmar: recalcular um mês passado usa o cadastro e a configuração **de hoje** e pode mudar bastante o número.
+- **Uma versão só.** O reparo de relatórios antigos (`repairTaxReportPayload`) é só de exibição e usa os mesmos insumos do recálculo (`report-inputs.ts`). Antes ele zerava os créditos de Ads e de custos fixos. Quando o número da tela difere do salvo, o banner oferece "Salvar recálculo".
+- **Fechado × incompleto:** mês fechado com pedidos buscados antes do fechamento (ex.: 10/09 para setembro) pede "Recalcular" (completo). Buscados depois do fechamento, está atualizado. Mês em andamento é só informativo.
+- **% médio do mês:** `consolidado.impostoOperacionalTotal` ÷ faturamento, a média ponderada pelo valor das vendas. Aparece como KPI "Imposto do mês" e no total da tabela por SKU. Relatórios antigos somam o `porSku` na leitura (`impostoOperacionalTotalRelatorio`).
 - **Persistência:** vendas detalhadas ficam em `porSku[].transacoes`; `transacoes` na raiz do JSON salvo fica vazio (menor volume no banco)
 - **Performance:** custos de produto carregados em batch (`loadCustoBySkuMap`); rota com `maxDuration = 300` (Vercel)
 - **ICMS vs DIFAL:** consolidado e tabela por venda separam ICMS (origem) e DIFAL (UF destino); total em `icmsDifalTotal`
 - **Apuração:** consolidado expõe `apuracao` com débito/crédito/líquido (PIS, COFINS, ICMS) e DIFAL por UF; crédito PIS/COFINS na base NF entrada; crédito ICMS de `purchaseIcmsPercent`
 - **ICMS saída interna:** usa `saleIcmsPercent` do cadastro; com `hasIcmsSt` aplica alíquota residual (incl. 0%); sem ST e `saleIcmsPercent` 0, usa tabela UF
 
+## Nivelamento de custo
+
+O nivelamento do DRE guarda o histórico do cadastro do produto por período: custo NF, ICMS da compra, ST, IPI, monofásico, importado. Na data da venda (dia civil em São Paulo, casando por anúncio), ele vale no lugar do cadastro atual nos créditos da compra e no custo (`resolveCustoDaVenda`, `enrichment/aplicar-nivelamento.ts`). A venda fica marcada `custoFonte: "nivelamento"`. Campos não informados em nivelamentos antigos usam o cadastro atual. Nivelamento alterado depois do cálculo marca o mês como desatualizado ("Atualizar cálculo", sem ML).
+
 ## Limitações conhecidas
 
 - Apenas **Lucro Real** na v1
 - Alíquotas internas: validar periodicamente com CONFAZ (seed inicial com TODO)
 - CBS/IBS 2026: informativo, compensado com PIS/COFINS no mesmo período
-- DRE existente continua com % simplificado por SKU (não substituído)
+- O DRE aplica o % por anúncio deste relatório à receita sem canceladas/devolvidas (ver `src/lib/dre/README.md` → Imposto sobre vendas); vendas devolvidas não são abatidas aqui (o relatório é por venda paga)
 
 ## Multi-tenant
 
