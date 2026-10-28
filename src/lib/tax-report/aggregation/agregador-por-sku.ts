@@ -8,7 +8,8 @@ import type {
   SkuAggregation,
 } from "@/lib/tax-report/types";
 
-function impostoOperacionalLinhaValor(det: DetalhamentoTributario): number {
+/** Imposto operacional da venda sem arredondar — o agregado arredonda só no total. */
+export function impostoOperacionalLinhaValor(det: DetalhamentoTributario): number {
   return (
     (det.pisCofins?.liquido ?? 0) +
     (det.icmsDifal?.icmsTotal ?? 0) -
@@ -24,7 +25,7 @@ function impostoOperacionalLinhaValor(det: DetalhamentoTributario): number {
  * SKU (Product.sku não é mais único). Cai pro texto de sku só quando não há
  * itemId (defensivo — TransacaoVenda.itemId é obrigatório na prática).
  */
-function aggregationKey(det: DetalhamentoTributario): string {
+export function aggregationKey(det: DetalhamentoTributario): string {
   if (det.transacao.itemId) return `item:${det.transacao.itemId}`;
   const raw = det.transacao.sku || "(sem SKU)";
   if (raw === "(sem SKU)") return raw;

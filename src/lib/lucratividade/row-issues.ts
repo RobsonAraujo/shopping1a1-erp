@@ -38,7 +38,7 @@ export function missingTaxIssue(ctx: LucratividadeTaxContext): RowIssue {
     severity: "blocker",
     title: "Sem alíquota apurada",
     detail:
-      "A alíquota vem do relatório tributário do último mês fechado. SKU novo (ou que não vendeu nesse mês) só ganha alíquota quando o mês for calculado em Tributário.",
+      "A alíquota vem das vendas dos últimos 30 dias apuradas no relatório tributário. Anúncio novo ganha alíquota quando o Tributário do mês em que vendeu for gerado ou recalculado.",
     action: { label: "Abrir Tributário", href: TAX_REPORT_HREF },
   };
 }

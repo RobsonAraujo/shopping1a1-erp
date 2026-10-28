@@ -6,7 +6,10 @@ import {
   type ProductRecordForPricing,
   type ResolvedProductPricing,
 } from "@/lib/pricing/product-pricing";
-import type { ProductTaxReportLookup } from "@/lib/products/product-tax-from-report";
+import type {
+  ProductTaxBasis,
+  ProductTaxReportLookup,
+} from "@/lib/products/product-tax-from-report";
 import { loadProductResolverMaps, resolveProductForLine } from "@/lib/products/product-resolver";
 import {
   DEFAULT_WHOLESALE_REDUCTIONS,
@@ -54,6 +57,11 @@ export type ProductView = ProductRecordForPricing & {
   /** Mês/ano do relatório tributário de onde veio taxPercent (pode ser um mês anterior ao mais recente). */
   taxPercentYear: number | null;
   taxPercentMonth: number | null;
+  /** `rolling30d` = vendas dos últimos 30 dias; `month` = % do mês mais recente em que o anúncio vendeu. */
+  taxPercentBasis: ProductTaxBasis | null;
+  /** Dias (`YYYY-MM-DD`) das vendas somadas, quando `taxPercentBasis` = `rolling30d`. */
+  taxPercentPeriodFrom: string | null;
+  taxPercentPeriodTo: string | null;
   pmaPrice: number | null;
   createdAt: string;
   updatedAt: string;
@@ -100,6 +108,9 @@ export function buildProductView(
     taxPercentGeneratedAt: isSimples ? null : (reportTax?.generatedAt ?? null),
     taxPercentYear: isSimples ? null : (reportTax?.year ?? null),
     taxPercentMonth: isSimples ? null : (reportTax?.month ?? null),
+    taxPercentBasis: isSimples ? null : (reportTax?.basis ?? null),
+    taxPercentPeriodFrom: isSimples ? null : (reportTax?.periodFrom ?? null),
+    taxPercentPeriodTo: isSimples ? null : (reportTax?.periodTo ?? null),
     pmaPrice: decimalToNumber(product.pmaPrice),
     createdAt: product.createdAt.toISOString(),
     updatedAt: product.updatedAt.toISOString(),

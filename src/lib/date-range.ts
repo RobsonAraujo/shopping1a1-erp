@@ -68,18 +68,3 @@ export function monthsInRange(
   }
   return months;
 }
-
-/**
- * Mês civil fechado anterior a `reference` (hoje, por padrão) — ex.: em
- * qualquer dia de setembro, retorna agosto. Usado como âncora padrão do
- * imposto "ao vivo" (Produtos/Lucratividade): nunca olha pro mês em
- * andamento, que teria poucos dias de amostra no início do período.
- */
-export function lastClosedMonth(
-  reference: Date = new Date(),
-): { year: number; month: number } {
-  const year = reference.getFullYear();
-  const currentMonthIndex0 = reference.getMonth(); // 0-11 do mês atual
-  if (currentMonthIndex0 === 0) return { year: year - 1, month: 12 };
-  return { year, month: currentMonthIndex0 }; // já é (mês atual 1-based - 1)
-}

@@ -17,6 +17,15 @@ export function getZonedParts(date: Date, timeZone: string) {
   };
 }
 
+/** Dia civil (`YYYY-MM-DD`) de `date` no timezone de negócio. */
+export function zonedYmd(
+  date: Date,
+  timeZone: string = reportsConfig.catalogCompetitionTimezone,
+): string {
+  const { year, month, day } = getZonedParts(date, timeZone);
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
 export function zonedLocalToUtc(
   year: number,
   month: number,

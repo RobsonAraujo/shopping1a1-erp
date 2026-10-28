@@ -658,6 +658,11 @@ model TaxReportMonthSnapshot {
   /// por SKU, evitando trafegar o detalhamento por venda do banco. Nullable para
   /// snapshots antigos ainda não migrados (backfill).
   payloadSummary Json?    @map("payload_summary")
+  /// Receita e imposto operacional por dia × anúncio (`TaxDailyTotal[]`),
+  /// gravados junto com o snapshot. Alimentam o imposto "últimos 30 dias" de
+  /// Produtos/Lucratividade somados no próprio Postgres, sem trafegar o
+  /// payload. Nullable para snapshots antigos ainda não migrados (backfill).
+  dailyTotals    Json?    @map("daily_totals")
 
   @@unique([sellerId, year, month])
   @@index([year, month])

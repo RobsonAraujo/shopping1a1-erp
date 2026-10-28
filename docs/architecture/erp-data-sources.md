@@ -14,8 +14,8 @@
 | `/dashboard/compras` | Análise por fornecedor + kanban de reposição de compra | ML API + DB `replenishment_cycles` |
 | `/dashboard/operacoes-full` | Kanban de envio Full | DB `replenishment_cycles` |
 | `/dashboard/envios-full` | Custo de coleta Full por unidade | DB `full_shipments` |
-| `/dashboard/produtos` | Cadastro fiscal e custo por SKU | DB `products` |
-| `/dashboard/lucratividade` | Margem por anúncio (taxa ML, frete, impostos, ads). Padrão: vendas dos últimos 7 dias com média ponderada pelo faturamento (presets Hoje/Ontem/7d/Mês atual/60d/90d/personalizado); opção "Simulação · preço de hoje" (todos os anúncios, média simples). Sem custo/alíquota/kit incompleto ficam fora da média | ML API (preço/vendas, taxas, ads) + DB `products` |
+| `/dashboard/produtos` | Cadastro fiscal e custo por SKU; coluna Imposto = % das vendas dos últimos 30 dias apuradas no Tributário | DB `products` + `tax_report_month_snapshots.daily_totals` |
+| `/dashboard/lucratividade` | Margem por anúncio (taxa ML, frete, impostos, ads). Padrão: vendas dos últimos 7 dias com média ponderada pelo faturamento (presets Hoje/Ontem/7d/Mês atual/60d/90d/personalizado); opção "Simulação · preço de hoje" (todos os anúncios, média simples). Sem custo/alíquota/kit incompleto ficam fora da média. Imposto = % das vendas dos últimos 30 dias apuradas no Tributário (mesmo de Produtos) | ML API (preço/vendas, taxas, ads) + DB `products` + `tax_report_month_snapshots.daily_totals` |
 | `/dashboard/catalog-report` | Status de competição no catálogo | DB `catalog_competition_snapshots` |
 | `/dashboard/dre` | DRE mensal (receita, COGS, resultado) | ML API + DB |
 | `/dashboard/relatorio-tributario` | Apuração fiscal PIS/COFINS + ICMS/DIFAL por venda | DB `tax_report_month_snapshots` + ML API |

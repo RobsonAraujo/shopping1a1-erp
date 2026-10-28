@@ -73,6 +73,8 @@ type ProductsResponse = {
   taxRegime: TaxRegime;
   simplesAliquotaEfetivaPercent: number | null;
   taxReportGeneratedAt: string | null;
+  /** Janela de 30 dias do imposto (null = Tributário ainda sem totais diários). */
+  taxWindow: { from: string; to: string } | null;
 };
 
 const DATE_TIME_FORMATTER = new Intl.DateTimeFormat("pt-BR", {
@@ -106,6 +108,43 @@ function daysSince(iso: string): number {
 
 function taxReportPeriodLabel(year: number, month: number): string {
   return `${TAX_REPORT_MONTH_NAMES[month - 1] ?? month}/${year}`;
+}
+
+/** `YYYY-MM-DD` → `DD/MM`. */
+function formatYmdDayMonth(ymd: string): string {
+  const [, month, day] = ymd.split("-");
+  return `${day}/${month}`;
+}
+
+/** Dias corridos entre `ymd` e hoje (calendário local). */
+function daysSinceYmd(ymd: string): number {
+  const [year, month, day] = ymd.split("-").map(Number);
+  const now = new Date();
+  const diffMs =
+    Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) -
+    Date.UTC(year, month - 1, day);
+  return Math.max(0, Math.round(diffMs / (1000 * 60 * 60 * 24)));
+}
+
+/** Janela termina há mais que isso → a nota sugere recalcular o Tributário. */
+const TAX_WINDOW_STALE_DAYS = 3;
+
+function productTaxExplainer(product: ProductView): string {
+  if (product.taxPercent === null || !product.taxPercentGeneratedAt) {
+    return "Este anúncio ainda não aparece em nenhum relatório tributário calculado. Gere/recalcule o relatório tributário do mês em que ele vendeu para obter o imposto médio dele.";
+  }
+  if (
+    product.taxPercentBasis === "rolling30d" &&
+    product.taxPercentPeriodFrom &&
+    product.taxPercentPeriodTo
+  ) {
+    return `% operacional de imposto das vendas deste anúncio de ${formatYmdDayMonth(product.taxPercentPeriodFrom)} a ${formatYmdDayMonth(product.taxPercentPeriodTo)} (últimos 30 dias apurados no relatório tributário): imposto ÷ receita. Se houve vendas ou mudanças fiscais recentes, recalcule o relatório tributário para atualizar este valor.`;
+  }
+  const monthLabel =
+    product.taxPercentYear !== null && product.taxPercentMonth !== null
+      ? taxReportPeriodLabel(product.taxPercentYear, product.taxPercentMonth)
+      : "mês mais recente";
+  return `Este anúncio não vendeu nos últimos 30 dias apurados no relatório tributário — usamos o % operacional de ${monthLabel}, o mês mais recente em que ele vendeu (recalculado em ${DATE_TIME_FORMATTER.format(new Date(product.taxPercentGeneratedAt))}, ${daysSince(product.taxPercentGeneratedAt)} dia(s) atrás).`;
 }
 
 type ProductFormState = {
@@ -1025,11 +1064,26 @@ export function ProductsClient() {
 
       {data?.taxRegime !== "SIMPLES" && data?.taxReportGeneratedAt ? (
         <p className="text-xs text-[var(--muted-foreground)]">
-          Coluna Imposto calculada com base no último mês fechado do relatório
-          tributário (gerado em{" "}
-          {DATE_TIME_FORMATTER.format(new Date(data.taxReportGeneratedAt))},{" "}
-          {daysSince(data.taxReportGeneratedAt)} dia(s) atrás). Se houve vendas
-          ou mudanças fiscais recentes,{" "}
+          {data.taxWindow ? (
+            <>
+              Coluna Imposto: média das vendas de{" "}
+              {formatYmdDayMonth(data.taxWindow.from)} a{" "}
+              {formatYmdDayMonth(data.taxWindow.to)} apuradas no relatório
+              tributário (anúncio sem venda nesse período usa o mês mais
+              recente em que vendeu).{" "}
+              {daysSinceYmd(data.taxWindow.to) > TAX_WINDOW_STALE_DAYS
+                ? `As vendas depois de ${formatYmdDayMonth(data.taxWindow.to)} ainda não entraram: `
+                : "Se houve mudanças fiscais recentes, "}
+            </>
+          ) : (
+            <>
+              Coluna Imposto: % do mês mais recente em que cada anúncio vendeu
+              no relatório tributário (gerado em{" "}
+              {DATE_TIME_FORMATTER.format(new Date(data.taxReportGeneratedAt))},{" "}
+              {daysSince(data.taxReportGeneratedAt)} dia(s) atrás). Se houve
+              vendas ou mudanças fiscais recentes,{" "}
+            </>
+          )}
           <Link
             href="/dashboard/relatorio-tributario"
             className="font-medium text-[var(--primary)] underline underline-offset-2"
@@ -1159,12 +1213,7 @@ export function ProductsClient() {
         taxPercentExplainer={(product) =>
           data?.taxRegime === "SIMPLES"
             ? "Alíquota efetiva do Simples Nacional (DAS), informada manualmente em Configurações > Empresa — aplicada da mesma forma a todos os produtos (o Simples não apura ICMS/PIS/COFINS por SKU)."
-            : product.taxPercent !== null &&
-                product.taxPercentGeneratedAt &&
-                product.taxPercentYear !== null &&
-                product.taxPercentMonth !== null
-              ? `Média % operacional de imposto apurada no relatório tributário do último mês fechado (${taxReportPeriodLabel(product.taxPercentYear, product.taxPercentMonth)}, recalculado em ${DATE_TIME_FORMATTER.format(new Date(product.taxPercentGeneratedAt))}, ${daysSince(product.taxPercentGeneratedAt)} dia(s) atrás). Se o produto não vendeu nesse mês, usamos o mês fechado mais recente em que ele aparece. Se houve vendas ou mudanças fiscais recentes, recalcule o relatório tributário para atualizar este valor.`
-              : "Este SKU ainda não aparece em nenhum relatório tributário calculado. Gere/recalcule o relatório tributário para obter o imposto médio deste produto."
+            : productTaxExplainer(product)
         }
         onEdit={(product) =>
           setModal({ mode: "edit", form: formFromProduct(product) })

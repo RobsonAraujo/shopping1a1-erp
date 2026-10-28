@@ -34,6 +34,7 @@ import { getItemSku } from "@/lib/mercadolibre/item-sku";
 import { resolveEffectiveSkuByItemId } from "@/lib/products/product-resolver";
 import { repairTaxReportPayload } from "@/lib/tax-report/repair-snapshot-apuracao";
 import { stripTransacoesForResponse } from "@/lib/tax-report/strip-transacoes-for-response";
+import { buildTaxDailyTotals } from "@/lib/tax-report/aggregation/daily-totals";
 import { calcularRelatorioFromTransacoes } from "@/lib/tax-report/service/compute-report";
 import {
   loadCbsIbsVigencia,
@@ -457,6 +458,7 @@ export async function saveTaxReportSnapshot(
   // payload acabou de ser gerado (agregados por SKU já calculados em
   // compute-report.ts), então é seguro extrair o resumo sem rodar reparo.
   const summary = stripTransacoesForResponse(payload);
+  const dailyTotals = buildTaxDailyTotals(payload);
   await prisma.taxReportMonthSnapshot.upsert({
     where: {
       sellerId_year_month: {
@@ -473,11 +475,13 @@ export async function saveTaxReportSnapshot(
       generatedAt: new Date(payload.meta.geradoEm),
       payload: slim as object,
       payloadSummary: summary as object,
+      dailyTotals: dailyTotals as object,
     },
     update: {
       generatedAt: new Date(payload.meta.geradoEm),
       payload: slim as object,
       payloadSummary: summary as object,
+      dailyTotals: dailyTotals as object,
     },
   });
 }
@@ -575,31 +579,11 @@ export async function loadRecentTaxReportSnapshotsUpTo(
 }
 
 /**
- * Versão enxuta de `loadRecentTaxReportSnapshots`: lê só `payloadSummary`
- * (sem `porSku[].transacoes`) do Postgres, não a coluna `payload` completa.
- * Usada por `loadProductTaxFromLatestReport`, que só precisa de agregados por
- * SKU — evita trafegar o detalhamento por venda do banco a cada requisição
- * (era a maior fonte de Egress identificada). Ignora silenciosamente
- * snapshots ainda sem `payloadSummary` (pré-backfill); `loadProductTaxFromLatestReport`
- * já lida bem com menos de `limit` meses (cai para o snapshot anterior que
- * tiver o SKU).
+ * Versão enxuta de `loadRecentTaxReportSnapshotsUpTo`: lê só `payloadSummary`
+ * (sem `porSku[].transacoes`), não a coluna `payload` completa — o DRE só
+ * precisa de agregados por SKU, e o detalhamento por venda era a maior fonte
+ * de Egress. Ignora snapshots ainda sem `payloadSummary` (pré-backfill).
  */
-export async function loadRecentTaxReportSummaries(
-  sellerId: number,
-  limit = 12,
-): Promise<TaxReportPayload[]> {
-  const rows = await prisma.taxReportMonthSnapshot.findMany({
-    where: { sellerId },
-    orderBy: [{ year: "desc" }, { month: "desc" }],
-    take: limit,
-    select: { payloadSummary: true },
-  });
-  return rows
-    .filter((row) => row.payloadSummary !== null)
-    .map((row) => row.payloadSummary as unknown as TaxReportPayload);
-}
-
-/** Versão enxuta de `loadRecentTaxReportSnapshotsUpTo` — ver `loadRecentTaxReportSummaries`. */
 export async function loadRecentTaxReportSummariesUpTo(
   sellerId: number,
   year: number,

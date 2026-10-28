@@ -10,7 +10,10 @@ import {
   productWriteToPrismaData,
   validateProductInput,
 } from "@/lib/products/product-data";
-import { loadProductTaxFromLatestReport } from "@/lib/products/product-tax-from-report";
+import {
+  emptyProductTaxLookup,
+  loadProductTaxRolling30d,
+} from "@/lib/products/product-tax-from-report";
 import { fetchItemById } from "@/lib/mercadolibre/api";
 import { getItemSku } from "@/lib/mercadolibre/item-sku";
 import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
@@ -41,14 +44,20 @@ export async function GET() {
   const { userId, organizationId } = auth.ctx;
 
   try {
+    const settingsPromise = ensureCompanySettings(organizationId);
     const [settings, products, taxFromReport] = await Promise.all([
-      ensureCompanySettings(organizationId),
+      settingsPromise,
       prisma.product.findMany({
         where: { organizationId },
         orderBy: { sku: "asc" },
         include: { supplier: { select: { id: true, name: true } } },
       }),
-      loadProductTaxFromLatestReport(userId),
+      // No Simples o imposto é a alíquota única da empresa: não lê o Tributário.
+      settingsPromise.then((s) =>
+        s.taxRegime === "SIMPLES"
+          ? emptyProductTaxLookup()
+          : loadProductTaxRolling30d(organizationId, userId),
+      ),
     ]);
     const imageUrlsByMlItemId = await loadListingImageUrlsByMlItemId(
       organizationId,
@@ -63,6 +72,7 @@ export async function GET() {
       taxRegime: settings.taxRegime,
       simplesAliquotaEfetivaPercent: settings.simplesAliquotaEfetivaPercent,
       taxReportGeneratedAt: taxFromReport.generatedAt,
+      taxWindow: taxFromReport.window,
       products: products.map((p) =>
         buildProductView(
           p,

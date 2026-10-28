@@ -50,7 +50,8 @@ import {
   type ResolvedProductPricing,
 } from "@/lib/pricing/product-pricing";
 import {
-  loadProductTaxFromLatestReport,
+  emptyProductTaxLookup,
+  loadProductTaxRolling30d,
   type ProductTaxReportLookup,
 } from "@/lib/products/product-tax-from-report";
 import {
@@ -937,7 +938,7 @@ async function applyMinPriceRefinement(
 /**
  * Alíquota por anúncio/SKU conforme o regime: no Simples é a alíquota efetiva
  * única da empresa (vale também pra anúncio sem SKU); fora dele, o % apurado
- * no relatório tributário (último mês fechado, com fallback).
+ * no relatório tributário (vendas dos últimos 30 dias, com fallback mensal).
  */
 function buildTaxLookups(
   companySettings: CompanySettings,
@@ -994,10 +995,16 @@ async function loadRowContext(
   const skus = [...effectiveSkuByItemId.values()]
     .filter((sku): sku is string => Boolean(sku))
     .concat(kitComponentSkus);
+  const companySettingsPromise = getCompanySettings(organizationId);
   const [pricingLookup, taxFromReport, productsForPma, companySettings] =
     await Promise.all([
       loadProductsMapBySku(organizationId, skus, itemIds),
-      loadProductTaxFromLatestReport(userId),
+      // No Simples o imposto é a alíquota única da empresa: não lê o Tributário.
+      companySettingsPromise.then((settings) =>
+        settings.taxRegime === "SIMPLES"
+          ? emptyProductTaxLookup()
+          : loadProductTaxRolling30d(organizationId, userId),
+      ),
       prisma.product.findMany({
         where: {
           organizationId,
@@ -1005,7 +1012,7 @@ async function loadRowContext(
         },
         select: { mlItemId: true, sku: true, pmaPrice: true },
       }),
-      getCompanySettings(organizationId),
+      companySettingsPromise,
     ]);
   const { byMlItemId: pricingByMlItemId, bySku: pricingBySku } = pricingLookup;
   const { taxBySku, taxByMlItemId } = buildTaxLookups(

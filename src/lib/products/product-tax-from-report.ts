@@ -1,102 +1,190 @@
 import { skuImpostoOperacionalPercentual } from "@/lib/tax-report/imposto-operacional";
 import { normalizeProductSku } from "@/lib/pricing/product-pricing";
-import { lastClosedMonth } from "@/lib/date-range";
-import type { TaxReportPayload } from "@/lib/tax-report/types";
+import { roundMoney } from "@/lib/pricing/financial-margin";
+import { zonedYmd } from "@/lib/report-timezone";
+import type { SkuAggregation } from "@/lib/tax-report/types";
+import type {
+  TaxFallbackRow,
+  TaxSnapshotMeta,
+  TaxWindowRow,
+} from "@/lib/tax-report/service/tax-daily-totals-data";
 
-const RECENT_SNAPSHOTS_LIMIT = 12;
+/** Dias corridos da janela do imposto "ao vivo". */
+export const TAX_WINDOW_DAYS = 30;
 
-type SnapshotsLoader = (sellerId: number) => Promise<TaxReportPayload[]>;
-
-function anchoredLoadSnapshots(anchor: { year: number; month: number }) {
-  return async (sellerId: number) => {
-    const { loadRecentTaxReportSummariesUpTo } = await import(
-      "@/lib/tax-report/service/generate-monthly-report"
-    );
-    return loadRecentTaxReportSummariesUpTo(
-      sellerId,
-      anchor.year,
-      anchor.month,
-      RECENT_SNAPSHOTS_LIMIT,
-    );
-  };
-}
+export type ProductTaxBasis = "rolling30d" | "month";
 
 export type ProductTaxFromReport = {
-  /** % médio operacional de imposto apurado por venda, vindo do relatório tributário. */
+  /** % operacional de imposto (imposto ÷ receita das vendas), vindo do relatório tributário. */
   taxPercent: number;
-  /** Data (ISO) em que o snapshot usado foi gerado/recalculado. */
+  /** `rolling30d` = vendas da janela de 30 dias; `month` = % do mês mais recente em que o anúncio vendeu (fallback). */
+  basis: ProductTaxBasis;
+  /** Data (ISO) em que o snapshot usado foi gerado/recalculado (na janela: o mais recente dela). */
   generatedAt: string;
-  /** Mês/ano do relatório tributário de onde veio o valor (ex.: pode ser um mês anterior, por fallback). */
+  /** Mês/ano do relatório de onde veio o valor (na janela: o mês mais recente dela). */
   year: number;
   month: number;
+  /** Só em `rolling30d`: dias (`YYYY-MM-DD`) das vendas somadas. */
+  periodFrom?: string;
+  periodTo?: string;
 };
 
 export type ProductTaxReportLookup = {
   generatedAt: string | null;
+  /** Janela de 30 dias usada (null = nenhum snapshot com totais diários ainda). */
+  window: { from: string; to: string } | null;
   /** Lookup por identidade (mlItemId) — preferir este; sku-texto não é mais único, `bySku` é só fallback pra linha sem produto resolvido ou snapshot antigo sem mlItemId. */
   byMlItemId: Map<string, ProductTaxFromReport>;
   bySku: Map<string, ProductTaxFromReport>;
 };
 
-/**
- * Carrega os relatórios tributários mais recentes e monta um mapa
- * sku -> imposto operacional médio (%), para preencher a coluna "Imposto"
- * da tela de produtos (e demais telas que usam o mesmo custo/imposto).
- *
- * Sem `anchor` nem `loadSnapshots` explícito (uso "ao vivo" em
- * Produtos/Lucratividade), a busca é ancorada no **último mês fechado**
- * (`lastClosedMonth`) — nunca no mês em andamento, que só teria alguns dias
- * de amostra no início do período e produziria um % pouco representativo.
- * Isso dá sempre um número real de um mês inteiro (não uma aproximação):
- * mais preciso que uma média ponderada por dias, e igualmente barato (é a
- * mesma busca por um snapshot só, sem combinar nada).
- *
- * Se um SKU não aparecer nesse mês, cai para o snapshot mais recente dentre
- * os anteriores que contenha esse SKU — evita deixar produtos pouco
- * vendidos sem imposto só porque não venderam naquele mês.
- *
- * `anchor`, quando informado (ex.: pelo DRE, ao montar um mês fiscal
- * específico), ancora a busca nesse mês exato em vez do último fechado —
- * nunca usa a % de um relatório tributário gerado depois do período sendo
- * calculado. `loadSnapshots` explícito (testes) ignora tanto `anchor` quanto
- * o último mês fechado — usa exatamente os snapshots injetados.
- */
-export async function loadProductTaxFromLatestReport(
-  sellerId: number,
-  loadSnapshots?: SnapshotsLoader,
-  anchor?: { year: number; month: number },
-): Promise<ProductTaxReportLookup> {
-  const resolvedLoadSnapshots =
-    loadSnapshots ?? anchoredLoadSnapshots(anchor ?? lastClosedMonth());
-  const payloads = await resolvedLoadSnapshots(sellerId);
-  if (payloads.length === 0) {
-    return { generatedAt: null, byMlItemId: new Map(), bySku: new Map() };
-  }
+export function emptyProductTaxLookup(): ProductTaxReportLookup {
+  return { generatedAt: null, window: null, byMlItemId: new Map(), bySku: new Map() };
+}
 
-  const generatedAt = payloads[0].meta.geradoEm;
+function addDaysYmd(ymd: string, days: number): string {
+  const [year, month, day] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days))
+    .toISOString()
+    .slice(0, 10);
+}
+
+function monthEndYmd(year: number, month: number): string {
+  return new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+}
+
+/**
+ * Janela de 30 dias terminando no último dia com dado no Tributário: o dia em
+ * que os pedidos do snapshot mais recente foram buscados — limitado ao fim do
+ * mês dele e a hoje. Assim são sempre 30 dias de vendas reais, mesmo com o
+ * Tributário do mês corrente parado ou ainda não gerado.
+ */
+export function resolveTaxWindow(
+  latest: Pick<TaxSnapshotMeta, "year" | "month" | "ordersFetchedAt">,
+  now: Date = new Date(),
+): { from: string; to: string } {
+  const fetchedAt = new Date(latest.ordersFetchedAt);
+  const candidates = [monthEndYmd(latest.year, latest.month), zonedYmd(now)];
+  if (!Number.isNaN(fetchedAt.getTime())) candidates.push(zonedYmd(fetchedAt));
+  const to = candidates.sort()[0];
+  return { from: addDaysYmd(to, -(TAX_WINDOW_DAYS - 1)), to };
+}
+
+function fallbackPercent(row: TaxFallbackRow): number {
+  return skuImpostoOperacionalPercentual({
+    impostoOperacionalMedioPercentual:
+      row.impostoOperacionalMedioPercentual ?? undefined,
+    impostoOperacionalTotal: row.impostoOperacionalTotal ?? undefined,
+    receitaTotal: row.receitaTotal,
+    transacoes: [],
+  } as Partial<SkuAggregation> as SkuAggregation);
+}
+
+/**
+ * Monta o lookup por anúncio: o % das vendas da janela (Σ imposto ÷ Σ
+ * receita) quando o anúncio vendeu nela; senão o % do mês mais recente em que
+ * ele aparece (`fallbackRows`, mais recente primeiro) — evita deixar produto
+ * pouco vendido sem imposto só porque não vendeu nos últimos 30 dias.
+ */
+export function buildRollingTaxLookup(input: {
+  window: { from: string; to: string } | null;
+  windowSnapshot: Pick<TaxSnapshotMeta, "year" | "month" | "generatedAt"> | null;
+  windowRows: TaxWindowRow[];
+  fallbackRows: TaxFallbackRow[];
+  generatedAt: string | null;
+}): ProductTaxReportLookup {
   const byMlItemId = new Map<string, ProductTaxFromReport>();
   const bySku = new Map<string, ProductTaxFromReport>();
+  const setSku = (sku: string, entry: ProductTaxFromReport) => {
+    const key = normalizeProductSku(sku);
+    if (!bySku.has(key)) bySku.set(key, entry);
+  };
 
-  for (const payload of payloads) {
-    for (const row of payload.porSku) {
+  const { window, windowSnapshot } = input;
+  if (window && windowSnapshot) {
+    for (const row of input.windowRows) {
+      if (!(row.receita > 0)) continue;
       const entry: ProductTaxFromReport = {
-        taxPercent: skuImpostoOperacionalPercentual(row),
-        generatedAt: payload.meta.geradoEm,
-        year: payload.year,
-        month: payload.month,
+        taxPercent: roundMoney((row.imposto / row.receita) * 100),
+        basis: "rolling30d",
+        generatedAt: windowSnapshot.generatedAt,
+        year: windowSnapshot.year,
+        month: windowSnapshot.month,
+        periodFrom: window.from,
+        periodTo: window.to,
       };
-      if (row.mlItemId && !byMlItemId.has(row.mlItemId)) {
-        byMlItemId.set(row.mlItemId, entry);
-      }
-      const skus = [row.sku, ...(row.skuAliases ?? [])];
-      for (const sku of skus) {
-        const key = normalizeProductSku(sku);
-        if (!bySku.has(key)) {
-          bySku.set(key, entry);
-        }
-      }
+      if (row.mlItemId) byMlItemId.set(row.mlItemId, entry);
+      for (const sku of row.skus) setSku(sku, entry);
     }
   }
 
-  return { generatedAt, byMlItemId, bySku };
+  for (const row of input.fallbackRows) {
+    const own: ProductTaxFromReport = {
+      taxPercent: fallbackPercent(row),
+      basis: "month",
+      generatedAt: row.generatedAt,
+      year: row.year,
+      month: row.month,
+    };
+    // SKU/alias antigo de um anúncio que vendeu na janela aponta pro % da janela.
+    const entry = (row.mlItemId && byMlItemId.get(row.mlItemId)) || own;
+    if (row.mlItemId && !byMlItemId.has(row.mlItemId)) {
+      byMlItemId.set(row.mlItemId, entry);
+    }
+    for (const sku of [row.sku, ...(row.skuAliases ?? [])]) setSku(sku, entry);
+  }
+
+  return { generatedAt: input.generatedAt, window, byMlItemId, bySku };
+}
+
+/**
+ * Imposto "ao vivo" por anúncio (Produtos, Lucratividade, detalhe do
+ * anúncio): % das vendas dos últimos 30 dias apuradas no Tributário, somadas
+ * no Postgres a partir de `TaxReportMonthSnapshot.dailyTotals` — trafega só
+ * um número por anúncio. Anúncio sem venda na janela cai no % do mês mais
+ * recente em que aparece. O DRE não usa isto: um mês do DRE usa o % do
+ * próprio mês (`loadDreTaxRates`).
+ */
+export async function loadProductTaxRolling30d(
+  organizationId: string,
+  sellerId: number,
+  now: Date = new Date(),
+): Promise<ProductTaxReportLookup> {
+  const { loadTaxFallbackRows, loadTaxSnapshotMetas, loadTaxWindowTotals } =
+    await import("@/lib/tax-report/service/tax-daily-totals-data");
+  // A janela depende do snapshot mais recente: sai assim que os metadados
+  // chegam, em paralelo com o fallback.
+  const windowPromise = loadTaxSnapshotMetas(organizationId, sellerId).then(
+    async (metas) => {
+      const windowSnapshot = metas.find((meta) => meta.hasDailyTotals) ?? null;
+      const window = windowSnapshot ? resolveTaxWindow(windowSnapshot, now) : null;
+      const windowRows = window
+        ? await loadTaxWindowTotals(organizationId, sellerId, window)
+        : [];
+      return { metas, windowSnapshot, window, windowRows };
+    },
+  );
+  const [{ metas, windowSnapshot, window, windowRows }, fallbackSummaryRows] =
+    await Promise.all([
+      windowPromise,
+      loadTaxFallbackRows(organizationId, sellerId),
+    ]);
+  if (metas.length === 0) return emptyProductTaxLookup();
+
+  const generatedAtByMonth = new Map(
+    metas.map((meta) => [`${meta.year}-${meta.month}`, meta.generatedAt]),
+  );
+  const fallbackRows = fallbackSummaryRows.map((row) => ({
+    ...row,
+    generatedAt:
+      generatedAtByMonth.get(`${row.year}-${row.month}`) ?? metas[0].generatedAt,
+  }));
+
+  return buildRollingTaxLookup({
+    window,
+    windowSnapshot,
+    windowRows,
+    fallbackRows,
+    generatedAt: metas[0].generatedAt,
+  });
 }
