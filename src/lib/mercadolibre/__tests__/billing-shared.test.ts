@@ -266,15 +266,17 @@ describe("classifyMlBillingEntry", () => {
     );
   });
 
-  it("classifies DIFAL / CDLIT as specialFee", () => {
+  it("keeps the ML DIFAL apart from special fees (CDLIT)", () => {
     assert.equal(
       classifyMlBillingEntry(
         "CDIFAL",
         "cobranca do diferencial de aliquota interestadual (icms-difal)",
         "CHARGE",
       ),
-      "specialFee",
+      "difal",
     );
+    assert.equal(classifyMlBillingEntry("BDIFAL", "", "BONUS"), "difal");
+    assert.equal(classifyMlBillingEntry("ZZZ", "icms-difal", "CHARGE"), "difal");
     assert.equal(classifyMlBillingEntry("CDLIT", "", "CHARGE"), "specialFee");
     assert.equal(classifyMlBillingEntry("BDLIT", "", "BONUS"), "specialFee");
   });

@@ -4,7 +4,8 @@ import * as XLSX from "xlsx";
 import { parseBrMoney, parseFeeDetailsCell } from "./fee-details-parser";
 import { resolveFeeLineKey } from "./fee-name-mapping";
 import { aggregateReconciliationRows } from "./aggregate";
-import type { ReconciliationRow } from "./types";
+import { assertSheetMatchesMonth } from "./sheet-period";
+import { ReconciliationParseError, type ReconciliationRow } from "./types";
 import { parseReconciliationWorkbook } from "./xlsx-parser";
 
 describe("parseBrMoney", () => {
@@ -41,7 +42,7 @@ Pós-paga: Sim;}`;
 });
 
 describe("resolveFeeLineKey", () => {
-  it("maps known fee names and falls back to special fees", () => {
+  it("maps known fee names and leaves unknown names out of the DRE", () => {
     assert.equal(
       resolveFeeLineKey("Custo por vender no Mercado Livre").lineKey,
       "saleFeeMl",
@@ -50,29 +51,59 @@ describe("resolveFeeLineKey", () => {
       resolveFeeLineKey("Tarifa pelo serviço de armazenamento Full").lineKey,
       "fullStorageMl",
     );
-    assert.equal(resolveFeeLineKey("Tarifa misteriosa XYZ").recognized, false);
-    assert.equal(
-      resolveFeeLineKey("Tarifa misteriosa XYZ").lineKey,
-      "specialFeesMl",
+    assert.deepEqual(resolveFeeLineKey("Tarifa misteriosa XYZ"), {
+      kind: "unrecognized",
+      lineKey: null,
+      credit: false,
+    });
+    assert.equal(resolveFeeLineKey("").kind, "unrecognized");
+  });
+
+  it("maps the names that used to fall into special fees (planilha out/2026)", () => {
+    const nonCompliance = resolveFeeLineKey(
+      "Cancelamento da tarifa por inconformidade no Envios Full",
     );
+    assert.equal(nonCompliance.lineKey, "fullNonComplianceMl");
+    assert.equal(nonCompliance.credit, true);
+
+    assert.equal(
+      resolveFeeLineKey("Tarifa de devolução por envio interno no município")
+        .lineKey,
+      "returnFeeMl",
+    );
+    const returnCredit = resolveFeeLineKey("Cancelamento da tarifa por devolução");
+    assert.equal(returnCredit.lineKey, "returnFeeMl");
+    assert.equal(returnCredit.credit, true);
+
+    assert.equal(
+      resolveFeeLineKey("Custo do serviço de coleta Full").lineKey,
+      "fullShippingMl",
+    );
+    assert.equal(
+      resolveFeeLineKey(
+        "Cobrança do diferencial de alíquota interestadual (ICMS-DIFAL)",
+      ).kind,
+      "difal",
+    );
+    assert.equal(resolveFeeLineKey("Juros do empréstimo").kind, "non_operational");
   });
 
   it("maps shipping to seller freight and skips ads and installment fees", () => {
     const ads = resolveFeeLineKey(
       "Tarifa por campanha de publicidade de Product Ads",
     );
-    assert.equal(ads.skipped, true);
+    assert.equal(ads.kind, "skipped");
     assert.equal(ads.lineKey, null);
 
     const shipping = resolveFeeLineKey("Tarifa de envio extra ou intermunicipal");
-    assert.equal(shipping.skipped, false);
+    assert.equal(shipping.kind, "line");
     assert.equal(shipping.lineKey, "sellerShippingMl");
     assert.equal(shipping.credit, false);
 
     const installment = resolveFeeLineKey(
       "Taxa de parcelamento (equivalente ao acréscimo no preço pago pelo comprador)",
     );
-    assert.equal(installment.skipped, true);
+    assert.equal(installment.kind, "skipped");
 
     const cancelSale = resolveFeeLineKey(
       "Cancelamento do Custo por vender no Mercado Livre",
@@ -143,9 +174,14 @@ function row(overrides: Partial<ReconciliationRow>): ReconciliationRow {
   };
 }
 
+const LUCRO_REAL = { difalCountsAsFee: false };
+const SIMPLES = { difalCountsAsFee: true };
+const aggregateLucroReal = (rows: ReconciliationRow[]) =>
+  aggregateReconciliationRows(rows, LUCRO_REAL);
+
 describe("aggregateReconciliationRows", () => {
   it("aggregates sales, cancellations and storage with DRE signs", () => {
-    const result = aggregateReconciliationRows([
+    const result = aggregateLucroReal([
       row({ operationId: "s1" }),
       row({
         operationId: "c1",
@@ -184,7 +220,7 @@ describe("aggregateReconciliationRows", () => {
   });
 
   it("nets shipping fees minus cancellations into seller freight", () => {
-    const result = aggregateReconciliationRows([
+    const result = aggregateLucroReal([
       row({
         operationId: "ship1",
         sellerPaidShipping: 99,
@@ -222,7 +258,7 @@ describe("aggregateReconciliationRows", () => {
   });
 
   it("keeps sale fees net of cancellations and ignores installment", () => {
-    const result = aggregateReconciliationRows([
+    const result = aggregateLucroReal([
       row({
         operationId: "fee1",
         feeDetails: [
@@ -267,7 +303,7 @@ describe("aggregateReconciliationRows", () => {
   });
 
   it("does not reconcile partial returns from item minus gross", () => {
-    const result = aggregateReconciliationRows([
+    const result = aggregateLucroReal([
       row({
         operationId: "partial-1",
         operationStatus: "Parcialmente reembolsado",
@@ -308,7 +344,7 @@ describe("aggregateReconciliationRows", () => {
   });
 
   it("uses only Minha Página net fee amount, not the postpaid column", () => {
-    const result = aggregateReconciliationRows([
+    const result = aggregateLucroReal([
       row({
         operationId: "mp1",
         operationType: "eShop",
@@ -334,7 +370,7 @@ describe("aggregateReconciliationRows", () => {
   });
 
   it("does not reconcile ads and maps outbound shipping to seller freight", () => {
-    const result = aggregateReconciliationRows([
+    const result = aggregateLucroReal([
       row({
         operationId: "ad1",
         operationType: "Anúncios MClicks",
@@ -371,7 +407,114 @@ describe("aggregateReconciliationRows", () => {
     assert.equal(result.amounts.adsCost, undefined);
     assert.equal(result.amounts.fullShippingMl, undefined);
     assert.equal(result.amounts.sellerShippingMl, -12);
-    assert.equal(result.unrecognizedFees.length, 0);
+    assert.equal(result.excludedFees.length, 0);
+  });
+
+  it("always reports Tarifas especiais, zero when the sheet has none", () => {
+    const result = aggregateLucroReal([row({ operationId: "s1" })]);
+    assert.equal(result.amounts.specialFeesMl, 0);
+    assert.equal(result.breakdowns.specialFeesMl, undefined);
+  });
+
+  const difalRow = (operationId: string, amount: number) =>
+    row({
+      rowIndex: 105,
+      operationId,
+      operationType: "Cobrança de DIFAL",
+      operationStatus: null,
+      operationDate: new Date(Date.UTC(2026, 9, 28)),
+      closingDate: new Date(Date.UTC(2026, 10, 4)),
+      billingPeriod: "2026-11",
+      itemId: null,
+      itemTitle: null,
+      sku: null,
+      quantity: null,
+      feeDetails: [
+        {
+          feeId: operationId,
+          name: "Cobrança do diferencial de alíquota interestadual (ICMS-DIFAL)",
+          grossAmount: amount,
+          discountAmount: 0,
+          netAmount: amount,
+          postpaid: true,
+        },
+      ],
+    });
+
+  it("leaves the ML DIFAL out in Lucro Real (already in sales tax) with the path to find it", () => {
+    const result = aggregateLucroReal([
+      difalRow("74346756344", 13.05),
+      difalRow("74346073714", 7.85),
+    ]);
+    assert.equal(result.amounts.specialFeesMl, 0);
+    assert.equal(result.excludedFees.length, 1);
+    const [difal] = result.excludedFees;
+    assert.equal(difal?.reason, "in_sales_tax");
+    assert.equal(difal?.total, -20.9);
+    assert.equal(difal?.occurrences, 2);
+    assert.deepEqual(difal?.samples[0], {
+      rowIndex: 105,
+      operationDate: "2026-10-28",
+      operationId: "74346756344",
+      operationType: "Cobrança de DIFAL",
+      feeId: "74346756344",
+      amount: -13.05,
+      billingPeriod: "2026-11",
+      closingDate: "2026-11-04",
+    });
+  });
+
+  it("keeps the ML DIFAL in Tarifas especiais in the Simples (DAS has no DIFAL)", () => {
+    const result = aggregateReconciliationRows(
+      [difalRow("74346756344", 13.05), difalRow("74346073714", 7.85)],
+      SIMPLES,
+    );
+    assert.equal(result.amounts.specialFeesMl, -20.9);
+    assert.equal(result.breakdowns.specialFeesMl?.length, 2);
+    assert.equal(result.excludedFees.length, 0);
+  });
+
+  it("leaves loan interest and unknown fees out of every line", () => {
+    const fee = (name: string, netAmount: number) => ({
+      feeId: "f",
+      name,
+      grossAmount: netAmount,
+      discountAmount: 0,
+      netAmount,
+      postpaid: true,
+    });
+    const result = aggregateLucroReal([
+      row({
+        operationId: "73996779726",
+        operationType: "Movimentações de empréstimo",
+        feeDetails: [fee("Juros do empréstimo", 6373.08)],
+      }),
+      row({ operationId: "x1", feeDetails: [fee("Tarifa misteriosa XYZ", 5)] }),
+      row({
+        operationId: "inc",
+        operationType: "Inconformidade no envio ao Full",
+        feeDetails: [
+          fee("Custo por inconformidade no Envios Full", 846),
+          fee("Cancelamento da tarifa por inconformidade no Envios Full", 846),
+        ],
+      }),
+      row({
+        operationId: "col",
+        operationType: "Coleta Full",
+        feeDetails: [fee("Custo do serviço de coleta Full", 143.81)],
+      }),
+    ]);
+    assert.equal(result.amounts.specialFeesMl, 0);
+    assert.equal(result.amounts.saleFeeMl, undefined);
+    assert.equal(result.amounts.fullNonComplianceMl, 0);
+    assert.equal(result.amounts.fullShippingMl, -143.81);
+    assert.deepEqual(
+      result.excludedFees.map((item) => [item.reason, item.name, item.total]),
+      [
+        ["non_operational", "Juros do empréstimo", -6373.08],
+        ["unrecognized", "Tarifa misteriosa XYZ", -5],
+      ],
+    );
   });
 });
 
@@ -425,5 +568,35 @@ describe("parseReconciliationWorkbook", () => {
     assert.equal(parsed.sheetName, "Vendas");
     assert.equal(parsed.rows.length, 1);
     assert.equal(parsed.warnings.length, 0);
+  });
+});
+
+describe("assertSheetMatchesMonth", () => {
+  const dated = (...dates: (string | null)[]) =>
+    dates.map((d) => ({ operationDate: d ? new Date(`${d}T00:00:00.000Z`) : null }));
+
+  it("accepts the sheet of the chosen month, even with a few rows from the next one", () => {
+    assert.doesNotThrow(() =>
+      assertSheetMatchesMonth(
+        dated("2026-10-01", "2026-10-15", "2026-10-28", "2026-11-01", null),
+        2026,
+        10,
+      ),
+    );
+  });
+
+  it("refuses another month's sheet and says which month it is (julho com a planilha de janeiro)", () => {
+    assert.throws(
+      () => assertSheetMatchesMonth(dated("2026-01-05", "2026-01-20", "2026-01-31"), 2026, 7),
+      (error: unknown) =>
+        error instanceof ReconciliationParseError &&
+        error.code === "wrong_month" &&
+        error.message.includes("01/2026") &&
+        error.message.includes("07/2026"),
+    );
+  });
+
+  it("does not block a sheet without operation dates", () => {
+    assert.doesNotThrow(() => assertSheetMatchesMonth(dated(null, null), 2026, 7));
   });
 });

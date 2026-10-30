@@ -9,6 +9,7 @@ import {
   buildSyncedLineBaseline,
   captureSyncedBreakdowns,
   computeDreTotals,
+  effectiveKeptFromPrevious,
   getEditableLineAmount,
   getYearLineBreakdown,
   getYearProductCostBreakdown,
@@ -19,6 +20,7 @@ import {
   mergeProductCostBreakdowns,
   mergeSyncedSnapshot,
   mergeTaxBreakdowns,
+  mlDifalCountsAsFee,
   normalizeProductCostAuditMergeKey,
   percentOfRevenue,
   productCostAuditKey,
@@ -1085,6 +1087,64 @@ describe("mergeSyncedSnapshot — source unavailable keeps the previous value", 
     const merged = mergeSyncedSnapshot(emptyPayload({ adsCost: 500 }), previous, KEEP_NOTHING);
     assert.equal(merged.adsCost, 500);
     assert.equal(merged.keptFromPrevious, undefined);
+  });
+});
+
+describe("mlDifalCountsAsFee", () => {
+  it("counts the ML DIFAL as a fee only in the Simples (Lucro Real has it in the sales tax)", () => {
+    assert.equal(mlDifalCountsAsFee("SIMPLES"), true);
+    assert.equal(mlDifalCountsAsFee("LUCRO_REAL"), false);
+  });
+});
+
+describe("effectiveKeptFromPrevious — the note only where the shown value is the kept one", () => {
+  it("drops a kept line that the reconciliation reapplied in the same sync", () => {
+    const merged = mergeSyncedSnapshot(emptyPayload(), reconciledMonth(), {
+      keepReconciliation: true,
+      preserveLineKeys: [],
+      keepPreviousLineKeys: ["saleFeeMl", "fullStorageMl"],
+      previousSyncedAt: "2026-10-14T15:30:00.000Z",
+    });
+    assert.equal(merged.saleFeeMl, -120);
+    assert.deepEqual(merged.keptFromPrevious?.lineKeys, ["saleFeeMl", "fullStorageMl"]);
+    assert.deepEqual(effectiveKeptFromPrevious(merged), {
+      lineKeys: ["fullStorageMl"],
+      syncedAt: "2026-10-14T15:30:00.000Z",
+    });
+  });
+
+  it("drops a kept line reconciled after the sync", () => {
+    const synced = {
+      ...withSyncLineBaseline(emptyPayload({ fullStorageMl: -75 })),
+      keptFromPrevious: { lineKeys: ["fullStorageMl" as const], syncedAt: null },
+    };
+    const reconciled = applyReconciliationToPayload(
+      synced,
+      { amounts: { fullStorageMl: -80 }, breakdowns: {} },
+      ["fullStorageMl"],
+      RECON_META,
+    );
+    assert.equal(effectiveKeptFromPrevious(synced)?.lineKeys[0], "fullStorageMl");
+    assert.equal(effectiveKeptFromPrevious(reconciled), null);
+  });
+
+  it("drops a kept line that a preserved manual edit replaced", () => {
+    const edited = applyManualLineEdit(
+      withSyncLineBaseline(emptyPayload({ fullStorageMl: -75 })),
+      "fullStorageMl",
+      -999,
+    );
+    const merged = mergeSyncedSnapshot(emptyPayload(), edited, {
+      keepReconciliation: true,
+      preserveLineKeys: ["fullStorageMl"],
+      keepPreviousLineKeys: ["fullStorageMl"],
+    });
+    assert.equal(merged.fullStorageMl, -999);
+    assert.equal(effectiveKeptFromPrevious(merged), null);
+  });
+
+  it("returns null without a marker", () => {
+    assert.equal(effectiveKeptFromPrevious(emptyPayload()), null);
   });
 });
 

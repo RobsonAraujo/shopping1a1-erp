@@ -11,6 +11,7 @@ import {
   mergeLineBreakdowns,
   mergeProductCostBreakdowns,
   mergeSyncedSnapshot,
+  mlDifalCountsAsFee,
   productCostAuditKey,
   type DreCancelledIncludeOverlay,
   type DreEditableLineKey,
@@ -889,6 +890,11 @@ export async function buildDreMonthSnapshot(
   let partialReturnsMl = 0;
   let returnFeeMl = 0;
   let specialFeesMl = 0;
+  /**
+   * ICMS-DIFAL que o ML recolheu e cobrou na fatura. Só entra em Tarifas
+   * especiais depois, pelo regime (`mlDifalCountsAsFee`).
+   */
+  let mlDifal = 0;
   let fullShippingMl = 0;
   let fullStorageMl = 0;
   let fullNonComplianceMl = 0;
@@ -913,6 +919,7 @@ export async function buildDreMonthSnapshot(
     partialReturnsMl = billing!.partialReturns;
     returnFeeMl = billing!.returnFee;
     specialFeesMl = billing!.specialFees;
+    mlDifal = billing!.difal;
     fullShippingMl = billing!.fullShipping;
     fullStorageMl = billing!.fullStorage;
     fullNonComplianceMl = billing!.fullNonCompliance;
@@ -961,12 +968,14 @@ export async function buildDreMonthSnapshot(
         (civil.saleFeeMl !== 0 ||
           civil.sellerShippingMl !== 0 ||
           civil.returnFeeMl !== 0 ||
-          civil.specialFeesMl !== 0)
+          civil.specialFeesMl !== 0 ||
+          civil.difalMl !== 0)
       ) {
         saleFeeMl = civil.saleFeeMl;
         sellerShippingMl = civil.sellerShippingMl;
         returnFeeMl = civil.returnFeeMl;
         specialFeesMl = civil.specialFeesMl;
+        mlDifal = civil.difalMl;
         if (civil.cancelledSalesMl !== 0) {
           billingCancelledSalesMl = civil.cancelledSalesMl;
         }
@@ -1011,6 +1020,7 @@ export async function buildDreMonthSnapshot(
     if (!usedCivilDetails) {
       returnFeeMl = billing!.returnFee;
       specialFeesMl = billing!.specialFees;
+      mlDifal = billing!.difal;
     }
     fullShippingMl = billing!.fullShipping;
     fullStorageMl = billing!.fullStorage;
@@ -1051,12 +1061,14 @@ export async function buildDreMonthSnapshot(
           (civil.saleFeeMl !== 0 ||
             civil.sellerShippingMl !== 0 ||
             civil.returnFeeMl !== 0 ||
-            civil.specialFeesMl !== 0)
+            civil.specialFeesMl !== 0 ||
+            civil.difalMl !== 0)
         ) {
           saleFeeMl = civil.saleFeeMl;
           sellerShippingMl = civil.sellerShippingMl;
           returnFeeMl = civil.returnFeeMl;
           specialFeesMl = civil.specialFeesMl;
+          mlDifal = civil.difalMl;
           billingCancelledSalesMl = civil.cancelledSalesMl;
           partialReturnsMl = civil.partialReturnsMl;
           fullShippingMl = civil.fullShippingMl;
@@ -1122,6 +1134,7 @@ export async function buildDreMonthSnapshot(
   let partialReturnsBreakdown: DreLineBreakdownItem[] | undefined;
   let returnFeeBreakdown: DreLineBreakdownItem[] | undefined;
   let specialFeesBreakdown: DreLineBreakdownItem[] | undefined;
+  let mlDifalBreakdown: DreLineBreakdownItem[] | undefined;
   let fullShippingBreakdown: DreLineBreakdownItem[] | undefined;
   let fullStorageBreakdown: DreLineBreakdownItem[] | undefined;
   let fullNonComplianceBreakdown: DreLineBreakdownItem[] | undefined;
@@ -1202,6 +1215,7 @@ export async function buildDreMonthSnapshot(
     partialReturnsBreakdown = billingLineLists.partialReturnsMl;
     returnFeeBreakdown = billingLineLists.returnFeeMl;
     specialFeesBreakdown = billingLineLists.specialFeesMl;
+    mlDifalBreakdown = billingLineLists.difalMl;
     fullShippingBreakdown = billingLineLists.fullShippingMl;
     fullStorageBreakdown = billingLineLists.fullStorageMl;
     fullNonComplianceBreakdown = billingLineLists.fullNonComplianceMl;
@@ -1224,6 +1238,24 @@ export async function buildDreMonthSnapshot(
       `${activeCosts.incompleteItemIds.size} anúncio(s) sem preço de compra no estoque.`,
     );
   }
+  // DIFAL do ML: no Simples é custo a mais (o DAS não tem DIFAL); no Lucro Real
+  // o Tributário já o põe em Impostos sobre vendas — somar seria contar duas vezes.
+  if (mlDifal !== 0) {
+    if (mlDifalCountsAsFee(erpContext.taxRates.regime)) {
+      specialFeesMl = roundMoney(specialFeesMl + mlDifal);
+      if (mlDifalBreakdown?.length) {
+        specialFeesBreakdown = mergeLineBreakdowns([
+          specialFeesBreakdown ?? [],
+          mlDifalBreakdown,
+        ]);
+      }
+    } else {
+      syncWarnings.push(
+        `DIFAL cobrado pelo ML na fatura (${formatMoneyForWarning(Math.abs(mlDifal))}) ficou fora de Tarifas especiais: no Lucro Real ele já está em Impostos sobre vendas, pelo Tributário. Confira com o contador se a guia de DIFAL abate o que o ML recolheu.`,
+      );
+    }
+  }
+
   if (erpContext.taxRates.regime === "SIMPLES") {
     if (erpContext.taxRates.simplesRatePercent === null && revenueMl > 0) {
       syncWarnings.push(

@@ -171,6 +171,44 @@ describe("aggregateMlBillingDetails", () => {
   });
 });
 
+describe("aggregateMlBillingDetails — DIFAL do ML", () => {
+  it("sums CDIFAL into difalMl with its own audit list, out of specialFeesMl", () => {
+    const agg = aggregateMlBillingDetails([
+      {
+        charge_info: {
+          detail_amount: 13.05,
+          detail_type: "CHARGE",
+          detail_sub_type: "CDIFAL",
+          transaction_detail:
+            "Cobrança do diferencial de alíquota interestadual (ICMS-DIFAL)",
+        },
+      },
+      {
+        charge_info: {
+          detail_amount: 7.85,
+          detail_type: "CHARGE",
+          detail_sub_type: "CDIFAL",
+          transaction_detail:
+            "Cobrança do diferencial de alíquota interestadual (ICMS-DIFAL)",
+        },
+      },
+      {
+        charge_info: {
+          detail_amount: 50,
+          detail_type: "CHARGE",
+          detail_sub_type: "CDLIT",
+          transaction_detail: "Tarifas especiais",
+        },
+      },
+    ]);
+    assert.equal(agg.difalMl, -20.9);
+    assert.equal(agg.specialFeesMl, -50);
+    assert.equal(agg.lineBreakdowns.difalMl?.[0]?.amount, -20.9);
+    assert.equal(agg.lineBreakdowns.specialFeesMl?.[0]?.amount, -50);
+    assert.equal(agg.unmappedCharges, 0);
+  });
+});
+
 describe("mapBillingSummaryToDreLines", () => {
   it("maps MLB summary charge types", () => {
     const mapped = mapBillingSummaryToDreLines({
@@ -209,6 +247,7 @@ describe("mergeBillingLines", () => {
         partialReturnsMl: 0,
         returnFeeMl: 0,
         specialFeesMl: 0,
+        difalMl: 0,
         adsCost: 3100,
         fullShippingMl: -770,
         fullStorageMl: -100,
@@ -230,6 +269,7 @@ describe("mergeBillingLines", () => {
         partialReturns: 0,
         returnFee: 0,
         specialFees: 0,
+        difal: 0,
         fullShipping: 0,
         fullStorage: 0,
         fullNonCompliance: 0,
@@ -257,6 +297,7 @@ describe("mergeBillingLines", () => {
         partialReturnsMl: 0,
         returnFeeMl: 0,
         specialFeesMl: 0,
+        difalMl: 0,
         adsCost: 1024,
         fullShippingMl: 0,
         fullStorageMl: 0,
@@ -278,6 +319,7 @@ describe("mergeBillingLines", () => {
         partialReturns: 26.5,
         returnFee: 0,
         specialFees: 0,
+        difal: 0,
         fullShipping: -503.6,
         fullStorage: -605.47,
         fullNonCompliance: 0,

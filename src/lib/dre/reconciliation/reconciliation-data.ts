@@ -6,6 +6,7 @@ import {
   applyRestoreLineFromSync,
   getEditableLineAmount,
   isDreEditableLineKey,
+  mlDifalCountsAsFee,
   type DreEditableLineKey,
   type DreMonthSnapshotPayload,
 } from "@/lib/dre/dre-calculations";
@@ -14,7 +15,9 @@ import {
   parseSnapshotPayload,
 } from "@/lib/dre/dre-month-data";
 import { loadDreYearView } from "@/lib/dre/dre-year-data";
+import { getCompanySettings } from "@/lib/products/product-data";
 import { aggregateReconciliationRows } from "@/lib/dre/reconciliation/aggregate";
+import { assertSheetMatchesMonth } from "@/lib/dre/reconciliation/sheet-period";
 import {
   compareReconciliation,
   resolveReconciledLineKeys,
@@ -65,6 +68,7 @@ function parseAggregation(raw: unknown): ReconciliationLineAggregation {
     amounts: value.amounts ?? {},
     breakdowns: value.breakdowns ?? {},
     unrecognizedFees: value.unrecognizedFees ?? [],
+    excludedFees: value.excludedFees ?? [],
     warnings: value.warnings ?? [],
   };
 }
@@ -147,6 +151,7 @@ function buildReview(
     diff: comparison.diff,
     matched: comparison.matched,
     unrecognizedFees: aggregation.unrecognizedFees,
+    excludedFees: aggregation.excludedFees,
     warnings: [
       ...extraWarnings,
       ...parseWarnings(row.parseWarningsJson),
@@ -162,12 +167,16 @@ export async function createPendingReconciliationImport(input: {
   fileName: string;
   parsed: ReconciliationParseResult;
 }): Promise<DreReconciliationReview> {
-  const aggregation = aggregateReconciliationRows(input.parsed.rows);
-  const currentPayload = await loadMonthPayload(
-    input.organizationId,
-    input.year,
-    input.month,
-  );
+  assertSheetMatchesMonth(input.parsed.rows, input.year, input.month);
+  const [settings, currentPayload] = await Promise.all([
+    getCompanySettings(input.organizationId),
+    loadMonthPayload(input.organizationId, input.year, input.month),
+  ]);
+  const aggregation = aggregateReconciliationRows(input.parsed.rows, {
+    difalCountsAsFee: mlDifalCountsAsFee(
+      settings.taxRegime === "SIMPLES" ? "SIMPLES" : "LUCRO_REAL",
+    ),
+  });
 
   const created = await prisma.$transaction(async (tx) => {
     // Só rascunhos: um `pending` já aplicado (legado) carrega histórico e é

@@ -9,8 +9,14 @@ export type MlBillingDreLines = {
   partialReturns: number;
   /** Tarifas de devolução (CXDED/CDSDB) — custo do seller, não reembolso. */
   returnFee: number;
-  /** Tarifas especiais (CDIFAL/CDLIT etc.). */
+  /** Tarifas especiais (CDLIT etc.) — sem o DIFAL, que vem em `difal`. */
   specialFees: number;
+  /**
+   * ICMS-DIFAL recolhido pelo ML (CDIFAL). Fica separado porque é imposto, não
+   * tarifa: o DRE decide pelo regime se entra em Tarifas especiais
+   * (`mlDifalCountsAsFee`).
+   */
+  difal: number;
   fullShipping: number;
   fullStorage: number;
   fullNonCompliance: number;
@@ -138,6 +144,7 @@ export type MlBillingLineCategory =
   | "partialReturn"
   | "returnFee"
   | "specialFee"
+  | "difal"
   | "skip";
 
 /** Classifica subtipo/label da API de faturamento MLB para linhas do DRE. */
@@ -187,13 +194,20 @@ export function classifyMlBillingEntry(
     return "returnFee";
   }
 
-  // Tarifas especiais: DIFAL, CDLIT etc.
+  // ICMS-DIFAL recolhido pelo ML: imposto, separado das tarifas especiais.
   if (
     type === "CDIFAL" ||
     type === "BDIFAL" ||
+    /difal|diferencial de aliquota/.test(label)
+  ) {
+    return "difal";
+  }
+
+  // Tarifas especiais: CDLIT etc.
+  if (
     type === "CDLIT" ||
     type === "BDLIT" ||
-    /difal|diferencial de aliquota|tarifas especiais/.test(label)
+    /tarifas especiais/.test(label)
   ) {
     return "specialFee";
   }
@@ -314,7 +328,8 @@ export function applyBillingLineAmount(
     category === "saleFee" ||
     category === "sellerShipping" ||
     category === "returnFee" ||
-    category === "specialFee"
+    category === "specialFee" ||
+    category === "difal"
   ) {
     return isBonus
       ? addBillingBonus(current, abs)

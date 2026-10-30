@@ -160,6 +160,7 @@ export function mapBillingSummaryToDreLines(
     partialReturns: aggregated.partialReturnsMl,
     returnFee: aggregated.returnFeeMl,
     specialFees: aggregated.specialFeesMl,
+    difal: aggregated.difalMl,
     fullShipping: aggregated.fullShippingMl,
     fullStorage: aggregated.fullStorageMl,
     fullNonCompliance: aggregated.fullNonComplianceMl,
@@ -180,6 +181,7 @@ export function isBillingSummaryEmpty(
     mapped.partialReturns !== 0 ||
     mapped.returnFee !== 0 ||
     mapped.specialFees !== 0 ||
+    mapped.difal !== 0 ||
     mapped.fullShipping !== 0 ||
     mapped.fullStorage !== 0 ||
     mapped.fullNonCompliance !== 0 ||

@@ -75,6 +75,7 @@ export type BillingDreBreakdownKey =
   | "partialReturnsMl"
   | "returnFeeMl"
   | "specialFeesMl"
+  | "difalMl"
   | "adsCost"
   | "fullShippingMl"
   | "fullStorageMl"
@@ -91,6 +92,8 @@ export type MlDetailsAggregation = {
   partialReturnsMl: number;
   returnFeeMl: number;
   specialFeesMl: number;
+  /** ICMS-DIFAL recolhido pelo ML — fora de `specialFeesMl` (ver `MlBillingDreLines.difal`). */
+  difalMl: number;
   adsCost: number;
   fullShippingMl: number;
   fullStorageMl: number;
@@ -181,6 +184,7 @@ function emptyAggregation(): MlDetailsAggregation {
     partialReturnsMl: 0,
     returnFeeMl: 0,
     specialFeesMl: 0,
+    difalMl: 0,
     adsCost: 0,
     fullShippingMl: 0,
     fullStorageMl: 0,
@@ -212,6 +216,8 @@ function billingCategoryToBreakdownKey(
       return "returnFeeMl";
     case "specialFee":
       return "specialFeesMl";
+    case "difal":
+      return "difalMl";
     case "ads":
       return "adsCost";
     case "fullShipping":
@@ -320,6 +326,14 @@ function applyCategory(
       agg.specialFeesMl = applyBillingLineAmount(
         category,
         agg.specialFeesMl,
+        amount,
+        isBonus,
+      );
+      break;
+    case "difal":
+      agg.difalMl = applyBillingLineAmount(
+        category,
+        agg.difalMl,
         amount,
         isBonus,
       );
@@ -690,6 +704,7 @@ export function listBillingMergeDivergences(
     ["Devoluções parciais", details.partialReturnsMl, summary.partialReturns],
     ["Tarifa de devolução", details.returnFeeMl, summary.returnFee],
     ["Tarifas especiais", details.specialFeesMl, summary.specialFees],
+    ["DIFAL (ML)", details.difalMl, summary.difal],
     ["ADS (fatura)", details.adsCost, summary.adsCost],
     ["Minha Página", details.minhaPaginaMl, summary.minhaPagina],
     ["Comissão Afiliados", details.affiliateFeeMl, summary.affiliateFee],
@@ -742,6 +757,7 @@ export function mergeBillingLines(
     ),
     returnFee: pick(details?.returnFeeMl ?? 0, summary.returnFee),
     specialFees: pick(details?.specialFeesMl ?? 0, summary.specialFees),
+    difal: pick(details?.difalMl ?? 0, summary.difal),
     fullShipping: pick(details?.fullShippingMl ?? 0, full.fullShipping),
     fullStorage: pick(details?.fullStorageMl ?? 0, full.fullStorage),
     fullNonCompliance: pick(

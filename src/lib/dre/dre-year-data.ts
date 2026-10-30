@@ -1,6 +1,7 @@
 import {
   applyDreIncludeCancelledView,
   computeDreTotals,
+  effectiveKeptFromPrevious,
   sumYearLineAmounts,
   type DreCancelledIncludeOverlay,
   type DreComputedTotals,
@@ -836,7 +837,7 @@ export async function loadDreYearView(
       taxSource: payload?.taxSource ?? null,
       // Preenchido depois do laço: compara com os outros meses do ano.
       zeroLineAnomalies: [],
-      keptFromPrevious: payload?.keptFromPrevious ?? null,
+      keptFromPrevious: payload ? effectiveKeptFromPrevious(payload) : null,
       lineAuditMismatches: payload?.lineAuditMismatches ?? [],
       // Checagem ao vivo (não só o flag do snapshot): snapshots antigos não
       // tinham `fullReportSourced`, e importar depois da sync também conta.

@@ -36,7 +36,13 @@ function payload(overrides: Partial<DreMonthSnapshotPayload> = {}): DreMonthSnap
 function aggregation(
   amounts: ReconciliationLineAggregation["amounts"],
 ): ReconciliationLineAggregation {
-  return { amounts, breakdowns: {}, unrecognizedFees: [], warnings: [] };
+  return {
+    amounts,
+    breakdowns: {},
+    unrecognizedFees: [],
+    excludedFees: [],
+    warnings: [],
+  };
 }
 
 describe("buildReconciliationDiff", () => {

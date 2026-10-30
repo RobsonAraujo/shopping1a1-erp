@@ -78,6 +78,10 @@ export type ReconciliationParseResult = {
   warnings: ReconciliationParseWarning[];
 };
 
+/**
+ * Imports antigos: tarifas sem nome conhecido que foram **somadas** em Tarifas
+ * especiais. A agregação atual não soma mais nada às cegas (ver `excludedFees`).
+ */
 export type UnrecognizedFeeSummary = {
   name: string;
   total: number;
@@ -85,10 +89,47 @@ export type UnrecognizedFeeSummary = {
   sampleRowIndexes: number[];
 };
 
+/**
+ * Por que a cobrança ficou fora das linhas do DRE:
+ * - `in_sales_tax`: DIFAL recolhido pelo ML — já está em Impostos sobre vendas;
+ * - `non_operational`: despesa financeira (juros de empréstimo);
+ * - `unrecognized`: tarifa que o DRE não conhece.
+ */
+export type ExcludedFeeReason = "in_sales_tax" | "non_operational" | "unrecognized";
+
+/** Uma cobrança fora do DRE, com o que for preciso para achá-la no ML. */
+export type ExcludedFeeOccurrence = {
+  rowIndex: number;
+  /** `YYYY-MM-DD`. */
+  operationDate: string | null;
+  operationId: string;
+  operationType: string;
+  feeId: string | null;
+  /** Mesmo sinal das linhas: cobrança negativa, estorno positivo. */
+  amount: number;
+  billingPeriod: string | null;
+  /** `YYYY-MM-DD`. */
+  closingDate: string | null;
+};
+
+export type ExcludedFeeSummary = {
+  name: string;
+  reason: ExcludedFeeReason;
+  total: number;
+  occurrences: number;
+  /** As primeiras ocorrências (até `EXCLUDED_FEE_SAMPLE_LIMIT`). */
+  samples: ExcludedFeeOccurrence[];
+};
+
+export const EXCLUDED_FEE_SAMPLE_LIMIT = 20;
+
 export type ReconciliationLineAggregation = {
   amounts: Partial<Record<DreEditableLineKey, number>>;
   breakdowns: Partial<Record<DreEditableLineKey, DreLineBreakdownItem[]>>;
+  /** Só imports antigos (somadas em Tarifas especiais); agregação nova grava `[]`. */
   unrecognizedFees: UnrecognizedFeeSummary[];
+  /** Cobranças da planilha que ficaram fora das linhas do DRE. */
+  excludedFees: ExcludedFeeSummary[];
   warnings: ReconciliationParseWarning[];
 };
 
@@ -120,5 +161,6 @@ export type DreReconciliationReview = {
   diff: DreReconciliationLineDiff[];
   matched: DreReconciliationLineMatch[];
   unrecognizedFees: UnrecognizedFeeSummary[];
+  excludedFees: ExcludedFeeSummary[];
   warnings: ReconciliationParseWarning[];
 };

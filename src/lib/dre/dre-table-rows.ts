@@ -176,7 +176,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     indent: true,
     lineKey: "specialFeesMl",
     methodology:
-      "Cobranças especiais da fatura ML (ex.: DIFAL/CDIFAL, CDLIT e bonificações relacionadas), líquidas.",
+      "Cobranças especiais da fatura ML (ex.: CDLIT e bonificações relacionadas), líquidas. O DIFAL que o ML recolhe entra aqui só no Simples; no Lucro Real ele já está em Impostos sobre vendas.",
   },
   {
     type: "static",

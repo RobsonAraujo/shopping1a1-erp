@@ -16,12 +16,33 @@ Estado do mês:
 
 Fluxo:
 
-1. **Prévia** (`POST /api/dre/reconciliation/preview`): cria um import `pending` sem `appliedAt` (rascunho — não toca no snapshot) e devolve `diff` (linhas que mudariam) + `matched` (linhas que já conferem).
+1. **Prévia** (`POST /api/dre/reconciliation/preview`): cria um import `pending` sem `appliedAt` (rascunho — não toca no snapshot) e devolve `diff` (linhas que mudariam) + `matched` (linhas que já conferem). Planilha de outro mês é recusada (`assertSheetMatchesMonth`: a maioria das operações datadas precisa cair no mês escolhido).
 2. **Conciliar** (`POST .../[importId]/confirm`, `confirmReconciliationImport`): numa transação, grava os valores da planilha nas linhas `matched` + divergentes aceitas (`applyReconciliationToPayload`: valor e auditoria viram baseline, saem de "ajustado"), marca o import `confirmed` e aposenta os outros do mês (`superseded`; rascunhos são apagados).
 3. **Sync** (`persistDreMonthSnapshot` → `mergeSyncedSnapshot`): com `keepReconciliation` (padrão `true`) reaplica `payload.reconciliation` por cima do sync — o resto do mês atualiza. Sem manter, o mês volta a `none` e o import vira `superseded` na mesma transação. O re-sync do nivelamento sempre mantém (custo produto nunca é linha da planilha).
 4. **Descartar** (`DELETE .../[importId]`): rascunho é apagado; legado aplicado volta ao baseline **linha a linha** (só o que ainda é exatamente o valor da planilha); `confirmed` vira `superseded` e o mês deixa de estar conciliado sem mudar valores.
 
-Ajuste manual sobre linha conciliada vence a conciliação enquanto for mantido no sync; "Restaurar" volta ao valor da planilha. Auditoria/backup antes de revisar meses legados em produção: `scripts/dre-reconciliation-audit.ts` (somente leitura).
+Ajuste manual sobre linha conciliada vence a conciliação enquanto for mantido no sync; "Restaurar" volta ao valor da planilha.
+
+### O que a planilha põe em cada linha (`fee-name-mapping.ts`, `aggregate.ts`)
+
+- Cada tarifa vai pelo nome; o estorno ("Cancelamento da/do …") cai na mesma linha, com sinal positivo.
+- **Nada cai numa linha por eliminação.** Antes, todo nome desconhecido ia para Tarifas especiais. Em out/2026 isso pôs lá juros de empréstimo (R$ 6,4 mil), a coleta Full (já contada em Full envios pelo Relatório Full) e o estorno de uma inconformidade Full.
+- Ficam **fora das linhas** e aparecem na prévia em "Ficaram fora do DRE", com linha da planilha, nº da operação, data e fatura de cada cobrança (`excludedFees`):
+  - juros de empréstimo (`non_operational`) — o usuário decide se lança em Saídas não operacionais;
+  - DIFAL do ML no Lucro Real (`in_sales_tax`, ver abaixo);
+  - nome desconhecido (`unrecognized`).
+- Repasse (Product Ads, parcelamento pago pelo comprador) fica fora sem aviso.
+- **Tarifas especiais sai sempre da planilha** (0 quando ela não tem nenhuma). A planilha governa a linha; sem isso, o valor anterior continuaria valendo pelo baseline.
+- Imports gravados antes disso guardam `unrecognizedFees` (somadas em especiais) e os valores da época em `payload.reconciliation`. Para refazer, é preciso subir a planilha de novo.
+
+## DIFAL cobrado pelo ML
+
+A fatura e a planilha trazem "Cobrança do diferencial de alíquota interestadual (ICMS-DIFAL)" (`CDIFAL`), sem número de pedido. É ICMS-DIFAL que o ML recolhe por vendas (Full, na maioria), não tarifa. Regra única (`mlDifalCountsAsFee`):
+
+- **Lucro Real:** o Tributário já calcula o DIFAL venda a venda, e ele está no % de Impostos sobre vendas. A cobrança do ML fica fora de Tarifas especiais (contaria duas vezes) e vira aviso: no sync, em `syncWarnings`; na planilha, em `excludedFees`. Para o caixa vale conferir com o contador se a guia de DIFAL abate o que o ML recolheu.
+- **Simples:** o imposto do DRE é a alíquota do DAS, que não tem DIFAL. A cobrança entra em Tarifas especiais.
+
+Na fatura, o DIFAL vem separado (`MlBillingDreLines.difal`, `MlDetailsAggregation.difalMl`). Só `dre-month-data.ts` decide, no ponto onde o regime já é lido.
 
 ## Nivelamento de custo
 
@@ -45,7 +66,7 @@ Devolução faturada neste mês de uma venda de **outro** mês não entra neste 
 
 ## Integridade do sync
 
-- **Fonte indisponível não é zero.** `buildDreMonthSnapshot` devolve `unavailableLineKeys`, e `persistDreMonthSnapshot` → `mergeSyncedSnapshot({ keepPreviousLineKeys })` mantém o último valor **sincronizado** dessas linhas, com auditoria e baseline. A marca fica em `payload.keptFromPrevious`. Linhas cobertas:
+- **Fonte indisponível não é zero.** `buildDreMonthSnapshot` devolve `unavailableLineKeys`, e `persistDreMonthSnapshot` → `mergeSyncedSnapshot({ keepPreviousLineKeys })` mantém o último valor **sincronizado** dessas linhas, com auditoria e baseline. A marca fica em `payload.keptFromPrevious`. A tela lê `effectiveKeptFromPrevious`: linha conciliada ou com ajuste manual não mostra a marca, porque o valor exibido não é o mantido (a conciliação entra por cima no merge, ou vem depois). Linhas cobertas:
   - ADS de mês com mais de 90 dias (a API de Ads só cobre 90 dias) ou com erro;
   - linhas que só a fatura traz (Devoluções parciais, Tarifa de devolução, Tarifas especiais, Full armazém, Minha Página, Afiliados, Full envios/inconf. sem Relatório Full) quando a fatura falha ou volta vazia;
   - Canceladas quando a busca de cancelados falha.

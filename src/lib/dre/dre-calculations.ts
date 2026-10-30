@@ -227,6 +227,17 @@ const RECONCILIATION_SKIPPED_LINE_KEYS = new Set<DreEditableLineKey>([
   "partialReturnsMl",
 ]);
 
+/**
+ * O DIFAL que o ML cobra na fatura (ICMS-DIFAL recolhido por ele) entra em
+ * Tarifas especiais? Só no Simples: lá o imposto do DRE é a alíquota do DAS, que
+ * não tem DIFAL. No Lucro Real o Tributário já calcula o DIFAL venda a venda e
+ * ele está no % de Impostos sobre vendas — somar a cobrança do ML contaria o
+ * mesmo imposto duas vezes. Regra única da planilha Por Vendas e do sync da API.
+ */
+export function mlDifalCountsAsFee(regime: "SIMPLES" | "LUCRO_REAL"): boolean {
+  return regime === "SIMPLES";
+}
+
 export function isReconciliationGovernedLineKey(
   key: DreEditableLineKey,
 ): boolean {
@@ -637,6 +648,28 @@ export function mergeSyncedSnapshot(
   }
 
   return next;
+}
+
+/**
+ * Linhas mantidas do sync anterior cujo valor exibido **ainda é** o mantido.
+ * A conciliação e o ajuste manual entram por cima no merge (e podem vir
+ * depois, no "Conciliar"), então a marca do sync não vale mais para elas.
+ * Calculado na leitura para cobrir snapshots já gravados.
+ */
+export function effectiveKeptFromPrevious(
+  payload: Pick<
+    DreMonthSnapshotPayload,
+    "keptFromPrevious" | "reconciliation" | "manuallyEditedLineKeys"
+  >,
+): DreKeptFromPrevious | null {
+  const kept = payload.keptFromPrevious;
+  if (!kept) return null;
+  const overridden = new Set<DreEditableLineKey>([
+    ...(payload.reconciliation?.lineKeys ?? []),
+    ...(payload.manuallyEditedLineKeys ?? []),
+  ]);
+  const lineKeys = kept.lineKeys.filter((key) => !overridden.has(key));
+  return lineKeys.length > 0 ? { ...kept, lineKeys } : null;
 }
 
 function amountsMatch(a: number, b: number): boolean {

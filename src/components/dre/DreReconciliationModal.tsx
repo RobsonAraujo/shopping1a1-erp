@@ -20,6 +20,7 @@ import type { DreMonthView, DreYearView } from "@/lib/dre/dre-year-data";
 import type { DreReconciliationReview } from "@/lib/dre/reconciliation/types";
 import { readApiError } from "@/lib/api/api-client-error";
 import { cn } from "@/lib/utils";
+import { DreReconciliationExcludedFees } from "./DreReconciliationExcludedFees";
 
 const ML_BILLING_URL =
   "https://vendedores.mercadolivre.com.br/billing/resume#from=seller-menu";
@@ -331,8 +332,9 @@ export function DreReconciliationModal({
               </p>
               {review.unrecognizedFees.length > 0 ? (
                 <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                  Tarifas não reconhecidas foram somadas em Tarifas especiais.
-                  Total:{" "}
+                  Esta planilha foi lida antes da revisão das tarifas: as não
+                  reconhecidas foram somadas em Tarifas especiais. Suba a
+                  planilha de novo para separá-las. Total:{" "}
                   {formatFinancialMoney(
                     review.unrecognizedFees.reduce(
                       (sum, fee) => sum + fee.total,
@@ -422,6 +424,8 @@ export function DreReconciliationModal({
                   Nenhuma diferença: a planilha confere com o DRE atual.
                 </p>
               )}
+
+              <DreReconciliationExcludedFees fees={review.excludedFees ?? []} />
 
               {review.matched.length > 0 ? (
                 <div className="rounded-lg border border-[var(--border)]">
