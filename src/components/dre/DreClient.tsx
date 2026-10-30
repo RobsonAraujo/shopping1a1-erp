@@ -26,6 +26,12 @@ import { DreSyncOverlay } from "@/components/dre/DreSyncOverlay";
 import { DreYearTable } from "@/components/dre/DreYearTable";
 import { DreReconciliationModal } from "@/components/dre/DreReconciliationModal";
 import { formatReconciledAt } from "@/components/dre/DreYearTableShared";
+import {
+  dreRecalcCostKey,
+  dreRecalcLineKey,
+  DreRecalcProvider,
+  type DreRecalc,
+} from "@/components/dre/dre-recalc";
 import { useDreSync } from "@/components/dre/use-dre-sync";
 import { useDreTaxActions } from "@/components/dre/use-dre-tax-actions";
 import { TaxRecalcConfirmDialog } from "@/components/relatorio-tributario/TaxRecalcConfirmDialog";
@@ -155,6 +161,8 @@ export function DreClient({
   const [sessionAdjustedByMonth, setSessionAdjustedByMonth] = useState<
     Record<number, DreEditableLineKey[]>
   >({});
+  /** Edição manual gravando: a coluna do mês fica borrada até o ano voltar. */
+  const [recalc, setRecalc] = useState<DreRecalc | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [cadastroOpen, setCadastroOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -268,8 +276,10 @@ export function DreClient({
     confirmDialogProps,
     labelFor: taxMonthLabel,
   } = useDreTaxActions({ year, setData, loadYear, setError, requestSyncMonth });
-  // Sync ou recálculo em andamento: fechar/recarregar a aba pede confirmação.
-  useBeforeUnloadGuard(syncingMonths.size > 0 || taxOperation !== null);
+  // Sync, recálculo ou edição gravando: fechar/recarregar a aba pede confirmação.
+  useBeforeUnloadGuard(
+    syncingMonths.size > 0 || taxOperation !== null || recalc !== null,
+  );
   // O toast pós-sync (dentro de useDreSync) chama a ação do imposto: ref evita
   // a dependência circular entre os dois hooks.
   const runTaxActionRef = useRef(requestTaxAction);
@@ -378,6 +388,7 @@ export function DreClient({
   const handleManualCostChange = useCallback(
     async (costItemId: string, month: number, amount: number | null) => {
       setError(null);
+      setRecalc({ month, editedKey: dreRecalcCostKey(costItemId) });
       try {
         const res = await fetch("/api/dre/cost-values", {
           method: "PUT",
@@ -394,6 +405,8 @@ export function DreClient({
         }
       } catch {
         setError("Falha de rede ao salvar o valor.");
+      } finally {
+        setRecalc(null);
       }
     },
     [year],
@@ -402,6 +415,7 @@ export function DreClient({
   const handleLineChange = useCallback(
     async (lineKey: DreEditableLineKey, month: number, amount: number) => {
       setError(null);
+      setRecalc({ month, editedKey: dreRecalcLineKey(lineKey) });
       try {
         const res = await fetch("/api/dre/lines", {
           method: "PATCH",
@@ -419,6 +433,8 @@ export function DreClient({
         }
       } catch {
         setError("Falha de rede ao salvar o valor.");
+      } finally {
+        setRecalc(null);
       }
     },
     [year, updateSessionAdjustedAfterEdit],
@@ -427,6 +443,7 @@ export function DreClient({
   const handleLineRestore = useCallback(
     async (lineKey: DreEditableLineKey, month: number) => {
       setError(null);
+      setRecalc({ month, editedKey: null });
       try {
         const res = await fetch("/api/dre/lines", {
           method: "PATCH",
@@ -452,6 +469,8 @@ export function DreClient({
         }
       } catch {
         setError("Falha de rede ao restaurar o valor.");
+      } finally {
+        setRecalc(null);
       }
     },
     [year],
@@ -787,27 +806,29 @@ export function DreClient({
         ) : null}
 
         {viewData ? (
-          <DreYearTable
-            data={viewData}
-            visibility={displaySettings}
-            showDetails={showDetails}
-            onToggleDetails={toggleShowDetails}
-            selectedMonth={selectedMonth}
-            onSelectedMonthChange={setSelectedMonth}
-            syncingMonths={syncingMonths}
-            syncingMonthMessages={syncingMonthMessages}
-            onSyncMonth={requestSyncMonth}
-            onReconcileMonth={openReconcile}
-            onTaxAction={requestTaxAction}
-            taxBusyMonths={taxBusyMonths}
-            onLineChange={handleLineChange}
-            onLineRestore={handleLineRestore}
-            onFixedCostChange={handleManualCostChange}
-            onOperationalCostChange={handleManualCostChange}
-            onInvestmentCostChange={handleManualCostChange}
-            onNonOperationalOutChange={handleManualCostChange}
-            onNonOperationalInChange={handleManualCostChange}
-          />
+          <DreRecalcProvider value={recalc}>
+            <DreYearTable
+              data={viewData}
+              visibility={displaySettings}
+              showDetails={showDetails}
+              onToggleDetails={toggleShowDetails}
+              selectedMonth={selectedMonth}
+              onSelectedMonthChange={setSelectedMonth}
+              syncingMonths={syncingMonths}
+              syncingMonthMessages={syncingMonthMessages}
+              onSyncMonth={requestSyncMonth}
+              onReconcileMonth={openReconcile}
+              onTaxAction={requestTaxAction}
+              taxBusyMonths={taxBusyMonths}
+              onLineChange={handleLineChange}
+              onLineRestore={handleLineRestore}
+              onFixedCostChange={handleManualCostChange}
+              onOperationalCostChange={handleManualCostChange}
+              onInvestmentCostChange={handleManualCostChange}
+              onNonOperationalOutChange={handleManualCostChange}
+              onNonOperationalInChange={handleManualCostChange}
+            />
+          </DreRecalcProvider>
         ) : null}
 
         <DreCostItemsModal

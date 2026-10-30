@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, RefreshCw } from "lucide-react";
+import { CheckCircle2, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { dreMonthShortLabel } from "@/lib/dre/dre-table-rows";
 import type { DreMonthView } from "@/lib/dre/dre-year-data";
@@ -18,6 +18,7 @@ export function DreMonthHeaderCell({
   month,
   syncing,
   syncMessage,
+  recalculating = false,
   selected,
   dimmed,
   onSync,
@@ -27,6 +28,8 @@ export function DreMonthHeaderCell({
   month: DreMonthView;
   syncing: boolean;
   syncMessage?: string;
+  /** Edição manual gravando: a coluna está borrada até o ano voltar. */
+  recalculating?: boolean;
   selected: boolean;
   dimmed: boolean;
   onSync: () => void;
@@ -71,6 +74,15 @@ export function DreMonthHeaderCell({
             )}
           >
             {dreMonthShortLabel(month.month)}
+            {recalculating ? (
+              <span role="status" className="inline-flex">
+                <Loader2
+                  className="size-3 shrink-0 animate-spin text-[var(--primary)]"
+                  aria-hidden
+                />
+                <span className="sr-only">{` — recalculando ${month.label}`}</span>
+              </span>
+            ) : null}
             {month.reconciliation.status === "reconciled" ? (
               <>
                 <CheckCircle2

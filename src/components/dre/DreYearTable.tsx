@@ -20,6 +20,7 @@ import {
   Info,
   Landmark,
   List,
+  Loader2,
   Pencil,
   PiggyBank,
   Receipt,
@@ -57,6 +58,16 @@ import { DreTaxAuditModal } from "@/components/dre/DreTaxAuditModal";
 import { DreLineAuditModal } from "@/components/dre/DreLineAuditModal";
 import { DreMonthHeaderCell } from "@/components/dre/DreMonthHeaderCell";
 import { DreRevenuePie, WaterfallConnector } from "@/components/dre/DreRevenuePie";
+import {
+  DRE_RECALC_BLUR_CLASS,
+  DRE_RECALC_TRANSITION_CLASS,
+  dreRecalcCostKey,
+  dreRecalcLineKey,
+  DreRecalcStatus,
+  DreRecalcValue,
+  isDreRecalculating,
+  useDreRecalc,
+} from "@/components/dre/dre-recalc";
 import {
   useDreAuditTarget,
   auditTargetNeedsResync,
@@ -291,8 +302,11 @@ function sourceOriginLabel(source: string): string {
 
 function AdjustedBadge({
   onRestore,
+  restoreDisabled = false,
 }: {
   onRestore?: () => void;
+  /** Restaurar espera enquanto uma edição recalcula o mês. */
+  restoreDisabled?: boolean;
 }) {
   return (
     <span className="inline-flex items-center gap-0.5">
@@ -305,7 +319,8 @@ function AdjustedBadge({
       {onRestore ? (
         <button
           type="button"
-          className="inline-flex size-5 items-center justify-center rounded text-amber-800 hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]"
+          disabled={restoreDisabled}
+          className="inline-flex size-5 items-center justify-center rounded text-amber-800 hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)] disabled:pointer-events-none disabled:opacity-50"
           title="Restaurar valor do último sync"
           aria-label="Restaurar valor do último sync"
           onClick={(e) => {
@@ -328,6 +343,8 @@ function DreInlineMoneyCell({
   muted = false,
   adjusted = false,
   title,
+  recalcMonth,
+  recalcKey,
   onCommit,
   onEditingChange,
   onAudit,
@@ -343,6 +360,13 @@ function DreInlineMoneyCell({
   /** Célula com valor diferente do último sync. */
   adjusted?: boolean;
   title?: string;
+  /** Mês da célula: borra enquanto a coluna desse mês recalcula. */
+  recalcMonth: number;
+  /**
+   * Identidade da célula (`dreRecalcLineKey`/`dreRecalcCostKey`). A célula
+   * editada mostra o valor novo enquanto o resto da coluna recalcula.
+   */
+  recalcKey?: string;
   onCommit: (amount: number | null) => void;
   /** Notifica o pai ao entrar/sair do modo de edição (para esmaecer o restante do DRE). */
   onEditingChange?: (editing: boolean) => void;
@@ -362,6 +386,26 @@ function DreInlineMoneyCell({
   const panelRef = useRef<HTMLDivElement>(null);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const focusedOnceRef = useRef(false);
+  const recalc = useDreRecalc();
+  /**
+   * Último valor aplicado aqui — só aparece enquanto esta célula é a que
+   * recalcula. Objeto para distinguir "nada aplicado" de "aplicou vazio" (custo
+   * apagado), e para uma célula montada no meio do recálculo (troca de layout)
+   * cair no valor do servidor.
+   */
+  const [committed, setCommitted] = useState<{ amount: number | null } | null>(
+    null,
+  );
+  const columnRecalculating = isDreRecalculating(recalc, recalcMonth);
+  const pendingHere =
+    columnRecalculating &&
+    recalcKey !== undefined &&
+    recalc?.editedKey === recalcKey &&
+    committed !== null;
+  // Sem reset: quando o recálculo termina, `pendingHere` vira false e volta o
+  // valor do servidor (o novo, ou o anterior se a gravação falhou).
+  const shownAmount = pendingHere ? committed.amount : displayAmount;
+  const blurred = columnRecalculating && !pendingHere;
 
   const EDITOR_MIN_WIDTH_PX = 320;
   const VIEWPORT_PAD_PX = 16;
@@ -481,7 +525,8 @@ function DreInlineMoneyCell({
   }
 
   function startEditing() {
-    if (disabled) return;
+    // Uma edição por vez: duas gravações cruzadas devolveriam anos diferentes.
+    if (disabled || recalc !== null) return;
     clearClickTimer();
     setDraft(displayAmount);
     setEditing(true);
@@ -506,6 +551,7 @@ function DreInlineMoneyCell({
       (next === null && prev === null) ||
       (next !== null && prev !== null && Math.abs(next - prev) < 0.000_001);
     if (!same) {
+      setCommitted({ amount: next });
       onCommit(next);
     }
   }
@@ -715,11 +761,14 @@ function DreInlineMoneyCell({
       <span
         role={disabled && !onAudit ? undefined : "button"}
         tabIndex={disabled && !onAudit ? undefined : 0}
+        aria-busy={columnRecalculating || undefined}
         className={cn(
           "whitespace-nowrap text-[12.5px] font-bold tabular-nums leading-tight",
+          DRE_RECALC_TRANSITION_CLASS,
+          blurred && DRE_RECALC_BLUR_CLASS,
           muted && "text-[var(--muted-foreground)]",
           adjusted && "text-amber-900",
-          !muted && !adjusted && valueToneClass(displayAmount),
+          !muted && !adjusted && valueToneClass(shownAmount),
           (!disabled || onAudit) &&
             "cursor-pointer rounded-sm hover:bg-[var(--muted)]",
           onAudit &&
@@ -773,9 +822,17 @@ function DreInlineMoneyCell({
           }
         }}
       >
-        {formatFinancialMoney(displayAmount)}
+        {formatFinancialMoney(shownAmount)}
       </span>
-      {adjusted ? <AdjustedBadge onRestore={onRestore} /> : null}
+      {pendingHere ? (
+        <Loader2
+          className="size-3 shrink-0 animate-spin text-[var(--muted-foreground)]"
+          aria-hidden
+        />
+      ) : null}
+      {adjusted ? (
+        <AdjustedBadge onRestore={onRestore} restoreDisabled={recalc !== null} />
+      ) : null}
       {trailing}
       {mobileEditor}
     </div>
@@ -891,6 +948,8 @@ function renderValueCell(
       <DreInlineMoneyCell
         displayAmount={displayAmount}
         label={`${row.label} (${month.label})`}
+        recalcMonth={month.month}
+        recalcKey={dreRecalcCostKey(row.costItemId)}
         allowNegative
         disabled={!canEditMonth}
         muted={inherited}
@@ -920,6 +979,8 @@ function renderValueCell(
       <DreInlineMoneyCell
         displayAmount={displayAmount}
         label={`${row.label} (${month.label})`}
+        recalcMonth={month.month}
+        recalcKey={dreRecalcCostKey(row.costItemId)}
         allowNegative
         disabled={!canEditMonth}
         muted={inherited}
@@ -949,6 +1010,8 @@ function renderValueCell(
       <DreInlineMoneyCell
         displayAmount={displayAmount}
         label={`${row.label} (${month.label})`}
+        recalcMonth={month.month}
+        recalcKey={dreRecalcCostKey(row.costItemId)}
         allowNegative
         disabled={!canEditMonth}
         muted={inherited}
@@ -978,6 +1041,8 @@ function renderValueCell(
       <DreInlineMoneyCell
         displayAmount={displayAmount}
         label={`${row.label} (${month.label})`}
+        recalcMonth={month.month}
+        recalcKey={dreRecalcCostKey(row.costItemId)}
         allowNegative
         disabled={!canEditMonth}
         muted={inherited}
@@ -1007,6 +1072,8 @@ function renderValueCell(
       <DreInlineMoneyCell
         displayAmount={displayAmount}
         label={`${row.label} (${month.label})`}
+        recalcMonth={month.month}
+        recalcKey={dreRecalcCostKey(row.costItemId)}
         allowNegative
         disabled={!canEditMonth}
         muted={inherited}
@@ -1057,6 +1124,8 @@ function renderValueCell(
         <DreInlineMoneyCell
           displayAmount={amount}
           label={`${row.label} (${month.label})`}
+          recalcMonth={month.month}
+          recalcKey={dreRecalcLineKey(editableKey)}
           allowNegative={editableKey !== "revenueMl"}
           adjusted={isAdjusted}
           onAudit={
@@ -1113,7 +1182,7 @@ function renderValueCell(
             : undefined
         }
       >
-        {moneyLabel}
+        <DreRecalcValue month={month.month}>{moneyLabel}</DreRecalcValue>
       </div>
       {issue ? <CellIssueMarker tone={issue.tone} text={issue.text} /> : null}
       {isAdjusted ? (
@@ -1412,7 +1481,15 @@ function DreMobileRow({
       <div className="shrink-0 text-right">
         {withRevenuePercentTooltip(valueNode, revenueAmount, revenueBase)}
         {showPercentRow ? (
-          <div className="mt-0.5">{renderPercentCell(percent)}</div>
+          <div className="mt-0.5">
+            {month ? (
+              <DreRecalcValue month={month.month} as="div">
+                {renderPercentCell(percent)}
+              </DreRecalcValue>
+            ) : (
+              renderPercentCell(percent)
+            )}
+          </div>
         ) : null}
       </div>
     </div>
@@ -1502,6 +1579,7 @@ function DreYearTableMobile({
 
   const selectedMonth = selection === "total" ? null : data.months[selection];
   const alertMessages = selectedMonth ? getMonthAlertMessages(selectedMonth) : [];
+  const recalc = useDreRecalc();
   /** Avisos são auditoria sob demanda: fechados até o usuário pedir, e voltam a fechar ao trocar de mês. */
   const [alertsOpenFor, setAlertsOpenFor] = useState<number | null>(null);
   const alertsOpen =
@@ -1582,6 +1660,9 @@ function DreYearTableMobile({
       {selectedMonth ? (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--muted)]/20 px-3 py-2 text-xs text-[var(--muted-foreground)]">
           <span>Sync: {formatSyncTime(selectedMonth.syncedAt)}</span>
+          {isDreRecalculating(recalc, selectedMonth.month) ? (
+            <DreRecalcStatus />
+          ) : null}
           <MonthReconciliationBadge month={selectedMonth} />
           {alertMessages.length > 0 ? (
             <button
@@ -1959,6 +2040,14 @@ function DreStatementPanel({
   const isYear = month === null;
   const alertMessages = month ? getMonthAlertMessages(month) : [];
   const totals = isYear ? data.yearTotals : month.totals;
+  const recalc = useDreRecalc();
+  /** Só o mês exibido borra; a visão do ano fica nítida. */
+  const recalculating =
+    month !== null && isDreRecalculating(recalc, month.month);
+  const recalcClass = cn(
+    DRE_RECALC_TRANSITION_CLASS,
+    recalculating && DRE_RECALC_BLUR_CLASS,
+  );
 
   function renderDetailRow(row: DreTableRow) {
     const { amount, percent } = isYear
@@ -2023,7 +2112,10 @@ function DreStatementPanel({
           )}
           {percent != null && Math.abs(percent) > 0 ? (
             <div
-              className="mt-1 h-1 w-16 overflow-hidden rounded-full bg-[var(--muted)]"
+              className={cn(
+                "mt-1 h-1 w-16 overflow-hidden rounded-full bg-[var(--muted)]",
+                recalcClass,
+              )}
               aria-hidden
             >
               <div
@@ -2057,6 +2149,7 @@ function DreStatementPanel({
             {month ? (
               <MonthAlertsTooltip month={month} messages={alertMessages} />
             ) : null}
+            {recalculating ? <DreRecalcStatus className="ml-1" /> : null}
           </p>
           {month ? (
             <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
@@ -2113,7 +2206,11 @@ function DreStatementPanel({
       </div>
 
       <div className="space-y-3">
-        <DreRevenuePie totals={totals} visibility={visibility} />
+        <DreRevenuePie
+          totals={totals}
+          visibility={visibility}
+          recalculating={recalculating}
+        />
 
         <div className="mx-auto flex max-w-xl flex-col items-stretch">
           {groups.map((group, index) => (
@@ -2178,7 +2275,9 @@ function DreStatementPanel({
             className={cn(
               "shrink-0 text-sm font-semibold tabular-nums",
               valueToneClass(headerAmount),
+              recalcClass,
             )}
+            aria-busy={recalculating || undefined}
           >
             {formatFinancialMoney(headerAmount)}
           </p>
@@ -2226,7 +2325,10 @@ function DreStatementPanel({
               Resultado líquido
             </p>
           </div>
-          <div className="flex shrink-0 flex-col items-end">
+          <div
+            className={cn("flex shrink-0 flex-col items-end", recalcClass)}
+            aria-busy={recalculating || undefined}
+          >
             <p
               className={cn(
                 "text-base font-bold tabular-nums",
@@ -2320,6 +2422,7 @@ function DreYearTableDesktop({
   } = useDreAuditTarget(data);
   const isEditing = editingCell !== null;
   const columnFocusMonth = isEditing ? null : selectedMonth;
+  const recalc = useDreRecalc();
 
   function isEditingThisCell(month: number, rowId: string) {
     return (
@@ -2467,6 +2570,7 @@ function DreYearTableDesktop({
                   month={month}
                   syncing={syncingMonths.has(month.month)}
                   syncMessage={syncingMonthMessages[month.month]}
+                  recalculating={isDreRecalculating(recalc, month.month)}
                   selected={
                     !isEditing && selectedMonth === month.month
                   }
@@ -2745,9 +2849,11 @@ function DreYearTableDesktop({
                             sectionColor,
                           )}
                         >
-                          {renderPercentCell(
-                            getCellValue(row, month).percent,
-                          )}
+                          <DreRecalcValue month={month.month} as="div">
+                            {renderPercentCell(
+                              getCellValue(row, month).percent,
+                            )}
+                          </DreRecalcValue>
                         </td>
                       ))}
                       <td

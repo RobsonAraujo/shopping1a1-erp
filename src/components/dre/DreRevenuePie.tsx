@@ -19,6 +19,10 @@ import {
 } from "@/lib/pricing/financial-margin";
 import type { DreComputedTotals } from "@/lib/dre/dre-calculations";
 import {
+  DRE_RECALC_BLUR_CLASS,
+  DRE_RECALC_TRANSITION_CLASS,
+} from "@/components/dre/dre-recalc";
+import {
   DEFAULT_DRE_VISIBILITY,
   valueToneClass,
   type DreVisibilitySettings,
@@ -78,9 +82,12 @@ const PIE_DISPLAY_OPTIONS: Array<{ value: DrePieDisplayMode; label: string }> = 
 export const DreRevenuePie = memo(function DreRevenuePie({
   totals,
   visibility = DEFAULT_DRE_VISIBILITY,
+  recalculating = false,
 }: {
   totals: DreComputedTotals | null | undefined;
   visibility?: DreVisibilitySettings;
+  /** Edição manual gravando no mês exibido: gráfico e valores borrados. */
+  recalculating?: boolean;
 }) {
   const [mode, setMode] = useState<DrePieDisplayMode>("both");
   const base = totals?.totalEntrada ?? null;
@@ -190,7 +197,13 @@ export const DreRevenuePie = memo(function DreRevenuePie({
         </div>
       </div>
 
-      <div className="mt-4 flex flex-col items-center gap-6 sm:flex-row">
+      <div
+        className={cn(
+          "mt-4 flex flex-col items-center gap-6 sm:flex-row",
+          DRE_RECALC_TRANSITION_CLASS,
+          recalculating && DRE_RECALC_BLUR_CLASS,
+        )}
+      >
         <div className="relative shrink-0">
           <svg viewBox="0 0 200 200" className="size-44 sm:size-48" aria-hidden>
             {slices
@@ -289,7 +302,13 @@ export const DreRevenuePie = memo(function DreRevenuePie({
       </div>
 
       {isLoss ? (
-        <div className="mt-3 flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+        <div
+          className={cn(
+            "mt-3 flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700",
+            DRE_RECALC_TRANSITION_CLASS,
+            recalculating && DRE_RECALC_BLUR_CLASS,
+          )}
+        >
           <AlertCircle className="size-3.5 shrink-0" aria-hidden />
           Prejuízo operacional: {formatFinancialMoney(lucro)} (
           {formatFinancialPercent((lucro / base) * 100)})

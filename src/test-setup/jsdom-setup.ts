@@ -89,6 +89,14 @@ for (const [key, value] of Object.entries(globals)) {
   });
 }
 
+// O jsdom não implementa `matchMedia`, e o código chama `window.matchMedia`
+// (useIsMobile) — o global acima não basta.
+Object.defineProperty(window, "matchMedia", {
+  value: globals.matchMedia,
+  writable: true,
+  configurable: true,
+});
+
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 after(() => {
