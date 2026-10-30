@@ -266,8 +266,8 @@ export function MarketingLanding({
           lead={
             <>
               O card nasce quando o estoque vai faltar. Arraste o fornecedor da
-              entrada até a compra, ou o anúncio até a coleta Full. Colunas,
-              cores e tela cheia iguais para toda a equipe.{" "}
+              entrada até a compra, ou o anúncio até a coleta Full. Colunas e
+              cores iguais para toda a equipe.{" "}
               <InlineLink href="/kanban-compras-mercado-livre">
                 Saiba mais sobre o kanban
               </InlineLink>

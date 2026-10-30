@@ -293,7 +293,7 @@ model KanbanColumn {
 }
 
 /// Configuração visual do board (Kanban de Compras ou Operações Full) por
-/// organização — fundo, tela cheia e aparência das colunas, estilo Trello.
+/// organização — fundo e aparência das colunas, estilo Trello.
 /// 1 linha por org+kind, materializada de forma lazy (mesmo padrão de `KanbanColumn`).
 model KanbanBoardSettings {
   id             String             @id @default(cuid())
@@ -301,10 +301,6 @@ model KanbanBoardSettings {
   kind           OperationCycleKind
   /// CSS `background` (cor sólida ou gradiente) — "" = sem cor (padrão do app).
   background     String             @default("")
-  /// Preferência de UI compartilhada da organização — mesmo raciocínio do
-  /// `background` acima: persistida aqui em vez de localStorage pra não
-  /// "piscar" no primeiro paint (o servidor já manda o estado certo).
-  isFullscreen   Boolean            @default(false) @map("is_fullscreen")
   /// Tema/cores das colunas (`KanbanAppearance`) — JSON pequeno na mesma
   /// linha pra não adicionar query no load do board.
   appearance     Json               @default("{}")

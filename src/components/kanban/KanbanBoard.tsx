@@ -1,10 +1,7 @@
 "use client";
 
 import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/adapter/element-adapter";
-import {
-  autoScrollForElements,
-  autoScrollWindowForElements,
-} from "@atlaskit/pragmatic-drag-and-drop-auto-scroll/element";
+import { autoScrollForElements } from "@atlaskit/pragmatic-drag-and-drop-auto-scroll/element";
 import { extractClosestEdge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge/extract-closest-edge";
 import type { Edge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/types";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -77,12 +74,6 @@ export type KanbanBoardProps<T> = {
   onToggleCollapse: (id: string, isCollapsed: boolean) => void;
   appearance: KanbanAppearance;
   setColumnColor: (columnId: string, colorId: string) => void;
-  /** CSS `background` (cor sólida ou gradiente) escolhido pelo usuário —
-   * vazio/undefined = sem cor (fundo padrão do app). */
-  background?: string;
-  /** Modo "tela cheia" (estilo Trello): colunas ocupam a altura total
-   * disponível e rolam verticalmente por dentro, em vez de esticar a página. */
-  fullHeight?: boolean;
 };
 
 function compareByPosition<T>(
@@ -129,8 +120,6 @@ export function KanbanBoard<T>({
   onToggleCollapse,
   appearance,
   setColumnColor,
-  background,
-  fullHeight = false,
 }: KanbanBoardProps<T>) {
   const [drag, setDrag] = useState<DragState>(IDLE);
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
@@ -285,8 +274,8 @@ export function KanbanBoard<T>({
     });
   }, [boardId, findCard, refsByColumn]);
 
-  // Arrastar perto da borda esquerda/direita do board rola as colunas; fora
-  // da tela cheia, perto do topo/fundo da janela rola a página.
+  // Arrastar perto da borda esquerda/direita do board rola as colunas (a
+  // rolagem vertical fica por conta da lista de cada coluna).
   useEffect(() => {
     if (!scrollEl) return;
     return autoScrollForElements({
@@ -296,13 +285,6 @@ export function KanbanBoard<T>({
         parseKanbanColumnDragData(source.data, boardId) !== null,
     });
   }, [scrollEl, boardId]);
-
-  useEffect(() => {
-    if (fullHeight) return;
-    return autoScrollWindowForElements({
-      canScroll: ({ source }) => parseKanbanCardDragData(source.data, boardId) !== null,
-    });
-  }, [fullHeight, boardId]);
 
   const handleCardMenuAction = useCallback(
     (cardId: string, action: KanbanCardMenuAction) => {
@@ -370,11 +352,8 @@ export function KanbanBoard<T>({
           // Snap só ajuda a rolar no celular; durante o arrasto ele brigaria
           // com o autoscroll (cada passo do autoscroll "voltaria" pro snap).
           dragging ? "snap-none" : "snap-x snap-mandatory sm:snap-none",
-          fullHeight
-            ? "min-h-0 flex-1 px-3 pb-3 sm:px-4 sm:pb-12 kanban-scroll-x"
-            : "rounded-2xl p-3 max-sm:-mx-4 max-sm:rounded-none max-sm:px-4",
+          "min-h-0 flex-1 px-3 pb-3 sm:px-4 sm:pb-12 kanban-scroll-x",
         )}
-        style={!fullHeight && background ? { background } : undefined}
         {...panScroll}
       >
         {sortedColumns.map((column) => {
@@ -403,7 +382,6 @@ export function KanbanBoard<T>({
               colorId={colorIdByColumn.get(column.id)}
               colorMode={appearance.colorMode}
               colorPicker={colorPicker}
-              fullHeight={fullHeight}
               menuColumns={sortedColumns}
               onRename={onRenameColumn}
               onToggleCollapse={onToggleCollapse}

@@ -49,7 +49,6 @@ type KanbanColumnProps<T> = {
   colorMode: KanbanColumnColorMode;
   /** Tema "colorido": cada coluna escolhe a própria cor no header. */
   colorPicker: boolean;
-  fullHeight: boolean;
   menuColumns: readonly KanbanColumnRow[];
   onRename: (columnId: string, label: string) => void;
   onToggleCollapse: (columnId: string, isCollapsed: boolean) => void;
@@ -87,7 +86,6 @@ function KanbanColumnImpl<T>({
   colorId,
   colorMode,
   colorPicker,
-  fullHeight,
   menuColumns,
   onRename,
   onToggleCollapse,
@@ -163,22 +161,21 @@ function KanbanColumnImpl<T>({
     });
   }, [shellEl, headerEl, canDragColumn, boardId, column.id]);
 
-  // Em tela cheia a lista de cards rola por dentro: arrastar perto da borda
-  // de cima/baixo dela tem que rolar, senão não dá pra alcançar o fim.
+  // A lista de cards rola por dentro: arrastar perto da borda de cima/baixo
+  // dela tem que rolar, senão não dá pra alcançar o fim.
   useEffect(() => {
-    if (!listEl || !fullHeight) return;
+    if (!listEl) return;
     return autoScrollForElements({
       element: listEl,
       canScroll: ({ source }) => parseKanbanCardDragData(source.data, boardId) !== null,
     });
-  }, [listEl, fullHeight, boardId]);
+  }, [listEl, boardId]);
 
   return (
     <div
       className={cn(
-        "relative flex shrink-0 snap-center flex-col sm:snap-align-none",
-        (collapsed || fullHeight) && "self-start",
-        fullHeight && !collapsed && "max-h-full",
+        "relative flex shrink-0 snap-center flex-col self-start sm:snap-align-none",
+        !collapsed && "max-h-full",
       )}
     >
       {columnEdge === "left" ? <ColumnDropIndicator side="left" /> : null}
@@ -227,7 +224,7 @@ function KanbanColumnImpl<T>({
             />
             <div
               ref={setListEl}
-              className={cn("flex flex-1 flex-col gap-2 p-2", fullHeight && "min-h-0 overflow-y-auto")}
+              className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2"
             >
               {cards.length === 0 && !showEndShadow ? (
                 <p className="px-1 py-6 text-center text-xs text-[var(--muted-foreground)]">Vazio</p>

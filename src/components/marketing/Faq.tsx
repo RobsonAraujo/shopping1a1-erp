@@ -20,7 +20,7 @@ const FAQ = [
   },
   {
     q: "O kanban de compras é só no meu navegador?",
-    a: "Não. Colunas, fundo, tela cheia e aparência das etapas ficam na organização: a equipe vê o mesmo quadro, no estilo Trello. Os cards nascem do estoque e do giro da loja no Mercado Livre, não de um quadro montado à mão.",
+    a: "Não. Colunas, fundo e aparência das etapas ficam na organização: a equipe vê o mesmo quadro, no estilo Trello. Os cards nascem do estoque e do giro da loja no Mercado Livre, não de um quadro montado à mão.",
   },
   {
     q: "Meus dados ficam misturados com os de outro vendedor?",

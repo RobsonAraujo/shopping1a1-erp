@@ -42,7 +42,7 @@ const PILLARS = [
   {
     icon: Share2,
     title: "Compartilhado com a loja",
-    body: "Fundo, tela cheia e aparência das colunas ficam na organização. Quem entra no painel vê o mesmo quadro: compras e Full alinhados.",
+    body: "Fundo e aparência das colunas ficam na organização. Quem entra no painel vê o mesmo quadro: compras e Full alinhados.",
     wrap: "border-amber-200/80 bg-gradient-to-br from-amber-50 via-white to-white",
     icon_bg: "bg-amber-100 text-amber-800",
   },
@@ -102,7 +102,7 @@ export default async function KanbanComprasPage() {
           breadcrumb="Kanban"
           eyebrow="Operação · Kanban"
           title="Compras e Full no mesmo estilo Trello, com os números da sua loja"
-          lead="O card nasce quando o estoque vai faltar. Você arrasta do fornecedor até a compra, ou do alerta até a coleta Full. Colunas, cores e tela cheia ficam iguais para toda a equipe, e não é um quadro só no seu navegador."
+          lead="O card nasce quando o estoque vai faltar. Você arrasta do fornecedor até a compra, ou do alerta até a coleta Full. Colunas e cores ficam iguais para toda a equipe, e não é um quadro só no seu navegador."
           highlights={[
             "Os cards vêm do giro real, não do seu palpite",
             "Quadro compartilhado com a organização",

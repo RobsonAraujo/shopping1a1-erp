@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Maximize2, Paintbrush, Palette } from "lucide-react";
+import { Paintbrush, Palette } from "lucide-react";
 import { getKanbanColumnColor } from "@/lib/kanban/kanban-column-colors";
 import { cn } from "@/lib/utils";
 
@@ -309,13 +309,6 @@ export function DemoKanban({
           >
             <Paintbrush className="size-3.5" />
             Colunas
-          </span>
-          <span
-            className="hidden items-center gap-1 rounded-md border border-white/15 bg-white/10 px-2 py-1 text-[11px] sm:inline-flex"
-            aria-hidden
-          >
-            <Maximize2 className="size-3.5" />
-            Tela cheia
           </span>
         </div>
       </div>

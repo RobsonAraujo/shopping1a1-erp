@@ -19,7 +19,6 @@ export function KanbanFullscreenSkeleton({
           <Skeleton className="size-8 rounded-md bg-white/20" />
           <Skeleton className="size-8 rounded-md bg-white/20" />
           <h2 className="min-w-0 truncate text-base font-semibold text-white sm:text-lg">{title}</h2>
-          <Skeleton className="ml-auto size-8 rounded-md bg-white/20 sm:h-8 sm:w-36" />
         </div>
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden px-3 pt-3 sm:gap-5 sm:overflow-visible sm:px-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">

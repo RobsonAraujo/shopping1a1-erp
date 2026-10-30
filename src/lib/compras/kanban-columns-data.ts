@@ -241,29 +241,25 @@ export async function deleteKanbanColumn(
 
 export type KanbanBoardSettingsRow = {
   background: string;
-  isFullscreen: boolean;
   appearance: KanbanAppearance;
 };
 
 const BOARD_SETTINGS_SELECT = {
   background: true,
-  isFullscreen: true,
   appearance: true,
 } as const;
 
 function toSettingsRow(row: {
   background: string;
-  isFullscreen: boolean;
   appearance: Prisma.JsonValue;
 }): KanbanBoardSettingsRow {
   return {
     background: row.background,
-    isFullscreen: row.isFullscreen,
     appearance: parseKanbanAppearance(row.appearance),
   };
 }
 
-/** Cor de fundo + tela cheia + aparência das colunas do board (Kanban de
+/** Cor de fundo + aparência das colunas do board (Kanban de
  * Compras ou Operações Full), compartilhadas pela organização — igual a um
  * board no Trello. Materializa uma linha default na primeira leitura. */
 export async function loadOrMaterializeKanbanBoardSettings(
@@ -294,20 +290,6 @@ export async function setKanbanBoardBackground(
     where: { organizationId_kind: { organizationId, kind } },
     create: { organizationId, kind, background },
     update: { background },
-    select: BOARD_SETTINGS_SELECT,
-  });
-  return toSettingsRow(updated);
-}
-
-export async function setKanbanBoardFullscreen(
-  organizationId: string,
-  kind: OperationCycleKind,
-  isFullscreen: boolean,
-): Promise<KanbanBoardSettingsRow> {
-  const updated = await prisma.kanbanBoardSettings.upsert({
-    where: { organizationId_kind: { organizationId, kind } },
-    create: { organizationId, kind, isFullscreen },
-    update: { isFullscreen },
     select: BOARD_SETTINGS_SELECT,
   });
   return toSettingsRow(updated);

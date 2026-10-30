@@ -4,7 +4,6 @@ import { OperationCycleKind } from "@/generated/prisma/client";
 import {
   setKanbanBoardAppearance,
   setKanbanBoardBackground,
-  setKanbanBoardFullscreen,
   type KanbanBoardSettingsRow,
 } from "@/lib/compras/kanban-columns-data";
 import { normalizeKanbanAppearance } from "@/lib/kanban/kanban-column-colors";
@@ -27,21 +26,14 @@ const patchBodySchema = z
   .object({
     kind: z.nativeEnum(OperationCycleKind),
     background: z.string().max(200),
-    isFullscreen: z.boolean(),
     appearance: appearanceSchema,
   })
-  .partial({ background: true, isFullscreen: true, appearance: true })
-  .refine(
-    (data) =>
-      data.background !== undefined ||
-      data.isFullscreen !== undefined ||
-      data.appearance !== undefined,
-    {
-      message: "Nada para atualizar",
-    },
-  );
+  .partial({ background: true, appearance: true })
+  .refine((data) => data.background !== undefined || data.appearance !== undefined, {
+    message: "Nada para atualizar",
+  });
 
-/** Visual do board (fundo, tela cheia, aparência das colunas) — compartilhado
+/** Visual do board (fundo, aparência das colunas) — compartilhado
  * pela organização. `GET /api/kanban-columns` já devolve os valores atuais;
  * este endpoint só existe pra escrever. */
 export async function PATCH(request: NextRequest) {
@@ -61,13 +53,6 @@ export async function PATCH(request: NextRequest) {
         organizationId,
         parsedBody.data.kind,
         parsedBody.data.background,
-      );
-    }
-    if (parsedBody.data.isFullscreen !== undefined) {
-      settings = await setKanbanBoardFullscreen(
-        organizationId,
-        parsedBody.data.kind,
-        parsedBody.data.isFullscreen,
       );
     }
     if (parsedBody.data.appearance !== undefined) {

@@ -33,20 +33,18 @@ export type DeleteColumnResult =
 export type KanbanBoardInitialData = {
   columns: KanbanColumnRow[];
   background: string;
-  isFullscreen: boolean;
   appearance: KanbanAppearance;
 };
 
-type BoardSettings = Pick<KanbanBoardInitialData, "background" | "isFullscreen" | "appearance">;
+type BoardSettings = Pick<KanbanBoardInitialData, "background" | "appearance">;
 
 const SETTINGS_NETWORK_ERRORS: Record<keyof BoardSettings, string> = {
   background: "Falha de rede ao mudar a cor do fundo.",
-  isFullscreen: "Falha de rede ao mudar o modo de visualização.",
   appearance: "Falha de rede ao mudar a aparência das colunas.",
 };
 
 /**
- * Colunas + fundo + tela cheia + aparência das colunas do Kanban (Compras
+ * Colunas + fundo + aparência das colunas do Kanban (Compras
  * ou Operações Full) — tudo compartilhado pela organização e persistido no
  * banco (igual a um board no Trello). Semeado com `initial` (já carregado
  * no servidor, ver `page.tsx` de cada board) em vez de buscar num
@@ -64,7 +62,6 @@ export function useKanbanBoard(kind: OperationCycleKind, initial: KanbanBoardIni
   const [columns, setColumns] = useState<KanbanColumnRow[]>(initial.columns);
   const [settings, setSettings] = useState<BoardSettings>({
     background: initial.background,
-    isFullscreen: initial.isFullscreen,
     appearance: initial.appearance,
   });
   const [error, setError] = useState<string | null>(null);
@@ -246,11 +243,6 @@ export function useKanbanBoard(kind: OperationCycleKind, initial: KanbanBoardIni
     [patchSettings],
   );
 
-  const setFullscreen = useCallback(
-    (value: boolean) => patchSettings("isFullscreen", value),
-    [patchSettings],
-  );
-
   const setAppearance = useCallback(
     (value: KanbanAppearance) => patchSettings("appearance", value),
     [patchSettings],
@@ -315,7 +307,6 @@ export function useKanbanBoard(kind: OperationCycleKind, initial: KanbanBoardIni
   return {
     columns,
     background: settings.background,
-    isFullscreen: settings.isFullscreen,
     appearance: settings.appearance,
     error,
     rename,
@@ -324,7 +315,6 @@ export function useKanbanBoard(kind: OperationCycleKind, initial: KanbanBoardIni
     reorder,
     toggleCollapse,
     setBackground,
-    setFullscreen,
     setAppearance,
     setTheme,
     setSolidColor,

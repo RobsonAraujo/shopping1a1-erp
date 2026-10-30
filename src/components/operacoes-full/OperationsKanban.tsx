@@ -13,32 +13,22 @@ import { useKanbanBoard, type KanbanColumnRow } from "@/hooks/use-kanban-columns
 import { useOperationsBoardCards } from "@/hooks/use-operations-board-cards";
 import type { OperationCycleKind } from "@/generated/prisma/client";
 import type { KanbanAppearance } from "@/lib/kanban/kanban-column-colors";
-import { cn } from "@/lib/utils";
 
 type OperationsKanbanProps = {
   initialCards: OperationsBoardCard[];
   /** Board único — sem abas internas. */
   kind: OperationCycleKind;
-  /** Colunas + fundo + tela cheia + aparência já carregadas no servidor —
+  /** Colunas + fundo + aparência já carregadas no servidor —
    * evita o "piscar" de buscar isso num `useEffect` depois de montar
    * (ver `useKanbanBoard`). */
   initialColumns: KanbanColumnRow[];
   initialBackground: string;
-  initialFullscreen: boolean;
   initialAppearance: KanbanAppearance;
 };
 
-const KIND_CONFIG: Record<OperationCycleKind, { label: string; description: string }> = {
-  purchase: {
-    label: "Reposição de compra",
-    description:
-      "Do alerta de compra até a chegada no galpão. O card some quando o estoque é imputado ou a necessidade de compra se resolve.",
-  },
-  full: {
-    label: "Envio Full",
-    description:
-      "Agende o envio ao Full do Mercado Livre. O card some quando o estoque ML sobe após a coleta ou a necessidade de agendamento se resolve.",
-  },
+const KIND_LABEL: Record<OperationCycleKind, string> = {
+  purchase: "Reposição de compra",
+  full: "Envio Full",
 };
 
 const getCycleId = (card: OperationsBoardCard) => card.cycleId;
@@ -56,17 +46,15 @@ export function OperationsKanban({
   kind,
   initialColumns,
   initialBackground,
-  initialFullscreen,
   initialAppearance,
 }: OperationsKanbanProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const board = useKanbanBoard(kind, {
     columns: initialColumns,
     background: initialBackground,
-    isFullscreen: initialFullscreen,
     appearance: initialAppearance,
   });
-  const { columns, removeColumn, setFullscreen } = board;
+  const { columns, removeColumn } = board;
   const {
     cards,
     busyIds,
@@ -113,38 +101,12 @@ export function OperationsKanban({
     [removeColumn, applyServerRows],
   );
 
-  const exitFullscreen = useCallback(() => {
-    void setFullscreen(false);
-  }, [setFullscreen]);
-
-  const config = KIND_CONFIG[kind];
-  const isFullscreen = board.isFullscreen;
   const errors = [...new Set([cardsError, board.error, streamError].filter(Boolean))];
 
   return (
-    <KanbanFullscreenFrame
-      active={isFullscreen}
-      title={config.label}
-      count={cards.length}
-      background={board.background}
-      onExit={exitFullscreen}
-    >
-      <div className={cn("flex min-h-0 flex-col gap-3 sm:gap-5", isFullscreen && "h-full max-sm:overflow-hidden")}>
-        <div className={cn("flex shrink-0 flex-col gap-3 sm:gap-5", isFullscreen && "px-3 pt-3 sm:px-4")}>
-          {!isFullscreen ? (
-            <div className="hidden sm:block">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-base font-semibold text-[var(--foreground)]">{config.label}</h2>
-                <span className="rounded-full bg-[var(--muted)] px-2 py-0.5 text-xs tabular-nums text-[var(--foreground)]">
-                  {cards.length}
-                </span>
-              </div>
-              <p className="mt-1 max-w-3xl text-sm text-[var(--muted-foreground)]">
-                {config.description}
-              </p>
-            </div>
-          ) : null}
-
+    <KanbanFullscreenFrame title={KIND_LABEL[kind]} count={cards.length} background={board.background}>
+      <div className="flex h-full min-h-0 flex-col gap-3 max-sm:overflow-hidden sm:gap-5">
+        <div className="flex shrink-0 flex-col gap-3 px-3 pt-3 sm:gap-5 sm:px-4">
           <KanbanToolbar
             search={{
               value: searchQuery,
@@ -162,8 +124,6 @@ export function OperationsKanban({
             syncing={syncing}
             syncDisabled={syncing || streaming}
             onSync={() => void refresh()}
-            isFullscreen={isFullscreen}
-            onEnterFullscreen={() => void setFullscreen(true)}
           />
 
           {errors.map((message) => (
@@ -196,8 +156,6 @@ export function OperationsKanban({
           onToggleCollapse={board.toggleCollapse}
           appearance={board.appearance}
           setColumnColor={board.setColumnColor}
-          background={board.background}
-          fullHeight={isFullscreen}
         />
       </div>
     </KanbanFullscreenFrame>

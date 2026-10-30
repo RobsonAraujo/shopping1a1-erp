@@ -38,7 +38,6 @@ import {
   useOperationsBoardCards,
   type CardMoveTarget,
 } from "@/hooks/use-operations-board-cards";
-import { cn } from "@/lib/utils";
 
 type PlannedSupplierMove = {
   supplier: string;
@@ -69,16 +68,14 @@ export function SupplierPurchaseKanban({
   initialCards,
   initialColumns,
   initialBackground,
-  initialFullscreen,
   initialAppearance,
 }: {
   initialCards: OperationsBoardCard[];
-  /** Colunas + fundo + tela cheia + aparência já carregadas no servidor —
+  /** Colunas + fundo + aparência já carregadas no servidor —
    * evita o "piscar" de buscar isso num `useEffect` depois de montar
    * (ver `useKanbanBoard`). */
   initialColumns: KanbanColumnRow[];
   initialBackground: string;
-  initialFullscreen: boolean;
   initialAppearance: KanbanAppearance;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -87,10 +84,9 @@ export function SupplierPurchaseKanban({
   const board = useKanbanBoard("purchase", {
     columns: initialColumns,
     background: initialBackground,
-    isFullscreen: initialFullscreen,
     appearance: initialAppearance,
   });
-  const { columns, removeColumn, setFullscreen } = board;
+  const { columns, removeColumn } = board;
   const {
     cards: rawCards,
     busyIds,
@@ -199,29 +195,13 @@ export function SupplierPurchaseKanban({
     [removeColumn, applyServerRows],
   );
 
-  const exitFullscreen = useCallback(() => {
-    void setFullscreen(false);
-  }, [setFullscreen]);
-
-  const isFullscreen = board.isFullscreen;
   const errors = [...new Set([cardsError, board.error, streamError].filter(Boolean))];
 
   return (
     <>
-      <KanbanFullscreenFrame
-        active={isFullscreen}
-        title="Compras"
-        count={supplierCards.length}
-        background={board.background}
-        onExit={exitFullscreen}
-      >
-        <div className={cn("flex min-h-0 flex-col gap-3 sm:gap-5", isFullscreen && "h-full max-sm:overflow-hidden")}>
-          <div
-            className={cn(
-              "flex shrink-0 flex-col gap-3 sm:gap-5",
-              isFullscreen && "px-3 pt-3 sm:px-4",
-            )}
-          >
+      <KanbanFullscreenFrame title="Compras" count={supplierCards.length} background={board.background}>
+        <div className="flex h-full min-h-0 flex-col gap-3 max-sm:overflow-hidden sm:gap-5">
+          <div className="flex shrink-0 flex-col gap-3 px-3 pt-3 sm:gap-5 sm:px-4">
             <KanbanToolbar
               search={{
                 value: searchQuery,
@@ -256,8 +236,6 @@ export function SupplierPurchaseKanban({
               syncing={syncing}
               syncDisabled={syncing || streaming}
               onSync={() => void refresh()}
-              isFullscreen={isFullscreen}
-              onEnterFullscreen={() => void setFullscreen(true)}
             />
 
             {errors.map((message) => (
@@ -272,12 +250,7 @@ export function SupplierPurchaseKanban({
           </div>
 
           {supplierCards.length === 0 ? (
-            <p
-              className={cn(
-                "text-sm text-[var(--muted-foreground)]",
-                isFullscreen && "px-3 sm:px-4",
-              )}
-            >
+            <p className="px-3 text-sm text-[var(--muted-foreground)] sm:px-4">
               Nenhum fornecedor precisa de compra no momento.
             </p>
           ) : (
@@ -300,8 +273,6 @@ export function SupplierPurchaseKanban({
               onToggleCollapse={board.toggleCollapse}
               appearance={board.appearance}
               setColumnColor={board.setColumnColor}
-              background={board.background}
-              fullHeight={isFullscreen}
             />
           )}
         </div>

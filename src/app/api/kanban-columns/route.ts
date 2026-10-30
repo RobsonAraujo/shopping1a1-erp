@@ -38,7 +38,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       columns,
       background: settings.background,
-      isFullscreen: settings.isFullscreen,
       appearance: settings.appearance,
     });
   } catch (e) {
