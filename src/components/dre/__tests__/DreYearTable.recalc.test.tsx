@@ -1,211 +1,45 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act, renderIntoDocument } from "@/test-setup/render";
-import { DreYearTable } from "@/components/dre/DreYearTable";
-import {
-  dreRecalcLineKey,
-  DreRecalcProvider,
-  type DreRecalc,
-} from "@/components/dre/dre-recalc";
+import { dreRecalcLineKey } from "@/components/dre/dre-recalc";
 import type { DreEditableLineKey } from "@/lib/dre/dre-calculations";
-import type { DreYearView } from "@/lib/dre/dre-year-data";
+import {
+  dreTable,
+  editableValue,
+  flush,
+  openEditor,
+  pressKey,
+  text,
+  typeValue,
+  yearView,
+  type LineChange,
+} from "./dre-table-test-utils";
 
-const TOTALS = {
-  totalEntrada: 1000,
-  totalCustoOperacional: -740,
-  margemContribuicao: 260,
-  margemContribuicaoPercent: 26,
-  totalCustoFixoManual: 0,
-  totalCustoOperacionalManual: 0,
-  totalInvestimentoManual: 0,
-  adsCost: 30,
-  totalCustoFixo: 0,
-  totalInvestimento: 0,
-  lucroOperacionalAntesInvestimentos: 260,
-  lucroOperacionalAntesInvestimentosPercent: 26,
-  lucroOperacional: 260,
-  lucroOperacionalPercent: 26,
-  totalSaidaNaoOperacionalManual: 0,
-  totalSaidaNaoOperacional: 0,
-  totalEntradaNaoOperacionalManual: 0,
-  totalEntradaNaoOperacional: 0,
-  resultadoLiquido: 260,
-  resultadoLiquidoPercent: 26,
-};
-
-/** Mesmo formato do fixture de `dre-export-csv.test.ts`; só janeiro tem números. */
-function yearView(): DreYearView {
-  return {
-    year: 2026,
-    costItems: [],
-    operationalCostItems: [],
-    investmentCostItems: [],
-    nonOperationalOutItems: [],
-    nonOperationalInItems: [],
-    months: Array.from({ length: 12 }, (_, i) => ({
-      month: i + 1,
-      label: `Mês ${i + 1}`,
-      isCurrentMonth: false,
-      isFutureMonth: false,
-      canSync: true,
-      syncedAt: null,
-      billingSource: null,
-      isPartial: false,
-      incompleteProductCostCount: 0,
-      syncWarnings: [],
-      lines:
-        i === 0
-          ? {
-              revenueMl: 1000,
-              cancelledSalesMl: -50,
-              saleFeeMl: -100,
-              partialReturnsMl: -10,
-              returnFeeMl: 0,
-              specialFeesMl: 0,
-              productCostErp: -400,
-              taxErp: -80,
-              sellerShippingMl: -70,
-              fullShippingMl: 0,
-              fullStorageMl: 0,
-              fullNonComplianceMl: 0,
-              minhaPaginaMl: 0,
-              affiliateFeeMl: 0,
-            }
-          : null,
-      cancelledIncludeOverlay: null,
-      productCostBreakdown: null,
-      taxBreakdown: null,
-      revenueBreakdown: null,
-      cancelledSalesBreakdown: null,
-      saleFeeBreakdown: null,
-      sellerShippingBreakdown: null,
-      adsCostBreakdown: null,
-      partialReturnsBreakdown: null,
-      returnFeeBreakdown: null,
-      specialFeesBreakdown: null,
-      fullShippingBreakdown: null,
-      fullStorageBreakdown: null,
-      fullNonComplianceBreakdown: null,
-      minhaPaginaBreakdown: null,
-      affiliateFeeBreakdown: null,
-      reconciliation: {
-        status: "none",
-        reconciledAt: null,
-        fileName: null,
-        lineKeys: [],
-        reviewImportId: null,
-      },
-      levelingChangedAfterSync: false,
-      taxStatus: null,
-      taxSource: null,
-      zeroLineAnomalies: [],
-      keptFromPrevious: null,
-      lineAuditMismatches: [],
-      fullReportSourced: false,
-      adsCost: i === 0 ? 30 : null,
-      manuallyEditedLineKeys: [],
-      syncedLineBaselineKeys: [],
-      fixedCostValues: {},
-      fixedCostOverrides: {},
-      operationalCostValues: {},
-      operationalCostOverrides: {},
-      investmentCostValues: {},
-      investmentCostOverrides: {},
-      nonOperationalOutValues: {},
-      nonOperationalOutOverrides: {},
-      nonOperationalInValues: {},
-      nonOperationalInOverrides: {},
-      totals: i === 0 ? TOTALS : null,
-    })),
-    yearTotals: TOTALS,
-  };
-}
-
-const noop = () => {};
 const data = yearView();
-
-function tree(
-  recalc: DreRecalc | null,
-  onLineChange: (lineKey: DreEditableLineKey, month: number, amount: number) => void,
-) {
-  return (
-    <DreRecalcProvider value={recalc}>
-      <DreYearTable
-        data={data}
-        showDetails
-        selectedMonth={1}
-        onSelectedMonthChange={noop}
-        syncingMonths={new Set()}
-        onSyncMonth={noop}
-        onLineChange={onLineChange}
-        onFixedCostChange={noop}
-        onOperationalCostChange={noop}
-        onInvestmentCostChange={noop}
-        onNonOperationalOutChange={noop}
-        onNonOperationalInChange={noop}
-      />
-    </DreRecalcProvider>
-  );
-}
-
-const text = (node: Element) => (node.textContent ?? "").replace(/\s/g, " ");
-
-/** Valor editável do Demonstrativo (o `span` com duplo-clique). */
-function editableValue(container: ParentNode, label: string): HTMLElement {
-  const node = [...container.querySelectorAll<HTMLElement>('span[role="button"]')].find(
-    (span) => (span.getAttribute("title") ?? "").includes(`editar ${label}`),
-  );
-  assert.ok(node, `valor editável de ${label}`);
-  return node;
-}
-
-async function flush() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  });
-}
-
-async function typeAndApply(label: string, typed: string) {
-  const input = document.querySelector<HTMLInputElement>(
-    `input[aria-label="Editar ${label}"]`,
-  );
-  assert.ok(input, `editor de ${label} aberto`);
-  const setValue = Object.getOwnPropertyDescriptor(
-    HTMLInputElement.prototype,
-    "value",
-  )!.set!;
-  await act(async () => {
-    setValue.call(input, typed);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  await act(async () => {
-    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-  });
-}
 
 describe("DreYearTable — recálculo depois de uma edição manual", () => {
   it("mostra o valor novo na célula editada, borra o resto do mês e volta no erro", async () => {
     const calls: [DreEditableLineKey, number, number][] = [];
-    const onLineChange = (lineKey: DreEditableLineKey, month: number, amount: number) => {
+    const onLineChange: LineChange = (lineKey, month, amount) => {
       calls.push([lineKey, month, amount]);
     };
-    const view = renderIntoDocument(tree(null, onLineChange));
+    const view = renderIntoDocument(dreTable({ data, onLineChange }));
     const revenueLabel = "Faturamento ML (Mês 1)";
 
     assert.equal(document.querySelectorAll('[aria-busy="true"]').length, 0);
 
-    await act(async () => {
-      editableValue(view.container, revenueLabel).dispatchEvent(
-        new MouseEvent("dblclick", { bubbles: true }),
-      );
-    });
-    await flush();
-    await typeAndApply(revenueLabel, "R$ 1.500,00");
+    const input = await openEditor(view.container, revenueLabel);
+    await typeValue(input, "R$ 1.500,00");
+    await pressKey(input, "Enter");
     assert.deepEqual(calls, [["revenueMl", 1, 1500]]);
 
     // O pai (DreClient) marca o mês como recalculando até o ano voltar.
     view.rerender(
-      tree({ month: 1, editedKey: dreRecalcLineKey("revenueMl") }, onLineChange),
+      dreTable({
+        data,
+        onLineChange,
+        recalc: { month: 1, editedKey: dreRecalcLineKey("revenueMl") },
+      }),
     );
     const edited = editableValue(view.container, revenueLabel);
     assert.equal(text(edited), "R$ 1.500,00");
@@ -233,7 +67,7 @@ describe("DreYearTable — recálculo depois de uma edição manual", () => {
     );
 
     // Falhou (os dados não mudaram): a célula volta ao valor do servidor.
-    view.rerender(tree(null, onLineChange));
+    view.rerender(dreTable({ data, onLineChange }));
     assert.equal(text(editableValue(view.container, revenueLabel)), "R$ 1.000,00");
     assert.equal(document.querySelectorAll('[aria-busy="true"]').length, 0);
     assert.equal(view.container.querySelector('[role="status"]'), null);
@@ -241,7 +75,7 @@ describe("DreYearTable — recálculo depois de uma edição manual", () => {
   });
 
   it("na visão Comparar meses borra só a coluna do mês editado", async () => {
-    const view = renderIntoDocument(tree(null, noop));
+    const view = renderIntoDocument(dreTable({ data }));
     const yearToggle = [...view.container.querySelectorAll("button")].find((button) =>
       text(button).includes("Comparar meses"),
     );
@@ -250,7 +84,7 @@ describe("DreYearTable — recálculo depois de uma edição manual", () => {
       yearToggle.click();
     });
 
-    view.rerender(tree({ month: 1, editedKey: null }, noop));
+    view.rerender(dreTable({ data, recalc: { month: 1, editedKey: null } }));
     assert.match(
       editableValue(view.container, "Tarifa ML (Mês 1)").className,
       /blur-\[3px\]/,

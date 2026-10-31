@@ -345,6 +345,7 @@ function DreInlineMoneyCell({
   title,
   recalcMonth,
   recalcKey,
+  signToggle,
   onCommit,
   onEditingChange,
   onAudit,
@@ -367,6 +368,12 @@ function DreInlineMoneyCell({
    * editada mostra o valor novo enquanto o resto da coluna recalcula.
    */
   recalcKey?: string;
+  /**
+   * Botão de sinal (−/+) ao lado do campo, que recebe só o número: digitar
+   * 45000 numa linha de custo grava −45.000, não uma receita por engano.
+   * `natural` é o sinal de partida quando o valor atual é zero ou vazio.
+   */
+  signToggle?: { natural: 1 | -1 };
   onCommit: (amount: number | null) => void;
   /** Notifica o pai ao entrar/sair do modo de edição (para esmaecer o restante do DRE). */
   onEditingChange?: (editing: boolean) => void;
@@ -379,6 +386,7 @@ function DreInlineMoneyCell({
   const isMobile = useIsMobile();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<number | null>(displayAmount);
+  const [sign, setSign] = useState<1 | -1>(signToggle?.natural ?? -1);
   const [panelStyle, setPanelStyle] = useState<CSSProperties | null>(null);
   const [panelEntered, setPanelEntered] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -528,7 +536,18 @@ function DreInlineMoneyCell({
     // Uma edição por vez: duas gravações cruzadas devolveriam anos diferentes.
     if (disabled || recalc !== null) return;
     clearClickTimer();
-    setDraft(displayAmount);
+    if (signToggle) {
+      setSign(
+        displayAmount !== null && displayAmount !== 0
+          ? displayAmount < 0
+            ? -1
+            : 1
+          : signToggle.natural,
+      );
+      setDraft(displayAmount === null ? null : Math.abs(displayAmount));
+    } else {
+      setDraft(displayAmount);
+    }
     setEditing(true);
     onEditingChange?.(true);
   }
@@ -539,6 +558,12 @@ function DreInlineMoneyCell({
     setPanelStyle(null);
     setPanelEntered(false);
     onEditingChange?.(false);
+  }
+
+  /** Valor a gravar: com o botão de sinal, o campo guarda só o número. */
+  function signedDraft(): number | null {
+    if (!signToggle || draft === null) return draft;
+    return sign * Math.abs(draft);
   }
 
   function commit(next: number | null) {
@@ -564,20 +589,25 @@ function DreInlineMoneyCell({
         setDraft(values.floatValue ?? null);
       }}
       onKeyDown={(e) => {
+        if (signToggle && (e.key === "-" || e.key === "+")) {
+          e.preventDefault();
+          setSign(e.key === "-" ? -1 : 1);
+          return;
+        }
         if (e.key === "Escape") {
           e.preventDefault();
           cancelEditing();
         }
         if (e.key === "Enter") {
           e.preventDefault();
-          commit(draft);
+          commit(signedDraft());
         }
       }}
       thousandSeparator="."
       decimalSeparator=","
       prefix="R$ "
       decimalScale={2}
-      allowNegative={allowNegative}
+      allowNegative={signToggle ? false : allowNegative}
       inputMode="decimal"
       enterKeyHint="done"
       autoComplete="off"
@@ -590,6 +620,36 @@ function DreInlineMoneyCell({
           : "h-14 w-full rounded-xl border-0 bg-[var(--muted)]/50 px-3.5 text-right text-2xl font-bold tabular-nums text-[var(--foreground)] shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] outline-none ring-1 ring-[var(--border)] transition-[box-shadow,ring-color,background-color] duration-150 focus:bg-[var(--background)] focus:shadow-none focus:ring-2 focus:ring-[var(--primary)]/50"
       }
     />
+  );
+
+  const signLabel =
+    sign < 0
+      ? "Valor negativo — clique para deixar positivo"
+      : "Valor positivo — clique para deixar negativo";
+  const signedInput = signToggle ? (
+    <div className="flex items-stretch gap-2">
+      <button
+        type="button"
+        aria-pressed={sign < 0}
+        aria-label={signLabel}
+        title={signLabel}
+        className={cn(
+          "flex shrink-0 cursor-pointer items-center justify-center font-bold ring-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/50",
+          isMobile ? "h-16 w-14 rounded-2xl text-3xl" : "h-14 w-12 rounded-xl text-2xl",
+          sign < 0
+            ? "bg-red-50 text-red-700 ring-red-200 hover:bg-red-100"
+            : "bg-emerald-50 text-emerald-700 ring-emerald-200 hover:bg-emerald-100",
+        )}
+        // Mantém o foco no campo (mesmo padrão dos botões do painel).
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => setSign((current) => (current < 0 ? 1 : -1))}
+      >
+        {sign < 0 ? "−" : "+"}
+      </button>
+      <div className="min-w-0 flex-1">{moneyInput}</div>
+    </div>
+  ) : (
+    moneyInput
   );
 
   const mobileEditor =
@@ -606,7 +666,7 @@ function DreInlineMoneyCell({
             <SheetDescription className="text-sm">{label}</SheetDescription>
           </SheetHeader>
           <SheetBody className="space-y-5 pt-2">
-            {moneyInput}
+            {signedInput}
             {onAudit ? (
               <button
                 type="button"
@@ -645,7 +705,7 @@ function DreInlineMoneyCell({
             <Button
               type="button"
               className="h-12 rounded-xl text-base font-semibold"
-              onClick={() => commit(draft)}
+              onClick={() => commit(signedDraft())}
             >
               Aplicar
             </Button>
@@ -695,7 +755,7 @@ function DreInlineMoneyCell({
                   </button>
                 </div>
                 <div className="p-3.5">
-                  {moneyInput}
+                  {signedInput}
                   <p className="mt-2 text-center text-[11px] text-[var(--muted-foreground)]">
                     <kbd className="rounded border border-[var(--border)] bg-[var(--muted)] px-1 py-0.5 font-sans text-[10px] font-medium">
                       Enter
@@ -721,7 +781,7 @@ function DreInlineMoneyCell({
                       type="button"
                       className="h-10 gap-1.5 text-sm font-semibold"
                       onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => commit(draft)}
+                      onClick={() => commit(signedDraft())}
                     >
                       <Check className="size-3.5" aria-hidden />
                       Aplicar
@@ -1127,6 +1187,12 @@ function renderValueCell(
           recalcMonth={month.month}
           recalcKey={dreRecalcLineKey(editableKey)}
           allowNegative={editableKey !== "revenueMl"}
+          // Faturamento é só positivo; ADS o servidor grava como custo.
+          signToggle={
+            editableKey === "revenueMl" || editableKey === "adsCost"
+              ? undefined
+              : { natural: row.kind === "entrada-detail" ? 1 : -1 }
+          }
           adjusted={isAdjusted}
           onAudit={
             auditKind && onAuditClick
