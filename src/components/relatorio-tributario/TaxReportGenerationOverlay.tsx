@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -52,7 +52,9 @@ function progressPercent(progress: TaxReportProgressState): number {
   ) {
     return 45 + Math.round((progress.current / progress.total) * 45);
   }
-  if (progress.phase === "compute") return 55;
+  // Antes do contador de vendas: tem que ser o início da faixa (45), senão a
+  // barra recua quando o contador começa.
+  if (progress.phase === "compute") return 45;
   if (
     progress.phase === "billing" &&
     progress.total != null &&
@@ -63,6 +65,35 @@ function progressPercent(progress: TaxReportProgressState): number {
   }
   if (progress.phase === "orders") return 8;
   return 50;
+}
+
+const SAVE_HINT_AFTER_SECONDS = 5;
+
+function formatElapsed(seconds: number): string {
+  if (seconds < 60) return `${seconds} s`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return rest === 0 ? `${minutes} min` : `${minutes} min ${rest} s`;
+}
+
+/**
+ * Gravar um mês com muitas vendas leva tempo e o servidor não tem como reportar
+ * andamento no meio. Montado só durante "Salvando", então o contador nasce
+ * zerado e a mensagem só aparece se a espera for perceptível.
+ */
+function SaveElapsedHint() {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setSeconds((current) => current + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+  if (seconds < SAVE_HINT_AFTER_SECONDS) return null;
+  return (
+    <p className="mt-2 text-xs tabular-nums text-[var(--muted-foreground)]">
+      Salvando há {formatElapsed(seconds)}. Meses com muitas vendas demoram mais.
+      Mantenha esta aba aberta.
+    </p>
+  );
 }
 
 /**
@@ -125,7 +156,10 @@ export function TaxReportGenerationOverlay({
         <div className="mt-5">
           <div className="h-2 overflow-hidden rounded-full bg-[var(--muted)]">
             <div
-              className="h-full rounded-full bg-[var(--primary)] transition-all duration-500 ease-out"
+              className={cn(
+                "h-full rounded-full bg-[var(--primary)] transition-all duration-500 ease-out",
+                progress.phase === "save" && "animate-pulse",
+              )}
               style={{ width: `${percent}%` }}
             />
           </div>
@@ -135,6 +169,7 @@ export function TaxReportGenerationOverlay({
               {progress.phase === "billing" ? "pedidos" : "vendas"}
             </p>
           ) : null}
+          {progress.phase === "save" ? <SaveElapsedHint /> : null}
         </div>
 
         <ol className="mt-5 space-y-2">

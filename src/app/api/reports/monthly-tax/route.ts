@@ -11,7 +11,10 @@ import {
   loadTaxReportScreen,
   previewTaxReportRecompute,
 } from "@/lib/tax-report/service/tax-report-screen";
-import type { ManualFiscalOverride } from "@/lib/tax-report/types";
+import type {
+  ManualFiscalOverride,
+  TaxReportSavedSummary,
+} from "@/lib/tax-report/types";
 import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 import { requireOrganization } from "@/lib/api/api-auth";
 import { stripTransacoesForResponse } from "@/lib/tax-report/strip-transacoes-for-response";
@@ -219,20 +222,28 @@ export async function POST(request: NextRequest) {
               year,
               month,
               overrides: body.overrides ?? {},
-              onProgress: sendProgress,
+              // O serviço avisa "done" ao fim do cálculo, mas aqui ainda falta
+              // salvar: repassar faria a barra voltar de 100% para "Salvando".
+              onProgress: (progress) => {
+                if (progress.phase !== "done") sendProgress(progress);
+              },
             });
 
+            const sales = payload.meta.linhasProcessadas;
             sendProgress({
               phase: "save",
-              message: "Salvando snapshot…",
+              message: `Salvando o relatório (${sales.toLocaleString("pt-BR")} venda${sales === 1 ? "" : "s"})…`,
             });
 
+            const saveStartedAt = Date.now();
             await saveTaxReportSnapshot(organizationId, userId, payload);
+            const saveMs = Date.now() - saveStartedAt;
             // O imposto do DRE do mês acompanha a nova versão (só banco).
             sendProgress({
               phase: "save",
               message: "Atualizando o imposto do DRE do mês…",
             });
+            const dreStartedAt = Date.now();
             const dreFollowUp = await followUpDreTax({
               organizationId,
               sellerId: userId,
@@ -240,8 +251,22 @@ export async function POST(request: NextRequest) {
               month,
             });
 
+            console.info("[tax-report] recálculo salvo", {
+              organizationId,
+              year,
+              month,
+              pedidos: payload.meta.pedidosProcessados,
+              fetchMs: payload.meta.duracaoMs,
+              saveMs,
+              dreMs: Date.now() - dreStartedAt,
+            });
+
+            const saved: TaxReportSavedSummary = {
+              revenue: payload.consolidado.faturamento,
+              orders: payload.meta.pedidosProcessados,
+            };
             controller.enqueue(
-              encoder.encode(sseLine({ type: "complete", dreFollowUp })),
+              encoder.encode(sseLine({ type: "complete", dreFollowUp, saved })),
             );
           } catch (e) {
             logServerError("api/reports/monthly-tax POST stream", e);

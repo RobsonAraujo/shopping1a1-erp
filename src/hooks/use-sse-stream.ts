@@ -51,7 +51,14 @@ export type UseSSEStreamState = {
  */
 export function useSSEStream<TEvent>(
   onEvent: (event: TEvent) => void | Promise<void>,
-): UseSSEStreamState & { start: (input: RequestInfo, init?: RequestInit) => Promise<void> } {
+): UseSSEStreamState & {
+  /**
+   * `true` se o stream fechou sem exceção. Não garante que o servidor terminou:
+   * uma função encerrada no meio também fecha limpo — quem depende de um evento
+   * final precisa conferir se ele chegou.
+   */
+  start: (input: RequestInfo, init?: RequestInit) => Promise<boolean>;
+} {
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const onEventRef = useRef(onEvent);
@@ -73,10 +80,12 @@ export function useSSEStream<TEvent>(
           throw new Error(await readApiError(res, "stream_failed"));
         }
         await consumeSSEStream<TEvent>(res, (event) => onEventRef.current(event));
+        return true;
       } catch (e) {
         if (run === runRef.current && !init?.signal?.aborted) {
           setError(e instanceof Error ? e.message : "Erro de rede");
         }
+        return false;
       } finally {
         if (run === runRef.current) setStreaming(false);
       }

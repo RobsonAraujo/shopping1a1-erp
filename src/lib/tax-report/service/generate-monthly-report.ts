@@ -460,6 +460,9 @@ export async function saveTaxReportSnapshot(
   const summary = stripTransacoesForResponse(payload);
   const dailyTotals = buildTaxDailyTotals(payload);
   await prisma.taxReportMonthSnapshot.upsert({
+    // Sem `select` o Prisma devolve a linha inteira — o `payload` de um mês
+    // cheio tem 16 MB, e ninguém usa o retorno.
+    select: { id: true },
     where: {
       sellerId_year_month: {
         sellerId,

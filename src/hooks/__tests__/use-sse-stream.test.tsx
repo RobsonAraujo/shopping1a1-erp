@@ -30,14 +30,16 @@ describe("useSSEStream", () => {
       }),
     );
 
+    let closedCleanly: boolean | undefined;
     await act(async () => {
-      await result.current.start("/api/stream");
+      closedCleanly = await result.current.start("/api/stream");
     });
     await waitFor(() => {
       assert.deepEqual(events, [{ type: "ok" }]);
       assert.equal(result.current.streaming, false);
       assert.equal(result.current.error, null);
     });
+    assert.equal(closedCleanly, true);
     unmount();
   });
 
@@ -49,8 +51,9 @@ describe("useSSEStream", () => {
       });
 
     const { result, unmount } = renderHook(() => useSSEStream(() => {}));
+    let closedCleanly: boolean | undefined;
     await act(async () => {
-      await result.current.start("/api/stream");
+      closedCleanly = await result.current.start("/api/stream");
     });
     await waitFor(() => {
       assert.match(
@@ -59,6 +62,36 @@ describe("useSSEStream", () => {
       );
       assert.equal(result.current.streaming, false);
     });
+    assert.equal(closedCleanly, false);
+    unmount();
+  });
+
+  it("reports a failure when a handler throws on a server error event", async () => {
+    const encoder = new TextEncoder();
+    globalThis.fetch = async () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(
+              encoder.encode('data: {"type":"error","message":"falhou"}\n\n'),
+            );
+            controller.close();
+          },
+        }),
+        { status: 200 },
+      );
+
+    const { result, unmount } = renderHook(() =>
+      useSSEStream<{ type: string; message: string }>((event) => {
+        throw new Error(event.message);
+      }),
+    );
+    let closedCleanly: boolean | undefined;
+    await act(async () => {
+      closedCleanly = await result.current.start("/api/stream");
+    });
+    assert.equal(closedCleanly, false);
+    assert.equal(result.current.error, "falhou");
     unmount();
   });
 });

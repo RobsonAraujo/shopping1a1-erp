@@ -8,7 +8,10 @@ import {
   type SetStateAction,
 } from "react";
 import { toast } from "sonner";
-import { dreFollowUpMessage } from "@/components/relatorio-tributario/TaxReportStatusPanel";
+import {
+  TAX_REPORT_INTERRUPTED_MESSAGE,
+  dreFollowUpMessage,
+} from "@/components/relatorio-tributario/TaxReportStatusPanel";
 import type { TaxRecalcKind } from "@/components/relatorio-tributario/TaxRecalcConfirmDialog";
 import type { TaxReportProgressState } from "@/components/relatorio-tributario/TaxReportGenerationOverlay";
 import { useTaxRecalcConfirm } from "@/components/relatorio-tributario/use-tax-recalc-confirm";
@@ -173,6 +176,7 @@ export function useDreTaxActions({
         }
         let followUp: TaxReportDreFollowUp | undefined;
         let completed = false;
+        let failed = false;
         await consumeSSEStream<TaxReportSseEvent>(res, (event) => {
           if (event.type === "progress") {
             setTaxOperation({
@@ -189,10 +193,20 @@ export function useDreTaxActions({
             completed = true;
             followUp = event.dreFollowUp;
           } else if (event.type === "error") {
+            failed = true;
             setError(formatApiErrorMessage(event.message));
           }
         });
-        if (!completed) return;
+        if (!completed) {
+          // Fechou sem evento final (ex.: a função foi encerrada no meio): pode
+          // ou não ter gravado. Recarrega antes do aviso, porque `loadYear`
+          // limpa o erro da tela.
+          if (!failed) {
+            await loadYear(year);
+            setError(TAX_REPORT_INTERRUPTED_MESSAGE);
+          }
+          return;
+        }
         await loadYear(year);
         notify(month, followUp);
       } catch (err) {

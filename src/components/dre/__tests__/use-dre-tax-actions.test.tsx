@@ -103,6 +103,52 @@ describe("useDreTaxActions — tela bloqueada durante a ação", () => {
     unmount();
   });
 
+  it("warns and reloads when the generation stream closes without a final event", async () => {
+    globalThis.fetch = (async () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.close();
+          },
+        }),
+        { status: 200 },
+      )) as typeof fetch;
+
+    const { result, unmount, loads, errors } = setup();
+    act(() => result.current.requestTaxAction(9, "regenerate_report"));
+    act(() => result.current.confirmDialogProps.onConfirm());
+
+    await waitFor(() => assert.equal(result.current.taxOperation, null));
+    assert.deepEqual(loads, [2026]);
+    assert.match(errors.at(-1) ?? "", /interrompido antes da confirmação/);
+    unmount();
+  });
+
+  it("keeps only the server error when the stream reports a failure", async () => {
+    const encoder = new TextEncoder();
+    globalThis.fetch = (async () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(
+              encoder.encode('data: {"type":"error","message":"Falhou no ML"}\n\n'),
+            );
+            controller.close();
+          },
+        }),
+        { status: 200 },
+      )) as typeof fetch;
+
+    const { result, unmount, loads, errors } = setup();
+    act(() => result.current.requestTaxAction(9, "regenerate_report"));
+    act(() => result.current.confirmDialogProps.onConfirm());
+
+    await waitFor(() => assert.equal(result.current.taxOperation, null));
+    assert.deepEqual(loads, []);
+    assert.equal(errors.at(-1), "Falhou no ML");
+    unmount();
+  });
+
   it("walks through several months after a leveling, one at a time", async () => {
     const seen: number[] = [];
     globalThis.fetch = (async (_url: string, init?: RequestInit) => {

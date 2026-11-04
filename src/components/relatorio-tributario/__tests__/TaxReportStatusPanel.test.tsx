@@ -7,6 +7,7 @@ import {
   TaxReportDreLine,
   TaxReportStatusBanner,
   dreFollowUpMessage,
+  taxReportSavedMessage,
 } from "@/components/relatorio-tributario/TaxReportStatusPanel";
 import { TaxRecalcConfirmDialog } from "@/components/relatorio-tributario/TaxRecalcConfirmDialog";
 import type {
@@ -192,6 +193,32 @@ describe("dreFollowUpMessage", () => {
       dreFollowUpMessage({ status: "no_snapshot", previousTaxErp: null, taxErp: null }, "julho"),
       null,
     );
+  });
+});
+
+describe("taxReportSavedMessage", () => {
+  const saved = { revenue: 379925.35, orders: 5152 };
+
+  it("says it saved even when the revenue did not change", () => {
+    const text = taxReportSavedMessage(379925.35, saved, "Outubro");
+    assert.match(text!, /^Outubro recalculado e salvo\. O faturamento não mudou: /);
+    assert.match(text!, /379\.925,35 \(5\.152 pedidos\)\.$/);
+  });
+
+  it("shows before → after when the revenue changed", () => {
+    const text = taxReportSavedMessage(370000, saved, "Outubro");
+    assert.match(text!, /^Outubro recalculado e salvo\. Faturamento: /);
+    assert.match(text!, /370\.000,00 → R\$\s?379\.925,35\.$/);
+  });
+
+  it("does not compare when the month had no report yet", () => {
+    const text = taxReportSavedMessage(null, saved, "Outubro");
+    assert.match(text!, /^Outubro calculado e salvo\. Faturamento: /);
+    assert.doesNotMatch(text!, /→|não mudou/);
+  });
+
+  it("stays quiet when the server did not report what it saved", () => {
+    assert.equal(taxReportSavedMessage(100, undefined, "Outubro"), null);
   });
 });
 

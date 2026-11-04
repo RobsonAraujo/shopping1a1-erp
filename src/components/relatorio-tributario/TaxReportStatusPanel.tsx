@@ -20,6 +20,7 @@ import {
 import type {
   TaxReportDreFollowUp,
   TaxReportPayload,
+  TaxReportSavedSummary,
   TaxReportScreenStatus,
 } from "@/lib/tax-report/types";
 
@@ -234,6 +235,35 @@ export function TaxReportDreLine({
       )}
     </div>
   );
+}
+
+/**
+ * O stream fechou sem o evento final (ex.: a função foi encerrada no meio): não
+ * dá para afirmar se gravou, então a tela diz como conferir.
+ */
+export const TAX_REPORT_INTERRUPTED_MESSAGE =
+  "O recálculo foi interrompido antes da confirmação do servidor. Confira a data de “Gerado em”: se não mudou, o relatório não foi salvo. Recalcule de novo.";
+
+/**
+ * Confirma que o recálculo foi gravado — principalmente quando o valor não muda
+ * (mês fechado costuma trazer os mesmos pedidos), que sem isso parece falha.
+ * `previousRevenue` é `null` quando o mês ainda não tinha relatório.
+ */
+export function taxReportSavedMessage(
+  previousRevenue: number | null,
+  saved: TaxReportSavedSummary | undefined,
+  monthName: string,
+): string | null {
+  if (!saved) return null;
+  const revenue = formatFinancialMoney(saved.revenue);
+  if (previousRevenue === null) {
+    return `${monthName} calculado e salvo. Faturamento: ${revenue}.`;
+  }
+  if (Math.abs(saved.revenue - previousRevenue) < 0.005) {
+    const orders = saved.orders.toLocaleString("pt-BR");
+    return `${monthName} recalculado e salvo. O faturamento não mudou: ${revenue} (${orders} pedido${saved.orders === 1 ? "" : "s"}).`;
+  }
+  return `${monthName} recalculado e salvo. Faturamento: ${formatFinancialMoney(previousRevenue)} → ${revenue}.`;
 }
 
 /** Texto do toast depois que o DRE acompanhou o recálculo do tributário. */

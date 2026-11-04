@@ -319,6 +319,12 @@ export type TaxReportDreFollowUp = {
   taxErp: number | null;
 };
 
+/** O que o servidor acabou de gravar — a tela confirma ao usuário que salvou. */
+export type TaxReportSavedSummary = {
+  revenue: number;
+  orders: number;
+};
+
 export type TaxCompanyConfig = {
   taxRegime: "LUCRO_REAL" | "LUCRO_PRESUMIDO" | "SIMPLES";
   originUf: string;

@@ -30,12 +30,15 @@ import {
   TaxReportGenerationOverlay,
   type TaxReportProgressState,
 } from "@/components/relatorio-tributario/TaxReportGenerationOverlay";
+import { MonthlyTaxReportBodySkeleton } from "@/components/relatorio-tributario/MonthlyTaxReportSkeleton";
 import { TaxReportSkuTable } from "@/components/relatorio-tributario/tax-report-sku-table";
 import {
+  TAX_REPORT_INTERRUPTED_MESSAGE,
   TaxMonthKpi,
   TaxReportDreLine,
   TaxReportStatusBanner,
   dreFollowUpMessage,
+  taxReportSavedMessage,
 } from "@/components/relatorio-tributario/TaxReportStatusPanel";
 import { TaxRecalcConfirmDialog } from "@/components/relatorio-tributario/TaxRecalcConfirmDialog";
 import { useTaxRecalcConfirm } from "@/components/relatorio-tributario/use-tax-recalc-confirm";
@@ -57,9 +60,17 @@ import {
 import type {
   TaxReportDreFollowUp,
   TaxReportPayload,
+  TaxReportSavedSummary,
   TaxReportScreenStatus,
 } from "@/lib/tax-report/types";
 import { cn } from "@/lib/utils";
+
+/** O título diz qual ação falhou: nem todo erro desta tela é de carregamento. */
+const ERROR_TITLE = {
+  load: "Não foi possível carregar o relatório",
+  recalc: "Não foi possível recalcular o relatório",
+  dre: "Não foi possível atualizar o DRE",
+} as const;
 
 function formatYmdBr(ymd: string): string {
   const [y, m, d] = ymd.split("-");
@@ -123,7 +134,9 @@ export function MonthlyTaxReportClient({
   const [loading, setLoading] = useState(false);
   const [generateProgress, setGenerateProgress] =
     useState<TaxReportProgressState | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ title: string; message: string } | null>(
+    null,
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [fixedCostModalOpen, setFixedCostModalOpen] = useState(false);
   const [fixedCostItems, setFixedCostItems] =
@@ -132,6 +145,14 @@ export function MonthlyTaxReportClient({
   const isPeriodMode = mode === "period";
   const skipNextFixedCostFetch = useRef(true);
   const skipNextReportFetch = useRef(true);
+  // Só a última troca de período vale: meses grandes demoram mais para chegar, e
+  // uma resposta atrasada de outro mês não pode sobrescrever a tela.
+  const reportRequest = useRef<AbortController | null>(null);
+  const fixedCostRequest = useRef<AbortController | null>(null);
+  /** Se o recálculo em andamento já recebeu o evento final do servidor. */
+  const generationCompleted = useRef(false);
+  /** Faturamento na tela ao recalcular, para confirmar o que mudou no fim. */
+  const revenueBeforeGeneration = useRef<number | null>(null);
 
   const applyPreset = useCallback((days: 7 | 15 | 30) => {
     const { from, to } = lastDaysYmdRange(days);
@@ -151,9 +172,13 @@ export function MonthlyTaxReportClient({
   }, []);
 
   const loadFixedCostItems = useCallback(async () => {
+    fixedCostRequest.current?.abort();
+    const controller = new AbortController();
+    fixedCostRequest.current = controller;
     try {
       const res = await fetch(
         `/api/tax-report/fixed-cost-items?year=${year}&month=${month}`,
+        { signal: controller.signal },
       );
       if (!res.ok) return;
       const data = (await res.json()) as { items: TaxFixedCostItemRow[] };
@@ -178,6 +203,9 @@ export function MonthlyTaxReportClient({
   }, [loadFixedCostItems]);
 
   const loadReport = useCallback(async () => {
+    reportRequest.current?.abort();
+    const controller = new AbortController();
+    reportRequest.current = controller;
     setLoading(true);
     setError(null);
     setMissingMonths([]);
@@ -186,6 +214,7 @@ export function MonthlyTaxReportClient({
         isPeriodMode
           ? `/api/reports/period-tax?from=${fromDate}&to=${toDate}&summary=1`
           : `/api/reports/monthly-tax?year=${year}&month=${month}`,
+        { signal: controller.signal },
       );
       if (res.status === 404) {
         setReport(null);
@@ -203,15 +232,20 @@ export function MonthlyTaxReportClient({
       setReport(data);
       setReportStatus(data.reportStatus ?? null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao carregar relatório");
+      if (controller.signal.aborted) return;
+      setError({
+        title: ERROR_TITLE.load,
+        message: e instanceof Error ? e.message : "Erro ao carregar relatório",
+      });
       setReport(null);
       setReportStatus(null);
     } finally {
-      setLoading(false);
+      if (reportRequest.current === controller) setLoading(false);
     }
   }, [isPeriodMode, year, month, fromDate, toDate]);
 
-  const monthLabel = TAX_REPORT_MONTH_NAMES[month - 1]?.toLowerCase() ?? "";
+  const monthName = TAX_REPORT_MONTH_NAMES[month - 1] ?? "";
+  const monthLabel = monthName.toLowerCase();
 
   const notifyDreFollowUp = useCallback(
     (followUp: TaxReportDreFollowUp | undefined) => {
@@ -226,7 +260,11 @@ export function MonthlyTaxReportClient({
 
   const generateSSE = useSSEStream<
     | ({ type: "progress" } & TaxReportProgressState)
-    | { type: "complete"; dreFollowUp?: TaxReportDreFollowUp }
+    | {
+        type: "complete";
+        dreFollowUp?: TaxReportDreFollowUp;
+        saved?: TaxReportSavedSummary;
+      }
     | { type: "error"; message: string }
   >(
     useCallback(
@@ -239,18 +277,26 @@ export function MonthlyTaxReportClient({
             total: event.total,
           });
         } else if (event.type === "complete") {
+          generationCompleted.current = true;
           setFixedCostsChanged(false);
-          await loadReport();
+          // Já gravou: daqui em diante a espera é só para buscar os números.
           setGenerateProgress({
             phase: "done",
-            message: "Relatório gerado com sucesso.",
+            message: "Relatório salvo. Carregando os novos números…",
           });
+          await loadReport();
+          const savedMessage = taxReportSavedMessage(
+            revenueBeforeGeneration.current,
+            event.saved,
+            monthName,
+          );
+          if (savedMessage) toast.success(savedMessage);
           notifyDreFollowUp(event.dreFollowUp);
         } else if (event.type === "error") {
           throw new Error(event.message);
         }
       },
-      [loadReport, notifyDreFollowUp],
+      [loadReport, monthName, notifyDreFollowUp],
     ),
   );
 
@@ -277,7 +323,10 @@ export function MonthlyTaxReportClient({
       toast.success("Relatório recalculado com as vendas salvas.");
       notifyDreFollowUp(data.dreFollowUp);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao recalcular relatório");
+      setError({
+        title: ERROR_TITLE.recalc,
+        message: e instanceof Error ? e.message : "Erro ao recalcular relatório",
+      });
     } finally {
       setActionOverlay(null);
     }
@@ -303,7 +352,10 @@ export function MonthlyTaxReportClient({
       notifyDreFollowUp(data.result);
       await loadReport();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao atualizar o DRE");
+      setError({
+        title: ERROR_TITLE.dre,
+        message: e instanceof Error ? e.message : "Erro ao atualizar o DRE",
+      });
     } finally {
       setActionOverlay(null);
     }
@@ -311,26 +363,42 @@ export function MonthlyTaxReportClient({
   const generating = generateSSE.streaming;
   // Geração ou recálculo em andamento: fechar/recarregar a aba pede confirmação.
   useBeforeUnloadGuard(generating || actionBusy);
+  // Troca de mês/período. Os recálculos também recarregam, mas têm overlay próprio.
+  const switchingPeriod = loading && !generating && !actionBusy;
 
   useEffect(() => {
-    if (generateSSE.error) setError(generateSSE.error);
+    if (generateSSE.error) {
+      setError({ title: ERROR_TITLE.recalc, message: generateSSE.error });
+    }
   }, [generateSSE.error]);
 
   const generateReport = useCallback(
     async () => {
+      generationCompleted.current = false;
+      revenueBeforeGeneration.current = report?.consolidado.faturamento ?? null;
       setGenerateProgress({
         phase: "orders",
         message: "Iniciando geração do relatório…",
       });
       setError(null);
-      await generateSSE.start("/api/reports/monthly-tax", {
+      const closedCleanly = await generateSSE.start("/api/reports/monthly-tax", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ year, month, force: true, stream: true }),
       });
       setTimeout(() => setGenerateProgress(null), 400);
+      // Fechou sem evento final (ex.: a função foi encerrada no meio): pode ou
+      // não ter gravado. A tela mostra o que está no banco e diz como conferir.
+      // Recarrega antes do aviso, porque `loadReport` limpa o erro.
+      if (closedCleanly && !generationCompleted.current) {
+        await loadReport();
+        setError({
+          title: ERROR_TITLE.recalc,
+          message: TAX_REPORT_INTERRUPTED_MESSAGE,
+        });
+      }
     },
-    [year, month, generateSSE],
+    [year, month, generateSSE, report, loadReport],
   );
 
   const labelFor = useCallback(
@@ -580,9 +648,17 @@ export function MonthlyTaxReportClient({
         ) : null}
 
         {error ? (
-          <UserFeedback title="Não foi possível carregar o relatório">
-            {error}
-          </UserFeedback>
+          <UserFeedback title={error.title}>{error.message}</UserFeedback>
+        ) : null}
+
+        {switchingPeriod ? (
+          <MonthlyTaxReportBodySkeleton
+            label={
+              isPeriodMode
+                ? "Carregando o período…"
+                : `Carregando ${monthLabel}/${year}…`
+            }
+          />
         ) : null}
 
         {isPeriodMode && missingMonths.length > 0 ? (
@@ -622,7 +698,7 @@ export function MonthlyTaxReportClient({
           </Card>
         ) : null}
 
-        {report && !isPeriodMode && fixedCostsChanged ? (
+        {report && !switchingPeriod && !isPeriodMode && fixedCostsChanged ? (
           <UserFeedback tone="warning" title="Custos fixos alterados">
             <span className="block">
               O relatório de {monthLabel} ainda usa os custos fixos anteriores.
@@ -641,7 +717,7 @@ export function MonthlyTaxReportClient({
           </UserFeedback>
         ) : null}
 
-        {report && !isPeriodMode && reportStatus ? (
+        {report && !switchingPeriod && !isPeriodMode && reportStatus ? (
           <TaxReportStatusBanner
             status={reportStatus}
             report={report}
@@ -652,7 +728,7 @@ export function MonthlyTaxReportClient({
           />
         ) : null}
 
-        {report ? (
+        {report && !switchingPeriod ? (
           <>
             <Card className="overflow-hidden p-0">
               <div className="grid gap-0 md:grid-cols-[1fr_auto]">
