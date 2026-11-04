@@ -162,5 +162,7 @@ export type DreReconciliationReview = {
   matched: DreReconciliationLineMatch[];
   unrecognizedFees: UnrecognizedFeeSummary[];
   excludedFees: ExcludedFeeSummary[];
+  /** Frete pago pelo comprador já abatido de Frete vendedor nesta planilha. */
+  buyerPaidShipping: number;
   warnings: ReconciliationParseWarning[];
 };

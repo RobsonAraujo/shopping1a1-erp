@@ -33,7 +33,8 @@ Ajuste manual sobre linha conciliada vence a conciliação enquanto for mantido 
   - nome desconhecido (`unrecognized`).
 - Repasse (Product Ads, parcelamento pago pelo comprador) fica fora sem aviso.
 - **Tarifas especiais sai sempre da planilha** (0 quando ela não tem nenhuma). A planilha governa a linha; sem isso, o valor anterior continuaria valendo pelo baseline.
-- Imports gravados antes disso guardam `unrecognizedFees` (somadas em especiais) e os valores da época em `payload.reconciliation`. Para refazer, é preciso subir a planilha de novo.
+- **Frete vendedor sai sem o que o comprador pagou** (`abateBuyerPaidShipping`). O ML cobra o frete inteiro do vendedor e devolve a parte do comprador junto com a venda (coluna "Envio pago pelo comprador (+)"). Faturamento não inclui frete, então a cobrança inteira seria custo que não saiu do caixa. Por envio (`Número do envio`): `abatimento = min(comprador, max(0, frete líquido do envio))`. O comprador é o maior valor entre as linhas do envio, porque a mesma venda pode vir em duas linhas. Envio estornado, sem cobrança ou sem número não abate nada. O valor fica em `buyerPaidAmount`, na operação da maior cobrança do envio, e a auditoria mostra: cobrado pelo ML − pago pelo comprador = Frete vendedor.
+- Imports gravados antes disso guardam `unrecognizedFees` (somadas em especiais), o frete sem abatimento e os valores da época em `payload.reconciliation`. Para refazer, é preciso subir a planilha de novo.
 
 ## DIFAL cobrado pelo ML
 
@@ -99,6 +100,10 @@ A conta que liga as duas telas, no modal de auditoria (`buildDreTaxBridge`): **i
 Pedidos buscados **depois** do fechamento contam como relatório atualizado; número de pedidos diferente vira só nota de conferência. Tudo que muda número passa por uma **prévia** (antes → depois) antes de gravar (`TaxRecalcConfirmDialog`). Recalcular o tributário de um mês atualiza sozinho o imposto do DRE do mesmo mês. Ajuste manual em `taxErp` é respeitado (só o baseline atualiza). Depois de sincronizar meses afetados por um nivelamento, o DRE oferece atualizar o cálculo do tributário deles.
 
 ## Limitações conhecidas
+
+### Frete pago pelo comprador em mês sem planilha
+
+Só a planilha Por Vendas traz esse valor para o DRE. Em mês sem conciliação, inclusive o corrente, Frete vendedor vem da fatura sem esse abatimento e pode parecer maior que nos meses conciliados. Ainda falta confirmar com dados reais uma fonte do valor na API do ML.
 
 ### Devolução pós-entrega sem vínculo na fatura
 

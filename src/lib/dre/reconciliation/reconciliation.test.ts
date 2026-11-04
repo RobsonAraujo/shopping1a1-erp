@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import * as XLSX from "xlsx";
 import { parseBrMoney, parseFeeDetailsCell } from "./fee-details-parser";
 import { resolveFeeLineKey } from "./fee-name-mapping";
-import { aggregateReconciliationRows } from "./aggregate";
+import { aggregateReconciliationRows, buyerPaidShippingTotal } from "./aggregate";
 import { assertSheetMatchesMonth } from "./sheet-period";
 import { ReconciliationParseError, type ReconciliationRow } from "./types";
 import { parseReconciliationWorkbook } from "./xlsx-parser";
@@ -546,6 +546,161 @@ const POR_VENDAS_TABLE: (string | number | null)[][] = [
   ],
   ["Venda", "Liberado", 80.5, 0, "", 9.99, "SKU-1"],
 ];
+
+describe("frete pago pelo comprador", () => {
+  const freight = (netAmount: number) => ({
+    feeId: "ship",
+    name: "Tarifa de envio extra ou intermunicipal",
+    grossAmount: netAmount,
+    discountAmount: 0,
+    netAmount,
+    postpaid: true,
+  });
+  const freightRefund = (netAmount: number) => ({
+    ...freight(netAmount),
+    name: "Cancelamento da tarifa de envio extra ou intermunicipal",
+  });
+  const lineList = (rows: ReconciliationRow[]) => {
+    const result = aggregateLucroReal(rows);
+    return {
+      line: result.amounts.sellerShippingMl,
+      items: result.breakdowns.sellerShippingMl ?? [],
+    };
+  };
+
+  it("abate o que o comprador pagou e anota na operação", () => {
+    const { line, items } = lineList([
+      row({
+        operationId: "v1",
+        shipmentId: "e1",
+        buyerPaidShipping: 10.99,
+        feeDetails: [freight(17.94)],
+      }),
+    ]);
+    assert.equal(line, -6.95);
+    assert.equal(items[0].amount, -6.95);
+    assert.equal(items[0].buyerPaidAmount, 10.99);
+  });
+
+  it("não conta em dobro quando o envio vem em duas linhas", () => {
+    const { line, items } = lineList([
+      row({
+        operationId: "venda",
+        shipmentId: "e1",
+        buyerPaidShipping: 17.99,
+        feeDetails: [],
+      }),
+      row({
+        operationId: "frete",
+        shipmentId: "e1",
+        buyerPaidShipping: 17.99,
+        feeDetails: [freight(26.44)],
+      }),
+    ]);
+    assert.equal(line, -8.45);
+    assert.equal(buyerPaidShippingTotal(items), 17.99);
+  });
+
+  it("não abate envio estornado", () => {
+    const { line, items } = lineList([
+      row({
+        operationId: "v1",
+        shipmentId: "e1",
+        buyerPaidShipping: 10,
+        feeDetails: [freight(20)],
+      }),
+      row({
+        operationId: "c1",
+        operationStatus: "Cancelado",
+        shipmentId: "e1",
+        buyerPaidShipping: 10,
+        feeDetails: [freightRefund(20)],
+      }),
+    ]);
+    assert.equal(line, 0);
+    assert.equal(buyerPaidShippingTotal(items), 0);
+  });
+
+  it("abate só sobre o frete líquido quando há estorno parcial", () => {
+    const { line, items } = lineList([
+      row({
+        operationId: "v1",
+        shipmentId: "e1",
+        buyerPaidShipping: 10,
+        feeDetails: [freight(20)],
+      }),
+      row({
+        operationId: "c1",
+        shipmentId: "e1",
+        buyerPaidShipping: 10,
+        feeDetails: [freightRefund(15)],
+      }),
+    ]);
+    assert.equal(line, 0);
+    assert.equal(buyerPaidShippingTotal(items), 5);
+  });
+
+  it("nunca abate mais do que o frete cobrado", () => {
+    const { line, items } = lineList([
+      row({
+        operationId: "v1",
+        shipmentId: "e1",
+        buyerPaidShipping: 30,
+        feeDetails: [freight(20)],
+      }),
+    ]);
+    assert.equal(line, 0);
+    assert.equal(items[0].amount, 0);
+    assert.equal(items[0].buyerPaidAmount, 20);
+  });
+
+  it("não abate quando o comprador pagou e não houve cobrança", () => {
+    const { line, items } = lineList([
+      row({ shipmentId: "e1", buyerPaidShipping: 10, feeDetails: [] }),
+    ]);
+    assert.equal(line, undefined);
+    assert.deepEqual(items, []);
+  });
+
+  it("não abate linha sem número de envio", () => {
+    const { line, items } = lineList([
+      row({
+        shipmentId: null,
+        buyerPaidShipping: 10,
+        feeDetails: [freight(12)],
+      }),
+    ]);
+    assert.equal(line, -12);
+    assert.equal(items[0].buyerPaidAmount, undefined);
+  });
+
+  it("mantém a linha igual à soma da lista", () => {
+    const { line, items } = lineList([
+      row({
+        operationId: "a",
+        shipmentId: "e1",
+        buyerPaidShipping: 10.99,
+        feeDetails: [freight(17.94)],
+      }),
+      row({
+        operationId: "b",
+        shipmentId: "e2",
+        buyerPaidShipping: 0,
+        feeDetails: [freight(8.45)],
+      }),
+      row({
+        operationId: "c",
+        shipmentId: "e3",
+        buyerPaidShipping: 5.99,
+        feeDetails: [freight(14.44)],
+      }),
+    ]);
+    const sum = items.reduce((total, item) => total + item.amount, 0);
+    assert.equal(Math.round(sum * 100) / 100, line);
+    assert.equal(line, -23.85);
+    assert.equal(buyerPaidShippingTotal(items), 16.98);
+  });
+});
 
 describe("parseReconciliationWorkbook", () => {
   it("reads Por Vendas files without a DAILY_CONCILIATION sheet and does not warn", () => {

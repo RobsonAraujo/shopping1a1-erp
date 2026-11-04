@@ -5,7 +5,11 @@ import {
   parseSnapshotPayload,
   snapshotPayloadToLines,
 } from "../dre-month-data";
-import type { DreEditableLineKey } from "../dre-calculations";
+import {
+  applyReconciliationToPayload,
+  mergeSyncedSnapshot,
+  type DreEditableLineKey,
+} from "../dre-calculations";
 
 describe("emptyDreMonthSnapshotPayload", () => {
   it("returns a fully-zeroed payload with a fallback-source warning", () => {
@@ -41,6 +45,48 @@ describe("snapshotPayloadToLines", () => {
     assert.equal("billingSource" in lines, false);
     assert.equal("productCostBreakdown" in lines, false);
     assert.equal("manuallyEditedLineKeys" in lines, false);
+  });
+});
+
+describe("frete pago pelo comprador no snapshot", () => {
+  it("o valor e a anotação sobrevivem à gravação e a um novo sync", () => {
+    const reconciled = applyReconciliationToPayload(
+      emptyDreMonthSnapshotPayload(),
+      {
+        amounts: { sellerShippingMl: -6.95 },
+        breakdowns: {
+          sellerShippingMl: [
+            {
+              key: "v1",
+              sku: null,
+              title: "Cabo",
+              quantity: 1,
+              amount: -6.95,
+              buyerPaidAmount: 10.99,
+            },
+          ],
+        },
+      },
+      ["sellerShippingMl"],
+      {
+        importId: "imp-1",
+        reconciledAt: "2026-11-04T00:00:00.000Z",
+        fileName: "planilha.xlsx",
+      },
+    );
+
+    const saved = parseSnapshotPayload(JSON.parse(JSON.stringify(reconciled)));
+    assert.ok(saved);
+    assert.equal(saved.sellerShippingBreakdown?.[0]?.buyerPaidAmount, 10.99);
+
+    // O sync traz da fatura o frete cheio; a planilha continua valendo.
+    const synced = mergeSyncedSnapshot(
+      { ...emptyDreMonthSnapshotPayload(), sellerShippingMl: -17.94 },
+      saved,
+      { keepReconciliation: true, preserveLineKeys: [] },
+    );
+    assert.equal(synced.sellerShippingMl, -6.95);
+    assert.equal(synced.sellerShippingBreakdown?.[0]?.buyerPaidAmount, 10.99);
   });
 });
 

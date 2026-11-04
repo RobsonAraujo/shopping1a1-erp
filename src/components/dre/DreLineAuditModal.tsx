@@ -1,7 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertTriangle, Ban, ExternalLink, Info, Search } from "lucide-react";
+import {
+  AlertTriangle,
+  Ban,
+  ExternalLink,
+  Info,
+  Search,
+  Truck,
+} from "lucide-react";
 import {
   Sheet,
   SheetBody,
@@ -91,6 +98,11 @@ export function DreLineAuditModal({
     (sum, item) => sum + (item.cancelledAmount ?? 0),
     0,
   );
+  const buyerPaidTotal = items.reduce(
+    (sum, item) => sum + (item.buyerPaidAmount ?? 0),
+    0,
+  );
+  const lineTotal = Math.abs(items.reduce((sum, item) => sum + item.amount, 0));
 
   return (
     <Sheet
@@ -152,6 +164,21 @@ export function DreLineAuditModal({
                     canceladas no faturamento bruto), mas é abatido pela
                     linha &quot;Canceladas / devolvidas&quot; no resultado
                     final.
+                  </span>
+                </div>
+              ) : null}
+              {buyerPaidTotal > 0 ? (
+                <div className="mb-3 flex shrink-0 items-start gap-2 rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 text-xs leading-relaxed text-[var(--muted-foreground)]">
+                  <Truck className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                  <span>
+                    <span className="font-medium tabular-nums text-[var(--foreground)]">
+                      Cobrado pelo ML{" "}
+                      {formatFinancialMoney(lineTotal + buyerPaidTotal)} − Pago
+                      pelo comprador {formatFinancialMoney(buyerPaidTotal)} ={" "}
+                      {rowLabel} {formatFinancialMoney(lineTotal)}.
+                    </span>{" "}
+                    O ML cobra o frete inteiro e devolve a parte do comprador
+                    junto com a venda, então ela não saiu do seu caixa.
                   </span>
                 </div>
               ) : null}
@@ -266,6 +293,18 @@ export function DreLineAuditModal({
                                           cancelledAmountForItem,
                                         )}
                                         )
+                                      </p>
+                                    ) : null}
+                                    {(item.buyerPaidAmount ?? 0) > 0 ? (
+                                      <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-[var(--muted-foreground)]">
+                                        <Truck
+                                          className="size-3 shrink-0"
+                                          aria-hidden
+                                        />
+                                        comprador pagou{" "}
+                                        {formatFinancialMoney(
+                                          item.buyerPaidAmount ?? 0,
+                                        )}
                                       </p>
                                     ) : null}
                                   </div>

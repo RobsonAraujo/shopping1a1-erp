@@ -31,6 +31,10 @@ function addAmount(
   amounts[key] = roundMoney((amounts[key] ?? 0) + value);
 }
 
+function breakdownItemKey(row: ReconciliationRow): string {
+  return row.operationId || `${row.rowIndex}`;
+}
+
 function pushBreakdown(
   breakdowns: Partial<Record<DreEditableLineKey, DreLineBreakdownItem[]>>,
   key: DreEditableLineKey,
@@ -39,7 +43,7 @@ function pushBreakdown(
 ) {
   if (amount === 0) return;
   const list = breakdowns[key] ?? [];
-  const itemKey = row.operationId || `${row.rowIndex}`;
+  const itemKey = breakdownItemKey(row);
   const existing = list.find((item) => item.key === itemKey);
   if (existing) {
     existing.amount = roundMoney(existing.amount + amount);
@@ -92,6 +96,76 @@ function pushExcluded(
   excluded.set(mapKey, current);
 }
 
+/** O frete de um envio na planilha, para abater o que o comprador pagou. */
+type ShipmentFreight = {
+  /** Cobranças menos estornos. Positivo = saiu do vendedor. */
+  charged: number;
+  /** A mesma venda pode vir em duas linhas com o mesmo valor: vale o maior, nunca a soma. */
+  buyerPaid: number;
+  /** Operação da maior cobrança: é nela que o abatimento fica anotado. */
+  operationKey: string | null;
+  largestCharge: number;
+};
+
+function trackShipmentFreight(
+  shipments: Map<string, ShipmentFreight>,
+  row: ReconciliationRow,
+  charge: number,
+) {
+  if (!row.shipmentId) return;
+  const shipment = shipments.get(row.shipmentId) ?? {
+    charged: 0,
+    buyerPaid: 0,
+    operationKey: null,
+    largestCharge: 0,
+  };
+  shipment.charged = roundMoney(shipment.charged + charge);
+  shipment.buyerPaid = Math.max(shipment.buyerPaid, row.buyerPaidShipping ?? 0);
+  if (charge > shipment.largestCharge) {
+    shipment.largestCharge = charge;
+    shipment.operationKey = breakdownItemKey(row);
+  }
+  shipments.set(row.shipmentId, shipment);
+}
+
+/**
+ * Quando o comprador paga parte do frete, o ML cobra o frete inteiro do vendedor
+ * e devolve essa parte junto com a venda. Faturamento não inclui frete, então a
+ * cobrança inteira em Frete vendedor seria custo que não saiu do caixa. Abate o
+ * que o comprador pagou, sem passar do frete líquido do envio na planilha: envio
+ * estornado ou sem cobrança não abate nada.
+ */
+function abateBuyerPaidShipping(
+  amounts: Partial<Record<DreEditableLineKey, number>>,
+  breakdowns: Partial<Record<DreEditableLineKey, DreLineBreakdownItem[]>>,
+  shipments: Map<string, ShipmentFreight>,
+) {
+  const itemByKey = new Map(
+    (breakdowns.sellerShippingMl ?? []).map((item) => [item.key, item]),
+  );
+  for (const shipment of shipments.values()) {
+    const credit = roundMoney(
+      Math.min(shipment.buyerPaid, Math.max(0, shipment.charged)),
+    );
+    const item = shipment.operationKey
+      ? itemByKey.get(shipment.operationKey)
+      : undefined;
+    if (credit <= 0 || !item) continue;
+    addAmount(amounts, "sellerShippingMl", credit);
+    item.amount = roundMoney(item.amount + credit);
+    item.buyerPaidAmount = roundMoney((item.buyerPaidAmount ?? 0) + credit);
+  }
+}
+
+/** Total de frete pago pelo comprador já abatido de Frete vendedor. */
+export function buyerPaidShippingTotal(
+  items: readonly DreLineBreakdownItem[] | null | undefined,
+): number {
+  return roundMoney(
+    (items ?? []).reduce((sum, item) => sum + (item.buyerPaidAmount ?? 0), 0),
+  );
+}
+
 export type AggregateReconciliationOptions = {
   /** `mlDifalCountsAsFee(regime)`: DIFAL do ML em Tarifas especiais ou fora. */
   difalCountsAsFee: boolean;
@@ -103,6 +177,7 @@ export type AggregateReconciliationOptions = {
  * linhas e vai para `excludedFees`, com o caminho para o usuário achar a
  * cobrança. Tarifas especiais sai sempre (0 quando a planilha não tem): a
  * planilha governa a linha, senão o valor anterior dela continuaria valendo.
+ * Frete vendedor sai sem o que o comprador pagou (`abateBuyerPaidShipping`).
  */
 export function aggregateReconciliationRows(
   rows: ReconciliationRow[],
@@ -115,6 +190,7 @@ export function aggregateReconciliationRows(
     {};
   const warnings: ReconciliationParseWarning[] = [];
   const excluded = new Map<string, ExcludedFeeSummary>();
+  const shipments = new Map<string, ShipmentFreight>();
 
   for (const row of rows) {
     const type = normalizeType(row.operationType);
@@ -123,6 +199,7 @@ export function aggregateReconciliationRows(
       continue;
     }
 
+    let freightCharge = 0;
     for (const fee of row.feeDetails) {
       const { kind, lineKey, credit } = resolveFeeLineKey(fee.name);
       if (kind === "skipped") continue;
@@ -132,6 +209,7 @@ export function aggregateReconciliationRows(
       if (kind === "line" && lineKey) {
         addAmount(amounts, lineKey, signed);
         pushBreakdown(breakdowns, lineKey, row, signed);
+        if (lineKey === "sellerShippingMl") freightCharge -= signed;
       } else if (kind === "difal" && options.difalCountsAsFee) {
         addAmount(amounts, "specialFeesMl", signed);
         pushBreakdown(breakdowns, "specialFeesMl", row, signed);
@@ -143,7 +221,10 @@ export function aggregateReconciliationRows(
         pushExcluded(excluded, "unrecognized", row, fee, signed);
       }
     }
+    trackShipmentFreight(shipments, row, freightCharge);
   }
+
+  abateBuyerPaidShipping(amounts, breakdowns, shipments);
 
   for (const key of Object.keys(breakdowns) as DreEditableLineKey[]) {
     const list = breakdowns[key];

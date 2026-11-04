@@ -16,7 +16,10 @@ import {
 } from "@/lib/dre/dre-month-data";
 import { loadDreYearView } from "@/lib/dre/dre-year-data";
 import { getCompanySettings } from "@/lib/products/product-data";
-import { aggregateReconciliationRows } from "@/lib/dre/reconciliation/aggregate";
+import {
+  aggregateReconciliationRows,
+  buyerPaidShippingTotal,
+} from "@/lib/dre/reconciliation/aggregate";
 import { assertSheetMatchesMonth } from "@/lib/dre/reconciliation/sheet-period";
 import {
   compareReconciliation,
@@ -152,6 +155,9 @@ function buildReview(
     matched: comparison.matched,
     unrecognizedFees: aggregation.unrecognizedFees,
     excludedFees: aggregation.excludedFees,
+    buyerPaidShipping: buyerPaidShippingTotal(
+      aggregation.breakdowns.sellerShippingMl,
+    ),
     warnings: [
       ...extraWarnings,
       ...parseWarnings(row.parseWarningsJson),

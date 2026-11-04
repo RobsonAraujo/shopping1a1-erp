@@ -209,7 +209,7 @@ export const DRE_STATIC_ROWS: Extract<DreTableRow, { type: "static" }>[] = [
     indent: true,
     lineKey: "sellerShippingMl",
     methodology:
-      "Custo de frete líquido do vendedor (envio − estornos/descontos de reputação). Mesma regra da Tarifa ML quanto ao alinhamento fatura × mês civil.",
+      "Custo de frete líquido do vendedor (envio − estornos/descontos de reputação). Nos meses conciliados com a planilha Por Vendas, o frete pago pelo comprador também é abatido: o ML cobra o frete inteiro e devolve essa parte junto com a venda. Mesma regra da Tarifa ML quanto ao alinhamento fatura × mês civil.",
   },
   {
     type: "static",

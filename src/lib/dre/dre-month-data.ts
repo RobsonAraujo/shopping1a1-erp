@@ -2050,6 +2050,10 @@ export function parseSnapshotPayload(raw: unknown): DreMonthSnapshotPayload | nu
               item.cancelledAmount !== undefined
                 ? numFrom(item.cancelledAmount)
                 : undefined,
+            buyerPaidAmount:
+              item.buyerPaidAmount !== undefined
+                ? numFrom(item.buyerPaidAmount)
+                : undefined,
           }))
       : undefined;
 

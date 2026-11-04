@@ -184,6 +184,12 @@ export type DreLineBreakdownItem = {
    */
   cancelledQuantity?: number | null;
   cancelledAmount?: number;
+  /**
+   * Frete vendedor: parte da cobrança que o comprador pagou (positivo). O ML
+   * cobra o frete inteiro e devolve essa parte junto com a venda, então ela já
+   * está descontada de `amount`. Cobrado pelo ML = |amount| + este valor.
+   */
+  buyerPaidAmount?: number;
 };
 
 /** Linhas do snapshot que podem ser editadas manualmente na grade do DRE. */
@@ -1202,6 +1208,11 @@ export function mergeLineBreakdowns(
           (existing.cancelledQuantity ?? 0) + (item.cancelledQuantity ?? 0);
         existing.cancelledAmount = roundMoney(
           (existing.cancelledAmount ?? 0) + (item.cancelledAmount ?? 0),
+        );
+      }
+      if (item.buyerPaidAmount) {
+        existing.buyerPaidAmount = roundMoney(
+          (existing.buyerPaidAmount ?? 0) + item.buyerPaidAmount,
         );
       }
     }

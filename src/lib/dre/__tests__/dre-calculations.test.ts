@@ -922,6 +922,15 @@ describe("mergeLineBreakdowns", () => {
     assert.equal(merged[0].quantity, 4);
   });
 
+  it("sums the buyer-paid shipping noted on each month", () => {
+    const merged = mergeLineBreakdowns([
+      [item({ amount: -6.95, buyerPaidAmount: 10.99 })],
+      [item({ amount: -8.45 })],
+      [item({ amount: -7.15, buyerPaidAmount: 5.99 })],
+    ]);
+    assert.equal(merged[0].buyerPaidAmount, 16.98);
+  });
+
   it("sorts descending by amount", () => {
     const merged = mergeLineBreakdowns([
       [item({ key: "item:A", amount: 5 }), item({ key: "item:B", amount: 50 })],

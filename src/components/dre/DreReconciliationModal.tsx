@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ExternalLink, Upload } from "lucide-react";
+import { ChevronDown, ExternalLink, Truck, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { FormSelect } from "@/components/ui/form-select";
@@ -426,6 +426,19 @@ export function DreReconciliationModal({
               )}
 
               <DreReconciliationExcludedFees fees={review.excludedFees ?? []} />
+
+              {review.buyerPaidShipping > 0 ? (
+                <p className="flex items-start gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-xs leading-relaxed text-[var(--muted-foreground)]">
+                  <Truck className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                  <span>
+                    Frete vendedor já vem sem os{" "}
+                    <span className="font-medium tabular-nums text-[var(--foreground)]">
+                      {formatFinancialMoney(review.buyerPaidShipping)}
+                    </span>{" "}
+                    que os compradores pagaram: essa parte não saiu do seu caixa.
+                  </span>
+                </p>
+              ) : null}
 
               {review.matched.length > 0 ? (
                 <div className="rounded-lg border border-[var(--border)]">
