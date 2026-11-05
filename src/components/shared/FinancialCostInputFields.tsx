@@ -20,17 +20,19 @@ function FieldShell({
   label,
   hint,
   className,
+  labelClassName: labelOverride,
   children,
 }: {
   id: string;
   label: string;
   hint?: ReactNode;
   className?: string;
+  labelClassName?: string;
   children: ReactNode;
 }) {
   return (
     <div className={cn("space-y-1.5", className)}>
-      <label htmlFor={id} className={labelClassName}>
+      <label htmlFor={id} className={cn(labelClassName, labelOverride)}>
         {label}
       </label>
       {children}
@@ -51,6 +53,9 @@ type MaskedFieldProps = {
   readOnly?: boolean;
   hint?: ReactNode;
   className?: string;
+  /** Para o rótulo acompanhar os outros campos de um formulário que não usa o
+   * estilo padrão daqui (mesmo prop do `DatePicker`). */
+  labelClassName?: string;
 };
 
 export function MaskedMoneyField({
@@ -61,11 +66,19 @@ export function MaskedMoneyField({
   readOnly = false,
   hint,
   className,
+  labelClassName: labelOverride,
 }: MaskedFieldProps) {
   return (
-    <FieldShell id={id} label={label} hint={hint} className={className}>
+    <FieldShell
+      id={id}
+      label={label}
+      hint={hint}
+      className={className}
+      labelClassName={labelOverride}
+    >
       <NumericFormat
         id={id}
+        inputMode="decimal"
         value={value ?? ""}
         onValueChange={
           readOnly

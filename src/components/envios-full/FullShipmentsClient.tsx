@@ -5,6 +5,7 @@ import { Download, Plus, Truck } from "lucide-react";
 import { FullShipmentImportOverlay } from "@/components/envios-full/FullShipmentImportOverlay";
 import { FullShipmentsTable } from "@/components/envios-full/full-shipments-table";
 import { formatShipmentDate } from "@/components/envios-full/full-shipments-table/shared";
+import { MaskedMoneyField } from "@/components/shared/FinancialCostInputFields";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -38,7 +39,8 @@ type FullShipmentsClientProps = {
 
 type ShipmentFormState = {
   shippedAt: string;
-  totalCost: string;
+  /** Em reais. `null` é campo vazio, que é diferente de digitar 0. */
+  totalCost: number | null;
   totalUnits: string;
   notes: string;
 };
@@ -55,7 +57,7 @@ function emptyForm(): ShipmentFormState {
   const dd = String(today.getDate()).padStart(2, "0");
   return {
     shippedAt: `${yyyy}-${mm}-${dd}`,
-    totalCost: "",
+    totalCost: null,
     totalUnits: "",
     notes: "",
   };
@@ -68,23 +70,22 @@ function formFromShipment(shipment: FullShipmentRecord): ShipmentFormState {
   const dd = String(date.getUTCDate()).padStart(2, "0");
   return {
     shippedAt: `${yyyy}-${mm}-${dd}`,
-    totalCost: String(shipment.totalCost),
+    totalCost: shipment.totalCost,
     totalUnits: String(shipment.totalUnits),
     notes: shipment.notes ?? "",
   };
 }
 
 function parsePreviewCostPerUnit(
-  totalCost: string,
+  totalCost: number | null,
   totalUnits: string,
 ): number | null {
-  const cost = Number(totalCost);
   const units = Number(totalUnits);
-  if (!Number.isFinite(cost) || !Number.isInteger(units) || units <= 0) {
+  if (totalCost === null || !Number.isInteger(units) || units <= 0) {
     return null;
   }
   try {
-    return computeCostPerUnit(cost, units);
+    return computeCostPerUnit(totalCost, units);
   } catch {
     return null;
   }
@@ -302,13 +303,15 @@ export function FullShipmentsClient({
   }
 
   async function handleSave() {
-    const totalCost = Number(form.totalCost);
+    const { totalCost } = form;
     const totalUnits = Number(form.totalUnits);
     if (!form.shippedAt) {
       setError("Informe a data do envio.");
       return;
     }
-    if (!Number.isFinite(totalCost) || totalCost < 0) {
+    // Campo vazio é recusado: com o `Number("")` de antes ele virava 0 e salvava
+    // R$ 0 sem avisar. Quem quer zero digita 0.
+    if (totalCost === null || !Number.isFinite(totalCost) || totalCost < 0) {
       setError("Informe um custo total válido.");
       return;
     }
@@ -628,24 +631,13 @@ function ShipmentModal({
             />
           </div>
 
-          <div>
-            <label
-              htmlFor="shipment-cost"
-              className="block text-sm font-medium text-[var(--foreground)]"
-            >
-              Custo total pago (R$)
-            </label>
-            <input
-              id="shipment-cost"
-              type="number"
-              inputMode="decimal"
-              min={0}
-              step="0.01"
-              value={form.totalCost}
-              onChange={(e) => onChange({ ...form, totalCost: e.target.value })}
-              className="mt-1.5 h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-base tabular-nums text-[var(--foreground)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] sm:h-10 sm:text-sm"
-            />
-          </div>
+          <MaskedMoneyField
+            id="shipment-cost"
+            label="Custo total pago (R$)"
+            labelClassName="text-sm font-medium text-[var(--foreground)]"
+            value={form.totalCost}
+            onValueChange={(totalCost) => onChange({ ...form, totalCost })}
+          />
 
           <div>
             <label

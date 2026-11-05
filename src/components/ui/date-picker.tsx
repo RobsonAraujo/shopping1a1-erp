@@ -127,9 +127,13 @@ export function DatePicker({
       ) : (
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>{triggerButton}</PopoverTrigger>
+          {/* `z-[130]`, como no `Combobox`: o default do popover (100) fica
+              abaixo do `Sheet` (110), e o calendário abria atrás do modal, sem
+              receber clique. Sem `modal` de propósito: o calendário não rola,
+              então não precisa da trava de scroll aninhada. */}
           <PopoverContent
             align="start"
-            className="w-auto max-w-none p-0"
+            className="z-[130] w-auto max-w-none p-0"
             data-slot="popover-content"
           >
             {calendar}

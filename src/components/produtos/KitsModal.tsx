@@ -59,6 +59,14 @@ type SkuComboboxFieldProps = {
   className?: string;
 };
 
+/**
+ * Cabe sem rolagem de propósito. Dentro de um `Sheet` a roda do mouse fica
+ * bloqueada fora do conteúdo do modal, e o `modal` do Popover (que resolve isso
+ * no `Combobox`) tiraria o foco deste campo, onde o usuário está digitando.
+ * Quem não acha o item na lista refina a busca.
+ */
+const SKU_OPTIONS_CAP = 6;
+
 function SkuComboboxField({
   value,
   onValueChange,
@@ -71,8 +79,8 @@ function SkuComboboxField({
   const filtered = query
     ? options
         .filter((o) => (o.sku ?? o.mlItemId).toLowerCase().includes(query))
-        .slice(0, 20)
-    : options.slice(0, 20);
+        .slice(0, SKU_OPTIONS_CAP)
+    : options.slice(0, SKU_OPTIONS_CAP);
 
   return (
     <Popover open={open && filtered.length > 0} onOpenChange={setOpen}>
@@ -91,13 +99,15 @@ function SkuComboboxField({
           className={className}
         />
       </PopoverAnchor>
+      {/* `z-[130]`, como no `Combobox`: o default do popover (100) fica abaixo do
+          `Sheet` (110), e a lista abria atrás do modal, sem receber clique. */}
       <PopoverContent
         align="start"
         sideOffset={4}
-        className="w-[var(--radix-popover-trigger-width)] max-w-none p-0"
+        className="z-[130] w-[var(--radix-popover-trigger-width)] max-w-none p-0"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
-        <ul className="max-h-48 overflow-y-auto py-1">
+        <ul className="py-1">
           {filtered.map((option) => (
             <li key={option.mlItemId}>
               <button
