@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { afterEach, beforeEach, describe, it, mock } from "node:test";
+import { before, afterEach, beforeEach, describe, it, mock } from "node:test";
 import { act, renderIntoDocument } from "@/test-setup/render";
 import { clearWidgetFetch } from "@/lib/home/dashboard/widget-fetch-cache";
 import { HomeDashboardProvider } from "@/components/home/dashboard/HomeDashboardProvider";
@@ -100,6 +100,19 @@ async function renderGrid(options: {
 }
 
 describe("HomeWidgetGrid", () => {
+  // Widgets com `next/dynamic` só renderizam depois do `import()`, e o primeiro
+  // precisa compilar o arquivo: sob carga isso passa do `flush()` e o card ainda
+  // não está na tela quando o teste olha. Carregar antes deixa o `import()` imediato.
+  before(async () => {
+    await Promise.all([
+      import("@/components/home/dashboard/widgets/HomeWidgetShortcuts"),
+      import("@/components/home/dashboard/widgets/HomeWidgetDreResult"),
+      import("@/components/home/dashboard/widgets/HomeWidgetPma"),
+      import("@/components/home/dashboard/widgets/HomeWidgetCatalogoElegivel"),
+      import("@/components/home/dashboard/widgets/HomeWidgetPromocoes"),
+    ]);
+  });
+
   let restoreObserver: () => void;
 
   beforeEach(() => {

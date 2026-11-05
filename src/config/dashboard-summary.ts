@@ -14,6 +14,8 @@ export const dashboardSummaryConfig = {
   promotionScanBudgetMs: 60_000,
   /** Teto da lista "sem promoção". O total real vai em `withoutPromotionCount`. */
   promotionWithoutListMax: 200,
+  /** Teto da lista de elegíveis para catálogo. O total real vai em `total`. */
+  catalogEligibleListMax: 200,
 } as const;
 
 /**
@@ -21,5 +23,8 @@ export const dashboardSummaryConfig = {
  * Configurações precisa dela para invalidar esse cache ao salvar.
  */
 export const PROMOTION_SUMMARY_ENDPOINT = "/api/dashboard/summary/promotions";
+
+/** Rota dos anúncios elegíveis para catálogo. */
+export const CATALOG_ELIGIBLE_ENDPOINT = "/api/dashboard/widgets/catalog-eligible";
 
 export type DashboardSummaryConfig = typeof dashboardSummaryConfig;

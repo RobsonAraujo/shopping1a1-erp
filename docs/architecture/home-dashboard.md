@@ -134,6 +134,7 @@ lista grande de volta em todo acesso e desfaria a economia.
 | ↳ dizem **quais meses** | — | zero: a leitura de conciliações devolve os meses em vez de um `count`, e os campos já estavam no índice | — |
 | **Catálogo perdendo** | `core` | 2 queries: as **5 piores** linhas (ordenadas pelo gap no banco) + um `count` | **cron de catálogo** — zero ML na Home |
 | **Abaixo do PMA** | `isolated` | 1 query + `⌈N/20⌉ + N` **chamadas ML** (N = produtos com PMA) | ML, ao vivo |
+| **Elegíveis para catálogo** | `isolated` | `⌈E/50⌉ + ⌈E/20⌉` **chamadas ML** (E = elegíveis) | ML, ao vivo, filtrado pela tag |
 | **Promoções** | `isolated` | `⌈A/50⌉ + ⌈A/20⌉ + M + P` **chamadas ML** (zero se nada estiver monitorado) | ML, ao vivo |
 | **Onde você vai trabalhar hoje** | `local` | zero rede | o próprio navegador |
 | **Notas rápidas** | `local` | zero rede | o próprio navegador |
@@ -155,6 +156,12 @@ A lista "Sem promoção" vem inteira no mesmo payload (mais vendidos primeiro, a
 linhas custaria centenas de chamadas. Consulta que falha **não** conta como sem
 promoção: vira aviso. O resultado fica no cache por aba do widget, e salvar as
 configurações o invalida.
+
+Elegíveis para catálogo fica fora da faixa "Precisa da sua atenção" porque ela só
+deriva do snapshot, que não pode chamar o ML (invariante 1): o próprio card é o
+aviso, com contador no título. A busca usa `tags=catalog_listing_eligible`, e o
+loader confere a tag em cada anúncio: se o ML ignorasse o parâmetro, a busca
+devolveria todos os ativos e o card diria que tudo é elegível.
 
 ### Como a invisibilidade é expressa
 

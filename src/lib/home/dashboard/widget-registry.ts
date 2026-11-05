@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  BadgeCheck,
   Boxes,
   CheckSquare,
   Kanban,
@@ -15,7 +16,10 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react";
-import { PROMOTION_SUMMARY_ENDPOINT } from "@/config/dashboard-summary";
+import {
+  CATALOG_ELIGIBLE_ENDPOINT,
+  PROMOTION_SUMMARY_ENDPOINT,
+} from "@/config/dashboard-summary";
 import type { CategoryTone } from "@/lib/ui/tone";
 import type { HomeWidgetDataKey } from "@/lib/home/dashboard/widget-data-keys";
 
@@ -295,17 +299,19 @@ export const HOME_WIDGET_DEFINITIONS: readonly HomeWidgetDefinition[] = [
     priority: "p0",
     href: "/dashboard/catalog-report",
   },
-  // ── Os dois únicos widgets que batem no Mercado Livre a cada carregamento ──
+  // ── Os únicos widgets que batem no Mercado Livre a cada carregamento ──
   //
   // Todo o resto da Home é banco (ou localStorage): o padrão custa ~25 KB de
-  // egress por load. Estes dois custam chamadas ao ML, que é o recurso caro —
-  // tempo de função e limite de taxa, não bytes.
+  // egress por load. Estes custam chamadas ao ML, que é o recurso caro — tempo de
+  // função e limite de taxa, não bytes. Os elegíveis para catálogo são os mais
+  // baratos: o próprio ML filtra pela tag, então o custo escala com quantos
+  // anúncios estão elegíveis, não com o catálogo do seller.
   //
   // Medido numa org com 40 anúncios ativos (11 próprios) e 2 PMAs cadastrados:
   //   pma:       1 chamada por produto com PMA        → ~3 hoje
   //   promoções: 1-2 por anúncio próprio ativo        → ~20 hoje
   //
-  // Os dois escalam com o catálogo do seller: num seller de 200 anúncios
+  // PMA e promoções escalam com o catálogo do seller: num seller de 200 anúncios
   // próprios, promoções passa de ~300 chamadas POR ABERTURA da Home (é por isso
   // que a rota tem `maxDuration = 300`).
   //
@@ -329,6 +335,21 @@ export const HOME_WIDGET_DEFINITIONS: readonly HomeWidgetDefinition[] = [
     layout: "card",
     defaultColumn: 1,
     source: { kind: "isolated", endpoint: "/api/dashboard/widgets/pma" },
+    priority: "p1",
+  },
+  {
+    id: "catalogo-elegivel",
+    title: "Elegíveis para catálogo",
+    description:
+      "Anúncios próprios que o Mercado Livre marcou como elegíveis para virar catálogo.",
+    category: "atencao",
+    icon: BadgeCheck,
+    tone: "primary",
+    defaultVisible: true,
+    defaultOrder: 105,
+    layout: "card",
+    defaultColumn: 1,
+    source: { kind: "isolated", endpoint: CATALOG_ELIGIBLE_ENDPOINT },
     priority: "p1",
   },
   {

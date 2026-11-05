@@ -47,7 +47,7 @@ export async function fetchUserItemsSearch(
   userId: number,
   offset: number,
   limit: number,
-  options?: { status?: string; catalog_listing?: boolean },
+  options?: { status?: string; catalog_listing?: boolean; tags?: string },
 ): Promise<ItemsSearchResponse> {
   const { apiBase } = getMercadoLibreConfig();
   const u = new URL(`${apiBase}/users/${userId}/items/search`);
@@ -60,6 +60,7 @@ export async function fetchUserItemsSearch(
       options.catalog_listing ? "true" : "false",
     );
   }
+  if (options?.tags) u.searchParams.set("tags", options.tags);
 
   const res = await fetch(u.toString(), {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -932,7 +933,7 @@ export async function fetchUnitsSoldForItemsInWindow(
 export async function fetchAllUserItemIds(
   accessToken: string,
   userId: number,
-  options?: { status?: string; catalog_listing?: boolean },
+  options?: { status?: string; catalog_listing?: boolean; tags?: string },
 ): Promise<string[]> {
   const ids: string[] = [];
   let offset = 0;

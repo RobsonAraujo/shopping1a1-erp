@@ -12,6 +12,7 @@ import {
   createContext,
   useContext,
   useId,
+  useState,
   type ReactNode,
   type SyntheticEvent,
 } from "react";
@@ -308,6 +309,10 @@ export function HomeWidgetCard({
           // alça deixou de ser ativador e passou a abrir o menu de mover — a
           // alternativa que a diretriz de acessibilidade deles pede.
           <HomeWidgetMoveMenu widgetId={definitionId} />
+        ) : pending ? (
+          // O card em skeleton não se arrasta, mas reserva o lugar do menu: sem
+          // isso a seta do header pularia para o lado quando o dado chega.
+          <span aria-hidden className="size-8 shrink-0" />
         ) : null}
       </div>
 
@@ -629,6 +634,44 @@ export function HomeWidgetList({
           ) : (
             `+ ${hiddenCount.toLocaleString("pt-BR")} item(ns)`
           )}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * Prévia de 5 linhas para o card que já tem a lista em mão. O "Ver todos" expande
+ * a partir desse dado, com rolagem: buscar de novo para mostrar as outras linhas
+ * custaria uma varredura no Mercado Livre. O estado é efêmero de propósito.
+ */
+export function HomeWidgetExpandableList<T>({
+  rows,
+  total,
+  renderRow,
+}: {
+  rows: T[];
+  /** Pode passar de `rows.length` quando a lista tem teto. */
+  total: number;
+  renderRow: (row: T) => ReactNode;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? rows : rows.slice(0, HOME_WIDGET_LIST_CAP);
+
+  return (
+    <>
+      <HomeWidgetList
+        hiddenCount={rows.length - visible.length}
+        moreTotal={total}
+        onMore={() => setExpanded(true)}
+        scroll={expanded}
+      >
+        {visible.map(renderRow)}
+      </HomeWidgetList>
+      {expanded && total > rows.length ? (
+        <p className="mt-2 text-xs text-[var(--muted-foreground)]">
+          Mostrando os {rows.length.toLocaleString("pt-BR")} mais vendidos de{" "}
+          {total.toLocaleString("pt-BR")}.
         </p>
       ) : null}
     </>

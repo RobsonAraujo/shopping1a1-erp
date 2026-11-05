@@ -45,13 +45,7 @@ function CoreWidgetFallback({ id }: { id: string }) {
   if (id === "onboarding") return null;
   return (
     <HomeWidgetDragProvider value={NOT_DRAGGABLE}>
-      <HomeWidgetCard
-        definitionId={id}
-        pending
-        // Reserva o espaço do menu de mover, que o card real tem: sem isso a seta
-        // do header pularia para o lado quando o dado chega.
-        actions={<span aria-hidden className="block size-8" />}
-      />
+      <HomeWidgetCard definitionId={id} pending />
     </HomeWidgetDragProvider>
   );
 }
@@ -85,6 +79,14 @@ const HomeWidgetPma = dynamic(
   { loading: WidgetSkeleton },
 );
 
+const HomeWidgetCatalogoElegivel = dynamic(
+  () =>
+    import("@/components/home/dashboard/widgets/HomeWidgetCatalogoElegivel").then(
+      (m) => m.HomeWidgetCatalogoElegivel,
+    ),
+  { loading: WidgetSkeleton },
+);
+
 const HomeWidgetPromocoes = dynamic(
   () =>
     import("@/components/home/dashboard/widgets/HomeWidgetPromocoes").then(
@@ -111,6 +113,7 @@ const RENDERERS: Record<string, ComponentType> = {
   pendencias: HomeWidgetPendings,
   "catalogo-perdendo": HomeWidgetCatalogoPerdendo,
   pma: HomeWidgetPma,
+  "catalogo-elegivel": HomeWidgetCatalogoElegivel,
   promocoes: HomeWidgetPromocoes,
   atalhos: HomeWidgetShortcuts,
 };

@@ -109,6 +109,8 @@ const API_ERROR_MESSAGES: Record<string, string> = {
   wholesale_apply_failed: "Não foi possível aplicar os preços de atacado.",
   promotion_summary_failed: "Não foi possível carregar o resumo de promoções.",
   pma_alerts_failed: "Não foi possível carregar os anúncios abaixo do PMA.",
+  catalog_eligible_failed:
+    "Não foi possível carregar os anúncios elegíveis para catálogo.",
   finance_failed: "Não foi possível carregar o resultado do mês.",
   taxes_failed: "Não foi possível carregar os dados de faturamento por SKU.",
   stock_failed: "Não foi possível carregar o valor do estoque.",

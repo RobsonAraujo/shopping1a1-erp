@@ -1,13 +1,12 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useInView } from "@/hooks/use-in-view";
 import { useWidgetFetch } from "@/hooks/use-widget-fetch";
 import {
-  HOME_WIDGET_LIST_CAP,
   HomeWidgetCard,
   HomeWidgetEmpty,
-  HomeWidgetList,
+  HomeWidgetExpandableList,
   HomeWidgetListRow,
 } from "@/components/home/dashboard/HomeWidgetCard";
 import { UserFeedback } from "@/components/ui/user-feedback";
@@ -28,44 +27,6 @@ function daysUntilLabel(days: number | null): string {
 
 function joinSubtitle(parts: Array<string | null | false>): string {
   return parts.filter(Boolean).join(" · ");
-}
-
-/**
- * Lista com prévia de 5 linhas. O "Ver todos" expande a partir do dado que já
- * veio, com rolagem: repetir a varredura para mostrar as outras linhas custaria
- * centenas de chamadas ao Mercado Livre. O estado é efêmero de propósito.
- */
-function PromotionList({
-  rows,
-  total,
-  renderRow,
-}: {
-  rows: PromotionSummaryRow[];
-  /** Pode passar de `rows.length`: a lista "sem promoção" tem teto. */
-  total: number;
-  renderRow: (row: PromotionSummaryRow) => ReactNode;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const visible = expanded ? rows : rows.slice(0, HOME_WIDGET_LIST_CAP);
-
-  return (
-    <>
-      <HomeWidgetList
-        hiddenCount={rows.length - visible.length}
-        moreTotal={total}
-        onMore={() => setExpanded(true)}
-        scroll={expanded}
-      >
-        {visible.map(renderRow)}
-      </HomeWidgetList>
-      {expanded && total > rows.length ? (
-        <p className="mt-2 text-xs text-[var(--muted-foreground)]">
-          Mostrando os {rows.length.toLocaleString("pt-BR")} mais vendidos de{" "}
-          {total.toLocaleString("pt-BR")}.
-        </p>
-      ) : null}
-    </>
-  );
 }
 
 function PromotionGroup({
@@ -210,7 +171,7 @@ export function HomeWidgetPromocoes() {
               count={expiringSoon.length}
             >
               {expiringSoon.length > 0 ? (
-                <PromotionList
+                <HomeWidgetExpandableList
                   rows={expiringSoon}
                   total={expiringSoon.length}
                   renderRow={(row) => <ExpiringRow key={row.mlItemId} row={row} />}
@@ -226,7 +187,7 @@ export function HomeWidgetPromocoes() {
 
             <PromotionGroup title="Sem promoção" count={withoutTotal}>
               {withoutPromotion.length > 0 ? (
-                <PromotionList
+                <HomeWidgetExpandableList
                   rows={withoutPromotion}
                   total={withoutTotal}
                   renderRow={(row) => (
