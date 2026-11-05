@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  use,
   useCallback,
   useContext,
   useEffect,
@@ -37,7 +38,8 @@ import { useHomeWidgetData } from "@/hooks/use-home-widget-data";
  * Três contextos separados, e isso é a decisão de performance central da
  * Home.
  *
- * - `CoreContext`: o snapshot do servidor. Criado uma vez, **nunca muda**.
+ * - `CoreContext`: o snapshot do servidor. Chega por stream como promise (a
+ *   página não espera por ele) e **nunca muda** depois de resolvido.
  * - `DataContext`: as slices do batch. Muda quando um fetch resolve.
  * - `LayoutContext`: as preferências. Muda ao personalizar.
  *
@@ -71,7 +73,16 @@ type DataContextValue = {
   reload: (keys?: readonly HomeWidgetDataKey[]) => void;
 };
 
-const CoreContext = createContext<HomeCoreSnapshot | null>(null);
+type HomeCoreSource = HomeCoreSnapshot | Promise<HomeCoreSnapshot>;
+
+function isCorePromise(core: HomeCoreSource): core is Promise<HomeCoreSnapshot> {
+  return typeof (core as Promise<HomeCoreSnapshot>).then === "function";
+}
+
+/** Referência estável: enquanto o snapshot não chega, nenhuma chave é pedida. */
+const NO_DATA_KEYS: readonly HomeWidgetDataKey[] = [];
+
+const CoreContext = createContext<HomeCoreSource | null>(null);
 const SellerCardContext = createContext<ReactNode>(null);
 const LayoutContext = createContext<LayoutContextValue | null>(null);
 const DataContext = createContext<DataContextValue | null>(null);
@@ -84,7 +95,9 @@ export function HomeDashboardProvider({
   repository,
   children,
 }: {
-  core: HomeCoreSnapshot;
+  /** A página entrega a promise, para não esperar o snapshot antes do primeiro
+   * byte. Objeto pronto também vale (testes). */
+  core: HomeCoreSource;
   /** Card de Vendas renderizado no servidor (dentro de `<Suspense>`), para o
    * `fetchMe` streamar em vez de bloquear a página. */
   sellerCard?: ReactNode;
@@ -157,10 +170,27 @@ export function HomeDashboardProvider({
     [preferences, view.id],
   );
 
+  // O batch só sai depois do snapshot. Com a página sem esperar por ele, o client
+  // hidrata antes de as queries terminarem, e o batch disputaria o mesmo pool de
+  // conexões. Mantém a ordem de carga que a Home sempre teve; os cards do batch
+  // ficam em "carregando" nesse intervalo.
+  const [coreReady, setCoreReady] = useState(() => !isCorePromise(core));
+  useEffect(() => {
+    if (!isCorePromise(core)) return;
+    let active = true;
+    const markReady = () => {
+      if (active) setCoreReady(true);
+    };
+    void core.then(markReady, markReady);
+    return () => {
+      active = false;
+    };
+  }, [core]);
+
   // Só as chaves dos widgets VISÍVEIS: widget escondido não gera request.
   const dataKeys = useMemo(
-    () => homeWidgetDataKeysFor(visibleIds),
-    [visibleIds],
+    () => (coreReady ? homeWidgetDataKeysFor(visibleIds) : NO_DATA_KEYS),
+    [coreReady, visibleIds],
   );
   const widgetData = useHomeWidgetData(dataKeys);
 
@@ -206,12 +236,16 @@ export function HomeDashboardProvider({
   );
 }
 
+/**
+ * Suspende até o snapshot chegar: quem chama precisa estar dentro de um
+ * `<Suspense>`, que é o que `HomeWidgetRenderer` põe em volta dos widgets `core`.
+ */
 export function useHomeCore(): HomeCoreSnapshot {
   const core = useContext(CoreContext);
   if (!core) {
     throw new Error("useHomeCore precisa estar dentro de HomeDashboardProvider");
   }
-  return core;
+  return isCorePromise(core) ? use(core) : core;
 }
 
 export function useHomeSellerCard(): ReactNode {

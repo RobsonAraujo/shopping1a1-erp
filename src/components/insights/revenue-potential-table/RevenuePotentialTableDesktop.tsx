@@ -138,6 +138,7 @@ export function RevenuePotentialTableDesktop({
               <td className="max-w-xs py-2 pr-3">
                 <div className="flex min-w-0 items-center gap-2">
                   <Link
+                    prefetch={false}
                     href={`/dashboard/items/${row.mlItemId}`}
                     className="relative shrink-0 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--muted)]"
                   >

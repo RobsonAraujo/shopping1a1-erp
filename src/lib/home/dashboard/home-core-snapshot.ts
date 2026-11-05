@@ -15,8 +15,9 @@ import {
 /**
  * O snapshot que a Home renderiza no servidor, sempre — não depende de quais
  * widgets estão visíveis, porque só tem leitura barata e indexada (contagens
- * e um punhado de linhas). É isso que garante conteúdo real na primeira
- * pintura, sem esperar JS.
+ * e um punhado de linhas). A página não espera por ele: a promise desce pelo
+ * stream da própria página, então o dado chega sem um request a mais, e os
+ * widgets mostram skeleton nesse intervalo.
  *
  * Tudo que é caro (DRE, apuração fiscal, evolução de estoque) fica fora daqui
  * e vai pela rota de batch, buscado só quando o widget está visível. Tudo que
@@ -124,13 +125,19 @@ export async function loadHomeCoreSnapshot(
 ): Promise<HomeCoreSnapshot> {
   const snapshot = emptyHomeCoreSnapshot();
   const failed: string[] = [];
+  const startedAt = performance.now();
+  const sliceMs: Record<string, number> = {};
 
   function guard<T>(slice: string, promise: Promise<T>): Promise<T | null> {
-    return promise.catch((e: unknown) => {
-      logServerError(`home/core-snapshot:${slice}`, e);
-      failed.push(slice);
-      return null;
-    });
+    return promise
+      .catch((e: unknown) => {
+        logServerError(`home/core-snapshot:${slice}`, e);
+        failed.push(slice);
+        return null;
+      })
+      .finally(() => {
+        sliceMs[slice] = Math.round(performance.now() - startedAt);
+      });
   }
 
   const [onboarding, operations, catalogLosing, catalogPoll, catalog, pendings] =
@@ -142,6 +149,16 @@ export async function loadHomeCoreSnapshot(
       guard("catalog", loadCatalogHealth(organizationId)),
       guard("pendings", loadPendings(organizationId, now)),
     ]);
+
+  // Tempo de cada slice desde o início da onda (elas saem juntas e disputam o
+  // pool). É o que diz se algum índice composto vale a pena: otimizar sem esse
+  // número seria chute.
+  console.info("[home-core]", {
+    organizationId,
+    totalMs: Math.round(performance.now() - startedAt),
+    sliceMs,
+    failed,
+  });
 
   return {
     ...snapshot,

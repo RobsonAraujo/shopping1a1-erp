@@ -26,12 +26,14 @@ import { cn } from "@/lib/utils";
  * O que esta página faz, e só isto:
  *
  * 1. resolve sessão e tenant;
- * 2. carrega o snapshot barato de servidor (`loadHomeCoreSnapshot`) e o layout
- *    salvo (`loadDashboardLayout`), que é o que garante a Home **certa** na
- *    primeira pintura — não o layout padrão;
- * 3. mantém `fetchMe` como ilha de servidor — o header precisa do perfil de
+ * 2. espera só o layout salvo (`loadDashboardLayout`), que é o que garante a
+ *    grade **certa** na primeira pintura — não o layout padrão;
+ * 3. entrega o snapshot de servidor (`loadHomeCoreSnapshot`) como promise, sem
+ *    esperar: a página sai na hora e cada widget mostra o próprio skeleton até
+ *    o dado chegar pelo mesmo stream;
+ * 4. mantém `fetchMe` como ilha de servidor — o header precisa do perfil de
  *    qualquer forma, então o KPI de vendas sai de graça do mesmo `cache()`;
- * 4. entrega tudo ao provider e sai da frente.
+ * 5. entrega tudo ao provider e sai da frente.
  *
  * Dado caro (DRE, apuração fiscal, estoque) vai por
  * `/api/dashboard/widgets` num request só, e só para os widgets visíveis.
@@ -124,17 +126,16 @@ export default async function DashboardPage() {
 
   const organizationId = orgContext.organization.id;
 
-  // Uma slice que falha vira aviso dentro do widget dela (ver `failedSlices`) —
-  // antes uma falha de operações devolvia erro de página inteira e derrubava a
-  // Home junto.
-  //
-  // O layout vai na mesma onda: é uma leitura por chave primária, e trazê-lo
-  // aqui é o que permite renderizar a versão certa no servidor em vez de pintar
-  // o padrão e trocar depois da hidratação.
-  const [core, layout] = await Promise.all([
-    loadHomeCoreSnapshot(organizationId),
-    loadDashboardLayout(organizationId),
-  ]);
+  // O layout vem ANTES da onda do snapshot, de propósito: é uma leitura por chave
+  // primária, e sair junto com as queries do snapshot faria ele entrar na fila do
+  // pool. Trazê-lo aqui é o que permite renderizar a versão certa no servidor em
+  // vez de pintar o padrão e trocar depois da hidratação.
+  const layout = await loadDashboardLayout(organizationId);
+
+  // Sem `await`: é isso que tira as queries do caminho do primeiro byte. A promise
+  // não rejeita — uma slice que falha vira aviso dentro do widget dela (ver
+  // `failedSlices`), então uma falha de operações não derruba a Home junto.
+  const core = loadHomeCoreSnapshot(organizationId);
 
   return (
     <HomeDashboardProvider

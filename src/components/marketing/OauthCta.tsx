@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { OauthCtaIcon } from "@/components/marketing/OauthCtaIcon";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -40,9 +41,17 @@ export function OAuthCta({
       className={cn(shape, appearance, "whitespace-nowrap", className)}
     >
       {isLoggedIn ? (
-        <Link href={href} tabIndex={tabIndex}>
+        // Com o token vencendo, o href é a rota de refresh, um GET que troca
+        // tokens e grava cookies. O prefetch automático do `<Link>` a executaria
+        // só de o botão aparecer na tela, e um refresh que falhasse ali apagaria
+        // a sessão de quem nem clicou.
+        <Link
+          href={href}
+          tabIndex={tabIndex}
+          prefetch={href.startsWith("/api/") ? false : undefined}
+        >
           {label}
-          <ArrowRight />
+          <OauthCtaIcon />
         </Link>
       ) : (
         <a href={href} tabIndex={tabIndex}>

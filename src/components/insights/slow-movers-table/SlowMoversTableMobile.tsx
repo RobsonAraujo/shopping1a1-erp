@@ -29,6 +29,7 @@ export function SlowMoversTableMobile({ rows, threshold }: SlowMoversTableProps)
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 flex-1 gap-2">
                 <Link
+                  prefetch={false}
                   href={`/dashboard/items/${row.mlItemId}`}
                   target="_blank"
                   rel="noopener noreferrer"

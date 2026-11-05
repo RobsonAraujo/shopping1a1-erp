@@ -66,6 +66,7 @@ export function SupplierPurchaseAnalysisTableMobile({
               >
                 <div className="flex min-w-0 gap-3">
                   <Link
+                    prefetch={false}
                     href={`/dashboard/items/${row.item.id}`}
                     className="relative shrink-0 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--muted)]"
                   >

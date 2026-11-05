@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { NavPendingHint } from "@/components/shared/NavPendingHint";
 import {
   DASHBOARD_MOBILE_TAB_ITEMS,
   isDashboardNavItemActive,
@@ -27,7 +28,7 @@ export function DashboardMobileTabBar() {
                 href={item.href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex h-full flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors",
+                  "relative flex h-full flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors",
                   active
                     ? "text-[var(--primary)]"
                     : "text-[var(--muted-foreground)]",
@@ -35,6 +36,7 @@ export function DashboardMobileTabBar() {
               >
                 <Icon className="size-5" aria-hidden />
                 {item.label}
+                <NavPendingHint className="top-1.5 left-1/2 ml-3" />
               </Link>
             </li>
           );

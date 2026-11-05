@@ -67,6 +67,7 @@ export function RevenuePotentialTableMobile({
             <Card className={cn("p-4 shadow-sm", row.isExcluded && "opacity-50")}>
               <div className="flex items-start gap-3">
                 <Link
+                  prefetch={false}
                   href={`/dashboard/items/${row.mlItemId}`}
                   className="relative shrink-0 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--muted)]"
                 >

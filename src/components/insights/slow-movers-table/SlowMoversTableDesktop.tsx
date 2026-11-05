@@ -83,6 +83,7 @@ export function SlowMoversTableDesktop({ rows, threshold, sort, onSortChange }: 
               <td className="py-2 pr-3 max-w-[220px]">
                 <div className="flex min-w-0 items-center gap-2">
                   <Link
+                    prefetch={false}
                     href={`/dashboard/items/${row.mlItemId}`}
                     target="_blank"
                     rel="noopener noreferrer"

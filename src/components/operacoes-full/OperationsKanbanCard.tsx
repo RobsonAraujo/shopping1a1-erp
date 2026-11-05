@@ -99,7 +99,7 @@ function OperationsCardFooter({ card }: { card: OperationsBoardCard }) {
   return (
     <div className="flex items-center gap-2 border-t border-[var(--border)] bg-[var(--muted)]/20 px-3 py-2">
       <Button asChild size="sm" variant="secondary" className="h-7 w-full gap-1.5 text-xs font-semibold">
-        <Link href={`/dashboard/items/${card.mlItemId}`} draggable={false}>
+        <Link href={`/dashboard/items/${card.mlItemId}`} prefetch={false} draggable={false}>
           Ver anúncio
           <ExternalLink className="size-3.5" aria-hidden />
         </Link>

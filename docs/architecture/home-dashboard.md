@@ -18,23 +18,48 @@ A Home é dinâmica (lê `cookies()`), então **não há cache de página**: cad
 
 | # | Etapa | Custo |
 |---|-------|-------|
+| 0 | `(home)/loading.tsx` | zero: é o que aparece no instante do clique |
 | 1 | `readSession(cookies())` | zero |
 | 2 | `getOrganizationContext()` | 1 query, envolvida em `React.cache()` (compartilhada com o layout) |
-| 3 | `loadHomeCoreSnapshot` + `loadDashboardLayout` | **13 queries numa onda só** (`Promise.all`): 12 do snapshot mais a leitura do layout por chave primária |
-| 4 | Duas ilhas em `<Suspense>` (identidade do seller + card de Vendas) | **1 chamada ML** (`fetchMe`), compartilhada pelas duas via `React.cache()` |
-| 5 | Client monta → `/api/dashboard/widgets?keys=…` | **1 request**, só com as chaves dos widgets **visíveis** |
-| 6 | Cards de PMA e Promoções entram na viewport | 1 request cada, **chamadas ML** (ver tabela) |
+| 3 | `loadDashboardLayout` | 1 leitura por chave primária. É a **única** query da página que segura o primeiro byte |
+| 4 | `loadHomeCoreSnapshot` | **12 queries numa onda só**, sem `await`: a promise desce pelo stream e os widgets `core` mostram skeleton até ela resolver |
+| 5 | Duas ilhas em `<Suspense>` (identidade do seller + card de Vendas) | **1 chamada ML** (`fetchMe`), compartilhada pelas duas via `React.cache()` |
+| 6 | Snapshot resolve → `/api/dashboard/widgets?keys=…` | **1 request**, só com as chaves dos widgets **visíveis** |
+| 7 | Cards de PMA, Promoções e Elegíveis entram na viewport | 1 request cada, **chamadas ML** (ver tabela) |
 
-O passo 3 é o que garante conteúdo real na primeira pintura, sem esperar JS. Cada
-slice tem `.catch` próprio: **uma slice que falha degrada o card dela, nunca a
-página** — o nome entra em `failedSlices` e o widget mostra o aviso.
+Cada slice do snapshot tem `.catch` próprio: **uma slice que falha degrada o card
+dela, nunca a página** — o nome entra em `failedSlices` e o widget mostra o aviso.
+O mesmo `.catch` é o que garante que a promise entregue à página não rejeita.
+
+O card em skeleton mostra ícone e título de verdade (é a parte estática) e não é
+arrastável: o card real o substituiria no meio do arrasto. O React mantém um
+skeleton na tela por no mínimo 300 ms depois de mostrá-lo, então um snapshot muito
+rápido custa esse piso. É a troca por a tela reagir na hora.
+
+### O caminho até a Home
+
+O `loading.tsx` mora no route group `(home)` para valer só para a Home. Um
+`dashboard/loading.tsx` colocaria o mesmo esqueleto na troca de todas as rotas do
+dashboard. As outras rotas têm o retorno do `NavPendingHint` no link clicado.
+
+O `<Link>` faz prefetch sozinho em produção, e duas consequências disso não são
+óbvias (ver invariantes 8 e 9):
+
+- Cada link visível para rota dinâmica custa **2 requests** (árvore e metadata), e
+  o de metadata **executa `generateMetadata`**.
+- O prefetch executa **qualquer** URL do `href`, inclusive route handler. Quando o
+  token está vencendo, o `dashboardHref` do CTA é a rota de refresh.
 
 ### Pool de conexões
 
-`DATABASE_POOL_MAX` tem default **5**. As 13 queries do passo 3 saem juntas, então
-elas se enfileiram em ~3 ondas, e disputam o pool com o layout. É daqui que vem a
-latência de cauda quando há muitos acessos simultâneos — não deixar o passo 3
-crescer sem medir.
+`DATABASE_POOL_MAX` tem default **5**. As 12 queries do snapshot saem juntas, então
+elas se enfileiram em ~3 ondas. É daqui que vem a latência de cauda quando há
+muitos acessos simultâneos — não deixar o snapshot crescer sem medir. Duas decisões
+existem por causa disso: o layout é lido **antes** da onda, para não entrar na fila
+dela, e o batch só sai **depois** dela, para não disputar o pool.
+
+O log `[home-core]` traz o tempo total e o de cada slice por carregamento. É com ele
+que se decide se algum índice composto vale a pena.
 
 ---
 
@@ -87,7 +112,7 @@ que saiu do registry ou coluna inválida não quebram a Home.
 
 ## O que cada widget carrega
 
-`core` = vem do snapshot de servidor (passo 3). `batch` = request único do passo 5.
+`core` = vem do snapshot de servidor (passo 4). `batch` = request único do passo 6.
 `isolated` = rota própria, disparada por viewport. `local` = só `localStorage`.
 `server-island` = RSC em `<Suspense>`.
 
@@ -189,6 +214,12 @@ Quebrar qualquer uma destas encarece a página mais acessada do produto:
    query não seria pego por nada.
 7. **O registry é só metadado.** Nada de componente, `prisma` ou `server-only` —
    ele é importado por RSC, route handler, componente client e teste node.
+8. **`generateMetadata` de rota com link em lista não chama o Mercado Livre.** O
+   prefetch o executa uma vez por link visível. `items/[id]` chama, para pôr o SKU
+   no título da aba, e por isso os links para ele em listas usam `prefetch={false}`.
+9. **`href` de `<Link>` nunca é URL com efeito colateral.** Se for inevitável, leva
+   `prefetch={false}`, como o CTA de marketing faz com a rota de refresh: um refresh
+   que falhasse no prefetch apagaria a sessão de quem nem clicou.
 
 ---
 

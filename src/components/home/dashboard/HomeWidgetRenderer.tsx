@@ -1,12 +1,16 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { memo, type ComponentType } from "react";
+import { memo, Suspense, type ComponentType } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DashboardDailyChecklist } from "@/components/home/DashboardDailyChecklist";
 import { DashboardFocusTimer } from "@/components/home/DashboardFocusTimer";
 import { DashboardQuickNotes } from "@/components/home/DashboardQuickNotes";
 import { HomeAttentionZone } from "@/components/home/dashboard/HomeAttentionZone";
+import {
+  HomeWidgetCard,
+  HomeWidgetDragProvider,
+} from "@/components/home/dashboard/HomeWidgetCard";
 import { HomeWidgetCatalogHealth } from "@/components/home/dashboard/widgets/HomeWidgetCatalogHealth";
 import {
   HomeWidgetComprasKpi,
@@ -18,9 +22,38 @@ import {
   HomeWidgetOnboarding,
   HomeWidgetVendasKpi,
 } from "@/components/home/dashboard/widgets/HomeWidgetSimple";
+import { getHomeWidgetDefinition } from "@/lib/home/dashboard/widget-registry";
 
 function WidgetSkeleton() {
   return <Skeleton className="h-40 rounded-3xl" />;
+}
+
+const NOT_DRAGGABLE = {};
+
+/**
+ * O que um widget `core` mostra até o snapshot chegar: a parte estática (ícone e
+ * título) na hora, e skeleton só no corpo.
+ *
+ * Contexto de arrasto vazio de propósito: se o usuário começasse a arrastar o
+ * skeleton, o card real o substituiria no meio do arrasto, e o `dragend` não
+ * dispara para um elemento que saiu da tela.
+ */
+function CoreWidgetFallback({ id }: { id: string }) {
+  if (id === "atencao") return <Skeleton className="h-12 rounded-3xl" />;
+  // Só aparece enquanto há passo pendente: uma faixa reservada de antemão
+  // sumiria em seguida para quem já concluiu tudo.
+  if (id === "onboarding") return null;
+  return (
+    <HomeWidgetDragProvider value={NOT_DRAGGABLE}>
+      <HomeWidgetCard
+        definitionId={id}
+        pending
+        // Reserva o espaço do menu de mover, que o card real tem: sem isso a seta
+        // do header pularia para o lado quando o dado chega.
+        actions={<span aria-hidden className="block size-8" />}
+      />
+    </HomeWidgetDragProvider>
+  );
 }
 
 /**
@@ -98,5 +131,12 @@ export const HomeWidgetRenderer = memo(function HomeWidgetRenderer({
 }) {
   const Widget = RENDERERS[id];
   if (!Widget) return null;
+  if (getHomeWidgetDefinition(id)?.source.kind === "core") {
+    return (
+      <Suspense fallback={<CoreWidgetFallback id={id} />}>
+        <Widget />
+      </Suspense>
+    );
+  }
   return <Widget />;
 });
