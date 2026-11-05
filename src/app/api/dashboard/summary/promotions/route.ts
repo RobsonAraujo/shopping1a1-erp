@@ -36,6 +36,10 @@ export async function GET(request: NextRequest) {
   try {
     const payload = await loadPromotionSummary(token, userId, {
       expiringSoonDays,
+      monitor: {
+        own: operationalSettings.promotionMonitorOwnListings,
+        catalog: operationalSettings.promotionMonitorCatalogListings,
+      },
     });
     return NextResponse.json(payload);
   } catch (e) {

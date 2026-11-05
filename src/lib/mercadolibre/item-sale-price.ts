@@ -34,6 +34,8 @@ export async function fetchItemSalePrice(
   accessToken: string,
   itemId: string,
   fallbackPrice?: number,
+  /** `maxAttempts: 1` em varredura: repetir sob 429 só amplia a carga. */
+  retry?: { maxAttempts?: number },
 ): Promise<ItemSalePrice> {
   const { apiBase } = getMercadoLibreConfig();
   const u = new URL(`${apiBase}/items/${itemId}/sale_price`);
@@ -44,10 +46,14 @@ export async function fetchItemSalePrice(
 
   let res: Response;
   try {
-    res = await fetchWithRetry(u.toString(), {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      cache: "no-store",
-    });
+    res = await fetchWithRetry(
+      u.toString(),
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: "no-store",
+      },
+      retry,
+    );
   } catch (error) {
     if (hasFallback) return fallbackSalePrice(fallbackPrice!);
     throw error;

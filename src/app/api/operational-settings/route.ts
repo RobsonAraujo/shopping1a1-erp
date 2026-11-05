@@ -36,6 +36,8 @@ const patchBodySchema = z
     rotationHighDailyAvg: z.number().int().min(1).max(100000),
     rotationMediumDailyAvg: z.number().int().min(1).max(100000),
     promotionExpiringSoonDays: z.number().int().min(0).max(365),
+    promotionMonitorOwnListings: z.boolean(),
+    promotionMonitorCatalogListings: z.boolean(),
   })
   .partial()
   .refine(

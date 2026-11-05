@@ -6,11 +6,14 @@ import { Boxes, RotateCcw, ShoppingCart, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FormInput } from "@/components/ui/form-input";
+import { Switch } from "@/components/ui/switch";
 import { UserFeedback } from "@/components/ui/user-feedback";
 import { MetricWithHint } from "@/components/shared/MetricWithHint";
 import { ConfiguracoesSkeleton } from "@/components/configuracoes/ConfiguracoesSkeleton";
+import { PROMOTION_SUMMARY_ENDPOINT } from "@/config/dashboard-summary";
 import { readApiError } from "@/lib/api/api-client-error";
 import { buildPurchaseCoverageBufferTooltip } from "@/lib/compras/purchase-analysis";
+import { clearWidgetFetch } from "@/lib/home/dashboard/widget-fetch-cache";
 import { cn } from "@/lib/utils";
 import {
   OPERATIONAL_SETTINGS_DEFAULTS,
@@ -45,7 +48,25 @@ const SECTION_TONES: Record<
 
 type SettingsResponse = { settings: OperationalSettingsValues };
 
-type DraftValues = Record<keyof OperationalSettingsValues, string>;
+type ToggleKey = {
+  [K in keyof OperationalSettingsValues]: OperationalSettingsValues[K] extends boolean
+    ? K
+    : never;
+}[keyof OperationalSettingsValues];
+
+type FieldKey = Exclude<keyof OperationalSettingsValues, ToggleKey>;
+
+/** Só os campos numéricos: são texto enquanto o usuário digita. */
+type DraftValues = Record<FieldKey, string>;
+
+type ToggleValues = Pick<OperationalSettingsValues, ToggleKey>;
+
+function settingsToToggles(settings: OperationalSettingsValues): ToggleValues {
+  return {
+    promotionMonitorOwnListings: settings.promotionMonitorOwnListings,
+    promotionMonitorCatalogListings: settings.promotionMonitorCatalogListings,
+  };
+}
 
 function settingsToDraft(settings: OperationalSettingsValues): DraftValues {
   return {
@@ -66,8 +87,6 @@ function parseDraftInt(value: string): number | null {
   if (!Number.isFinite(parsed)) return null;
   return Math.round(parsed);
 }
-
-type FieldKey = keyof OperationalSettingsValues;
 
 function SectionHeader({
   icon: Icon,
@@ -180,6 +199,34 @@ function SettingField({
   );
 }
 
+function SettingToggle({
+  label,
+  description,
+  checked,
+  onCheckedChange,
+}: {
+  label: string;
+  description: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-2.5">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-[var(--foreground)]">{label}</p>
+        <p className="mt-0.5 text-xs leading-snug text-[var(--muted-foreground)]">
+          {description}
+        </p>
+      </div>
+      <Switch
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+        aria-label={label}
+      />
+    </div>
+  );
+}
+
 export function OperationalSettingsClient() {
   const router = useRouter();
   const [settings, setSettings] = useState<OperationalSettingsValues | null>(
@@ -187,6 +234,9 @@ export function OperationalSettingsClient() {
   );
   const [draft, setDraft] = useState<DraftValues>(
     settingsToDraft(OPERATIONAL_SETTINGS_DEFAULTS),
+  );
+  const [toggles, setToggles] = useState<ToggleValues>(
+    settingsToToggles(OPERATIONAL_SETTINGS_DEFAULTS),
   );
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -203,6 +253,7 @@ export function OperationalSettingsClient() {
       const json = (await res.json()) as SettingsResponse;
       setSettings(json.settings);
       setDraft(settingsToDraft(json.settings));
+      setToggles(settingsToToggles(json.settings));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao carregar");
     } finally {
@@ -220,6 +271,7 @@ export function OperationalSettingsClient() {
 
   const restoreAllDefaults = () => {
     setDraft(settingsToDraft(OPERATIONAL_SETTINGS_DEFAULTS));
+    setToggles(settingsToToggles(OPERATIONAL_SETTINGS_DEFAULTS));
   };
 
   const save = async () => {
@@ -256,14 +308,19 @@ export function OperationalSettingsClient() {
       const res = await fetch("/api/operational-settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(parsed),
+        body: JSON.stringify({ ...parsed, ...toggles }),
       });
       if (!res.ok)
         throw new Error(await readApiError(res, "operational_settings_save"));
       const json = (await res.json()) as SettingsResponse;
       setSettings(json.settings);
       setDraft(settingsToDraft(json.settings));
+      setToggles(settingsToToggles(json.settings));
       setMessage("Configurações salvas.");
+      // O widget de promoções guarda o resultado num cache por aba, fora do
+      // alcance do `router.refresh()`: sem isto, voltar para a Home mostraria a
+      // lista calculada com a config antiga até alguém clicar em "Atualizar".
+      clearWidgetFetch(PROMOTION_SUMMARY_ENDPOINT);
       // Estoque, Compras, Operações Full e o painel Início usam esses
       // valores — sem isto, quem navegar pra lá em seguida pode ver dados
       // calculados com a config antiga por causa do cache de navegação.
@@ -281,7 +338,8 @@ export function OperationalSettingsClient() {
 
   const hasChanges =
     settings !== null &&
-    JSON.stringify(draft) !== JSON.stringify(settingsToDraft(settings));
+    (JSON.stringify(draft) !== JSON.stringify(settingsToDraft(settings)) ||
+      JSON.stringify(toggles) !== JSON.stringify(settingsToToggles(settings)));
 
   return (
     <div className="space-y-6">
@@ -389,7 +447,7 @@ export function OperationalSettingsClient() {
         <SectionHeader
           icon={Tag}
           title="Promoções"
-          description="Quando alertar, no painel Início, que uma promoção do Mercado Livre está perto de terminar."
+          description="O que acompanhar no painel Início: anúncios sem promoção e promoções do Mercado Livre perto de terminar."
           tone="amber"
         />
         <div className="grid gap-3 px-4 py-4 sm:grid-cols-2 sm:px-5 lg:grid-cols-3">
@@ -401,6 +459,30 @@ export function OperationalSettingsClient() {
             draft={draft}
             onChange={updateField}
             tone="amber"
+          />
+        </div>
+        <div className="grid gap-3 px-4 pb-4 sm:grid-cols-2 sm:px-5">
+          <SettingToggle
+            label="Anúncios próprios"
+            description="Acompanhar as promoções dos seus anúncios próprios."
+            checked={toggles.promotionMonitorOwnListings}
+            onCheckedChange={(checked) =>
+              setToggles((current) => ({
+                ...current,
+                promotionMonitorOwnListings: checked,
+              }))
+            }
+          />
+          <SettingToggle
+            label="Anúncios de catálogo"
+            description="Acompanhar também os de catálogo. O módulo pode levar mais tempo para carregar, porque cada anúncio é uma consulta a mais ao Mercado Livre."
+            checked={toggles.promotionMonitorCatalogListings}
+            onCheckedChange={(checked) =>
+              setToggles((current) => ({
+                ...current,
+                promotionMonitorCatalogListings: checked,
+              }))
+            }
           />
         </div>
       </Card>

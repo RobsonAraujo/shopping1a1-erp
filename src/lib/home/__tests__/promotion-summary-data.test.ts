@@ -114,3 +114,185 @@ describe("loadPromotionSummary", () => {
     assert.equal(payload.totalActiveItems, 1);
   });
 });
+
+/**
+ * Vários anúncios de uma vez. `salePrice` recebe o id para cada anúncio poder
+ * responder diferente.
+ */
+function mockMlItems({
+  items,
+  salePrice,
+}: {
+  items: Array<Record<string, unknown>>;
+  salePrice: (id: string) => Response;
+}) {
+  const calls: string[] = [];
+  mock.method(globalThis, "fetch", async (input: RequestInfo | URL) => {
+    const url = String(input);
+    calls.push(url);
+    if (url.includes("/items/search")) {
+      const onlyCatalog = url.includes("catalog_listing=true");
+      const results = items
+        .filter((item) => !onlyCatalog || item.catalog_listing === true)
+        .map((item) => item.id);
+      return Response.json({ results, paging: { total: results.length } });
+    }
+    const priceMatch = url.match(/\/items\/([^/]+)\/sale_price/);
+    if (priceMatch) return salePrice(priceMatch[1]);
+    if (url.includes("/items?ids=")) {
+      const ids = new URL(url).searchParams.get("ids")?.split(",") ?? [];
+      return Response.json(
+        items
+          .filter((item) => ids.includes(String(item.id)))
+          .map((body) => ({ code: 200, body })),
+      );
+    }
+    throw new Error(`URL não mockada: ${url}`);
+  });
+  return calls;
+}
+
+const NO_PROMOTION = () => Response.json({ amount: 100, regular_amount: null });
+
+describe("loadPromotionSummary: anúncios monitorados e sem promoção", () => {
+  afterEach(() => mock.restoreAll());
+
+  const own = itemBody({ id: "MLB1", sold_quantity: 5 });
+  const catalog = itemBody({
+    id: "MLB2",
+    catalog_listing: true,
+    sold_quantity: 50,
+    seller_custom_field: "SKU-B",
+  });
+
+  it("por padrão acompanha só os próprios, como sempre foi", async () => {
+    mockMlItems({ items: [own, catalog], salePrice: NO_PROMOTION });
+
+    const payload = await loadPromotionSummary("token", USER_ID);
+
+    assert.deepEqual(payload.monitor, { own: true, catalog: false });
+    assert.deepEqual(
+      payload.withoutPromotion.map((row) => row.mlItemId),
+      ["MLB1"],
+    );
+    assert.equal(payload.totalActiveItems, 1);
+  });
+
+  it("com os dois ligados, marca o que é catálogo e ordena por mais vendidos", async () => {
+    mockMlItems({ items: [own, catalog], salePrice: NO_PROMOTION });
+
+    const payload = await loadPromotionSummary("token", USER_ID, {
+      monitor: { own: true, catalog: true },
+    });
+
+    assert.deepEqual(
+      payload.withoutPromotion.map((row) => [
+        row.mlItemId,
+        row.catalogListing,
+        row.soldQuantity,
+      ]),
+      [
+        ["MLB2", true, 50],
+        ["MLB1", false, 5],
+      ],
+    );
+    assert.equal(payload.withoutPromotionCount, 2);
+  });
+
+  it("só catálogo filtra já na busca, sem consultar os próprios", async () => {
+    const calls = mockMlItems({ items: [own, catalog], salePrice: NO_PROMOTION });
+
+    const payload = await loadPromotionSummary("token", USER_ID, {
+      monitor: { own: false, catalog: true },
+    });
+
+    assert.ok(calls.some((url) => url.includes("catalog_listing=true")));
+    assert.ok(!calls.some((url) => url.includes("/MLB1/sale_price")));
+    assert.deepEqual(
+      payload.withoutPromotion.map((row) => row.mlItemId),
+      ["MLB2"],
+    );
+  });
+
+  it("só próprios não filtra a busca: catalog_listing=false nunca foi validado", async () => {
+    const calls = mockMlItems({ items: [own, catalog], salePrice: NO_PROMOTION });
+
+    await loadPromotionSummary("token", USER_ID, {
+      monitor: { own: true, catalog: false },
+    });
+
+    assert.ok(!calls.some((url) => url.includes("catalog_listing=")));
+  });
+
+  it("com os dois desligados não faz nenhuma chamada ao Mercado Livre", async () => {
+    const calls = mockMlItems({ items: [own, catalog], salePrice: NO_PROMOTION });
+
+    const payload = await loadPromotionSummary("token", USER_ID, {
+      monitor: { own: false, catalog: false },
+    });
+
+    assert.equal(calls.length, 0);
+    assert.deepEqual(payload.withoutPromotion, []);
+    assert.deepEqual(payload.monitor, { own: false, catalog: false });
+  });
+
+  it("consulta que falha não conta como sem promoção", async () => {
+    mockMlItems({
+      items: [own, itemBody({ id: "MLB3" })],
+      salePrice: (id) =>
+        id === "MLB3"
+          ? new Response("forbidden", { status: 403 })
+          : NO_PROMOTION(),
+    });
+
+    const payload = await loadPromotionSummary("token", USER_ID);
+
+    assert.equal(payload.withoutPromotionCount, 1);
+    assert.deepEqual(
+      payload.withoutPromotion.map((row) => row.mlItemId),
+      ["MLB1"],
+    );
+    assert.equal(payload.warnings.length, 1);
+    assert.match(payload.warnings[0], /MLB3/);
+  });
+
+  it("não repete a consulta sob 429: na varredura isso só amplia a carga", async () => {
+    const calls = mockMlItems({
+      items: [own],
+      salePrice: () => new Response("slow down", { status: 429 }),
+    });
+
+    const payload = await loadPromotionSummary("token", USER_ID);
+
+    assert.equal(
+      calls.filter((url) => url.includes("/sale_price")).length,
+      1,
+    );
+    assert.equal(payload.withoutPromotionCount, 0);
+  });
+
+  it("passou do orçamento de tempo: para de consultar e avisa que é parcial", async () => {
+    const calls = mockMlItems({ items: [own], salePrice: NO_PROMOTION });
+
+    const payload = await loadPromotionSummary("token", USER_ID, {
+      scanBudgetMs: 0,
+    });
+
+    assert.ok(!calls.some((url) => url.includes("/sale_price")));
+    assert.match(payload.warnings[0], /0 de 1 anúncios/);
+    assert.equal(payload.withoutPromotionCount, 0);
+  });
+
+  it("limita a lista, mas o total continua sendo o real", async () => {
+    const items = Array.from({ length: 205 }, (_, index) =>
+      itemBody({ id: `MLB${1000 + index}`, sold_quantity: index }),
+    );
+    mockMlItems({ items, salePrice: NO_PROMOTION });
+
+    const payload = await loadPromotionSummary("token", USER_ID);
+
+    assert.equal(payload.withoutPromotion.length, 200);
+    assert.equal(payload.withoutPromotionCount, 205);
+    assert.equal(payload.withoutPromotion[0].soldQuantity, 204);
+  });
+});

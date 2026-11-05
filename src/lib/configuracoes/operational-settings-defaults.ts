@@ -25,6 +25,8 @@ export type OperationalSettingsValues = {
   rotationHighDailyAvg: number;
   rotationMediumDailyAvg: number;
   promotionExpiringSoonDays: number;
+  promotionMonitorOwnListings: boolean;
+  promotionMonitorCatalogListings: boolean;
 };
 
 export const OPERATIONAL_SETTINGS_DEFAULTS: OperationalSettingsValues = {
@@ -35,6 +37,10 @@ export const OPERATIONAL_SETTINGS_DEFAULTS: OperationalSettingsValues = {
   rotationHighDailyAvg: purchaseAnalysisConfig.rotationDailyAvg.altaMin,
   rotationMediumDailyAvg: purchaseAnalysisConfig.rotationDailyAvg.mediaMin,
   promotionExpiringSoonDays: dashboardSummaryConfig.promotionExpiringSoonDays,
+  promotionMonitorOwnListings:
+    dashboardSummaryConfig.promotionMonitorOwnListings,
+  promotionMonitorCatalogListings:
+    dashboardSummaryConfig.promotionMonitorCatalogListings,
 };
 
 /** Converte para o formato aceito por `computeStockPlanningDisplay`/`buildPurchasePlan`. */

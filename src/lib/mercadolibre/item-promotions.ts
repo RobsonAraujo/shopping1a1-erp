@@ -144,6 +144,8 @@ function normalizePromotionsPayload(data: unknown): ItemPromotionRecord[] {
 export async function fetchItemPromotions(
   accessToken: string,
   itemId: string,
+  /** `maxAttempts: 1` em varredura: repetir sob 429 só amplia a carga. */
+  retry?: { maxAttempts?: number },
 ): Promise<ItemPromotionRecord[]> {
   const { apiBase } = getMercadoLibreConfig();
   const u = new URL(`${apiBase}/seller-promotions/items/${itemId}`);
@@ -151,10 +153,14 @@ export async function fetchItemPromotions(
 
   let res: Response;
   try {
-    res = await fetchWithRetry(u.toString(), {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      cache: "no-store",
-    });
+    res = await fetchWithRetry(
+      u.toString(),
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: "no-store",
+      },
+      retry,
+    );
   } catch (error) {
     // 404 aqui é anúncio sem nenhuma promoção, não falha.
     if (error instanceof MlApiFetchError && error.status === 404) return [];

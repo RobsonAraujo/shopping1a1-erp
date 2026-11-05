@@ -38,6 +38,12 @@ export async function loadOperationalSettings(
     promotionExpiringSoonDays:
       row?.promotionExpiringSoonDays ??
       OPERATIONAL_SETTINGS_DEFAULTS.promotionExpiringSoonDays,
+    promotionMonitorOwnListings:
+      row?.promotionMonitorOwnListings ??
+      OPERATIONAL_SETTINGS_DEFAULTS.promotionMonitorOwnListings,
+    promotionMonitorCatalogListings:
+      row?.promotionMonitorCatalogListings ??
+      OPERATIONAL_SETTINGS_DEFAULTS.promotionMonitorCatalogListings,
   };
 }
 

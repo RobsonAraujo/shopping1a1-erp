@@ -815,6 +815,10 @@ model OperationalSettings {
 
   /// Dias de antecedência para alertar no painel que uma promoção do Mercado Livre está terminando.
   promotionExpiringSoonDays Int? @map("promotion_expiring_soon_days")
+  /// Acompanhar promoções de anúncios próprios no painel Início.
+  promotionMonitorOwnListings Boolean? @map("promotion_monitor_own_listings")
+  /// Acompanhar promoções de anúncios de catálogo no painel Início. Custa uma chamada ao Mercado Livre por anúncio.
+  promotionMonitorCatalogListings Boolean? @map("promotion_monitor_catalog_listings")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

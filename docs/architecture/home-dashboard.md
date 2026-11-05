@@ -134,14 +134,27 @@ lista grande de volta em todo acesso e desfaria a economia.
 | ↳ dizem **quais meses** | — | zero: a leitura de conciliações devolve os meses em vez de um `count`, e os campos já estavam no índice | — |
 | **Catálogo perdendo** | `core` | 2 queries: as **5 piores** linhas (ordenadas pelo gap no banco) + um `count` | **cron de catálogo** — zero ML na Home |
 | **Abaixo do PMA** | `isolated` | 1 query + `⌈N/20⌉ + N` **chamadas ML** (N = produtos com PMA) | ML, ao vivo |
-| **Promoções terminando** | `isolated` | `⌈A/50⌉ + ⌈A/20⌉ + O + P` **chamadas ML** | ML, ao vivo |
+| **Promoções** | `isolated` | `⌈A/50⌉ + ⌈A/20⌉ + M + P` **chamadas ML** (zero se nada estiver monitorado) | ML, ao vivo |
 | **Onde você vai trabalhar hoje** | `local` | zero rede | o próprio navegador |
 | **Notas rápidas** | `local` | zero rede | o próprio navegador |
 | **Foco** | `local` | zero rede | o próprio navegador |
 | **Atalhos** (off por default) | `local` | zero rede, e o código entra por `dynamic()` | — |
 
-Legenda de promoções: `A` = anúncios ativos, `O` = ativos próprios (não-catálogo),
-`P` = dos próprios, quantos têm promoção.
+Legenda de promoções: `A` = anúncios ativos buscados, `M` = monitorados (conforme
+Configurações > Planejamento; por padrão, só os próprios), `P` = dos monitorados,
+quantos têm promoção. Ligar catálogo aumenta `M` em um por anúncio de catálogo.
+
+Só o caso "só catálogo" filtra `A` na busca (`catalog_listing=true`). O caso "só
+próprios" filtra em memória: `catalog_listing=false` ainda não foi validado contra a
+API, e como anúncio sem o campo conta como próprio, um filtro que os deixasse de
+fora sumiria com eles em silêncio. Vale validar com a conta real: é o que tiraria os
+anúncios de catálogo de `A` para quem fica no padrão.
+
+A lista "Sem promoção" vem inteira no mesmo payload (mais vendidos primeiro, até
+200), e o "Ver todos" expande a partir dela: repetir a varredura para mostrar mais
+linhas custaria centenas de chamadas. Consulta que falha **não** conta como sem
+promoção: vira aviso. O resultado fica no cache por aba do widget, e salvar as
+configurações o invalida.
 
 ### Como a invisibilidade é expressa
 
@@ -239,11 +252,10 @@ reduzi-la.
 
 O caminho já mapeado, em ordem de custo/benefício:
 
-1. **Orçamento de tempo** em `loadPromotionSummary`: parar a varredura ao passar de
-   N segundos e devolver parcial com aviso. Hoje, sob 429, a rota pode consumir os
-   300s de `maxDuration` inteiros e falhar no fim.
-2. **Não repetir em 429** nesse caminho (`maxAttempts: 1`): o retry ajuda num sync
-   pontual, não numa varredura de centenas de itens.
+1. **Feito: orçamento de tempo** em `loadPromotionSummary`: a varredura para de
+   começar item novo depois de 60s e devolve parcial com aviso.
+2. **Feito: não repetir em 429** nesse caminho (`maxAttempts: 1`): o retry ajuda num
+   sync pontual, não numa varredura de centenas de itens.
 3. **Cron 2×/dia gravando numa tabela** — o padrão que `catalogo-perdendo` já usa, e
    que custa ~650 B e **zero** chamada ML por acesso. Corta ~80%.
    Cron de hora em hora seria **pior** que ao vivo.

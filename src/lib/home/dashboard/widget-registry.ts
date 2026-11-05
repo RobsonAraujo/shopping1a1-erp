@@ -15,6 +15,7 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react";
+import { PROMOTION_SUMMARY_ENDPOINT } from "@/config/dashboard-summary";
 import type { CategoryTone } from "@/lib/ui/tone";
 import type { HomeWidgetDataKey } from "@/lib/home/dashboard/widget-data-keys";
 
@@ -332,9 +333,9 @@ export const HOME_WIDGET_DEFINITIONS: readonly HomeWidgetDefinition[] = [
   },
   {
     id: "promocoes",
-    title: "Promoções terminando",
+    title: "Promoções",
     description:
-      "Promoções do Mercado Livre que vencem nos próximos dias, para você decidir se renova.",
+      "Promoções do Mercado Livre que vencem nos próximos dias e anúncios sem promoção, nos tipos de anúncio escolhidos em Configurações.",
     category: "atencao",
     icon: Percent,
     tone: "amber",
@@ -344,7 +345,7 @@ export const HOME_WIDGET_DEFINITIONS: readonly HomeWidgetDefinition[] = [
     defaultColumn: 1,
     source: {
       kind: "isolated",
-      endpoint: "/api/dashboard/summary/promotions",
+      endpoint: PROMOTION_SUMMARY_ENDPOINT,
     },
     priority: "p2",
   },
