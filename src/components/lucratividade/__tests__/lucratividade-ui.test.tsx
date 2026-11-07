@@ -94,6 +94,9 @@ describe("MarginSummaryHero", () => {
           droppedListings={null}
           excludedFilterActive={false}
           onToggleExcludedFilter={noop}
+          segment="all"
+          segmentSummaries={null}
+          onSelectSegment={noop}
         />
       </TooltipProvider>,
     );
@@ -103,6 +106,81 @@ describe("MarginSummaryHero", () => {
     assert.match(text, /de margem sobre/);
     assert.match(text, /1 fora da média/);
     assert.match(text, /Média ponderada pelo faturamento/);
+    unmount();
+  });
+
+  it("shows total revenue and the own vs catalog strip, which selects a segment", () => {
+    const selected: string[] = [];
+    const { container, unmount } = renderIntoDocument(
+      <TooltipProvider>
+        <MarginSummaryHero
+          summary={summary({})}
+          isSimulation={false}
+          rangeLabel="Últimos 7 dias · 30/09 – 06/10"
+          loading={false}
+          afterAdsUnavailableText={null}
+          droppedListings={null}
+          excludedFilterActive={false}
+          onToggleExcludedFilter={noop}
+          segment="all"
+          segmentSummaries={{
+            own: summary({
+              contributionPercent: 18.2,
+              totalRevenue: 2575,
+              excluded: {
+                count: 0,
+                revenue: 0,
+                units: 0,
+                byReason: { missing_cost: 0, missing_tax: 0, kit_incomplete: 0, incomplete: 0 },
+              },
+            }),
+            catalog: summary({ contributionPercent: 2.1, totalRevenue: 7725 }),
+          }}
+          onSelectSegment={(s) => selected.push(s)}
+        />
+      </TooltipProvider>,
+    );
+    const text = container.textContent ?? "";
+    assert.match(text, /Faturamento/);
+    assert.match(text, /10\.300,00/);
+    assert.match(text, /103 un\. vendidas · 3 anúncios/);
+    assert.match(text, /18,20%/);
+    assert.match(text, /25% do total/);
+    assert.match(text, /75% do total/);
+
+    const catalogButton = container.querySelector(
+      'button[aria-label="Ver só anúncios: Catálogo"]',
+    ) as HTMLButtonElement | null;
+    assert.ok(catalogButton);
+    catalogButton.click();
+    assert.deepEqual(selected, ["catalog"]);
+    unmount();
+  });
+
+  it("names the segment in the title and hides the strip when filtered", () => {
+    const { container, unmount } = renderIntoDocument(
+      <TooltipProvider>
+        <MarginSummaryHero
+          summary={summary({})}
+          isSimulation={false}
+          rangeLabel={null}
+          loading={false}
+          afterAdsUnavailableText={null}
+          droppedListings={null}
+          excludedFilterActive={false}
+          onToggleExcludedFilter={noop}
+          segment="catalog"
+          segmentSummaries={null}
+          onSelectSegment={noop}
+        />
+      </TooltipProvider>,
+    );
+    const text = container.textContent ?? "";
+    assert.match(text, /Margem de contribuição · só catálogo/);
+    assert.equal(
+      container.querySelector('[aria-label="Margem por tipo de anúncio"]'),
+      null,
+    );
     unmount();
   });
 
@@ -118,6 +196,9 @@ describe("MarginSummaryHero", () => {
           droppedListings={null}
           excludedFilterActive={false}
           onToggleExcludedFilter={noop}
+          segment="all"
+          segmentSummaries={null}
+          onSelectSegment={noop}
         />
       </TooltipProvider>,
     );

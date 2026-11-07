@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useId, useMemo, useState, useSyncExternalStore } from "react";
 import { MousePointerClick, RefreshCw } from "lucide-react";
 import {
   ItemListSearch,
@@ -14,6 +14,11 @@ import {
 } from "@/components/shared/ShowPausedListingsSwitch";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  SegmentedTabs,
+  tabId,
+  tabPanelId,
+} from "@/components/ui/segmented-tabs";
 import type { TableSort } from "@/components/ui/sortable-th";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { UserFeedback } from "@/components/ui/user-feedback";
@@ -24,6 +29,11 @@ import {
   computeMarginSummary,
   marginExclusionReason,
 } from "@/lib/lucratividade/margin-summary";
+import {
+  LISTING_SEGMENT_LABEL,
+  filterRowsBySegment,
+  type ListingSegment,
+} from "@/lib/lucratividade/listing-segment";
 import {
   DEFAULT_LUCRATIVIDADE_VIEW,
   LUCRATIVIDADE_PERIOD_PRESETS,
@@ -44,7 +54,10 @@ import { FinancialDetailSheet } from "@/components/lucratividade/detail-sheet/Fi
 import { FinancialEvaluationTable } from "@/components/lucratividade/financial-evaluation-table";
 import type { SortKey } from "@/components/lucratividade/financial-evaluation-table/types";
 import { FinancialEvaluationTableSkeleton } from "@/components/lucratividade/FinancialEvaluationTableSkeleton";
-import { MarginSummaryHero } from "@/components/lucratividade/MarginSummaryHero";
+import {
+  MarginSummaryHero,
+  type SegmentSummaries,
+} from "@/components/lucratividade/MarginSummaryHero";
 import { PeriodBar } from "@/components/lucratividade/PeriodBar";
 import { TargetMarginPopover } from "@/components/lucratividade/TargetMarginPopover";
 import {
@@ -105,6 +118,21 @@ const PERIOD_LONG_LABEL: Record<LucratividadePeriodPreset, string> = {
   last90: "Últimos 90 dias",
 };
 
+const SEGMENTS: ListingSegment[] = ["all", "own", "catalog"];
+
+/** Lista vazia — "Todos" mantém o texto de sempre; o recorte diz qual tipo faltou. */
+function emptyListMessage(segment: ListingSegment, isSimulation: boolean): string {
+  if (segment === "all") {
+    return isSimulation
+      ? "Nenhum anúncio ativo ou pausado."
+      : "Nenhuma venda paga neste período.";
+  }
+  const kind = segment === "catalog" ? "de catálogo" : "próprio";
+  return isSimulation
+    ? `Nenhum anúncio ${kind} ativo ou pausado.`
+    : `Nenhuma venda de anúncio ${kind} neste período.`;
+}
+
 function isPeriodPreset(view: LucratividadeView): view is LucratividadePeriodPreset {
   return LUCRATIVIDADE_PERIOD_PRESETS.some((preset) => preset.id === view);
 }
@@ -164,6 +192,9 @@ export function FinancialEvaluationClient({
   const [searchQuery, setSearchQuery] = useState("");
   const [showPaused, setShowPaused] = useState(false);
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
+  // Recorte por tipo de anúncio — não reseta ao trocar de período.
+  const [segment, setSegment] = useState<ListingSegment>("all");
+  const segmentBaseId = useId();
   const [sort, setSort] = useState<TableSort<SortKey>>({
     key: "sales",
     direction: "desc",
@@ -191,10 +222,46 @@ export function FinancialEvaluationClient({
   const rows = stream.rows;
   const loading = request === null || stream.status === "loading";
 
-  const summary = useMemo(
-    () => computeMarginSummary(rows, { weighted: !isSimulation }),
-    [rows, isSimulation],
+  // Tudo o que a página mostra (topo, contadores, tabela) parte do recorte;
+  // o overlay de preço p/ meta e o anúncio aberto continuam sobre `rows`.
+  const segmentRows = useMemo(
+    () => filterRowsBySegment(rows, segment),
+    [rows, segment],
   );
+
+  const summary = useMemo(
+    () => computeMarginSummary(segmentRows, { weighted: !isSimulation }),
+    [segmentRows, isSimulation],
+  );
+
+  const segmentSummaries = useMemo<SegmentSummaries | null>(
+    () =>
+      segment === "all"
+        ? {
+            own: computeMarginSummary(filterRowsBySegment(rows, "own"), {
+              weighted: !isSimulation,
+            }),
+            catalog: computeMarginSummary(filterRowsBySegment(rows, "catalog"), {
+              weighted: !isSimulation,
+            }),
+          }
+        : null,
+    [rows, segment, isSimulation],
+  );
+
+  const segmentTabs = useMemo(() => {
+    const catalogCount = rows.filter((row) => row.catalogListing).length;
+    const counts: Record<ListingSegment, number> = {
+      all: rows.length,
+      own: rows.length - catalogCount,
+      catalog: catalogCount,
+    };
+    return SEGMENTS.map((id) => ({
+      id,
+      label: LISTING_SEGMENT_LABEL[id],
+      badge: counts[id].toLocaleString("pt-BR"),
+    }));
+  }, [rows]);
 
   const overlay = useMinPriceOverlay({
     rows,
@@ -219,14 +286,15 @@ export function FinancialEvaluationClient({
   );
 
   const pausedCount = useMemo(
-    () => countPausedListings(rows, (row) => row.status),
-    [rows],
+    () => countPausedListings(segmentRows, (row) => row.status),
+    [segmentRows],
   );
   const belowTargetCount = useMemo(
     () =>
-      rows.filter((row) => isRowBelowTarget(row, targetMarginPercent, marginBasis))
-        .length,
-    [rows, targetMarginPercent, marginBasis],
+      segmentRows.filter((row) =>
+        isRowBelowTarget(row, targetMarginPercent, marginBasis),
+      ).length,
+    [segmentRows, targetMarginPercent, marginBasis],
   );
 
   // "Vendas" não existe na simulação — cai pra ordem por produto.
@@ -240,7 +308,7 @@ export function FinancialEvaluationClient({
 
   const visibleRows = useMemo(() => {
     const byStatus = filterListingsByPausedVisibility(
-      rows,
+      segmentRows,
       showPaused,
       (row) => row.status,
     );
@@ -259,7 +327,7 @@ export function FinancialEvaluationClient({
           : bySearch;
     return [...byQuick].sort((a, b) => compareRows(a, b, effectiveSort));
   }, [
-    rows,
+    segmentRows,
     showPaused,
     searchQuery,
     quickFilter,
@@ -351,8 +419,8 @@ export function FinancialEvaluationClient({
         ? "Métricas de Product Ads indisponíveis agora — tente Recalcular."
         : null;
 
-  const showTable = rows.length > 0;
-  const emptyDone = stream.status === "done" && rows.length === 0;
+  const showTable = segmentRows.length > 0;
+  const emptyDone = stream.status === "done" && segmentRows.length === 0;
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -421,135 +489,156 @@ export function FinancialEvaluationClient({
           </UserFeedback>
         ) : null}
 
-        <MarginSummaryHero
-          summary={summary}
-          isSimulation={isSimulation}
-          rangeLabel={rangeLabel}
-          loading={loading}
-          afterAdsUnavailableText={afterAdsUnavailableText}
-          droppedListings={stream.meta?.droppedListings ?? null}
-          excludedFilterActive={quickFilter === "excluded"}
-          onToggleExcludedFilter={() =>
-            setQuickFilter((prev) => (prev === "excluded" ? "all" : "excluded"))
-          }
+        <SegmentedTabs
+          tabs={segmentTabs}
+          value={segment}
+          onValueChange={setSegment}
+          baseId={segmentBaseId}
+          ariaLabel="Tipo de anúncio"
+          className="w-full sm:w-auto"
         />
 
-        <Card className="space-y-4 p-4">
-          <div className="flex flex-wrap items-start gap-2">
-            <ItemListSearch
-              value={searchQuery}
-              onChange={setSearchQuery}
-              filteredCount={visibleRows.length}
-              totalCount={rows.length}
-              placeholder="Buscar por SKU, título ou MLB…"
-              className="min-w-[220px] flex-1"
-            />
-            <ShowPausedListingsSwitch
-              checked={showPaused}
-              onCheckedChange={setShowPaused}
-              pausedCount={pausedCount}
-              className="h-11 sm:h-10"
-            />
-            <TargetMarginPopover
-              targetMarginPercent={targetMarginPercent}
-              marginBasis={marginBasis}
-              onApply={applyTarget}
-            />
-          </div>
+        <div
+          role="tabpanel"
+          id={tabPanelId(segmentBaseId, segment)}
+          aria-labelledby={tabId(segmentBaseId, segment)}
+          className="space-y-4"
+        >
+          <MarginSummaryHero
+            summary={summary}
+            isSimulation={isSimulation}
+            rangeLabel={rangeLabel}
+            loading={loading}
+            afterAdsUnavailableText={afterAdsUnavailableText}
+            // Anúncio removido do ML não tem `catalog_listing` — só dá pra
+            // contar em Todos.
+            droppedListings={
+              segment === "all" ? (stream.meta?.droppedListings ?? null) : null
+            }
+            excludedFilterActive={quickFilter === "excluded"}
+            onToggleExcludedFilter={() =>
+              setQuickFilter((prev) => (prev === "excluded" ? "all" : "excluded"))
+            }
+            segment={segment}
+            segmentSummaries={segmentSummaries}
+            onSelectSegment={setSegment}
+          />
 
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div
-              role="group"
-              aria-label="Filtrar anúncios"
-              className="flex flex-wrap items-center gap-2"
-            >
-              {(
-                [
-                  { id: "all", label: "Todos", count: rows.length },
-                  { id: "below", label: "Abaixo da meta", count: belowTargetCount },
-                  {
-                    id: "excluded",
-                    label: "Fora da média",
-                    count: summary.excluded.count,
-                  },
-                ] as const
-              ).map((filter) => {
-                const tone = QUICK_FILTER_TONE[filter.id];
-                const active = quickFilter === filter.id;
-                return (
-                  <button
-                    key={filter.id}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => setQuickFilter(filter.id)}
-                    className={cn(
-                      "inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-150",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1",
-                      active ? tone.active : tone.idle,
-                    )}
-                  >
-                    <span className={cn("size-2 rounded-full", tone.dot)} aria-hidden />
-                    {filter.label}
-                    <span
+          <Card className="space-y-4 p-4">
+            <div className="flex flex-wrap items-start gap-2">
+              <ItemListSearch
+                value={searchQuery}
+                onChange={setSearchQuery}
+                filteredCount={visibleRows.length}
+                totalCount={segmentRows.length}
+                placeholder="Buscar por SKU, título ou MLB…"
+                className="min-w-[220px] flex-1"
+              />
+              <ShowPausedListingsSwitch
+                checked={showPaused}
+                onCheckedChange={setShowPaused}
+                pausedCount={pausedCount}
+                className="h-11 sm:h-10"
+              />
+              <TargetMarginPopover
+                targetMarginPercent={targetMarginPercent}
+                marginBasis={marginBasis}
+                onApply={applyTarget}
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div
+                role="group"
+                aria-label="Filtrar anúncios"
+                className="flex flex-wrap items-center gap-2"
+              >
+                {(
+                  [
+                    { id: "all", label: "Todos", count: segmentRows.length },
+                    { id: "below", label: "Abaixo da meta", count: belowTargetCount },
+                    {
+                      id: "excluded",
+                      label: "Fora da média",
+                      count: summary.excluded.count,
+                    },
+                  ] as const
+                ).map((filter) => {
+                  const tone = QUICK_FILTER_TONE[filter.id];
+                  const active = quickFilter === filter.id;
+                  return (
+                    <button
+                      key={filter.id}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => setQuickFilter(filter.id)}
                       className={cn(
-                        "rounded-full px-1.5 font-semibold tabular-nums",
-                        tone.count,
+                        "inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-150",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1",
+                        active ? tone.active : tone.idle,
                       )}
                     >
-                      {filter.count.toLocaleString("pt-BR")}
-                    </span>
-                  </button>
-                );
-              })}
+                      <span className={cn("size-2 rounded-full", tone.dot)} aria-hidden />
+                      {filter.label}
+                      <span
+                        className={cn(
+                          "rounded-full px-1.5 font-semibold tabular-nums",
+                          tone.count,
+                        )}
+                      >
+                        {filter.count.toLocaleString("pt-BR")}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              {showTable && visibleRows.length > 0 ? (
+                <p className="flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)]">
+                  <MousePointerClick className="size-3" aria-hidden />
+                  Clique em um anúncio para ver de onde vem a margem e o preço p/ meta.
+                </p>
+              ) : null}
             </div>
-            {showTable && visibleRows.length > 0 ? (
-              <p className="flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)]">
-                <MousePointerClick className="size-3" aria-hidden />
-                Clique em um anúncio para ver de onde vem a margem e o preço p/ meta.
+
+            {overlay.error ? (
+              <UserFeedback tone="warning">{overlay.error}</UserFeedback>
+            ) : null}
+
+            {loading && !showTable ? <FinancialEvaluationTableSkeleton /> : null}
+
+            {emptyDone ? (
+              <p className="py-6 text-center text-sm text-[var(--muted-foreground)]">
+                {emptyListMessage(rows.length === 0 ? "all" : segment, isSimulation)}
               </p>
             ) : null}
-          </div>
 
-          {overlay.error ? (
-            <UserFeedback tone="warning">{overlay.error}</UserFeedback>
-          ) : null}
+            {showTable && visibleRows.length === 0 ? (
+              <p className="py-6 text-center text-sm text-[var(--muted-foreground)]">
+                {searchQuery
+                  ? itemListSearchEmptyMessage(searchQuery)
+                  : quickFilter === "below"
+                    ? "Nenhum anúncio abaixo da meta."
+                    : quickFilter === "excluded"
+                      ? "Todos os anúncios entram na média."
+                      : "Nenhum anúncio para mostrar — os pausados estão ocultos."}
+              </p>
+            ) : null}
 
-          {loading && !showTable ? <FinancialEvaluationTableSkeleton /> : null}
-
-          {emptyDone ? (
-            <p className="py-6 text-center text-sm text-[var(--muted-foreground)]">
-              {isSimulation
-                ? "Nenhum anúncio ativo ou pausado."
-                : "Nenhuma venda paga neste período."}
-            </p>
-          ) : null}
-
-          {showTable && visibleRows.length === 0 ? (
-            <p className="py-6 text-center text-sm text-[var(--muted-foreground)]">
-              {searchQuery
-                ? itemListSearchEmptyMessage(searchQuery)
-                : quickFilter === "below"
-                  ? "Nenhum anúncio abaixo da meta."
-                  : quickFilter === "excluded"
-                    ? "Todos os anúncios entram na média."
-                    : "Nenhum anúncio para mostrar — os pausados estão ocultos."}
-            </p>
-          ) : null}
-
-          {showTable && visibleRows.length > 0 ? (
-            <FinancialEvaluationTable
-              rows={visibleRows}
-              sort={effectiveSort}
-              onSortChange={onSortChange}
-              onSortSet={setSort}
-              isSimulation={isSimulation}
-              targetMarginPercent={targetMarginPercent}
-              marginBasis={marginBasis}
-              targetCellFor={targetCellFor}
-              onSelect={setSelectedId}
-            />
-          ) : null}
-        </Card>
+            {showTable && visibleRows.length > 0 ? (
+              <FinancialEvaluationTable
+                rows={visibleRows}
+                sort={effectiveSort}
+                onSortChange={onSortChange}
+                onSortSet={setSort}
+                isSimulation={isSimulation}
+                targetMarginPercent={targetMarginPercent}
+                marginBasis={marginBasis}
+                targetCellFor={targetCellFor}
+                onSelect={setSelectedId}
+              />
+            ) : null}
+          </Card>
+        </div>
 
         {selectedRow ? (
           <FinancialDetailSheet

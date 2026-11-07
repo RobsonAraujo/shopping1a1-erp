@@ -47,6 +47,20 @@ export function ExclusionBadge({ row }: { row: FinancialEvaluationRow }) {
   );
 }
 
+/** Marca o anúncio de catálogo — o próprio fica sem badge, pra não poluir. */
+export function CatalogBadge({ row }: { row: FinancialEvaluationRow }) {
+  if (!row.catalogListing) return null;
+  return (
+    <Badge
+      variant="muted"
+      className="h-5 px-1.5 text-[10px] font-medium"
+      title="Anúncio de catálogo do Mercado Livre"
+    >
+      Catálogo
+    </Badge>
+  );
+}
+
 export function PmaBadge({
   row,
   isSimulation,

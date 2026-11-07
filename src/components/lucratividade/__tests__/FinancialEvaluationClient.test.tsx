@@ -30,7 +30,13 @@ afterEach(() => {
 
 function periodRow(
   id: string,
-  opts: { price: number; cost: number | null; tax: number | null; units: number },
+  opts: {
+    price: number;
+    cost: number | null;
+    tax: number | null;
+    units: number;
+    catalog?: boolean;
+  },
 ): FinancialEvaluationRow {
   const breakdown = computeFinancialMargin({
     salePrice: opts.price,
@@ -53,6 +59,7 @@ function periodRow(
     hasPromotion: false,
     listingTypeId: "gold_special",
     listingTypeLabel: "Clássico",
+    catalogListing: opts.catalog ?? false,
     productCost: opts.cost,
     extraCosts: 0,
     taxRatePercent: opts.tax,
@@ -81,12 +88,12 @@ function periodRow(
   };
 }
 
-const rows = [
+const defaultRows = [
   periodRow("MLB1", { price: 100, cost: 50, tax: 10, units: 10 }),
   periodRow("MLB2", { price: 100, cost: null, tax: 10, units: 2 }),
 ];
 
-function mockFetch() {
+function mockFetch(rows: FinancialEvaluationRow[] = defaultRows) {
   const encoder = new TextEncoder();
   const calls: string[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -161,6 +168,52 @@ describe("FinancialEvaluationClient", () => {
       assert.equal(tab.disabled, true);
       assert.match(tab.textContent ?? "", /Em breve/);
       assert.match(document.body.textContent ?? "", /De onde vem a margem/);
+    });
+    unmount();
+  });
+
+  it("compares own vs catalog and scopes the page to the chosen segment", async () => {
+    // próprio 23% em R$ 1.000; catálogo 0,5% em R$ 4.000 → Todos 5%
+    mockFetch([
+      periodRow("MLB1", { price: 100, cost: 50, tax: 10, units: 10 }),
+      periodRow("MLB3", { price: 200, cost: 150, tax: 10, units: 20, catalog: true }),
+    ]);
+    const { container, unmount } = renderIntoDocument(
+      <FinancialEvaluationClient
+        taxContext={{ taxRegime: "LUCRO_REAL", simplesRateConfigured: false }}
+        initialWholesaleReductions={DEFAULT_WHOLESALE_REDUCTIONS}
+      />,
+    );
+    const tableSkus = () =>
+      [...container.querySelectorAll("tbody tr")].map((tr) =>
+        tr.textContent?.includes("SKU-MLB1") ? "MLB1" : "MLB3",
+      );
+
+    await waitFor(() => {
+      const text = container.textContent ?? "";
+      assert.match(text, /5,00%/);
+      assert.match(text, /5\.000,00/);
+      assert.match(text, /20% do total/);
+      assert.match(text, /80% do total/);
+      assert.deepEqual(tableSkus().sort(), ["MLB1", "MLB3"]);
+    });
+
+    const catalogButton = container.querySelector(
+      'button[aria-label="Ver só anúncios: Catálogo"]',
+    ) as HTMLButtonElement | null;
+    assert.ok(catalogButton);
+    act(() => {
+      catalogButton.click();
+    });
+
+    await waitFor(() => {
+      const text = container.textContent ?? "";
+      assert.match(text, /Margem de contribuição · só catálogo/);
+      assert.match(text, /0,50%/);
+      assert.doesNotMatch(text, /5,00%/);
+      assert.deepEqual(tableSkus(), ["MLB3"]);
+      const selectedTab = container.querySelector('[role="tab"][aria-selected="true"]');
+      assert.match(selectedTab?.textContent ?? "", /Catálogo/);
     });
     unmount();
   });

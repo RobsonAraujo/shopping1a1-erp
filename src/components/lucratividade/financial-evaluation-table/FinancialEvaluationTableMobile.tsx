@@ -15,6 +15,7 @@ import {
 import { marginExclusionReason } from "@/lib/lucratividade/margin-summary";
 import { cn } from "@/lib/utils";
 import {
+  CatalogBadge,
   ExclusionBadge,
   PmaBadge,
   StackedMarginCell,
@@ -105,6 +106,7 @@ export function FinancialEvaluationTableMobile({
                         mlStock={0}
                         warehouseStock={0}
                       />
+                      <CatalogBadge row={row} />
                       <ExclusionBadge row={row} />
                       <PmaBadge row={row} isSimulation={isSimulation} />
                     </div>

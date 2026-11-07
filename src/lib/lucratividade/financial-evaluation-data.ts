@@ -77,6 +77,9 @@ export type FinancialEvaluationRow = {
   hasPromotion: boolean;
   listingTypeId: string | null;
   listingTypeLabel: string | null;
+  /** `true` = anúncio de catálogo do ML (MLB próprio, os pedidos apontam pra
+   * ele); `false` = anúncio próprio. Base do filtro Próprios/Catálogo. */
+  catalogListing: boolean;
   productCost: number | null;
   extraCosts: number | null;
   taxRatePercent: number | null;
@@ -450,6 +453,7 @@ function buildFastRowPreview(
     regularPrice: null,
     hasPromotion: false,
     listingTypeId: item.listing_type_id ?? null,
+    catalogListing: item.catalog_listing === true,
     listingTypeLabel: listingTypeLabelFromId(item.listing_type_id),
     productCost: costs.productCost,
     extraCosts: costs.extraCosts,
@@ -633,6 +637,7 @@ async function buildRowForItem(
     regularPrice,
     hasPromotion,
     listingTypeId: item.listing_type_id ?? null,
+    catalogListing: item.catalog_listing === true,
     listingTypeLabel,
     productCost,
     extraCosts,
@@ -836,6 +841,7 @@ async function buildRowForPeriodItem(
     regularPrice: null,
     hasPromotion: false,
     listingTypeId: item.listing_type_id ?? null,
+    catalogListing: item.catalog_listing === true,
     listingTypeLabel,
     productCost,
     extraCosts,
