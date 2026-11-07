@@ -1,14 +1,14 @@
 import { prisma } from "@/lib/db/db";
 import { logServerError } from "@/lib/infra/server-public-error";
-import { fetchItemsByIds } from "@/lib/mercadolibre/api";
+import { ITEMS_BULK_MAX_IDS, fetchItemsByIds } from "@/lib/mercadolibre/api";
 import { mapWithConcurrency } from "@/lib/mercadolibre/concurrency";
 import { getItemSku } from "@/lib/mercadolibre/item-sku";
 import { upsertListingsFromItems } from "@/lib/mercadolibre/listing-sync";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import { normalizeProductSku } from "@/lib/pricing/product-pricing";
 
-/** Limite do multiget `/items?ids=` do ML. */
-const FETCH_CHUNK_SIZE = 20;
+/** Limite do multiget `/items/bulk?ids=` do ML. */
+const FETCH_CHUNK_SIZE = ITEMS_BULK_MAX_IDS;
 const FETCH_CONCURRENCY = 8;
 /** Mesmo tamanho de lote de escrita usado em `upsertListingsFromItems`. */
 const WRITE_CHUNK_SIZE = 25;

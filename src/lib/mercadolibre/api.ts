@@ -2,9 +2,14 @@ import { reportsConfig } from "@/config/reports";
 import { stockPlanningConfig } from "@/config/stock-planning";
 import { prisma } from "@/lib/db/db";
 import { roundMoney } from "@/lib/pricing/financial-margin";
+import { zonedYmd } from "@/lib/report-timezone";
 import { getMercadoLibreConfig } from "./config";
 import { fetchWithRetry } from "./fetch-with-retry";
 import { mapWithConcurrency } from "./concurrency";
+import {
+  forEachOrdersSearchPage,
+  type ForEachOrdersSearchPageOptions,
+} from "./orders-search";
 import {
   aggregateFulfillmentSnapshots,
   collectInventoryIdsFromItem,
@@ -23,7 +28,7 @@ import type {
   CategoryBody,
   ItemBody,
   ItemPriceToWinResponse,
-  ItemMultigetEntry,
+  ItemBulkEntry,
   ItemsSearchResponse,
   OrderSearchOrder,
   OrderSearchResponse,
@@ -73,23 +78,25 @@ export async function fetchUserItemsSearch(
   return res.json() as Promise<ItemsSearchResponse>;
 }
 
-function normalizeMultigetEntry(entry: ItemMultigetEntry): ItemBody | null {
-  if (entry && typeof entry === "object" && "body" in entry && entry.body) {
-    return entry.body as ItemBody;
-  }
-  if (entry && typeof entry === "object" && "id" in entry) {
-    return entry as ItemBody;
-  }
-  return null;
+/** Máximo de ids por chamada do `/items/bulk` (acima disso, 400 "Too many IDs"). */
+export const ITEMS_BULK_MAX_IDS = 20;
+
+/** Só entradas com sucesso: as de erro (`{ id, status_code: 404, error }`) não são anúncio. */
+function normalizeItemBulkEntry(entry: ItemBulkEntry): ItemBody | null {
+  if (!entry || typeof entry !== "object") return null;
+  const status = entry.status_code ?? entry.code;
+  if (typeof status === "number" && (status < 200 || status >= 300)) return null;
+  const body = entry.body;
+  if (!body || typeof body !== "object" || !body.id) return null;
+  return body;
 }
 
-export async function fetchItemsByIds(
+async function fetchItemsBulkChunk(
   accessToken: string,
   ids: string[],
 ): Promise<ItemBody[]> {
-  if (ids.length === 0) return [];
   const { apiBase } = getMercadoLibreConfig();
-  const u = new URL(`${apiBase}/items`);
+  const u = new URL(`${apiBase}/items/bulk`);
   u.searchParams.set("ids", ids.join(","));
 
   const res = await fetch(u.toString(), {
@@ -101,12 +108,38 @@ export async function fetchItemsByIds(
     throw new Error(`items multiget failed: ${res.status} ${t}`);
   }
 
-  const data = (await res.json()) as ItemMultigetEntry[] | ItemBody[];
+  const data = (await res.json()) as ItemBulkEntry[];
   if (!Array.isArray(data)) return [];
-
   return data
-    .map((entry) => normalizeMultigetEntry(entry as ItemMultigetEntry))
+    .map((entry) => normalizeItemBulkEntry(entry))
     .filter((x): x is ItemBody => x !== null);
+}
+
+/**
+ * Multiget de anúncios via `/items/bulk?ids=`. O ML aposentou o `/items?ids=`
+ * (migração pedida até 25/10/2026; em 2026-11-06 ele já respondia, de forma
+ * intermitente, 403 `ResourceDeprecated` "client no longer allowed to consume
+ * this resource"). O corpo de cada anúncio é o mesmo; o envelope muda para
+ * `{ id, status_code, body | error }` e a ordem da resposta não é garantida —
+ * devolvemos na ordem pedida, sem os ids que falharam.
+ */
+export async function fetchItemsByIds(
+  accessToken: string,
+  ids: string[],
+): Promise<ItemBody[]> {
+  if (ids.length === 0) return [];
+  const items: ItemBody[] = [];
+  for (let i = 0; i < ids.length; i += ITEMS_BULK_MAX_IDS) {
+    items.push(
+      ...(await fetchItemsBulkChunk(accessToken, ids.slice(i, i + ITEMS_BULK_MAX_IDS))),
+    );
+  }
+  const position = new Map(ids.map((id, index) => [id, index] as const));
+  return items.sort(
+    (a, b) =>
+      (position.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
+      (position.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+  );
 }
 
 export async function fetchItemById(
@@ -305,6 +338,46 @@ export function returnedPaidOrderIdsFromOrders(
   return ids;
 }
 
+/**
+ * `fetchPage` de `forEachOrdersSearchPage` para `/orders/search` do seller —
+ * o fatiamento por data (teto de offset do ML) fica no paginador.
+ */
+function ordersSearchPageFetcher(
+  accessToken: string,
+  sellerId: number,
+  query: {
+    dateField: SalesWindowDateField;
+    orderStatus?: string;
+    signal?: AbortSignal;
+  },
+): ForEachOrdersSearchPageOptions["fetchPage"] {
+  const { apiBase } = getMercadoLibreConfig();
+  return async (range, offset, limit) => {
+    const u = new URL(`${apiBase}/orders/search`);
+    u.searchParams.set("seller", String(sellerId));
+    if (query.orderStatus) {
+      u.searchParams.set("order.status", query.orderStatus);
+    }
+    setOrderDateRange(
+      u,
+      query.dateField,
+      range.from.toISOString(),
+      range.to.toISOString(),
+    );
+    u.searchParams.set("offset", String(offset));
+    u.searchParams.set("limit", String(limit));
+    u.searchParams.set("sort", "date_desc");
+    u.searchParams.set("display", "complete");
+
+    const res = await fetchWithRetry(u.toString(), {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+      signal: query.signal,
+    });
+    return (await res.json()) as OrderSearchResponse;
+  };
+}
+
 export async function fetchOrdersInDateRange(
   accessToken: string,
   sellerId: number,
@@ -319,53 +392,21 @@ export async function fetchOrdersInDateRange(
     signal?: AbortSignal;
   } = {},
 ): Promise<OrderSearchOrder[]> {
-  const { apiBase } = getMercadoLibreConfig();
-  const fromStr = from.toISOString();
-  const toStr = to.toISOString();
-  const dateField =
-    options.dateField ?? stockPlanningConfig.salesWindowDateField;
   const orders: OrderSearchOrder[] = [];
-  let offset = 0;
-  const limit = 50;
-  let total = Infinity;
-
-  while (offset < total) {
-    options.signal?.throwIfAborted();
-    const u = new URL(`${apiBase}/orders/search`);
-    u.searchParams.set("seller", String(sellerId));
-    if (options.orderStatus) {
-      u.searchParams.set("order.status", options.orderStatus);
-    }
-    setOrderDateRange(u, dateField, fromStr, toStr);
-    u.searchParams.set("offset", String(offset));
-    u.searchParams.set("limit", String(limit));
-    u.searchParams.set("sort", "date_desc");
-    u.searchParams.set("display", "complete");
-
-    const res = await fetchWithRetry(u.toString(), {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      cache: "no-store",
-    });
-
-    const data = (await res.json()) as OrderSearchResponse;
-    const reported = data.paging?.total;
-    total =
-      reported != null && reported >= 0
-        ? reported
-        : ((data.results?.length ?? 0) > 0 ? Infinity : 0);
-
-    const batch = data.results ?? [];
-    orders.push(...batch);
-    options.onPage?.({
-      fetched: orders.length,
-      total: Number.isFinite(total) ? total : null,
-    });
-
-    if (batch.length === 0) break;
-    offset += limit;
-    if (batch.length < limit) break;
-  }
-
+  await forEachOrdersSearchPage({
+    from,
+    to,
+    fetchPage: ordersSearchPageFetcher(accessToken, sellerId, {
+      dateField: options.dateField ?? stockPlanningConfig.salesWindowDateField,
+      orderStatus: options.orderStatus,
+      signal: options.signal,
+    }),
+    onOrders: (batch) => {
+      orders.push(...batch);
+    },
+    signal: options.signal,
+    onProgress: options.onPage,
+  });
   return orders;
 }
 
@@ -504,64 +545,70 @@ export async function fetchOrderMetricsByItemInDateRange(
   to: Date,
   dateField: SalesWindowDateField = stockPlanningConfig.salesWindowDateField,
 ): Promise<ItemOrderMetricsByListing> {
-  const { apiBase } = getMercadoLibreConfig();
-  const fromStr = from.toISOString();
-  const toStr = to.toISOString();
   const revenueByItem: Record<string, number> = {};
   const unitsByItem: Record<string, number> = {};
-  let offset = 0;
-  const limit = 50;
-  let total = Infinity;
 
-  while (offset < total) {
-    const u = new URL(`${apiBase}/orders/search`);
-    u.searchParams.set("seller", String(sellerId));
-    u.searchParams.set("order.status", "paid");
-    setOrderDateRange(u, dateField, fromStr, toStr);
-    u.searchParams.set("offset", String(offset));
-    u.searchParams.set("limit", String(limit));
-    u.searchParams.set("sort", "date_desc");
-    u.searchParams.set("display", "complete");
-
-    const res = await fetchWithRetry(u.toString(), {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      cache: "no-store",
-    });
-
-    const data = (await res.json()) as OrderSearchResponse;
-    const reported = data.paging?.total;
-    total =
-      reported != null && reported >= 0
-        ? reported
-        : ((data.results?.length ?? 0) > 0 ? Infinity : 0);
-
-    const batch = data.results ?? [];
-    for (const order of batch) {
-      if (order.status === "cancelled") continue;
-      for (const line of order.order_items ?? []) {
-        const itemId = listingIdFromOrderLine(line);
-        if (!itemId) continue;
-        const qty = quantityFromOrderLine(line);
-        if (qty > 0) {
-          unitsByItem[itemId] = (unitsByItem[itemId] ?? 0) + qty;
-        }
-        const lineRevenue = revenueFromOrderLine(line);
-        if (lineRevenue > 0) {
-          revenueByItem[itemId] = (revenueByItem[itemId] ?? 0) + lineRevenue;
+  await forEachOrdersSearchPage({
+    from,
+    to,
+    fetchPage: ordersSearchPageFetcher(accessToken, sellerId, {
+      dateField,
+      orderStatus: "paid",
+    }),
+    onOrders: (batch) => {
+      for (const order of batch) {
+        if (order.status === "cancelled") continue;
+        for (const line of order.order_items ?? []) {
+          const itemId = listingIdFromOrderLine(line);
+          if (!itemId) continue;
+          const qty = quantityFromOrderLine(line);
+          if (qty > 0) {
+            unitsByItem[itemId] = (unitsByItem[itemId] ?? 0) + qty;
+          }
+          const lineRevenue = revenueFromOrderLine(line);
+          if (lineRevenue > 0) {
+            revenueByItem[itemId] = (revenueByItem[itemId] ?? 0) + lineRevenue;
+          }
         }
       }
-    }
-
-    if (batch.length === 0) break;
-    offset += limit;
-    if (batch.length < limit) break;
-  }
+    },
+  });
 
   return { revenueByItem, unitsByItem };
 }
 
 /** Unidades vendidas por anúncio, agrupadas por dia (data ISO `YYYY-MM-DD`). */
 export type DailyUnitsSoldByItem = Record<string, Record<string, number>>;
+
+/**
+ * Soma as unidades de `orders` em `target`, por anúncio e por dia civil no
+ * fuso do relatório (São Paulo). Não usar `rawDate.slice(0, 10)`: o ML devolve
+ * `...-04:00`, e uma venda das 23h30 BRT caía no dia seguinte.
+ */
+export function addOrdersToDailyUnits(
+  target: DailyUnitsSoldByItem,
+  orders: OrderSearchOrder[],
+  dateField: SalesWindowDateField,
+): void {
+  for (const order of orders) {
+    if (order.status === "cancelled") continue;
+    const rawDate =
+      dateField === "date_closed" ? order.date_closed : order.date_created;
+    if (!rawDate) continue;
+    const date = new Date(rawDate);
+    if (Number.isNaN(date.getTime())) continue;
+    const dayKey = zonedYmd(date);
+
+    for (const line of order.order_items ?? []) {
+      const itemId = listingIdFromOrderLine(line);
+      if (!itemId) continue;
+      const qty = quantityFromOrderLine(line);
+      if (qty <= 0) continue;
+      const byDay = (target[itemId] ??= {});
+      byDay[dayKey] = (byDay[dayKey] ?? 0) + qty;
+    }
+  }
+}
 
 /**
  * Igual a `fetchOrderMetricsByItemInDateRange`, mas mantém a granularidade
@@ -575,83 +622,19 @@ export async function fetchDailyUnitsSoldByItemInDateRange(
   to: Date,
   dateField: SalesWindowDateField = stockPlanningConfig.salesWindowDateField,
 ): Promise<DailyUnitsSoldByItem> {
-  const { apiBase } = getMercadoLibreConfig();
-  const fromStr = from.toISOString();
-  const toStr = to.toISOString();
-  const limit = 50;
-  // Só a 1ª página é sequencial (pra saber o total); o resto busca em paralelo
-  // — evita centenas de round-trips um-a-um em contas com muitos pedidos.
-  const concurrency = 6;
   const dailyByItem: DailyUnitsSoldByItem = {};
-
-  function buildUrl(offset: number): string {
-    const u = new URL(`${apiBase}/orders/search`);
-    u.searchParams.set("seller", String(sellerId));
-    u.searchParams.set("order.status", "paid");
-    setOrderDateRange(u, dateField, fromStr, toStr);
-    u.searchParams.set("offset", String(offset));
-    u.searchParams.set("limit", String(limit));
-    u.searchParams.set("sort", "date_desc");
-    u.searchParams.set("display", "complete");
-    return u.toString();
-  }
-
-  async function fetchPage(offset: number): Promise<OrderSearchResponse> {
-    const res = await fetchWithRetry(buildUrl(offset), {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      cache: "no-store",
-    });
-    return (await res.json()) as OrderSearchResponse;
-  }
-
-  function ingest(data: OrderSearchResponse) {
-    for (const order of data.results ?? []) {
-      if (order.status === "cancelled") continue;
-      const rawDate =
-        dateField === "date_closed" ? order.date_closed : order.date_created;
-      const dayKey = rawDate ? rawDate.slice(0, 10) : null;
-      if (!dayKey) continue;
-
-      for (const line of order.order_items ?? []) {
-        const itemId = listingIdFromOrderLine(line);
-        if (!itemId) continue;
-        const qty = quantityFromOrderLine(line);
-        if (qty <= 0) continue;
-        const byDay = (dailyByItem[itemId] ??= {});
-        byDay[dayKey] = (byDay[dayKey] ?? 0) + qty;
-      }
-    }
-  }
-
-  const first = await fetchPage(0);
-  ingest(first);
-
-  const reportedTotal = first.paging?.total;
-
-  if (reportedTotal == null || reportedTotal < 0) {
-    // Total não confiável — cai para paginação sequencial página a página.
-    let offset = limit;
-    let lastBatchLen = first.results?.length ?? 0;
-    while (lastBatchLen === limit) {
-      const data = await fetchPage(offset);
-      ingest(data);
-      lastBatchLen = data.results?.length ?? 0;
-      offset += limit;
-    }
-    return dailyByItem;
-  }
-
-  const remainingOffsets: number[] = [];
-  for (let offset = limit; offset < reportedTotal; offset += limit) {
-    remainingOffsets.push(offset);
-  }
-
-  for (let i = 0; i < remainingOffsets.length; i += concurrency) {
-    const chunk = remainingOffsets.slice(i, i + concurrency);
-    const pages = await Promise.all(chunk.map((offset) => fetchPage(offset)));
-    for (const page of pages) ingest(page);
-  }
-
+  await forEachOrdersSearchPage({
+    from,
+    to,
+    fetchPage: ordersSearchPageFetcher(accessToken, sellerId, {
+      dateField,
+      orderStatus: "paid",
+    }),
+    onOrders: (batch) => addOrdersToDailyUnits(dailyByItem, batch, dateField),
+    // Só a 1ª página de cada fatia é sequencial (pra saber o total); o resto
+    // busca em paralelo — evita centenas de round-trips um-a-um.
+    concurrency: 6,
+  });
   return dailyByItem;
 }
 
@@ -1004,7 +987,7 @@ export async function fetchSellerFulfillmentInventoryIds(
 export async function fetchItemsByIdsBatched(
   accessToken: string,
   ids: string[],
-  batchSize = 20,
+  batchSize = ITEMS_BULK_MAX_IDS,
   concurrency = 8,
 ): Promise<ItemBody[]> {
   const unique = [...new Set(ids.filter(Boolean))];

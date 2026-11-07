@@ -19,6 +19,7 @@ import {
   filterListingsByPausedVisibility,
 } from "@/components/shared/ShowPausedListingsSwitch";
 import type { RevenuePotentialRow, RevenueSimulationPayload } from "@/lib/insights/types";
+import { effectiveMonthlyPotential } from "@/lib/insights/revenue-potential-math";
 import {
   WorkingCapitalCard,
   WORKING_CAPITAL_STORAGE_KEY,
@@ -36,7 +37,6 @@ import {
   type SortDir,
 } from "@/components/insights/revenue-potential-table";
 
-const DAYS_IN_MONTH = 30;
 const STORAGE_KEY = "insights:revenue-potential:v1";
 const ACTIVE_SIMULATION_STORAGE_KEY =
   "insights:revenue-potential:active-simulation:v1";
@@ -148,7 +148,7 @@ export function RevenuePotentialView({ rows }: { rows: RevenuePotentialRow[] }) 
     return rows.map((row) => {
       const override = overrides[row.mlItemId];
       const effectiveDailyAvg = override ?? row.dailyAvgEstimate;
-      const effectivePotential = effectiveDailyAvg * DAYS_IN_MONTH * row.price;
+      const effectivePotential = effectiveMonthlyPotential(row, override);
       return {
         ...row,
         effectiveDailyAvg,

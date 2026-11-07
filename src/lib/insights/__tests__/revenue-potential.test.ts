@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { mergeRevenuePotentialRowsBySku } from "../revenue-potential";
+import { DAYS_IN_MONTH, effectiveMonthlyPotential } from "../revenue-potential-math";
 import type { RevenuePotentialRow } from "@/lib/insights/types";
 
 function makeRow(overrides: Partial<RevenuePotentialRow>): RevenuePotentialRow {
@@ -78,5 +79,46 @@ describe("mergeRevenuePotentialRowsBySku", () => {
     const merged = mergeRevenuePotentialRowsBySku(rows);
 
     assert.equal(merged.length, 2);
+  });
+});
+
+describe("effectiveMonthlyPotential", () => {
+  // Clássico a R$ 100 (1/dia, vendendo) + catálogo a R$ 110 (0,5/dia, vendendo).
+  const merged = mergeRevenuePotentialRowsBySku([
+    makeRow({
+      mlItemId: "MLB1",
+      price: 100,
+      dailyAvgEstimate: 1,
+      potentialMonthlyRevenue: 3000,
+      currentMonthlyRevenue: 3000,
+    }),
+    makeRow({
+      mlItemId: "MLB2",
+      price: 110,
+      dailyAvgEstimate: 0.5,
+      potentialMonthlyRevenue: 1650,
+      currentMonthlyRevenue: 1650,
+    }),
+  ])[0]!;
+
+  it("keeps the server potential of a merged row with different prices (gap stays 0, not negative)", () => {
+    const potential = effectiveMonthlyPotential(merged, undefined);
+    assert.equal(potential, 4650);
+    assert.equal(potential - merged.currentMonthlyRevenue, 0);
+  });
+
+  it("scales the potential by the edited daily average", () => {
+    assert.equal(effectiveMonthlyPotential(merged, 3), 9300);
+    assert.equal(effectiveMonthlyPotential(merged, 0), 0);
+  });
+
+  it("uses the listing price when there was no sale to scale from", () => {
+    const row = makeRow({ price: 50, dailyAvgEstimate: 0, potentialMonthlyRevenue: 0 });
+    assert.equal(effectiveMonthlyPotential(row, 2), 2 * DAYS_IN_MONTH * 50);
+  });
+
+  it("matches avg × 30 × price on a single listing", () => {
+    const row = makeRow({ price: 80, dailyAvgEstimate: 2, potentialMonthlyRevenue: 4800 });
+    assert.equal(effectiveMonthlyPotential(row, 1), 1 * DAYS_IN_MONTH * 80);
   });
 });

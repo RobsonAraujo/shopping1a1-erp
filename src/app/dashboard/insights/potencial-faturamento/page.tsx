@@ -1,13 +1,17 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { cookies } from "next/headers";
-import { AlertTriangle, TrendingUp } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { TrendingUp } from "lucide-react";
+import { UserFeedback } from "@/components/ui/user-feedback";
 import { readSession } from "@/lib/mercadolibre/session";
 import { getOrganizationContext } from "@/lib/organizations/context";
+import { publicPageLoadMessage } from "@/lib/infra/server-public-error";
 import { loadRevenuePotentialData } from "@/lib/insights/revenue-potential";
 import { RevenuePotentialView } from "@/components/insights/RevenuePotentialView";
 import { RevenuePotentialSkeleton } from "@/components/insights/RevenuePotentialSkeleton";
+
+const LOAD_ERROR_MESSAGE =
+  "Não foi possível carregar as vendas do Mercado Livre agora. Tente de novo em instantes.";
 
 async function RevenuePotentialSection({
   token,
@@ -18,21 +22,16 @@ async function RevenuePotentialSection({
   userId: number;
   organizationId: string;
 }) {
-  const data = await loadRevenuePotentialData(token, userId, organizationId).catch(
-    () => null,
-  );
-
-  if (!data) {
+  let data: Awaited<ReturnType<typeof loadRevenuePotentialData>>;
+  try {
+    data = await loadRevenuePotentialData(token, userId, organizationId);
+  } catch (e) {
+    // O erro real fica no log — antes era engolido e a tela culpava a
+    // "conexão com o Mercado Livre" por qualquer falha.
     return (
-      <Card className="overflow-hidden rounded-2xl border-amber-500/20 bg-amber-500/5 p-0">
-        <CardContent className="flex items-start gap-3 p-4 pt-4 text-sm text-amber-900 sm:p-5 sm:pt-5 dark:text-amber-200">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
-          <span>
-            Não foi possível carregar os dados. Verifique sua conexão com o
-            Mercado Livre.
-          </span>
-        </CardContent>
-      </Card>
+      <UserFeedback title="Não foi possível carregar o potencial de faturamento">
+        {publicPageLoadMessage("insights/potencial-faturamento", e, LOAD_ERROR_MESSAGE)}
+      </UserFeedback>
     );
   }
 

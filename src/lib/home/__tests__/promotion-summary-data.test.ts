@@ -44,8 +44,8 @@ function mockMl({
       if (!promotions) throw new Error(`chamada inesperada: ${url}`);
       return promotions();
     }
-    if (url.includes("/items?ids=")) {
-      return Response.json([{ code: 200, body: item }]);
+    if (url.includes("/items/bulk?ids=")) {
+      return Response.json([{ id: item.id, status_code: 200, body: item }]);
     }
     throw new Error(`URL não mockada: ${url}`);
   });
@@ -139,12 +139,12 @@ function mockMlItems({
     }
     const priceMatch = url.match(/\/items\/([^/]+)\/sale_price/);
     if (priceMatch) return salePrice(priceMatch[1]);
-    if (url.includes("/items?ids=")) {
+    if (url.includes("/items/bulk?ids=")) {
       const ids = new URL(url).searchParams.get("ids")?.split(",") ?? [];
       return Response.json(
         items
           .filter((item) => ids.includes(String(item.id)))
-          .map((body) => ({ code: 200, body })),
+          .map((body) => ({ id: body.id, status_code: 200, body })),
       );
     }
     throw new Error(`URL não mockada: ${url}`);

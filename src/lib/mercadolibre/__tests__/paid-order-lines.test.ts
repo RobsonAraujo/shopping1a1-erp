@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  addOrdersToDailyUnits,
+  type DailyUnitsSoldByItem,
   paidOrderLinesFromOrders,
   returnedPaidOrderIdsFromOrders,
   splitOrderLinesByCancelledOrderIds,
@@ -115,5 +117,38 @@ describe("returnedPaidOrderIdsFromOrders", () => {
       now,
     );
     assert.deepEqual([...ids], []);
+  });
+});
+
+describe("addOrdersToDailyUnits", () => {
+  it("buckets by the São Paulo calendar day (ML sends -04:00) and skips cancelled", () => {
+    const daily: DailyUnitsSoldByItem = {};
+    addOrdersToDailyUnits(
+      daily,
+      [
+        {
+          id: 1,
+          status: "paid",
+          // 22:30 em -04:00 = 23:30 BRT do dia 5 — o `slice(0, 10)` acertava
+          // por acaso; o que quebra é o de 23:30 -04:00 (00:30 BRT do dia 6).
+          date_closed: "2026-11-05T22:30:00.000-04:00",
+          order_items: [{ quantity: 2, item: { id: "MLB1" } }],
+        },
+        {
+          id: 2,
+          status: "paid",
+          date_closed: "2026-11-05T23:30:00.000-04:00",
+          order_items: [{ quantity: 1, item: { id: "MLB1" } }],
+        },
+        {
+          id: 3,
+          status: "cancelled",
+          date_closed: "2026-11-05T10:00:00.000-04:00",
+          order_items: [{ quantity: 5, item: { id: "MLB1" } }],
+        },
+      ],
+      "date_closed",
+    );
+    assert.deepEqual(daily, { MLB1: { "2026-11-05": 2, "2026-11-06": 1 } });
   });
 });

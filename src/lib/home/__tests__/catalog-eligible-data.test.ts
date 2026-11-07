@@ -30,12 +30,12 @@ function mockMl(items: Array<Record<string, unknown>>) {
       const results = items.map((item) => item.id);
       return Response.json({ results, paging: { total: results.length } });
     }
-    if (url.includes("/items?ids=")) {
+    if (url.includes("/items/bulk?ids=")) {
       const ids = new URL(url).searchParams.get("ids")?.split(",") ?? [];
       return Response.json(
         items
           .filter((item) => ids.includes(String(item.id)))
-          .map((body) => ({ code: 200, body })),
+          .map((body) => ({ id: body.id, status_code: 200, body })),
       );
     }
     throw new Error(`URL não mockada: ${url}`);

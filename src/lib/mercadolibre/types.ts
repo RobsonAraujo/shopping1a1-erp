@@ -104,9 +104,18 @@ export type ItemBody = {
   tags?: string[];
 };
 
-export type ItemMultigetEntry =
-  | ItemBody
-  | { code: number; body: ItemBody };
+/**
+ * Entrada de `/items/bulk?ids=`: `{ id, status_code, body }` no sucesso,
+ * `{ id, status_code, error }` na falha. `code` é o nome do campo no antigo
+ * `/items?ids=` (aposentado pelo ML), aceito por tolerância.
+ */
+export type ItemBulkEntry = {
+  id?: string;
+  status_code?: number;
+  code?: number;
+  body?: ItemBody | null;
+  error?: unknown;
+};
 
 export type OrderSearchOrderItem = {
   quantity?: number;

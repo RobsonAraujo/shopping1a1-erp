@@ -23,17 +23,14 @@ import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { loadStockReportProductsByMlItemId } from "@/lib/products/product-data";
 import { loadSupplierNamesByMlItemId } from "@/lib/products/product-resolver";
 import { skuKeyFromListing } from "@/lib/inventory/inventory-stock-report";
+import { zonedYmd } from "@/lib/report-timezone";
+import { DAYS_IN_MONTH } from "@/lib/insights/revenue-potential-math";
 import type { RevenuePotentialRow } from "@/lib/insights/types";
 
 const LOOKBACK_DAYS = 120;
 const ANCHOR_WINDOW_DAYS = 14;
 const RECENT_SALE_THRESHOLD_DAYS = 7;
-const DAYS_IN_MONTH = 30;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-function dayKey(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
 
 /**
  * Junta linhas do mesmo SKU (ex.: 2 `mlItemId` pro mesmo produto, anúncio
@@ -102,7 +99,8 @@ export async function loadRevenuePotentialData(
   const rawItems = await fetchItemsByIdsBatched(token, allIds);
   const items = rawItems.filter((item) => !isKitItem(item));
 
-  const todayKey = dayKey(now);
+  // Mesmo fuso das chaves de `dailyByItem` (dia civil de São Paulo).
+  const todayKey = zonedYmd(now);
 
   const [productsByMlItemId, supplierNames] = await Promise.all([
     loadStockReportProductsByMlItemId(
