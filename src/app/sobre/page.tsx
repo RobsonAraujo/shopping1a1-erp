@@ -9,18 +9,19 @@ import { MarketingSection } from "@/components/marketing/MarketingSection";
 import { PageHero } from "@/components/marketing/PageHero";
 import { LEGAL } from "@/lib/marketing/legal";
 
-const title = "Sobre o ERP 1a1";
+const title = "Sobre a Maipo";
 const description =
   "Por que construímos um painel de lucratividade, imposto e DRE para vendedores do Mercado Livre, e os princípios que guiam cada número que aparece na tela.";
 
 export const metadata: Metadata = {
-  title,
+  // O nome já está no título; o template "%s · Maipo" repetiria a marca.
+  title: { absolute: title },
   description,
   alternates: { canonical: `${siteUrl()}/sobre` },
   openGraph: {
     type: "website",
     url: `${siteUrl()}/sobre`,
-    siteName: "ERP 1a1",
+    siteName: "Maipo",
     locale: "pt_BR",
     title,
     description,
@@ -84,7 +85,7 @@ export default async function SobrePage() {
           breadcrumb="Sobre"
           eyebrow="Sobre"
           title="O painel que a gente queria ter para fechar o mês"
-          lead="Quem vende no Mercado Livre não sofre por falta de dado, e sim por dado espalhado. Faturamento numa tela, tarifa na fatura, ADS em outro relatório, custo numa planilha que alguém esqueceu de atualizar. O ERP 1a1 nasceu para juntar isso numa conta só, que fecha."
+          lead="Quem vende no Mercado Livre não sofre por falta de dado, e sim por dado espalhado. Faturamento numa tela, tarifa na fatura, ADS em outro relatório, custo numa planilha que alguém esqueceu de atualizar. A Maipo nasceu para juntar isso numa conta só, que fecha."
         />
 
         <MarketingSection
@@ -110,7 +111,7 @@ export default async function SobrePage() {
               porque eram os que mais recebiam investimento em ads.
             </p>
             <p>
-              O ERP 1a1 existe para esse número aparecer <strong>antes</strong>,
+              A Maipo existe para esse número aparecer <strong>antes</strong>,
               por anúncio, com a fatura como fonte. E para que o fechamento do
               mês seja uma leitura, não uma investigação.
             </p>

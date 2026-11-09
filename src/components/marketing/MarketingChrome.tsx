@@ -1,4 +1,4 @@
-import Image from "next/image";
+import { BrandLogo } from "@/components/shared/BrandLogo";
 import Link from "next/link";
 import { MARKETING_NAV_LINKS } from "@/components/marketing/marketing-nav-links";
 import { LEGAL } from "@/lib/marketing/legal";
@@ -56,17 +56,9 @@ export function MarketingFooter() {
       <div className="mx-auto max-w-6xl">
         <div className="grid grid-cols-2 gap-10 sm:grid-cols-2 lg:grid-cols-4">
           <div className="col-span-2 lg:col-span-1">
-            <div className="flex items-center gap-2.5">
-              <Image
-                src="/logo-bg-blue.png"
-                alt=""
-                width={32}
-                height={32}
-                className="size-8 rounded-lg object-cover"
-              />
-              <span className="font-semibold tracking-tight text-[var(--foreground)]">
-                {LEGAL.productName}
-              </span>
+            <div className="flex items-center gap-3">
+              <BrandLogo className="h-7" />
+              <span className="sr-only">{LEGAL.productName}</span>
               <span className="rounded-full border border-emerald-200/80 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
                 Beta
               </span>
@@ -104,7 +96,7 @@ export function MarketingFooter() {
 
         <div className="mt-12 space-y-3 border-t border-[var(--border)] pt-8">
           <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
-            {LEGAL.productName} é um aplicativo independente e não possui
+            A {LEGAL.productName} é um aplicativo independente e não possui
             vínculo, patrocínio ou afiliação com o Mercado Livre. O acesso é
             feito pela autorização oficial (OAuth) da sua conta. O painel apoia
             a apuração fiscal, mas não emite nota fiscal e não substitui o seu

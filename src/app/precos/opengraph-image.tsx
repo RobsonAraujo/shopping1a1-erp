@@ -4,7 +4,7 @@ import {
   renderOgImage,
 } from "@/lib/marketing/og";
 
-export const alt = "ERP 1a1 — grátis durante o beta, sem cartão de crédito";
+export const alt = "Maipo — grátis durante o beta, sem cartão de crédito";
 export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
 

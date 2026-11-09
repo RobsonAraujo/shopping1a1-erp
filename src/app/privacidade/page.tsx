@@ -8,7 +8,7 @@ import { LEGAL } from "@/lib/marketing/legal";
 
 const title = "Política de privacidade";
 const description =
-  "Quais dados o ERP 1a1 coleta da sua conta do Mercado Livre, por que os usa, onde ficam guardados e como pedir exclusão.";
+  "Quais dados a Maipo coleta da sua conta do Mercado Livre, por que os usa, onde ficam guardados e como pedir exclusão.";
 
 export const metadata: Metadata = {
   title,
@@ -26,11 +26,11 @@ export default async function PrivacidadePage() {
       isLoggedIn={isLoggedIn}
       dashboardHref={dashboardHref}
       title="Política de privacidade"
-      intro="Esta política explica quais dados o ERP 1a1 recebe quando você conecta sua conta do Mercado Livre, para que eles são usados e o que você pode pedir a qualquer momento."
+      intro="Esta política explica quais dados a Maipo recebe quando você conecta sua conta do Mercado Livre, para que eles são usados e o que você pode pedir a qualquer momento."
     >
       <LegalSection n={1} title="Quem trata os seus dados">
         <p>
-          O <strong>{LEGAL.productName}</strong> é operado por{" "}
+          A <strong>{LEGAL.productName}</strong> é operada por{" "}
           <strong>{LEGAL.legalName}</strong>, inscrita no CNPJ{" "}
           {LEGAL.cnpj}, com sede em {LEGAL.address}. Para qualquer assunto
           relacionado a esta política, incluindo pedidos previstos na Lei Geral
@@ -46,7 +46,7 @@ export default async function PrivacidadePage() {
           autoriza o aplicativo; nós recebemos de volta um token de acesso.
         </p>
         <p>
-          Em nenhum momento o ERP 1a1 tem contato com o seu usuário e senha do
+          Em nenhum momento a Maipo tem contato com o seu usuário e senha do
           Mercado Livre. Os tokens recebidos são{" "}
           <strong>armazenados criptografados no servidor</strong> e usados
           apenas para as chamadas de API descritas abaixo. Você pode revogar a

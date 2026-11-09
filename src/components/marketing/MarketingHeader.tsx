@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
+import { BrandLogo } from "@/components/shared/BrandLogo";
 import { MarketingNavMenu } from "@/components/marketing/MarketingNavMenu";
 import { MarketingMobileNav } from "@/components/marketing/MarketingMobileNav";
 import { MarketingNavLink } from "@/components/marketing/MarketingNavLink";
@@ -91,25 +91,11 @@ export function MarketingHeader({
           <div className="mx-auto flex h-20 max-w-6xl items-center gap-8 px-4 sm:px-6">
             <a
               href={logoHref}
-              className="flex shrink-0 items-center gap-2.5"
-              aria-label="ERP 1a1"
+              className="flex shrink-0 items-center"
+              aria-label="Maipo"
             >
-              <Image
-                src="/logo-bg-blue.png"
-                alt=""
-                width={40}
-                height={40}
-                className="size-10 rounded-xl object-cover"
-                priority
-              />
-              <span
-                className={cn(
-                  "text-lg font-semibold tracking-tight",
-                  solid ? "text-[var(--foreground)]" : "text-white",
-                )}
-              >
-                ERP 1a1
-              </span>
+              {/* Transparente sobre o hero escuro → versão negativa. */}
+              <BrandLogo tone={solid ? "color" : "negative"} className="h-8 sm:h-9" />
             </a>
 
             <nav

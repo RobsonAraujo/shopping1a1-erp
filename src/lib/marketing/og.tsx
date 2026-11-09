@@ -1,4 +1,10 @@
 import { ImageResponse } from "next/og";
+import {
+  MAIPO_COLORS,
+  MAIPO_FULL_VIEWBOX,
+  maipoShapes,
+  viewBoxAttr,
+} from "@/lib/brand/maipo-mark";
 
 /**
  * Cartão Open Graph compartilhado pelas páginas de marketing. Satori só
@@ -7,6 +13,9 @@ import { ImageResponse } from "next/og";
  */
 export const OG_SIZE = { width: 1200, height: 630 } as const;
 export const OG_CONTENT_TYPE = "image/png";
+
+const LOGO_HEIGHT = 44;
+const fullBox = MAIPO_FULL_VIEWBOX;
 
 export function renderOgImage({
   eyebrow,
@@ -43,7 +52,7 @@ export function renderOgImage({
             width: 480,
             height: 480,
             borderRadius: 9999,
-            backgroundColor: "rgba(34, 211, 238, 0.16)",
+            backgroundColor: "rgba(190, 203, 211, 0.12)",
             display: "flex",
           }}
         />
@@ -55,9 +64,9 @@ export function renderOgImage({
               alignSelf: "flex-start",
               padding: "10px 22px",
               borderRadius: 9999,
-              border: "1px solid rgba(103, 232, 249, 0.3)",
-              backgroundColor: "rgba(34, 211, 238, 0.12)",
-              color: "#a5f3fc",
+              border: "1px solid rgba(190, 203, 211, 0.35)",
+              backgroundColor: "rgba(190, 203, 211, 0.12)",
+              color: MAIPO_COLORS.mist,
               fontSize: 22,
               fontWeight: 600,
               letterSpacing: 2,
@@ -104,28 +113,20 @@ export function renderOgImage({
             paddingTop: 32,
           }}
         >
-          <div style={{ display: "flex", alignItems: "center" }}>
-            <div
-              style={{
-                display: "flex",
-                width: 14,
-                height: 44,
-                borderRadius: 9999,
-                backgroundColor: "#22d3ee",
-                marginRight: 20,
-              }}
-            />
-            <div
-              style={{
-                display: "flex",
-                fontSize: 32,
-                fontWeight: 700,
-                letterSpacing: -0.5,
-              }}
-            >
-              ERP 1a1
-            </div>
-          </div>
+          {/* Logo Maipo em versão negativa (Satori renderiza <svg> inline). */}
+          <svg
+            width={LOGO_HEIGHT * (fullBox.width / fullBox.height)}
+            height={LOGO_HEIGHT}
+            viewBox={viewBoxAttr(fullBox)}
+          >
+            {maipoShapes("full").map((shape, i) => (
+              <path
+                key={i}
+                d={shape.d}
+                fill={shape.tone === "primary" ? "#ffffff" : MAIPO_COLORS.mist}
+              />
+            ))}
+          </svg>
           <div
             style={{
               display: "flex",

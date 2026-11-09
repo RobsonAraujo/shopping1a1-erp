@@ -45,7 +45,7 @@ export function organizationStructuredData() {
     "@type": "Organization",
     name: LEGAL.productName,
     url: base,
-    logo: `${base}/logo-bg-blue.png`,
+    logo: `${base}/icons/icon-512.png`,
     email: LEGAL.supportEmail,
     contactPoint: [
       {

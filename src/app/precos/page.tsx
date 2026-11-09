@@ -12,7 +12,7 @@ import { MarketingStickyCta } from "@/components/marketing/StickyCta";
 
 const title = "Preços — grátis durante o beta";
 const description =
-  "ERP 1a1 está em beta e é gratuito, sem cartão de crédito. Veja o que está incluso hoje e como vai funcionar quando os planos pagos forem lançados.";
+  "A Maipo está em beta e é gratuita, sem cartão de crédito. Veja o que está incluso hoje e como vai funcionar quando os planos pagos forem lançados.";
 
 export const metadata: Metadata = {
   title,
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     url: `${siteUrl()}/precos`,
-    siteName: "ERP 1a1",
+    siteName: "Maipo",
     locale: "pt_BR",
     title,
     description,

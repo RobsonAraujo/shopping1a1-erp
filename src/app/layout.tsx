@@ -18,7 +18,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: "cover",
-  themeColor: "#0f172a",
+  themeColor: "#1b2d6f",
 };
 
 export const metadata: Metadata = {
@@ -26,8 +26,8 @@ export const metadata: Metadata = {
   // Graph em page.tsx) contra localhost, quebrando o preview de link em produção.
   metadataBase: new URL(siteUrl()),
   title: {
-    default: "ERP 1a1 — Mercado Livre",
-    template: "%s · ERP 1a1",
+    default: "Maipo — Mercado Livre",
+    template: "%s · Maipo",
   },
   description: "Lucratividade e apuração de lucro real para vendedores Mercado Livre",
   manifest: "/manifest.webmanifest",
@@ -47,7 +47,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "ERP 1a1",
+    title: "Maipo",
   },
 };
 

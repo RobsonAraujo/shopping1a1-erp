@@ -8,7 +8,7 @@
  * revisão jurídica antes de irem ao ar.
  */
 export const LEGAL = {
-  productName: "ERP 1a1",
+  productName: "Maipo",
   legalName: "[RAZÃO SOCIAL]",
   cnpj: "[CNPJ]",
   address: "[ENDEREÇO COMPLETO]",

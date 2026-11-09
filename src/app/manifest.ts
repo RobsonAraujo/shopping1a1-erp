@@ -2,13 +2,13 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "ERP 1a1 — Mercado Livre",
-    short_name: "ERP 1a1",
+    name: "Maipo — Mercado Livre",
+    short_name: "Maipo",
     description: "Dashboard de anúncios e estoque",
     start_url: "/dashboard",
     display: "standalone",
     background_color: "#ffffff",
-    theme_color: "#0f172a",
+    theme_color: "#1b2d6f",
     lang: "pt-BR",
     icons: [
       {

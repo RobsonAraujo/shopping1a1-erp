@@ -17,6 +17,7 @@
     "postinstall": "prisma generate",
     "seed:catalog-demo": "tsx scripts/seed-catalog-report-demo.ts",
     "seed:sql": "tsx scripts/seed-from-sql.ts",
+    "brand:assets": "tsx scripts/generate-brand-assets.ts",
     "dre:billing-debug": "tsx scripts/dre-billing-debug.ts",
     "full:collect-debug": "tsx scripts/debug-full-collect-charges.ts",
     "full:inbound-debug": "tsx scripts/debug-full-inbound.ts"

@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     url: `${siteUrl()}/margem-de-contribuicao-mercado-livre`,
-    siteName: "ERP 1a1",
+    siteName: "Maipo",
     locale: "pt_BR",
     title,
     description,

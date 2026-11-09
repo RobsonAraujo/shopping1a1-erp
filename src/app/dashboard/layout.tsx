@@ -1,7 +1,7 @@
-import Image from "next/image";
 import Link from "next/link";
 import { LogOut } from "lucide-react";
 import { Toaster } from "sonner";
+import { BrandLogo } from "@/components/shared/BrandLogo";
 import { DashboardNav } from "@/components/shared/DashboardNav";
 import { DashboardMobileTabBar } from "@/components/shared/DashboardMobileTabBar";
 import { MobileDashboardMenu } from "@/components/shared/MobileDashboardMenu";
@@ -33,20 +33,12 @@ export default async function DashboardLayout({
         <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:h-20 sm:px-6">
           <Link
             href="/dashboard"
-            className="flex shrink-0 items-center gap-2.5 text-[var(--foreground)]"
-            aria-label="ERP 1a1"
+            className="flex shrink-0 items-center"
+            aria-label="Maipo"
           >
-            <Image
-              src="/logo-bg-blue.png"
-              alt=""
-              width={40}
-              height={40}
-              className="size-10 rounded-xl object-cover"
-              priority
-            />
-            <span className="text-lg font-semibold tracking-tight sm:hidden lg:inline">
-              ERP 1a1
-            </span>
+            {/* Na faixa sm–lg o menu ocupa a largura: só o símbolo. */}
+            <BrandLogo className="h-7 sm:hidden lg:block lg:h-8" />
+            <BrandLogo variant="symbol" className="hidden h-7 sm:block lg:hidden" />
           </Link>
           <DashboardNav />
           <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">

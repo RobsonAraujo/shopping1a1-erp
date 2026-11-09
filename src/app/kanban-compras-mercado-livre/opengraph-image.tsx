@@ -4,7 +4,7 @@ import {
   renderOgImage,
 } from "@/lib/marketing/og";
 
-export const alt = "ERP 1a1 — kanban de compras e Full para vendedores do Mercado Livre";
+export const alt = "Maipo — kanban de compras e Full para vendedores do Mercado Livre";
 export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
 

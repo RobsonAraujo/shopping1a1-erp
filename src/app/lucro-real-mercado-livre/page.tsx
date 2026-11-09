@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     url: `${siteUrl()}/lucro-real-mercado-livre`,
-    siteName: "ERP 1a1",
+    siteName: "Maipo",
     locale: "pt_BR",
     title,
     description,
@@ -68,7 +68,7 @@ export default async function LucroRealPage() {
           breadcrumb="Lucro Real"
           eyebrow="Tributário · Lucro Real"
           title="Lucro Real de verdade: débito e crédito, venda a venda"
-          lead="A maioria dos painéis de vendedor Mercado Livre para no Simples Nacional. O ERP 1a1 apura PIS/COFINS não cumulativo, ICMS e DIFAL por SKU, a dinâmica real de quem está no Lucro Real."
+          lead="A maioria dos painéis de vendedor Mercado Livre para no Simples Nacional. A Maipo apura PIS/COFINS não cumulativo, ICMS e DIFAL por SKU, a dinâmica real de quem está no Lucro Real."
           highlights={[
             "Crédito de entrada, não só débito de saída",
             "DIFAL pela UF do comprador, venda a venda",

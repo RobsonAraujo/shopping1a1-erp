@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     url: `${siteUrl()}/simples-nacional-mercado-livre`,
-    siteName: "ERP 1a1",
+    siteName: "Maipo",
     locale: "pt_BR",
     title,
     description,
@@ -116,7 +116,7 @@ export default async function SimplesNacionalPage() {
         >
           <DefinitionList items={DECISION_ITEMS} />
           <p className="mt-6 text-sm leading-relaxed text-[var(--muted-foreground)]">
-            O ERP 1a1 apoia a decisão e a apuração; a responsabilidade fiscal
+            A Maipo apoia a decisão e a apuração; a responsabilidade fiscal
             permanece com você e o escritório contábil.
           </p>
         </MarketingSection>

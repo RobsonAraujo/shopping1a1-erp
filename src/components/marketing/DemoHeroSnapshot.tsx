@@ -5,6 +5,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
 import { COST_COLOR, PROFIT_COLOR } from "@/components/marketing/cost-palette";
 import { cn } from "@/lib/utils";
+import { BrandLogo } from "@/components/shared/BrandLogo";
 import {
   formatFinancialMoney,
   formatFinancialPercent,
@@ -571,16 +572,8 @@ export function DemoHeroSnapshot() {
         {/* Barra do app: dá a leitura de "isto é o painel", não um gráfico */}
         <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--background)] px-4 py-2.5">
           <div className="flex min-w-0 items-center gap-2">
-            <Image
-              src="/logo-bg-blue.png"
-              alt=""
-              width={20}
-              height={20}
-              className="size-5 shrink-0 rounded-md object-cover"
-            />
-            <span className="truncate text-xs font-semibold tracking-tight text-[var(--foreground)]">
-              ERP 1a1
-            </span>
+            <BrandLogo className="h-4" />
+            <span className="sr-only">Maipo</span>
             <span className="hidden truncate rounded-md border border-[var(--border)] bg-[var(--card)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--muted-foreground)] sm:inline">
               Agosto 2026
             </span>

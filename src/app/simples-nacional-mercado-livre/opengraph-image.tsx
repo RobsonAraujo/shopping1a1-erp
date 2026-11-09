@@ -4,7 +4,7 @@ import {
   renderOgImage,
 } from "@/lib/marketing/og";
 
-export const alt = "ERP 1a1 — alíquota efetiva do DAS para vendedores do Mercado Livre no Simples Nacional";
+export const alt = "Maipo — alíquota efetiva do DAS para vendedores do Mercado Livre no Simples Nacional";
 export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
 

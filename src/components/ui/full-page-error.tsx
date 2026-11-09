@@ -1,4 +1,4 @@
-import Image from "next/image";
+import { BrandLogo } from "@/components/shared/BrandLogo";
 import Link from "next/link";
 import { RefreshCw, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,17 +20,8 @@ export function FullPageError({
     <div className="flex min-h-full flex-1 flex-col bg-[var(--background)]">
       <header className="border-b border-[var(--border)] bg-[var(--card)]/90 backdrop-blur-sm">
         <div className="mx-auto flex max-w-4xl items-center gap-2 px-4 py-4 sm:px-6">
-          <Image
-            src="/logo-bg-blue.png"
-            alt=""
-            width={36}
-            height={36}
-            className="h-9 w-9 rounded-lg object-cover shadow-sm"
-            priority
-          />
-          <span className="text-lg font-semibold tracking-tight text-[var(--primary)]">
-            ERP 1a1
-          </span>
+          <BrandLogo className="h-8" />
+          <span className="sr-only">Maipo</span>
         </div>
       </header>
 

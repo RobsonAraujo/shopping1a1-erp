@@ -8,7 +8,7 @@ import { LEGAL } from "@/lib/marketing/legal";
 
 const title = "Termos de uso";
 const description =
-  "Condições de uso do ERP 1a1: o que o painel faz, o que não faz, regras do beta gratuito e limites de responsabilidade.";
+  "Condições de uso da Maipo: o que o painel faz, o que não faz, regras do beta gratuito e limites de responsabilidade.";
 
 export const metadata: Metadata = {
   title,
@@ -26,19 +26,19 @@ export default async function TermosPage() {
       isLoggedIn={isLoggedIn}
       dashboardHref={dashboardHref}
       title="Termos de uso"
-      intro="As condições abaixo valem para qualquer pessoa que conecte uma conta do Mercado Livre ao ERP 1a1. Ao autorizar o aplicativo, você concorda com elas."
+      intro="As condições abaixo valem para qualquer pessoa que conecte uma conta do Mercado Livre à Maipo. Ao autorizar o aplicativo, você concorda com elas."
     >
       <LegalSection n={1} title="Quem somos e o que é o serviço">
         <p>
-          O <strong>{LEGAL.productName}</strong>, operado por{" "}
+          A <strong>{LEGAL.productName}</strong>, operada por{" "}
           <strong>{LEGAL.legalName}</strong> (CNPJ {LEGAL.cnpj}), é um painel
-          de gestão para vendedores do Mercado Livre. Ele lê dados da sua conta
+          de gestão para vendedores do Mercado Livre. Ela lê dados da sua conta
           via API oficial e os combina com informações que você cadastra, para
           calcular margem por anúncio, apuração tributária, DRE mensal, kanban
           de compras e Full e relatórios de estoque.
         </p>
         <p>
-          O ERP 1a1 não é afiliado ao Mercado Livre. É um aplicativo de terceiro
+          A Maipo não é afiliada ao Mercado Livre. É um aplicativo de terceiro
           que opera com a autorização que você concede.
         </p>
       </LegalSection>
@@ -96,7 +96,7 @@ export default async function TermosPage() {
       </LegalSection>
 
       <LegalSection n={5} title="Uso adequado">
-        <p>Ao usar o ERP 1a1, você concorda em não:</p>
+        <p>Ao usar a Maipo, você concorda em não:</p>
         <ul>
           <li>
             tentar acessar dados de organizações que não sejam a sua, ou
@@ -131,7 +131,7 @@ export default async function TermosPage() {
 
       <LegalSection n={7} title="Propriedade e seus dados">
         <p>
-          O software, a marca e a interface do ERP 1a1 são de titularidade de{" "}
+          O software, a marca e a interface da Maipo são de titularidade de{" "}
           {LEGAL.legalName}. <strong>Os dados da sua loja continuam seus</strong>.
           Nós apenas os tratamos para prestar o serviço, conforme a{" "}
           <Link href="/privacidade">Política de privacidade</Link>.

@@ -23,15 +23,15 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     url: siteUrl(),
-    siteName: "ERP 1a1",
+    siteName: "Maipo",
     locale: "pt_BR",
-    title: "ERP 1a1 — lucratividade e lucro real no Mercado Livre",
+    title: "Maipo — lucratividade e lucro real no Mercado Livre",
     description:
       "Veja se cada anúncio sobra depois da tarifa ML e do imposto. Apuração pensada para lucro real. Teste grátis, sem cartão.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "ERP 1a1 — lucratividade e lucro real no Mercado Livre",
+    title: "Maipo — lucratividade e lucro real no Mercado Livre",
     description:
       "Veja se cada anúncio sobra depois da tarifa ML e do imposto. Apuração pensada para lucro real. Teste grátis, sem cartão.",
   },

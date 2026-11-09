@@ -4,7 +4,7 @@ import {
   renderOgImage,
 } from "@/lib/marketing/og";
 
-export const alt = "Sobre o ERP 1a1 — princípios do painel para vendedores do Mercado Livre";
+export const alt = "Sobre a Maipo — princípios do painel para vendedores do Mercado Livre";
 export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
 

@@ -4,7 +4,7 @@ import {
   renderOgImage,
 } from "@/lib/marketing/og";
 
-export const alt = "ERP 1a1 — DRE mensal automático para vendedores do Mercado Livre";
+export const alt = "Maipo — DRE mensal automático para vendedores do Mercado Livre";
 export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
 
