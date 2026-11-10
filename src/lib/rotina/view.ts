@@ -11,6 +11,7 @@ import {
   type RotinaFloorView,
 } from "@/lib/rotina/floor-view";
 import {
+  formatClock,
   formatDaysUntil,
   formatMoney,
   formatPercent,
@@ -37,7 +38,7 @@ import {
   promotionDaysLeft,
 } from "@/lib/rotina/rules";
 import { stateKey } from "@/lib/rotina/reconcile";
-import type { RotinaSettings } from "@/lib/rotina/settings-shared";
+import { isRuleEnabled, type RotinaSettings } from "@/lib/rotina/settings-shared";
 import { isoIsToday, localDayDiff } from "@/lib/rotina/time";
 import type {
   ActionStateSnapshot,
@@ -116,6 +117,8 @@ export type RotinaActionView = {
   } | null;
   impact: number;
   snoozedUntil: string | null;
+  /** Quando o usuário decidiu (feito/ciente/adiado/ignorado); null se a ação está aberta. */
+  decidedAt: string | null;
 };
 
 export type RotinaInfoItem = {
@@ -125,6 +128,8 @@ export type RotinaInfoItem = {
   imageUrl: string | null;
   permalink: string;
   note: string;
+  /** Resolvidos: o que o dado de agora mostra ("Agora em promoção a R$ 89,90"). */
+  outcome?: string;
 };
 
 export type RotinaLinkedPair = {
@@ -315,6 +320,60 @@ function related(entity: Entity | undefined, fallbackId: string): RotinaRelatedL
     permalink: buyerFacingItemPermalink(entity?.health?.permalink ?? "", fallbackId),
     unitsPerDay: entity?.health?.unitsPerDay ?? null,
   };
+}
+
+/**
+ * O que mudou numa ação resolvida, lido do retrato de agora — nunca presumido
+ * pela regra: ela também some se o anúncio foi pausado, se a regra foi
+ * desligada em Metas ou se a meta mudou.
+ */
+function resolvedOutcome(
+  rule: RotinaRuleKey,
+  health: RotinaListingSnapshot,
+  settings: RotinaSettings,
+  target: ListingTargetValues | null,
+  timeZone: string,
+): string {
+  const fallback = "Não aparece mais na última atualização";
+  if (!isRuleEnabled(settings, rule)) return "Regra desligada em Metas";
+  if (health.mlStatus !== "active") return "Anúncio não está mais ativo no ML";
+
+  switch (rule) {
+    case "promo_missing":
+      return health.hasPromotion
+        ? `Agora em promoção a ${formatMoney(health.salePrice)}`
+        : fallback;
+    case "promo_expiring":
+      if (!health.hasPromotion) return "A promoção terminou";
+      return health.promotionEndsAt
+        ? `Promoção vai até ${formatShortDate(health.promotionEndsAt, timeZone)}`
+        : "Promoção renovada";
+    case "margin_below_min": {
+      const margin = marginForRules(health);
+      if (margin.percent === null) return "Sem dados para calcular a margem agora";
+      const min = formatPercent(
+        effectiveMinMarginPercent(health.catalogListing, settings, target),
+      );
+      const basis = margin.basis === "afterAds" ? "após ADS " : "";
+      return `Margem ${basis}agora ${formatPercent(margin.percent)} (mín. ${min}) a ${formatMoney(health.salePrice)}`;
+    }
+    case "below_pma":
+      return health.pmaPrice === null
+        ? "PMA removido em Meus produtos"
+        : `Preço agora ${formatMoney(health.salePrice)} (PMA ${formatMoney(health.pmaPrice)})`;
+    case "tacos_above":
+      if (!health.adsAvailable) return fallback;
+      if (health.adsStatus !== "active") return "ADS não está mais ativo";
+      return health.tacosPercent !== null
+        ? `TACOS agora ${formatPercent(health.tacosPercent)} (meta ${formatPercent(
+            effectiveTacosTargetPercent(settings, target),
+          )})`
+        : fallback;
+    case "ads_missing":
+      return health.adsStatus === "active" ? "ADS ativo agora" : fallback;
+    default:
+      return fallback;
+  }
 }
 
 /** Frase principal + linhas de apoio de cada regra. */
@@ -555,6 +614,7 @@ export function buildRotinaView(input: RotinaViewInput): RotinaView {
         : null,
       impact: (listing.unitsPerDay ?? 0) * (listing.salePrice ?? 0),
       snoozedUntil: state?.status === "snoozed" ? state.snoozedUntil : null,
+      decidedAt: visibility.bucket !== "active" && state ? state.statusChangedAt : null,
     });
   }
 
@@ -695,7 +755,14 @@ export function buildRotinaView(input: RotinaViewInput): RotinaView {
       sku: entity.health.sku,
       imageUrl: entity.health.imageUrl,
       permalink: buyerFacingItemPermalink(entity.health.permalink, entity.mlItemId),
-      note: `${ROTINA_RULES[state.rule as RotinaRuleKey].settingsLabel}: resolvido`,
+      note: ROTINA_RULES[state.rule as RotinaRuleKey].settingsLabel,
+      outcome: resolvedOutcome(
+        state.rule as RotinaRuleKey,
+        entity.health,
+        settings,
+        input.targets.get(entity.mlItemId) ?? null,
+        timeZone,
+      ),
     });
   }
   for (const entity of entities.values()) {
@@ -707,7 +774,10 @@ export function buildRotinaView(input: RotinaViewInput): RotinaView {
       sku: listing.sku,
       imageUrl: listing.imageUrl,
       permalink: listing.permalink,
-      note: "Voltou a ganhar no catálogo",
+      note: "Catálogo",
+      outcome: entity.catalog.statusSince
+        ? `Voltou a ganhar a vitrine às ${formatClock(entity.catalog.statusSince, timeZone)}`
+        : "Voltou a ganhar a vitrine",
     });
   }
 

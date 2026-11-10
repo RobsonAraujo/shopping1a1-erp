@@ -20,7 +20,7 @@ async function RotinaSection({ organizationId }: { organizationId: string }) {
   } catch (e) {
     return (
       <UserFeedback title="Não foi possível carregar a Central de anúncios">
-        {publicPageLoadMessage("dashboard/rotina", e, LOAD_ERROR_MESSAGE)}
+        {publicPageLoadMessage("dashboard/central-anuncios", e, LOAD_ERROR_MESSAGE)}
       </UserFeedback>
     );
   }

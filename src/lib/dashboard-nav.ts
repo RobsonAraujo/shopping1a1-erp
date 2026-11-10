@@ -66,7 +66,7 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
         icon: LayoutGrid,
       },
       {
-        href: "/dashboard/rotina",
+        href: "/dashboard/central-anuncios",
         label: "Central de anúncios",
         shortLabel: "Central",
         description: "O que fazer hoje nos anúncios próprios e no catálogo",

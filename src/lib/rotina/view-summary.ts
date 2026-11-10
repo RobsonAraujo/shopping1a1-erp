@@ -35,6 +35,8 @@ export function applyActionOverrides(
       continues: override.bucket === "active" ? action.continues : false,
       snoozedUntil:
         override.snoozedUntil !== undefined ? override.snoozedUntil : action.snoozedUntil,
+      // A hora certa chega com o recarregamento; até lá, sem hora.
+      decidedAt: null,
     };
   });
 }

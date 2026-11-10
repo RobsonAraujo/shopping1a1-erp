@@ -1,8 +1,8 @@
 # Central de anúncios (módulo `rotina`)
 
-Na tela e no menu o nome é **Central de anúncios**. A rota (`/dashboard/rotina`), as APIs (`/api/rotina/*`) e o código mantêm o nome interno `rotina`.
+Na tela e no menu o nome é **Central de anúncios**, e a página é `/dashboard/central-anuncios` (`/dashboard/rotina` redireciona para ela). As APIs (`/api/rotina/*`) e o código mantêm o nome interno `rotina`.
 
-Página `/dashboard/rotina`: a lista de trabalho diária de quem cuida dos **anúncios próprios** e do **catálogo**. Não é relatório. Cada linha é uma tarefa ("colocar promoção", "brigar no catálogo") com o **preço mínimo** que mantém a margem que o usuário definiu.
+Página `/dashboard/central-anuncios`: a lista de trabalho diária de quem cuida dos **anúncios próprios** e do **catálogo**. Não é relatório. Cada linha é uma tarefa ("colocar promoção", "brigar no catálogo") com o **preço mínimo** que mantém a margem que o usuário definiu.
 
 ## Estrutura
 
@@ -25,7 +25,7 @@ src/lib/rotina/
 src/lib/pricing/min-price-segments.ts   # mínimo ciente das faixas de frete (puro, cotação injetada)
 ```
 
-UI: `src/app/dashboard/rotina/` + `src/components/rotina/`. Rotas: `/api/rotina/{refresh,actions,settings,targets/[mlItemId]}`.
+UI: `src/app/dashboard/central-anuncios/` + `src/components/rotina/`. Rotas: `/api/rotina/{refresh,actions,settings,targets/[mlItemId]}`.
 
 ## Duas fontes de dado
 

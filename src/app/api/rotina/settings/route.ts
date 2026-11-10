@@ -46,7 +46,7 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const settings = await updateRotinaSettings(auth.ctx.organizationId, parsedBody.data);
-    revalidatePath("/dashboard/rotina");
+    revalidatePath("/dashboard/central-anuncios");
     return NextResponse.json({ settings });
   } catch (e) {
     logServerError("api/rotina/settings PATCH", e);

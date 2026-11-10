@@ -175,6 +175,70 @@ describe("buildRotinaView", () => {
     );
   });
 
+  it("says what changed in each resolution, from today's data", () => {
+    const resolved = (mlItemId: string, rule: string) =>
+      state({ mlItemId, rule, status: "resolved", resolvedAt: "2026-11-10T09:00:00.000Z" });
+    const view = buildRotinaView(
+      input({
+        settings: settings({ disabledRules: ["ads_missing"] }),
+        health: [
+          listing({ mlItemId: "PROMO", hasPromotion: true, salePrice: 89.9 }),
+          listing({ mlItemId: "OFF", adsStatus: "idle" }),
+          listing({ mlItemId: "PAUSED", mlStatus: "paused", pmaPrice: 120, salePrice: 100 }),
+        ],
+        catalogLive: [
+          catalogLive({
+            mlItemId: "CAT9",
+            status: "winning",
+            wonBackToday: true,
+            statusSince: "2026-11-10T14:05:00.000Z",
+          }),
+        ],
+        states: [
+          resolved("PROMO", "promo_missing"),
+          resolved("OFF", "ads_missing"),
+          resolved("PAUSED", "below_pma"),
+        ],
+      }),
+    );
+    const outcomes = Object.fromEntries(
+      view.info.resolvedToday.map((item) => [
+        item.mlItemId,
+        [item.note, item.outcome?.replace(/\u00a0/g, " ")],
+      ]),
+    );
+    assert.deepEqual(outcomes, {
+      PROMO: ["Sem promoção", "Agora em promoção a R$ 89,90"],
+      // Sumiu porque a regra foi desligada, não porque o ADS foi ativado.
+      OFF: ["Sem ADS ativo", "Regra desligada em Metas"],
+      PAUSED: ["Abaixo do PMA", "Anúncio não está mais ativo no ML"],
+      CAT9: ["Catálogo", "Voltou a ganhar a vitrine às 11h05"],
+    });
+  });
+
+  it("keeps when a done action was decided", () => {
+    const view = buildRotinaView(
+      input({
+        health: [ownNoPromo, ownNoAds],
+        states: [
+          state({
+            mlItemId: "OWN1",
+            rule: "promo_missing",
+            status: "done",
+            statusChangedAt: "2026-11-10T13:32:00.000Z",
+          }),
+        ],
+        lastCompleteRunAt: "2026-11-10T09:00:00.000Z",
+      }),
+    );
+    const done = view.actions.find((action) => action.id === "promo_missing:OWN1");
+    assert.equal(done?.doneToday, true);
+    assert.equal(done?.decidedAt, "2026-11-10T13:32:00.000Z");
+    const open = view.actions.find((action) => action.id === "ads_missing:OWN2");
+    assert.equal(open?.bucket, "active");
+    assert.equal(open?.decidedAt, null);
+  });
+
   it("works for catalog listings before the first refresh", () => {
     const view = buildRotinaView(
       input({ catalogLive: [catalogLive({ mlItemId: "CAT8" })], lastCompleteRunAt: null }),

@@ -2,13 +2,18 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ChevronRight, Eye, History } from "lucide-react";
+import { ArrowRight, Check, ChevronRight, Eye, History } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { RotinaThumb } from "@/components/rotina/RotinaThumb";
 import { SegmentTag } from "@/components/rotina/SegmentTag";
-import { formatShortDate, formatUnitsRate } from "@/lib/rotina/format";
+import {
+  formatClock,
+  formatShortDate,
+  formatUnitsRate,
+} from "@/lib/rotina/format";
 import { ROTINA_RULES } from "@/lib/rotina/rule-registry";
-import type { RotinaActionView, RotinaView } from "@/lib/rotina/view";
+import { isoIsToday } from "@/lib/rotina/time";
+import type { RotinaActionView, RotinaInfoItem, RotinaView } from "@/lib/rotina/view";
 import { cn } from "@/lib/utils";
 
 const UNDO_CLASS =
@@ -65,7 +70,7 @@ function InfoSection({
           {count}
         </span>
       </summary>
-      <div className="space-y-2 px-4 pb-3 pl-10 text-xs text-[var(--muted-foreground)]">
+      <div className="space-y-3 px-4 pb-3 pl-10 text-xs text-[var(--muted-foreground)]">
         {hint ? <p className="leading-relaxed">{hint}</p> : null}
         {children}
       </div>
@@ -84,6 +89,74 @@ function ItemLink({ href, title }: { href: string; title: string }) {
     >
       {title}
     </a>
+  );
+}
+
+/** Uma linha das listas: anúncio em cima, o que aconteceu com ele embaixo. */
+function Row({
+  imageUrl,
+  href,
+  title,
+  aside,
+  children,
+}: {
+  imageUrl: string | null;
+  href: string;
+  title: string;
+  aside?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="flex items-start gap-2.5">
+      <RotinaThumb src={imageUrl} size={32} className="mt-0.5 size-8 rounded-md" />
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="flex min-w-0 flex-1">
+            <ItemLink href={href} title={title} />
+          </span>
+          {aside}
+        </div>
+        {children ? <div className="mt-0.5 leading-relaxed">{children}</div> : null}
+      </div>
+    </div>
+  );
+}
+
+/** "às 10h32" hoje, "em 08/11" antes. */
+function whenLabel(iso: string, timeZone: string): string {
+  return isoIsToday(iso, new Date(), timeZone)
+    ? `às ${formatClock(iso, timeZone)}`
+    : `em ${formatShortDate(iso, timeZone)}`;
+}
+
+/** Feito: quando, e quem vai conferir se resolveu de verdade. */
+function doneDetail(action: RotinaActionView, timeZone: string): string {
+  const definition = ROTINA_RULES[action.rule];
+  const when = action.decidedAt ? ` ${whenLabel(action.decidedAt, timeZone)}` : "";
+  if (action.kind === "event") return `${definition.taskLabel} · ciente${when}`;
+  const check =
+    definition.source === "catalog"
+      ? "confere na próxima leitura do catálogo"
+      : "confere no próximo Atualizar";
+  return `${definition.taskLabel} · feito${when} · ${check}`;
+}
+
+/** Resolvido: o problema que havia → o que o dado de agora mostra. */
+function ResolvedDetail({ item }: { item: RotinaInfoItem }) {
+  return (
+    <span className="flex flex-wrap items-center gap-x-1.5">
+      <span>{item.note}</span>
+      {item.outcome ? (
+        <>
+          <ArrowRight className="size-3 shrink-0 opacity-60" aria-hidden />
+          <span className="sr-only">agora:</span>
+          <span className="inline-flex items-center gap-1 font-medium text-emerald-800">
+            <Check className="size-3 shrink-0" aria-hidden />
+            {item.outcome}
+          </span>
+        </>
+      ) : null}
+    </span>
   );
 }
 
@@ -110,40 +183,39 @@ export function RotinaInfoLists({
   const snoozed = actions.filter((action) => action.bucket === "snoozed");
   const dismissed = actions.filter((action) => action.bucket === "dismissed");
 
-  const actionLine = (action: RotinaActionView, suffix?: string) => (
-    <div key={action.id} className="flex items-center gap-2.5">
-      <RotinaThumb src={action.listing.imageUrl} size={24} className="size-6 rounded-md" />
-      <span className="flex min-w-0 flex-1 items-center gap-1.5">
-        <ItemLink href={action.listing.permalink} title={action.listing.title} />
-        <span className="shrink-0">
-          · {ROTINA_RULES[action.rule].settingsLabel}
-          {suffix ? ` · ${suffix}` : ""}
-        </span>
-      </span>
-      <SegmentTag segment={action.segment} className="hidden sm:inline-flex" />
-      <button
-        type="button"
-        className={UNDO_CLASS}
-        disabled={busy}
-        onClick={() => onUndo(action)}
-      >
-        Desfazer
-      </button>
-    </div>
+  const actionLine = (action: RotinaActionView, detail: string) => (
+    <Row
+      key={action.id}
+      imageUrl={action.listing.imageUrl}
+      href={action.listing.permalink}
+      title={action.listing.title}
+      aside={
+        <>
+          <SegmentTag segment={action.segment} className="hidden sm:inline-flex" />
+          <button
+            type="button"
+            className={UNDO_CLASS}
+            disabled={busy}
+            onClick={() => onUndo(action)}
+          >
+            Desfazer
+          </button>
+        </>
+      }
+    >
+      {detail}
+    </Row>
   );
 
-  const itemLine = (
-    item: { mlItemId: string; imageUrl: string | null; permalink: string; title: string },
-    key: string,
-    note?: string,
-  ) => (
-    <div key={key} className="flex items-center gap-2.5">
-      <RotinaThumb src={item.imageUrl} size={24} className="size-6 rounded-md" />
-      <span className="flex min-w-0 flex-1 items-center gap-1.5">
-        <ItemLink href={item.permalink} title={item.title} />
-        {note ? <span className="shrink-0">· {note}</span> : null}
-      </span>
-    </div>
+  const itemLine = (item: RotinaInfoItem, key: string, detail?: ReactNode) => (
+    <Row
+      key={key}
+      imageUrl={item.imageUrl}
+      href={item.permalink}
+      title={item.title}
+    >
+      {detail}
+    </Row>
   );
 
   const history: Section[] = [
@@ -152,7 +224,7 @@ export function RotinaInfoLists({
       count: doneToday.length,
       node: (
         <InfoSection title="Feitos hoje" count={doneToday.length}>
-          {doneToday.map((action) => actionLine(action))}
+          {doneToday.map((action) => actionLine(action, doneDetail(action, timeZone)))}
         </InfoSection>
       ),
     },
@@ -164,9 +236,14 @@ export function RotinaInfoLists({
           {snoozed.map((action) =>
             actionLine(
               action,
-              action.snoozedUntil
-                ? `volta em ${formatShortDate(action.snoozedUntil, timeZone)}`
-                : undefined,
+              [
+                ROTINA_RULES[action.rule].taskLabel,
+                action.snoozedUntil
+                  ? `volta em ${formatShortDate(action.snoozedUntil, timeZone)}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · "),
             ),
           )}
         </InfoSection>
@@ -181,7 +258,17 @@ export function RotinaInfoLists({
           count={dismissed.length}
           hint="Esta regra não aparece mais para estes anúncios até você desfazer."
         >
-          {dismissed.map((action) => actionLine(action))}
+          {dismissed.map((action) =>
+            actionLine(
+              action,
+              [
+                ROTINA_RULES[action.rule].settingsLabel,
+                action.decidedAt ? `ignorado ${whenLabel(action.decidedAt, timeZone)}` : null,
+              ]
+                .filter(Boolean)
+                .join(" · "),
+            ),
+          )}
         </InfoSection>
       ),
     },
@@ -191,7 +278,7 @@ export function RotinaInfoLists({
       node: (
         <InfoSection title="Resolvidos hoje" count={info.resolvedToday.length}>
           {info.resolvedToday.map((item, index) =>
-            itemLine(item, `${item.mlItemId}-${index}`, item.note),
+            itemLine(item, `${item.mlItemId}-${index}`, <ResolvedDetail item={item} />),
           )}
         </InfoSection>
       ),
