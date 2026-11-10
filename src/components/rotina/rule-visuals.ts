@@ -3,15 +3,21 @@ import {
   Copy,
   Gauge,
   Hourglass,
+  LayoutList,
   Megaphone,
   Percent,
   ShieldAlert,
+  Store,
   Tag,
   TrendingDown,
   Users,
 } from "lucide-react";
-import type { RotinaRuleKey } from "@/lib/rotina/rule-registry";
-import { STATUS_PILL_CLASS, type StatusTone } from "@/lib/ui/tone";
+import type { RotinaRuleKey, RotinaSegment } from "@/lib/rotina/rule-registry";
+import {
+  CATEGORY_BADGE_CLASS,
+  STATUS_PILL_CLASS,
+  type StatusTone,
+} from "@/lib/ui/tone";
 
 /**
  * Cor só onde ela diz algo: catálogo **perdendo** é vermelho, **dividindo** o
@@ -52,11 +58,23 @@ export const RULE_ACCENT_CLASS: Record<RuleVisual["tone"], string> = {
   neutral: "",
 };
 
-/** Cor do número nas contagens do resumo. */
-export const RULE_COUNT_CLASS: Record<RuleVisual["tone"], string> = {
-  danger: "font-semibold text-rose-700",
-  warning: "font-semibold text-amber-700",
-  neutral: "",
+/** Pílula da contagem no cabeçalho do grupo. */
+export const RULE_COUNT_PILL_CLASS: Record<RuleVisual["tone"], string> = {
+  danger: "bg-rose-50 text-rose-700",
+  warning: "bg-amber-50 text-amber-700",
+  neutral: "bg-[var(--muted)] text-[var(--foreground)]",
+};
+
+/**
+ * Próprio × Catálogo é **categoria** (nomeia o tipo de anúncio), não estado:
+ * por isso o tom de categoria de `tone.ts`, nunca vermelho/amarelo/verde.
+ */
+export const SEGMENT_VISUALS: Record<
+  RotinaSegment,
+  { label: string; icon: LucideIcon; className: string }
+> = {
+  own: { label: "Próprio", icon: Store, className: CATEGORY_BADGE_CLASS.primary },
+  catalog: { label: "Catálogo", icon: LayoutList, className: CATEGORY_BADGE_CLASS.violet },
 };
 
 export { STATUS_PILL_CLASS };

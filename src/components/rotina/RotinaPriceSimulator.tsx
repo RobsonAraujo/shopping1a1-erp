@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Calculator, ChevronRight, Loader2 } from "lucide-react";
+import { Calculator, Check, ChevronRight, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FormInput } from "@/components/ui/form-input";
 import { readApiError } from "@/lib/api/api-client-error";
@@ -10,7 +10,7 @@ import { formatMoney, formatPercent, formatWhen } from "@/lib/rotina/format";
 import type { RotinaFloorView } from "@/lib/rotina/floor-view";
 import type { RotinaSimulation } from "@/lib/rotina/simulate";
 import type { SimulatedPrice } from "@/lib/rotina/simulate-margin";
-import { valueToneClass } from "@/lib/ui/tone";
+import { STATUS_PILL_CLASS, valueToneClass } from "@/lib/ui/tone";
 import { cn } from "@/lib/utils";
 
 export type SimulatorSuggestion = { label: string; price: number };
@@ -57,6 +57,46 @@ export function buildSimulatorSuggestions(args: {
   return list;
 }
 
+function TargetStatus({
+  meetsTarget,
+  targetPercent,
+  compact,
+}: {
+  meetsTarget: boolean;
+  targetPercent: number;
+  compact: boolean;
+}) {
+  const Icon = meetsTarget ? Check : X;
+  const tone = STATUS_PILL_CLASS[meetsTarget ? "ok" : "danger"].wrap;
+  const text = meetsTarget
+    ? `dentro do mínimo de ${formatPercent(targetPercent)}`
+    : `abaixo do mínimo de ${formatPercent(targetPercent)}`;
+  if (compact) {
+    return (
+      <span
+        className={cn(
+          "inline-flex items-center gap-1 font-medium",
+          meetsTarget ? "text-emerald-800" : "text-rose-800",
+        )}
+      >
+        <Icon className="size-3.5 shrink-0" aria-hidden />
+        {text}
+      </span>
+    );
+  }
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold",
+        tone,
+      )}
+    >
+      <Icon className="size-3.5 shrink-0" aria-hidden />
+      {text}
+    </span>
+  );
+}
+
 function ResultSummary({
   result,
   targetPercent,
@@ -73,69 +113,88 @@ function ResultSummary({
       </span>
     );
   }
-  const afterAds = result.marginAfterAdsPercent;
   // A margem que decide é colorida pela META (dentro/abaixo do mínimo), não só
   // pelo sinal: 0,3% positivo mas abaixo de 2% não pode aparecer verde.
   const decidingTone =
     result.meetsTarget === null
-      ? ""
+      ? "text-[var(--foreground)]"
       : result.meetsTarget
         ? "text-emerald-800"
         : "text-rose-700";
   const otherTone = (value: number | null) =>
     value !== null && value < 0 ? "text-rose-800" : "text-[var(--foreground)]";
+  const metrics = [
+    result.decidingBasis === "afterAds"
+      ? {
+          key: "afterAds",
+          label: "Após ADS",
+          percent: result.marginAfterAdsPercent,
+          value: result.marginAfterAdsValue,
+          deciding: true,
+        }
+      : null,
+    {
+      key: "mc",
+      label: "MC",
+      percent: result.marginPercent,
+      value: result.marginValue,
+      deciding: result.decidingBasis === "contribution",
+    },
+  ].filter((metric) => metric !== null);
+
+  if (!emphasis) {
+    return (
+      <>
+        {metrics.map((metric) => (
+          <span key={metric.key} className="tabular-nums">
+            {metric.label}{" "}
+            <strong
+              className={cn(
+                "font-semibold",
+                metric.deciding ? decidingTone : otherTone(metric.percent),
+              )}
+            >
+              {formatPercent(metric.percent)}
+            </strong>
+          </span>
+        ))}
+        {result.meetsTarget !== null ? (
+          <TargetStatus meetsTarget={result.meetsTarget} targetPercent={targetPercent} compact />
+        ) : null}
+      </>
+    );
+  }
+
   return (
-    <span className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-      {result.decidingBasis === "afterAds" ? (
-        <span>
-          Após ADS{" "}
+    <span className="flex flex-wrap items-end gap-x-6 gap-y-2">
+      {metrics.map((metric) => (
+        <span key={metric.key} className="min-w-0">
+          <span className="block text-[11px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+            {metric.label}
+          </span>
           <strong
             className={cn(
-              "tabular-nums",
-              emphasis ? "text-base" : "text-sm",
-              decidingTone,
+              "block font-bold leading-tight tabular-nums",
+              metric.deciding ? "text-xl" : "text-base",
+              metric.deciding ? decidingTone : otherTone(metric.percent),
             )}
           >
-            {formatPercent(afterAds)}
+            {formatPercent(metric.percent)}
           </strong>
-          {result.marginAfterAdsValue !== null ? (
-            <span className="tabular-nums text-[var(--muted-foreground)]">
-              {" "}
-              ({formatMoney(result.marginAfterAdsValue)}/venda)
+          {metric.value !== null ? (
+            <span className="block text-[11px] tabular-nums text-[var(--muted-foreground)]">
+              {formatMoney(metric.value)}/venda
             </span>
           ) : null}
         </span>
-      ) : null}
-      <span>
-        MC{" "}
-        <strong
-          className={cn(
-            "tabular-nums",
-            emphasis && result.decidingBasis === "contribution" ? "text-base" : "text-sm",
-            result.decidingBasis === "contribution"
-              ? decidingTone
-              : otherTone(result.marginPercent),
-          )}
-        >
-          {formatPercent(result.marginPercent)}
-        </strong>
-        {result.marginValue !== null ? (
-          <span className="tabular-nums text-[var(--muted-foreground)]">
-            {" "}
-            ({formatMoney(result.marginValue)}/venda)
-          </span>
-        ) : null}
-      </span>
+      ))}
       {result.meetsTarget !== null ? (
-        <span
-          className={cn(
-            "text-xs font-medium",
-            result.meetsTarget ? "text-emerald-800" : "text-rose-800",
-          )}
-        >
-          {result.meetsTarget
-            ? `✓ dentro do mínimo de ${formatPercent(targetPercent)}`
-            : `✕ abaixo do mínimo de ${formatPercent(targetPercent)}`}
+        <span className="pb-0.5">
+          <TargetStatus
+            meetsTarget={result.meetsTarget}
+            targetPercent={targetPercent}
+            compact={false}
+          />
         </span>
       ) : null}
     </span>
@@ -256,53 +315,56 @@ export function RotinaPriceSimulator({
   const target = meta?.targetPercent ?? null;
 
   return (
-    <div className="mt-3 space-y-3 rounded-xl border border-[var(--border)] bg-[var(--muted)]/20 p-3">
+    <div className="space-y-3 pt-3">
       <p className="flex items-center gap-1.5 text-xs font-semibold text-[var(--foreground)]">
         <Calculator className="size-3.5" aria-hidden />
         Simular preço
       </p>
 
-      <form
-        className="flex flex-wrap items-end gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          submit();
-        }}
-      >
-        <FormInput
-          label="Se eu vender a (R$)"
-          inputMode="decimal"
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          className="w-40"
-        />
-        <Button type="submit" size="sm" disabled={loading}>
-          {loading ? <Loader2 className="animate-spin" aria-hidden /> : null}
-          Simular
-        </Button>
-      </form>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <form
+          className="flex items-end gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit();
+          }}
+        >
+          <FormInput
+            label="Se eu vender a (R$)"
+            inputMode="decimal"
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            className="w-36"
+            inputClassName="tabular-nums"
+          />
+          <Button type="submit" size="sm" disabled={loading} className="sm:h-10">
+            {loading ? <Loader2 className="animate-spin" aria-hidden /> : null}
+            Simular
+          </Button>
+        </form>
 
-      {suggestions.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5">
-          {suggestions.map((suggestion) => (
-            <button
-              key={`${suggestion.label}-${suggestion.price}`}
-              type="button"
-              disabled={loading}
-              onClick={() => {
-                setInput(inputValue(suggestion.price));
-                void simulate(suggestion.price);
-              }}
-              className="cursor-pointer rounded-full border border-[var(--border)] bg-[var(--card)] px-2.5 py-1 text-xs text-[var(--foreground)] transition-colors hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {suggestion.label}{" "}
-              <span className="tabular-nums text-[var(--muted-foreground)]">
-                {formatMoney(suggestion.price)}
-              </span>
-            </button>
-          ))}
-        </div>
-      ) : null}
+        {suggestions.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5 sm:pb-0.5" aria-label="Atalhos de preço">
+            {suggestions.map((suggestion) => (
+              <button
+                key={`${suggestion.label}-${suggestion.price}`}
+                type="button"
+                disabled={loading}
+                onClick={() => {
+                  setInput(inputValue(suggestion.price));
+                  void simulate(suggestion.price);
+                }}
+                className="cursor-pointer rounded-full border border-[var(--border)] bg-[var(--card)] px-2.5 py-1 text-xs text-[var(--foreground)] transition-colors hover:border-[var(--primary)]/40 hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {suggestion.label}{" "}
+                <span className="tabular-nums text-[var(--muted-foreground)]">
+                  {formatMoney(suggestion.price)}
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
 
       {error ? <p className="text-xs text-rose-700">{error}</p> : null}
 
@@ -321,9 +383,15 @@ export function RotinaPriceSimulator({
       ) : null}
 
       {latest && target !== null ? (
-        <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm">
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <span className="font-semibold tabular-nums">A {formatMoney(latest.price)}:</span>
+        <div
+          className={cn(
+            "rounded-lg border border-[var(--border)] bg-[var(--card)] px-3.5 py-3 text-sm transition-opacity",
+            loading && "opacity-60",
+          )}
+          aria-live="polite"
+        >
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-6">
+            <span className="text-base font-semibold tabular-nums text-[var(--foreground)] sm:pb-3">A {formatMoney(latest.price)}:</span>
             <ResultSummary result={latest} targetPercent={target} emphasis />
           </div>
           {latest.quoted ? (
@@ -332,7 +400,7 @@ export function RotinaPriceSimulator({
               onClick={() =>
                 setOpenBreakdown((current) => (current === latest.price ? null : latest.price))
               }
-              className="mt-1 inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-[var(--primary)] underline-offset-4 hover:underline"
+              className="mt-2 inline-flex cursor-pointer items-center gap-1 rounded text-xs font-medium text-[var(--primary)] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
               aria-expanded={openBreakdown === latest.price}
             >
               <ChevronRight
@@ -351,20 +419,25 @@ export function RotinaPriceSimulator({
           <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
             Comparar
           </p>
-          {previous.map((result) => (
-            <button
-              key={result.price}
-              type="button"
-              onClick={() => {
-                setInput(inputValue(result.price));
-                void simulate(result.price);
-              }}
-              className="flex w-full cursor-pointer flex-wrap items-baseline gap-x-3 rounded-md px-2 py-1 text-left text-xs hover:bg-[var(--card)]"
-            >
-              <span className="font-semibold tabular-nums">{formatMoney(result.price)}</span>
-              <ResultSummary result={result} targetPercent={target} emphasis={false} />
-            </button>
-          ))}
+          <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)]">
+            {previous.map((result) => (
+              <li key={result.price}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInput(inputValue(result.price));
+                    void simulate(result.price);
+                  }}
+                  className="flex w-full cursor-pointer flex-wrap items-baseline gap-x-4 gap-y-0.5 px-3 py-1.5 text-left text-xs text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)]/40 focus-visible:bg-[var(--muted)]/40 focus-visible:outline-none"
+                >
+                  <span className="w-20 font-semibold tabular-nums text-[var(--foreground)]">
+                    {formatMoney(result.price)}
+                  </span>
+                  <ResultSummary result={result} targetPercent={target} emphasis={false} />
+                </button>
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
 

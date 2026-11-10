@@ -14,6 +14,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
+import { SegmentTag } from "@/components/rotina/SegmentTag";
+import { RULE_ICON_CLASS, RULE_VISUALS } from "@/components/rotina/rule-visuals";
 import { formatPercent } from "@/lib/rotina/format";
 import {
   ROTINA_RULE_KEYS,
@@ -26,6 +28,38 @@ import {
   type RotinaSettings,
 } from "@/lib/rotina/settings-shared";
 import type { RotinaTargetOverride } from "@/lib/rotina/view";
+import { cn } from "@/lib/utils";
+
+const SECTION_TITLE_CLASS = "text-sm font-semibold text-[var(--foreground)]";
+
+/** Campo de % da matriz de metas: rótulo vai para leitores de tela, o "%" fica à vista. */
+function PercentField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="relative">
+      <FormInput
+        aria-label={label}
+        inputMode="decimal"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        inputClassName="pr-8 tabular-nums"
+      />
+      <span
+        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-[var(--muted-foreground)]"
+        aria-hidden
+      >
+        %
+      </span>
+    </div>
+  );
+}
 
 export type RotinaTargetsDraft = {
   ownMinMarginPercent: number;
@@ -113,25 +147,35 @@ export function RotinaTargetsSheet({
         </SheetHeader>
         <SheetBody className="space-y-6">
           <section className="space-y-3">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <FormInput
-                label="Margem mínima · Próprios (%)"
-                inputMode="decimal"
-                value={ownMargin}
-                onChange={(event) => setOwnMargin(event.target.value)}
-              />
-              <FormInput
-                label="Margem mínima · Catálogo (%)"
-                inputMode="decimal"
-                value={catalogMargin}
-                onChange={(event) => setCatalogMargin(event.target.value)}
-              />
-              <FormInput
-                label="TACOS meta · Próprios (%)"
-                inputMode="decimal"
-                value={tacos}
-                onChange={(event) => setTacos(event.target.value)}
-              />
+            <h3 className={SECTION_TITLE_CLASS}>Margens e TACOS</h3>
+            <div className="overflow-hidden rounded-xl border border-[var(--border)]">
+              <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-x-3 border-b border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+                <span>Segmento</span>
+                <span>Margem mín. após ADS</span>
+                <span>TACOS meta</span>
+              </div>
+              <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-x-3 border-b border-[var(--border)] px-3 py-2.5">
+                <SegmentTag segment="own" className="justify-self-start" />
+                <PercentField
+                  label="Margem mínima · Próprios (%)"
+                  value={ownMargin}
+                  onChange={setOwnMargin}
+                />
+                <PercentField
+                  label="TACOS meta · Próprios (%)"
+                  value={tacos}
+                  onChange={setTacos}
+                />
+              </div>
+              <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-x-3 px-3 py-2.5">
+                <SegmentTag segment="catalog" className="justify-self-start" />
+                <PercentField
+                  label="Margem mínima · Catálogo (%)"
+                  value={catalogMargin}
+                  onChange={setCatalogMargin}
+                />
+                <span className="text-xs text-[var(--muted-foreground)]">não se aplica</span>
+              </div>
             </div>
             <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
               Margem mínima = margem <strong>após ADS</strong>: o que sobra depois de taxa,
@@ -152,22 +196,43 @@ export function RotinaTargetsSheet({
           </section>
 
           <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-[var(--foreground)]">O que entra na lista</h3>
-            <ul className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)]">
+            <h3 className={SECTION_TITLE_CLASS}>O que entra na lista</h3>
+            <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)]">
               {ROTINA_RULE_KEYS.map((rule) => {
                 const definition = ROTINA_RULES[rule];
+                const visual = RULE_VISUALS[rule];
+                const Icon = visual.icon;
                 const enabled = !disabled.has(rule);
                 const switchId = `rotina-rule-${rule}`;
                 return (
-                  <li key={rule} className="flex items-start gap-3 px-3 py-2.5">
+                  <li
+                    key={rule}
+                    className={cn(
+                      "flex items-start gap-3 px-3 py-2.5 transition-opacity",
+                      !enabled && "opacity-60",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg",
+                        RULE_ICON_CLASS[visual.tone],
+                      )}
+                    >
+                      <Icon className="size-3.5" aria-hidden />
+                    </span>
                     <div className="min-w-0 flex-1">
-                      <label
-                        htmlFor={switchId}
-                        className="block cursor-pointer text-sm font-medium text-[var(--foreground)]"
-                      >
-                        {definition.settingsLabel}
-                      </label>
-                      <p className="text-xs text-[var(--muted-foreground)]">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <label
+                          htmlFor={switchId}
+                          className="cursor-pointer text-sm font-medium text-[var(--foreground)]"
+                        >
+                          {definition.settingsLabel}
+                        </label>
+                        {definition.segments.map((segment) => (
+                          <SegmentTag key={segment} segment={segment} />
+                        ))}
+                      </div>
+                      <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
                         {definition.settingsHint}
                       </p>
                     </div>
@@ -190,35 +255,36 @@ export function RotinaTargetsSheet({
           </section>
 
           <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-[var(--foreground)]">
-              Metas por anúncio
-            </h3>
+            <h3 className={SECTION_TITLE_CLASS}>Metas por anúncio</h3>
             {overrides.length === 0 ? (
-              <p className="text-xs text-[var(--muted-foreground)]">
+              <p className="rounded-xl border border-dashed border-[var(--border)] px-3 py-3 text-xs text-[var(--muted-foreground)]">
                 Nenhuma. Para dar a um anúncio uma meta diferente do padrão, use o menu ⋯
                 do card dele.
               </p>
             ) : (
-              <ul className="space-y-1.5">
+              <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)]">
                 {overrides.map((override) => (
                   <li
                     key={override.mlItemId}
-                    className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]"
+                    className="flex items-center gap-2 px-3 py-2 text-xs text-[var(--muted-foreground)]"
                   >
-                    <span className="min-w-0 flex-1 truncate">
-                      <span className="font-medium text-[var(--foreground)]">
-                        {override.title}
-                      </span>
-                      {override.minMarginPercent !== null
-                        ? ` · margem ${formatPercent(override.minMarginPercent)}`
-                        : ""}
-                      {override.tacosTargetPercent !== null
-                        ? ` · TACOS ${formatPercent(override.tacosTargetPercent)}`
-                        : ""}
+                    <SegmentTag segment={override.catalogListing ? "catalog" : "own"} />
+                    <span className="min-w-0 flex-1 truncate font-medium text-[var(--foreground)]">
+                      {override.title}
                     </span>
+                    {override.minMarginPercent !== null ? (
+                      <span className="shrink-0 rounded-full bg-[var(--muted)] px-2 py-0.5 tabular-nums">
+                        margem {formatPercent(override.minMarginPercent)}
+                      </span>
+                    ) : null}
+                    {override.tacosTargetPercent !== null ? (
+                      <span className="shrink-0 rounded-full bg-[var(--muted)] px-2 py-0.5 tabular-nums">
+                        TACOS {formatPercent(override.tacosTargetPercent)}
+                      </span>
+                    ) : null}
                     <button
                       type="button"
-                      className="shrink-0 cursor-pointer font-medium text-[var(--primary)] underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                      className="shrink-0 cursor-pointer rounded font-medium text-[var(--primary)] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-50"
                       disabled={saving}
                       onClick={() => onClearOverride(override.mlItemId)}
                     >
