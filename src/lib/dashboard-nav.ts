@@ -8,6 +8,7 @@ import {
   LayoutGrid,
   Lightbulb,
   LineChart,
+  ListChecks,
   Scale,
   Settings,
   ShoppingCart,
@@ -24,6 +25,12 @@ export type DashboardNavBadge = {
 export type DashboardNavItem = {
   href: string;
   label: string;
+  /**
+   * Rótulo curto na barra do topo abaixo de 1280px (`xl`). Nome longo no topo
+   * empurra "Configurações" para fora da barra em notebook; o nome inteiro
+   * continua no tooltip e para leitor de tela.
+   */
+  shortLabel?: string;
   description: string;
   icon: LucideIcon;
   badge?: DashboardNavBadge;
@@ -57,6 +64,13 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
         label: "Início",
         description: "Prioridades, atalhos e alertas do dia",
         icon: LayoutGrid,
+      },
+      {
+        href: "/dashboard/rotina",
+        label: "Central de anúncios",
+        shortLabel: "Central",
+        description: "O que fazer hoje nos anúncios próprios e no catálogo",
+        icon: ListChecks,
       },
     ],
   },

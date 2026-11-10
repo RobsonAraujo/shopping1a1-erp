@@ -146,9 +146,18 @@ function CategorizedNav({ pathname }: { pathname: string }) {
                 active && "bg-[var(--accent)] text-[var(--accent-foreground)]",
               )}
               aria-current={active ? "page" : undefined}
+              aria-label={item.shortLabel ? item.label : undefined}
+              title={item.shortLabel ? item.label : item.title}
             >
               <Icon className="size-4" aria-hidden />
-              {item.label}
+              {item.shortLabel ? (
+                <>
+                  <span className="hidden xl:inline">{item.label}</span>
+                  <span className="xl:hidden">{item.shortLabel}</span>
+                </>
+              ) : (
+                item.label
+              )}
               <NavPendingHint className="top-1 right-1" />
             </Link>
           </Button>

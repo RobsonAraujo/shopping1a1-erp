@@ -38,17 +38,26 @@ function prismaClientHasExpectedModels(client: PrismaClient): boolean {
     dreCostItem?: { findMany?: unknown };
     replenishmentCycle?: { findMany?: unknown };
     revenueSimulation?: { findMany?: unknown };
+    listingHealth?: { findMany?: unknown };
   };
   return (
     typeof delegate.dreCostItem?.findMany === "function" &&
     typeof delegate.replenishmentCycle?.findMany === "function" &&
-    typeof delegate.revenueSimulation?.findMany === "function"
+    typeof delegate.revenueSimulation?.findMany === "function" &&
+    typeof delegate.listingHealth?.findMany === "function"
   );
 }
 
 function getPrismaClient(): PrismaClient {
   const cached = globalForPrisma.prisma;
-  if (cached && prismaClientHasExpectedModels(cached)) {
+  // `instanceof`: depois de um `prisma generate` o módulo gerado é reavaliado e
+  // a classe muda — um cliente em cache da classe antiga não conhece colunas
+  // novas (a checagem de modelos só pega modelo novo inteiro).
+  if (
+    cached &&
+    cached instanceof PrismaClient &&
+    prismaClientHasExpectedModels(cached)
+  ) {
     return cached;
   }
   const client = createPrismaClient();

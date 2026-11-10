@@ -19,6 +19,7 @@ Módulos com README co-localizado (padrão do projeto):
 - [Simples Nacional](../src/lib/simples-nacional/README.md)
 - [DRE](../src/lib/dre/README.md)
 - [Estoque — fechamento mensal (Histórico)](../src/lib/inventory/README.md)
+- [Central de anúncios — ações do dia (módulo `rotina`)](../src/lib/rotina/README.md)
 
 ## Processo
 

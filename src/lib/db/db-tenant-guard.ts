@@ -33,6 +33,10 @@ const TENANT_SCOPED_MODELS = new Set([
   "KanbanBoardSettings",
   "InventoryStockMonthSnapshot",
   "DashboardLayout",
+  "ListingTarget",
+  "ListingHealth",
+  "ListingActionState",
+  "ListingHealthRun",
 ]);
 
 /**

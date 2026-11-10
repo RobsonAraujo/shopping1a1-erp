@@ -73,6 +73,19 @@ export type ItemBody = {
   };
   /** Catálogo compartilhado (ML) vs anúncio clássico do vendedor */
   catalog_listing?: boolean;
+  /** Produto de catálogo (`MLB…` de produto) ao qual o anúncio está associado. */
+  catalog_product_id?: string | null;
+  /**
+   * Vínculos com outros anúncios do vendedor — num anúncio de catálogo criado a
+   * partir de um tradicional, aponta para o tradicional. Lido pela Rotina para
+   * avisar "o ML criou catálogo do seu anúncio próprio".
+   */
+  item_relations?: Array<{
+    id?: string;
+    variation_id?: number | null;
+    stock_relation?: number | null;
+  }> | null;
+  sub_status?: string[];
   /** Miniatura (baixa resolução); prefira `pictures` ou `bestItemImageUrl` */
   thumbnail?: string;
   secure_thumbnail?: string;

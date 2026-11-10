@@ -347,6 +347,161 @@ model CatalogCompetitionPollRun {
   @@map("catalog_competition_poll_runs")
 }
 
+/// Rotina: meta por anúncio que sobrepõe o padrão do segmento (Metas da
+/// Rotina). Separada de `Product` de propósito: a meta de TACOS vale mesmo
+/// para anúncio sem custo cadastrado. Ver `src/lib/rotina/README.md`.
+model ListingTarget {
+  mlItemId           String   @id @map("ml_item_id")
+  organizationId     String   @map("organization_id")
+  /// Margem mínima após ADS (%) deste anúncio; null = padrão do segmento.
+  minMarginPercent   Decimal? @map("min_margin_percent") @db.Decimal(6, 2)
+  /// Meta de TACOS (%) deste anúncio; null = padrão da organização.
+  tacosTargetPercent Decimal? @map("tacos_target_percent") @db.Decimal(6, 2)
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@index([organizationId])
+  @@map("listing_targets")
+}
+
+/// Rotina: último retrato calculado de cada anúncio operacional — uma linha
+/// por anúncio, sobrescrita a cada "Atualizar". É cache de cálculo (margem,
+/// preço mínimo, ADS, promoção, vínculo de catálogo): pode ser apagado sem
+/// perda, a próxima rodada recria. Configuração do usuário NÃO mora aqui
+/// (metas por anúncio ficam em `ListingTarget`).
+model ListingHealth {
+  mlItemId              String    @id @map("ml_item_id")
+  organizationId        String    @map("organization_id")
+  runId                 String    @map("run_id")
+  title                 String
+  sku                   String?
+  imageUrl              String?   @map("image_url")
+  permalink             String
+  catalogListing        Boolean   @map("catalog_listing")
+  mlStatus              String    @map("ml_status")
+  salePrice             Decimal   @map("sale_price") @db.Decimal(18, 2)
+  regularPrice          Decimal?  @map("regular_price") @db.Decimal(18, 2)
+  /// `false` = a consulta de preço do ML falhou: não dá para dizer se há
+  /// promoção (e o anúncio NÃO entra em "sem promoção").
+  promotionKnown        Boolean   @map("promotion_known")
+  hasPromotion          Boolean   @map("has_promotion")
+  promotionName         String?   @map("promotion_name")
+  promotionType         String?   @map("promotion_type")
+  promotionEndsAt       DateTime? @map("promotion_ends_at")
+  /// `false` = há promoção, mas a consulta da data de término falhou.
+  promotionEndKnown     Boolean   @default(true) @map("promotion_end_known")
+  marginPercent         Decimal?  @map("margin_percent") @db.Decimal(9, 2)
+  marginValue           Decimal?  @map("margin_value") @db.Decimal(18, 2)
+  marginAfterAdsPercent Decimal?  @map("margin_after_ads_percent") @db.Decimal(9, 2)
+  marginAfterAdsValue   Decimal?  @map("margin_after_ads_value") @db.Decimal(18, 2)
+  /// `MarginExclusionReason` da Lucratividade (sem custo, sem alíquota…).
+  exclusionReason       String?   @map("exclusion_reason")
+  /// Meta (%) usada no cálculo dos mínimos — se a meta efetiva mudou depois,
+  /// o mínimo é mostrado como desatualizado.
+  floorTargetPercent    Decimal?  @map("floor_target_percent") @db.Decimal(6, 2)
+  /// Menor preço com margem de contribuição ≥ meta.
+  floorMcPrice          Decimal?  @map("floor_mc_price") @db.Decimal(18, 2)
+  /// Menor preço com margem após ADS ≥ meta.
+  floorAfterAdsPrice    Decimal?  @map("floor_after_ads_price") @db.Decimal(18, 2)
+  floorReason           String?   @map("floor_reason")
+  floorRefined          Boolean   @default(false) @map("floor_refined")
+  /// Faixas de preço acima do mínimo onde a meta NÃO se sustenta (ex.: logo
+  /// acima do limiar do frete grátis). `[{ from, to }]`.
+  floorBands            Json?     @map("floor_bands")
+  /// Insumos da conta de margem nesta rodada (custo, extras, imposto, rebate,
+  /// ADS). O simulador de preço só precisa cotar taxa e frete do preço pedido.
+  pricingInputs         Json?     @map("pricing_inputs")
+  pmaPrice              Decimal?  @map("pma_price") @db.Decimal(18, 2)
+  unitsPerDay           Decimal?  @map("units_per_day") @db.Decimal(12, 3)
+  /// `false` = a API de Product Ads não respondeu: nada de "sem ADS"/TACOS.
+  adsAvailable          Boolean   @map("ads_available")
+  adsStatus             String?   @map("ads_status")
+  adsCost               Decimal?  @map("ads_cost") @db.Decimal(18, 2)
+  tacosPercent          Decimal?  @map("tacos_percent") @db.Decimal(9, 2)
+  adsPeriodDays         Int       @map("ads_period_days")
+  tags                  String[]  @default([])
+  catalogProductId      String?   @map("catalog_product_id")
+  /// Ids de `item_relations` do anúncio (vínculo catálogo ↔ próprio no ML).
+  relatedItemIds        String[]  @default([]) @map("related_item_ids")
+  /// Só em anúncio de catálogo: o anúncio próprio ao qual ele está ligado.
+  linkedOwnItemId       String?   @map("linked_own_item_id")
+  /// `date_created` do anúncio no ML, quando veio.
+  listedAt              DateTime? @map("listed_at")
+  /// Primeira rodada em que o anúncio apareceu (não muda em updates).
+  firstSeenAt           DateTime  @default(now()) @map("first_seen_at")
+  computedAt            DateTime  @map("computed_at")
+
+  @@index([organizationId])
+  @@map("listing_health")
+}
+
+enum ListingActionStatus {
+  open
+  done
+  snoozed
+  dismissed
+  resolved
+}
+
+/// Rotina: estado de cada ação (anúncio × regra) — o que o usuário decidiu
+/// (feito, adiado, ignorado) e desde quando a ação existe. A regra em si é
+/// avaliada na leitura; esta tabela só guarda memória e decisões.
+model ListingActionState {
+  id              String              @id @default(cuid())
+  organizationId  String              @map("organization_id")
+  mlItemId        String              @map("ml_item_id")
+  /// Chave da regra (`RotinaRuleKey`). Texto, não enum: regra nova não pede migration.
+  rule            String
+  status          ListingActionStatus
+  firstSeenAt     DateTime            @map("first_seen_at")
+  lastSeenAt      DateTime            @map("last_seen_at")
+  statusChangedAt DateTime            @map("status_changed_at")
+  snoozedUntil    DateTime?           @map("snoozed_until")
+  resolvedAt      DateTime?           @map("resolved_at")
+  reopenCount     Int                 @default(0) @map("reopen_count")
+  /// Evento de vínculo de catálogo: o anúncio próprio relacionado.
+  relatedItemId   String?             @map("related_item_id")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  @@unique([organizationId, mlItemId, rule])
+  @@index([organizationId, status])
+  @@map("listing_action_states")
+}
+
+enum ListingHealthRunStatus {
+  running
+  ok
+  partial
+  failed
+}
+
+/// Rotina: cada "Atualizar". Também é a trava contra duas rodadas ao mesmo
+/// tempo (`running` com `heartbeatAt` recente) e o ponto de retomada quando o
+/// orçamento de tempo acaba no meio (`partial`).
+model ListingHealthRun {
+  id             String                 @id @default(cuid())
+  organizationId String                 @map("organization_id")
+  status         ListingHealthRunStatus
+  /// "all" = rodada completa; "items" = recálculo de anúncios específicos.
+  scope          String                 @default("all")
+  source         String                 @default("manual")
+  /// Primeira rodada completa da organização: não gera evento de vínculo de
+  /// catálogo (todo vínculo antigo pareceria novo).
+  isBaseline     Boolean                @default(false) @map("is_baseline")
+  plannedItemIds String[]               @default([]) @map("planned_item_ids")
+  itemsTotal     Int                    @default(0) @map("items_total")
+  itemsDone      Int                    @default(0) @map("items_done")
+  startedAt      DateTime               @default(now()) @map("started_at")
+  heartbeatAt    DateTime               @default(now()) @map("heartbeat_at")
+  finishedAt     DateTime?              @map("finished_at")
+  warnings       Json?
+  errorSummary   String?                @map("error_summary") @db.Text
+
+  @@index([organizationId, startedAt(sort: Desc)])
+  @@map("listing_health_runs")
+}
+
 /// Estoque físico no galpão (1:1 com listing).
 model WarehouseStock {
   mlItemId             String   @id @map("ml_item_id")
@@ -819,6 +974,16 @@ model OperationalSettings {
   promotionMonitorOwnListings Boolean? @map("promotion_monitor_own_listings")
   /// Acompanhar promoções de anúncios de catálogo no painel Início. Custa uma chamada ao Mercado Livre por anúncio.
   promotionMonitorCatalogListings Boolean? @map("promotion_monitor_catalog_listings")
+
+  /// Rotina: margem mínima (após ADS, %) dos anúncios próprios. Também é a
+  /// meta do preço mínimo mostrado nas ações (promoção, ajuste de preço).
+  rotinaOwnMinMarginPercent     Decimal? @map("rotina_own_min_margin_percent") @db.Decimal(6, 2)
+  /// Rotina: margem mínima (após ADS, %) dos anúncios de catálogo.
+  rotinaCatalogMinMarginPercent Decimal? @map("rotina_catalog_min_margin_percent") @db.Decimal(6, 2)
+  /// Rotina: TACOS (%) a partir do qual um anúncio próprio entra em "TACOS acima da meta".
+  rotinaOwnTacosTargetPercent   Decimal? @map("rotina_own_tacos_target_percent") @db.Decimal(6, 2)
+  /// Rotina: regras desligadas pelo usuário (chaves de `ROTINA_RULE_KEYS`). Vazio = todas ligadas.
+  rotinaDisabledRules           String[] @default([]) @map("rotina_disabled_rules")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

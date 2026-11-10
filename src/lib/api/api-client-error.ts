@@ -16,6 +16,16 @@ export const INVALID_DATE_RANGE_USER_ERROR =
   "Escolha um período válido: a data inicial precisa ser anterior ou igual à final, com no máximo 90 dias.";
 
 const API_ERROR_MESSAGES: Record<string, string> = {
+  rotina_refresh_busy:
+    "Já tem uma atualização dos anúncios rodando (talvez em outra aba). Espere ela terminar.",
+  rotina_refresh_failed:
+    "Não foi possível terminar a atualização. O que já foi calculado ficou salvo; tente de novo para continuar.",
+  rotina_action_failed: "Não foi possível salvar esta ação. Tente de novo.",
+  rotina_target_failed: "Não foi possível salvar a meta deste anúncio.",
+  rotina_settings_failed: "Não foi possível salvar as metas.",
+  rotina_listing_not_found: "Este anúncio não está mais na Central de anúncios. Atualize a página.",
+  rotina_simulate_failed:
+    "Não foi possível consultar taxa e frete no Mercado Livre agora. Tente de novo.",
   dre_load_failed: "Não foi possível carregar o DRE. Tente novamente.",
   dre_sync_failed: "Não foi possível sincronizar o mês com o Mercado Livre.",
   dre_cost_value_failed: "Não foi possível salvar o valor do custo fixo.",

@@ -16,6 +16,7 @@
 | `/dashboard/envios-full` | Custo de coleta Full por unidade | DB `full_shipments` |
 | `/dashboard/produtos` | Cadastro fiscal e custo por SKU; coluna Imposto = % das vendas dos últimos 30 dias apuradas no Tributário | DB `products` + `tax_report_month_snapshots.daily_totals` |
 | `/dashboard/lucratividade` | Margem por anúncio (taxa ML, frete, impostos, ads). Padrão: vendas dos últimos 7 dias com média ponderada pelo faturamento (presets Hoje/Ontem/7d/Mês atual/60d/90d/personalizado); opção "Simulação · preço de hoje" (todos os anúncios, média simples). Sem custo/alíquota/kit incompleto ficam fora da média. Imposto = % das vendas dos últimos 30 dias apuradas no Tributário (mesmo de Produtos) | ML API (preço/vendas, taxas, ads) + DB `products` + `tax_report_month_snapshots.daily_totals` |
+| `/dashboard/rotina` | **Central de anúncios**: lista de ações do dia (próprios + catálogo) com preço mínimo por margem-alvo (MC e após ADS) | DB `listing_health` (rodada do botão Atualizar, que chama o ML) + `listings.catalog_*` (cron de catálogo) + `listing_action_states`/`listing_targets`. Ver `src/lib/rotina/README.md` |
 | `/dashboard/catalog-report` | Status de competição no catálogo | DB `catalog_competition_snapshots` |
 | `/dashboard/dre` | DRE mensal (receita, COGS, resultado) | ML API + DB |
 | `/dashboard/relatorio-tributario` | Apuração fiscal PIS/COFINS + ICMS/DIFAL por venda | DB `tax_report_month_snapshots` + ML API |

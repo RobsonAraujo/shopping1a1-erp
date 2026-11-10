@@ -75,6 +75,10 @@ export type FinancialEvaluationRow = {
   salePrice: number;
   regularPrice: number | null;
   hasPromotion: boolean;
+  /** `false` quando a consulta de preço do ML falhou: `hasPromotion` é só o
+   * padrão, não um "sem promoção" confirmado. Ausente em linhas de período e
+   * de pré-visualização. */
+  promotionKnown?: boolean;
   listingTypeId: string | null;
   listingTypeLabel: string | null;
   /** `true` = anúncio de catálogo do ML (MLB próprio, os pedidos apontam pra
@@ -511,19 +515,21 @@ async function buildRowForItem(
   let salePrice = item.price;
   let regularPrice: number | null = null;
   let hasPromotion = false;
+  let promotionKnown = true;
   let currencyId = item.currency_id ?? null;
 
   try {
-    const salePriceInfo = await fetchItemSalePrice(
-      accessToken,
-      item.id,
-      item.price,
-    );
+    // Sem `fallbackPrice` de propósito: com fallback, uma falha do ML virava
+    // "sem promoção" em silêncio. O preço segue sendo o do anúncio (como antes),
+    // mas a linha diz que não deu para saber — a Rotina depende disso para não
+    // mandar "colocar promoção" em anúncio que talvez já tenha.
+    const salePriceInfo = await fetchItemSalePrice(accessToken, item.id);
     salePrice = salePriceInfo.amount;
     regularPrice = salePriceInfo.regularAmount;
     hasPromotion = salePriceInfo.hasPromotion;
     currencyId = salePriceInfo.currencyId ?? currencyId;
   } catch (e) {
+    promotionKnown = false;
     notes.push(
       e instanceof Error
         ? `Preço promocional indisponível: ${e.message}`
@@ -636,6 +642,7 @@ async function buildRowForItem(
     salePrice,
     regularPrice,
     hasPromotion,
+    promotionKnown,
     listingTypeId: item.listing_type_id ?? null,
     catalogListing: item.catalog_listing === true,
     listingTypeLabel,
@@ -661,13 +668,13 @@ async function buildRowForItem(
 /** Por que a margem pós ADS não pôde ser calculada na página inteira. */
 export type AdsUnavailableReason = "lookback_limit" | "api_error";
 
-type AdsLoad = {
+export type AdsLoad = {
   map: Map<string, ItemAdMetrics>;
   available: boolean;
   unavailableReason: AdsUnavailableReason | null;
 };
 
-async function loadAdsMetricsByItem(
+export async function loadAdsMetricsByItem(
   accessToken: string,
   siteId: string,
   itemIds?: string[],
@@ -1109,6 +1116,64 @@ export async function loadFinancialEvaluationRows(
   ]);
   signal?.throwIfAborted();
 
+  return buildRowsForLoadedItems(
+    accessToken,
+    userId,
+    organizationId,
+    items,
+    adsLoad,
+    options,
+  );
+}
+
+/**
+ * Mesmas linhas de {@link loadFinancialEvaluationRows} (preço de hoje), para
+ * itens que o chamador já buscou no `/items/bulk`. A Rotina usa os `ItemBody`
+ * também para vínculo de catálogo e cotações do preço mínimo — buscar de novo
+ * aqui dobraria as chamadas. Sem `adsLoad`, consulta o Product Ads só destes
+ * itens.
+ */
+export async function loadFinancialEvaluationRowsForItems(
+  accessToken: string,
+  userId: number,
+  organizationId: string,
+  items: ItemBody[],
+  options?: LoadStreamOptions & {
+    adsLoad?: AdsLoad;
+    targetMarginPercent?: number;
+    marginBasis?: MarginBasis;
+  },
+): Promise<FinancialEvaluationRow[]> {
+  if (items.length === 0) return [];
+  const adsLoad =
+    options?.adsLoad ??
+    (await loadAdsMetricsByItem(
+      accessToken,
+      siteIdFromItemId(items[0].id),
+      items.map((item) => item.id),
+    ));
+  return buildRowsForLoadedItems(
+    accessToken,
+    userId,
+    organizationId,
+    items,
+    adsLoad,
+    options,
+  );
+}
+
+async function buildRowsForLoadedItems(
+  accessToken: string,
+  userId: number,
+  organizationId: string,
+  items: ItemBody[],
+  adsLoad: AdsLoad,
+  options?: LoadStreamOptions & {
+    targetMarginPercent?: number;
+    marginBasis?: MarginBasis;
+  },
+): Promise<FinancialEvaluationRow[]> {
+  const signal = options?.signal;
   const operationalItems = items.filter((item) =>
     isOperationalStatus(item.status),
   );
