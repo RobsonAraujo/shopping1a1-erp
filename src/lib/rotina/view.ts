@@ -62,6 +62,32 @@ import {
 
 export type CatalogVerdictView = { tone: "ok" | "bad" | "neutral"; text: string };
 
+/**
+ * Meta de um anúncio para o formulário "Meta deste anúncio": a exceção gravada
+ * (null = usa o padrão) e o padrão do segmento, que vira o placeholder.
+ */
+export type RotinaListingTargetView = {
+  own: { minMarginPercent: number | null; tacosTargetPercent: number | null };
+  defaults: { minMarginPercent: number; tacosTargetPercent: number };
+};
+
+function listingTargetView(
+  catalogListing: boolean,
+  settings: RotinaSettings,
+  target: ListingTargetValues | null,
+): RotinaListingTargetView {
+  return {
+    own: {
+      minMarginPercent: target?.minMarginPercent ?? null,
+      tacosTargetPercent: target?.tacosTargetPercent ?? null,
+    },
+    defaults: {
+      minMarginPercent: effectiveMinMarginPercent(catalogListing, settings, null),
+      tacosTargetPercent: effectiveTacosTargetPercent(settings, null),
+    },
+  };
+}
+
 export type RotinaActionListing = {
   mlItemId: string;
   title: string;
@@ -77,6 +103,7 @@ export type RotinaActionListing = {
   minMarginOverridden: boolean;
   tacosTargetPercent: number;
   tacosOverridden: boolean;
+  target: RotinaListingTargetView;
   /** Tem retrato da rodada (dá para "recalcular este anúncio"). */
   hasHealth: boolean;
 };
@@ -158,6 +185,7 @@ export type RotinaListingRow = {
   priceToWin: number | null;
   unitsPerDay: number | null;
   openActions: number;
+  target: RotinaListingTargetView;
 };
 
 export type RotinaView = {
@@ -309,6 +337,7 @@ function identity(
     tacosTargetPercent: effectiveTacosTargetPercent(settings, target),
     tacosOverridden:
       target?.tacosTargetPercent !== null && target?.tacosTargetPercent !== undefined,
+    target: listingTargetView(catalogListing, settings, target),
     hasHealth: health !== null,
   };
 }
@@ -814,6 +843,7 @@ export function buildRotinaView(input: RotinaViewInput): RotinaView {
       priceToWin: entity.catalog?.priceToWin ?? null,
       unitsPerDay: health.unitsPerDay,
       openActions: openByItem.get(health.mlItemId) ?? 0,
+      target: listingTargetView(health.catalogListing, settings, target),
     });
   }
   listings.sort((a, b) => {

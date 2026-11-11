@@ -259,7 +259,7 @@ export function RotinaTargetsSheet({
             {overrides.length === 0 ? (
               <p className="rounded-xl border border-dashed border-[var(--border)] px-3 py-3 text-xs text-[var(--muted-foreground)]">
                 Nenhuma. Para dar a um anúncio uma meta diferente do padrão, use o menu ⋯
-                do card dele.
+                do card dele ou o botão de meta na aba Anúncios.
               </p>
             ) : (
               <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)]">

@@ -216,6 +216,35 @@ describe("buildRotinaView", () => {
     });
   });
 
+  it("gives every listing row its own target and the segment default", () => {
+    const view = buildRotinaView(
+      input({
+        settings: settings({
+          ownMinMarginPercent: 2,
+          catalogMinMarginPercent: 0,
+          ownTacosTargetPercent: 4,
+        }),
+        health: [ownNoPromo, catalogRow],
+        targets: new Map([["OWN1", { minMarginPercent: 5, tacosTargetPercent: null }]]),
+      }),
+    );
+    const own = view.listings.find((row) => row.mlItemId === "OWN1");
+    const catalog = view.listings.find((row) => row.mlItemId === "CAT1");
+    assert.deepEqual(own?.target, {
+      own: { minMarginPercent: 5, tacosTargetPercent: null },
+      defaults: { minMarginPercent: 2, tacosTargetPercent: 4 },
+    });
+    assert.equal(own?.floor.targetPercent, 5);
+    assert.deepEqual(catalog?.target, {
+      own: { minMarginPercent: null, tacosTargetPercent: null },
+      defaults: { minMarginPercent: 0, tacosTargetPercent: 4 },
+    });
+    // O card usa o mesmo par: o placeholder mostra o padrão, não a meta própria.
+    const promo = view.actions.find((action) => action.id === "promo_missing:OWN1");
+    assert.equal(promo?.listing.target.defaults.minMarginPercent, 2);
+    assert.equal(promo?.listing.target.own.minMarginPercent, 5);
+  });
+
   it("keeps when a done action was decided", () => {
     const view = buildRotinaView(
       input({

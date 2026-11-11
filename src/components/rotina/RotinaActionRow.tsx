@@ -302,14 +302,8 @@ export function RotinaActionRow({
               {editingTarget ? (
                 <RotinaListingTargetForm
                   catalogListing={listing.catalogListing}
-                  defaults={{
-                    minMarginPercent: listing.minMarginPercent,
-                    tacosTargetPercent: listing.tacosTargetPercent,
-                  }}
-                  current={{
-                    minMarginPercent: listing.minMarginOverridden ? listing.minMarginPercent : null,
-                    tacosTargetPercent: listing.tacosOverridden ? listing.tacosTargetPercent : null,
-                  }}
+                  defaults={listing.target.defaults}
+                  current={listing.target.own}
                   saving={savingTarget}
                   onCancel={() => setEditingTarget(false)}
                   onSave={async (draft) => {

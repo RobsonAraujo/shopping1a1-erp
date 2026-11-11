@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Calculator, Search } from "lucide-react";
+import { Calculator, Search, Target } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormInput } from "@/components/ui/form-input";
@@ -18,6 +18,8 @@ import {
   RotinaPriceSimulator,
   buildSimulatorSuggestions,
 } from "@/components/rotina/RotinaPriceSimulator";
+import type { ListingTargetDraft } from "@/components/rotina/RotinaListingTargetForm";
+import { RotinaListingTargetPopover } from "@/components/rotina/RotinaListingTargetPopover";
 import { RotinaThumb } from "@/components/rotina/RotinaThumb";
 import { SegmentTag } from "@/components/rotina/SegmentTag";
 import { STATUS_PILL_CLASS } from "@/components/rotina/rule-visuals";
@@ -65,6 +67,26 @@ function segmentOf(row: RotinaListingRow) {
 
 const TH_CLASS = "px-3 py-2.5 font-medium";
 
+function hasOwnTarget(row: RotinaListingRow): boolean {
+  return row.target.own.minMarginPercent !== null || row.target.own.tacosTargetPercent !== null;
+}
+
+/** "Meta própria: margem 5% · TACOS 3%" — o que está gravado neste anúncio. */
+function ownTargetLabel(row: RotinaListingRow): string {
+  const parts = [
+    row.target.own.minMarginPercent !== null
+      ? `margem ${formatPercent(row.target.own.minMarginPercent)}`
+      : null,
+    row.target.own.tacosTargetPercent !== null
+      ? `TACOS ${formatPercent(row.target.own.tacosTargetPercent)}`
+      : null,
+  ].filter(Boolean);
+  return `Meta própria: ${parts.join(" · ")}`;
+}
+
+const OWN_TARGET_BUTTON_CLASS =
+  "bg-[var(--primary)]/10 text-[var(--primary)] hover:bg-[var(--primary)]/15";
+
 function matches(row: RotinaListingRow, query: string): boolean {
   if (!query) return true;
   const needle = query.toLowerCase();
@@ -104,10 +126,14 @@ export function RotinaAllListingsTable({
   rows,
   segment,
   timeZone,
+  busy,
+  onSaveTarget,
 }: {
   rows: RotinaListingRow[];
   segment: SegmentFilter;
   timeZone: string;
+  busy: boolean;
+  onSaveTarget: (row: RotinaListingRow, draft: ListingTargetDraft) => Promise<boolean>;
 }) {
   const [query, setQuery] = useState("");
   const [simulating, setSimulating] = useState<RotinaListingRow | null>(null);
@@ -200,15 +226,28 @@ export function RotinaAllListingsTable({
                 </dd>
               </div>
             </dl>
-            <Button
-              size="sm"
-              variant="outline"
-              className="mt-2 w-full"
-              onClick={() => setSimulating(row)}
-            >
-              <Calculator aria-hidden />
-              Simular preço
-            </Button>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <Button size="sm" variant="outline" onClick={() => setSimulating(row)}>
+                <Calculator aria-hidden />
+                Simular preço
+              </Button>
+              <RotinaListingTargetPopover
+                catalogListing={row.catalogListing}
+                target={row.target}
+                disabled={busy}
+                onSave={(draft) => onSaveTarget(row, draft)}
+              >
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  className={cn(hasOwnTarget(row) && OWN_TARGET_BUTTON_CLASS)}
+                >
+                  <Target aria-hidden />
+                  {hasOwnTarget(row) ? "Meta própria" : "Meta"}
+                </Button>
+              </RotinaListingTargetPopover>
+            </div>
           </li>
         ))}
       </ul>
@@ -228,7 +267,7 @@ export function RotinaAllListingsTable({
               <th className={TH_CLASS}>Catálogo</th>
               <th className={cn(TH_CLASS, "text-right")}>Ações</th>
               <th className="px-3 py-2.5">
-                <span className="sr-only">Simular</span>
+                <span className="sr-only">Ferramentas</span>
               </th>
             </tr>
           </thead>
@@ -285,6 +324,7 @@ export function RotinaAllListingsTable({
                   {row.floor.effectivePrice !== null ? (
                     <span className="block text-[10px] text-[var(--muted-foreground)]">
                       p/ {formatPercent(row.floor.targetPercent)}
+                      {row.target.own.minMarginPercent !== null ? " · meta própria" : ""}
                       {row.floor.boundBy === "pma" ? " (PMA)" : ""}
                       {row.floor.bands.length > 0 ? " · tem faixa a evitar" : ""}
                       {row.floor.stale ? " · desatualizado" : ""}
@@ -320,19 +360,44 @@ export function RotinaAllListingsTable({
                   )}
                 </td>
                 <td className="px-2 py-2.5 text-right">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        size="icon-sm"
-                        variant="ghost"
-                        aria-label={`Simular preço de ${row.title}`}
-                        onClick={() => setSimulating(row)}
+                  <div className="flex items-center justify-end gap-0.5">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label={`Simular preço de ${row.title}`}
+                          onClick={() => setSimulating(row)}
+                        >
+                          <Calculator aria-hidden />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Simular preço</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <RotinaListingTargetPopover
+                        catalogListing={row.catalogListing}
+                        target={row.target}
+                        disabled={busy}
+                        onSave={(draft) => onSaveTarget(row, draft)}
                       >
-                        <Calculator aria-hidden />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Simular preço</TooltipContent>
-                  </Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            size="icon-sm"
+                            variant="ghost"
+                            disabled={busy}
+                            aria-label={`Meta de ${row.title}`}
+                            className={cn(hasOwnTarget(row) && OWN_TARGET_BUTTON_CLASS)}
+                          >
+                            <Target aria-hidden />
+                          </Button>
+                        </TooltipTrigger>
+                      </RotinaListingTargetPopover>
+                      <TooltipContent>
+                        {hasOwnTarget(row) ? ownTargetLabel(row) : "Definir meta deste anúncio"}
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
                 </td>
               </tr>
             ))}

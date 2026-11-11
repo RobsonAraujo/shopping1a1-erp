@@ -12,6 +12,7 @@ import {
   type RotinaActionHandlers,
 } from "@/components/rotina/RotinaActionRow";
 import { RotinaAllListingsTable } from "@/components/rotina/RotinaAllListingsTable";
+import type { ListingTargetDraft } from "@/components/rotina/RotinaListingTargetForm";
 import { RotinaHeader } from "@/components/rotina/RotinaHeader";
 import { RotinaInfoLists } from "@/components/rotina/RotinaInfoLists";
 import { RotinaRefreshOverlay } from "@/components/rotina/RotinaRefreshOverlay";
@@ -204,6 +205,32 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
   const undo = (action: RotinaActionView) =>
     decide(action, "reopen", { bucket: "active", doneToday: false, snoozedUntil: null });
 
+  /** Meta de um anúncio — do menu do card ou da aba Anúncios. */
+  async function saveListingTarget(
+    mlItemId: string,
+    hasHealth: boolean,
+    draft: ListingTargetDraft,
+  ): Promise<boolean> {
+    try {
+      const response = await fetch(`/api/rotina/targets/${encodeURIComponent(mlItemId)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(draft),
+      });
+      if (!response.ok) {
+        throw new Error(await readApiError(response, "rotina_target_failed"));
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não foi possível salvar a meta.");
+      return false;
+    }
+    toast.success("Meta do anúncio salva.");
+    // O preço mínimo depende da meta: recalcula só este anúncio.
+    if (hasHealth) void runRefresh([mlItemId]);
+    else reload();
+    return true;
+  }
+
   /** Confirmação com "Desfazer" — só depois que o servidor gravou a decisão. */
   function confirmWithUndo(saved: boolean, action: RotinaActionView, message: string) {
     if (!saved) return;
@@ -252,29 +279,8 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
     onRecalculate: (mlItemId) => {
       void runRefresh([mlItemId]);
     },
-    onSaveTarget: async (action, draft) => {
-      try {
-        const response = await fetch(
-          `/api/rotina/targets/${encodeURIComponent(action.listing.mlItemId)}`,
-          {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(draft),
-          },
-        );
-        if (!response.ok) {
-          throw new Error(await readApiError(response, "rotina_target_failed"));
-        }
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Não foi possível salvar a meta.");
-        return false;
-      }
-      toast.success("Meta do anúncio salva.");
-      // O preço mínimo depende da meta: recalcula só este anúncio.
-      if (action.listing.hasHealth) void runRefresh([action.listing.mlItemId]);
-      else reload();
-      return true;
-    },
+    onSaveTarget: (action, draft) =>
+      saveListingTarget(action.listing.mlItemId, action.listing.hasHealth, draft),
   };
 
   async function saveTargets(draft: RotinaTargetsDraft) {
@@ -445,6 +451,9 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
               rows={view.listings}
               segment={segment}
               timeZone={view.timeZone}
+              busy={busy}
+              // Toda linha da tabela vem da rodada: sempre dá para recalcular.
+              onSaveTarget={(row, draft) => saveListingTarget(row.mlItemId, true, draft)}
             />
           </div>
         )}
