@@ -139,6 +139,46 @@ describe("RotinaActionRow", () => {
     assert.equal(onDone.mock.callCount(), 1);
   });
 
+  it("opens the ML screen where the task gets done and shows PMA and TACOS", () => {
+    const view = viewWith(
+      [
+        {
+          mlItemId: "CAT1",
+          imageUrl: null,
+          catalogListing: true,
+          catalogProductId: "MLB27951053",
+          floorAfterAdsPrice: 91.2,
+          floorMcPrice: 88.7,
+          pmaPrice: 89.9,
+          tacosPercent: 5.2,
+          adsStatus: "active",
+        },
+      ],
+      [catalogLive({ mlItemId: "CAT1", priceToWin: 94.9 })],
+    );
+    const action = view.actions.find((candidate) => candidate.rule === "catalog_losing")!;
+    const rendered = render(action);
+    cleanup = rendered.unmount;
+
+    const links = Object.fromEntries(
+      [...rendered.container.querySelectorAll("a")].map((link) => [
+        link.textContent?.trim(),
+        link.getAttribute("href"),
+      ]),
+    );
+    assert.equal(
+      links["Editar preço"],
+      "https://www.mercadolivre.com.br/syi/core/modify?itemId=CAT1",
+    );
+    assert.equal(links["Ver concorrência"], "https://www.mercadolivre.com.br/p/MLB27951053/s");
+    assert.equal(links["Abrir no ML"], undefined, "o botão genérico deu lugar ao da tarefa");
+
+    const content = text(rendered.container);
+    assert.match(content, /PMA\s*R\$ 89,90/);
+    // Meta de TACOS do fixture: 10%.
+    assert.match(content, /TACOS 7d\s*5,2%\s*· meta 10%/);
+  });
+
   it("marks losing catalog in red and simulates the price to win", async () => {
     const view = viewWith(
       [

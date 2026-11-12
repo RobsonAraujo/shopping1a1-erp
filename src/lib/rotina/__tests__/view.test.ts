@@ -245,6 +245,66 @@ describe("buildRotinaView", () => {
     assert.equal(promo?.listing.target.own.minMarginPercent, 5);
   });
 
+  it("links each task to the ML screen where it gets done", () => {
+    const view = buildRotinaView(
+      input({
+        health: [
+          ownNoPromo,
+          ownNoAds,
+          { ...catalogRow, catalogProductId: "MLB27951053" },
+          listing({
+            mlItemId: "CAT2",
+            catalogListing: true,
+            catalogProductId: "MLB111",
+            marginAfterAdsPercent: -1,
+          }),
+        ],
+        catalogLive: [catalogLive({ mlItemId: "CAT1", priceToWin: 94.9 })],
+      }),
+    );
+    const linksOf = (id: string) => {
+      const action = view.actions.find((candidate) => candidate.id === id);
+      assert.ok(action, `faltou a ação ${id}`);
+      return [action.links.primary, ...action.links.extra].map((link) => [link.label, link.href]);
+    };
+
+    assert.deepEqual(linksOf("catalog_losing:CAT1"), [
+      ["Editar preço", "https://www.mercadolivre.com.br/syi/core/modify?itemId=CAT1"],
+      ["Ver concorrência", "https://www.mercadolivre.com.br/p/MLB27951053/s"],
+    ]);
+    assert.deepEqual(linksOf("promo_missing:OWN1"), [
+      [
+        "Abrir promoções",
+        "https://vendedores.mercadolivre.com.br/anuncios/lista/promos#from=seller-menu",
+      ],
+    ]);
+    const [adsLink] = linksOf("ads_missing:OWN2");
+    assert.equal(adsLink[0], "Abrir Product Ads");
+    // Sem advertiser_id/account_id fixos: cada organização tem os seus.
+    assert.doesNotMatch(adsLink[1], /advertiser_id|account_id/);
+    assert.deepEqual(linksOf("margin_below_min:CAT2"), [
+      ["Editar preço", "https://www.mercadolivre.com.br/syi/core/modify?itemId=CAT2"],
+      ["Ver concorrência", "https://www.mercadolivre.com.br/p/MLB111/s"],
+    ]);
+  });
+
+  it("puts PMA and current TACOS on the card, but no TACOS without ADS", () => {
+    const view = buildRotinaView(
+      input({
+        health: [
+          { ...ownNoPromo, pmaPrice: 110, tacosPercent: 5.2, adsStatus: "active" },
+          { ...ownNoAds, tacosPercent: 0 },
+        ],
+      }),
+    );
+    const promo = view.actions.find((action) => action.id === "promo_missing:OWN1");
+    assert.equal(promo?.listing.pmaPrice, 110);
+    assert.equal(promo?.listing.tacosPercent, 5.2);
+    assert.equal(promo?.listing.adsPeriodDays, 7);
+    const noAds = view.actions.find((action) => action.id === "ads_missing:OWN2");
+    assert.equal(noAds?.listing.tacosPercent, null, "idle: o 0% da rodada não é TACOS real");
+  });
+
   it("keeps when a done action was decided", () => {
     const view = buildRotinaView(
       input({

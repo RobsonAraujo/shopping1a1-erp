@@ -32,7 +32,7 @@ import {
   RULE_VISUALS,
   STATUS_PILL_CLASS,
 } from "@/components/rotina/rule-visuals";
-import { formatMoney, formatUnitsPerDay } from "@/lib/rotina/format";
+import { formatMoney, formatPercent, formatUnitsPerDay } from "@/lib/rotina/format";
 import { ROTINA_RULES } from "@/lib/rotina/rule-registry";
 import type { RotinaActionView } from "@/lib/rotina/view";
 import { cn } from "@/lib/utils";
@@ -106,6 +106,21 @@ export function RotinaActionRow({
     action.verdict?.tone === "ok" ? CheckCircle2 : action.verdict?.tone === "bad" ? XCircle : null;
   const statusPill = visual.pill && visual.tone !== "neutral" ? visual.tone : null;
   const hasPills = statusPill !== null || action.isNew || action.continues;
+  // PMA e TACOS de agora, para decidir — fora das tarefas cuja frase já diz isso.
+  const facts: Array<{ key: string; label: string; value: string; hint?: string; warn?: boolean }> =
+    [];
+  if (listing.pmaPrice !== null && action.rule !== "below_pma") {
+    facts.push({ key: "pma", label: "PMA", value: formatMoney(listing.pmaPrice) });
+  }
+  if (listing.tacosPercent !== null && action.rule !== "tacos_above") {
+    facts.push({
+      key: "tacos",
+      label: listing.adsPeriodDays ? `TACOS ${listing.adsPeriodDays}d` : "TACOS",
+      value: formatPercent(listing.tacosPercent),
+      hint: `· meta ${formatPercent(listing.tacosTargetPercent)}`,
+      warn: listing.tacosPercent > listing.tacosTargetPercent,
+    });
+  }
   const meta = [
     listing.sku,
     listing.mlItemId,
@@ -204,6 +219,28 @@ export function RotinaActionRow({
                 </p>
               ) : null}
 
+              {facts.length > 0 ? (
+                <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Contexto do anúncio">
+                  {facts.map((fact) => (
+                    <li
+                      key={fact.key}
+                      className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--muted)]/40 px-2 py-0.5 text-xs text-[var(--muted-foreground)]"
+                    >
+                      {fact.label}
+                      <strong
+                        className={cn(
+                          "font-semibold tabular-nums text-[var(--foreground)]",
+                          fact.warn && "text-amber-800",
+                        )}
+                      >
+                        {fact.value}
+                      </strong>
+                      {fact.hint ? <span className="tabular-nums">{fact.hint}</span> : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+
               {action.verdict ? (
                 <p
                   className={cn(
@@ -249,16 +286,20 @@ export function RotinaActionRow({
                 : "Simular preço"}
             </Button>
           ) : null}
-          <Button asChild variant="ghost" size="sm">
-            <a
-              href={action.related?.permalink ?? listing.permalink}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Abrir no ML
+          <Button asChild variant="outline" size="sm">
+            <a href={action.links.primary.href} target="_blank" rel="noopener noreferrer">
+              {action.links.primary.label}
               <ExternalLink aria-hidden />
             </a>
           </Button>
+          {action.links.extra.map((link) => (
+            <Button key={link.href} asChild variant="ghost" size="sm">
+              <a href={link.href} target="_blank" rel="noopener noreferrer">
+                {link.label}
+                <ExternalLink aria-hidden />
+              </a>
+            </Button>
+          ))}
         </div>
 
         <div className="ml-auto flex items-center gap-1.5">
@@ -344,6 +385,16 @@ export function RotinaActionRow({
                       Recalcular este anúncio
                     </button>
                   ) : null}
+                  <a
+                    href={listing.permalink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={MENU_ITEM_CLASS}
+                    onClick={() => setMoreOpen(false)}
+                  >
+                    <ExternalLink className="size-4" aria-hidden />
+                    Ver anúncio no ML
+                  </a>
                   <div className="my-1 h-px bg-[var(--border)]" role="separator" />
                   <button
                     type="button"

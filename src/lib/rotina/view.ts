@@ -4,6 +4,7 @@ import {
   type MarginExclusionReason,
 } from "@/lib/lucratividade/margin-summary";
 import { buyerFacingItemPermalink } from "@/lib/mercadolibre/item-permalink";
+import { buildActionLinks, type ActionLinks } from "@/lib/rotina/action-links";
 import { roundMoney } from "@/lib/pricing/financial-margin";
 import {
   buildFloorView,
@@ -104,6 +105,15 @@ export type RotinaActionListing = {
   tacosTargetPercent: number;
   tacosOverridden: boolean;
   target: RotinaListingTargetView;
+  /** PMA cadastrado em Meus produtos — o limite antes de mexer no preço. */
+  pmaPrice: number | null;
+  /**
+   * TACOS da janela de ADS, só com ADS ativo ou pausado: sem ADS a rodada grava
+   * 0, e "TACOS 0%" passaria a ideia errada.
+   */
+  tacosPercent: number | null;
+  adsPeriodDays: number | null;
+  catalogProductId: string | null;
   /** Tem retrato da rodada (dá para "recalcular este anúncio"). */
   hasHealth: boolean;
 };
@@ -146,6 +156,8 @@ export type RotinaActionView = {
   snoozedUntil: string | null;
   /** Quando o usuário decidiu (feito/ciente/adiado/ignorado); null se a ação está aberta. */
   decidedAt: string | null;
+  /** Onde executar a tarefa no ML (promoções, editor, Product Ads, concorrência). */
+  links: ActionLinks;
 };
 
 export type RotinaInfoItem = {
@@ -338,6 +350,13 @@ function identity(
     tacosOverridden:
       target?.tacosTargetPercent !== null && target?.tacosTargetPercent !== undefined,
     target: listingTargetView(catalogListing, settings, target),
+    pmaPrice: health?.pmaPrice ?? null,
+    tacosPercent:
+      health?.adsAvailable && (health.adsStatus === "active" || health.adsStatus === "paused")
+        ? health.tacosPercent
+        : null,
+    adsPeriodDays: health?.adsPeriodDays ?? null,
+    catalogProductId: health?.catalogProductId ?? null,
     hasHealth: health !== null,
   };
 }
@@ -644,6 +663,19 @@ export function buildRotinaView(input: RotinaViewInput): RotinaView {
       impact: (listing.unitsPerDay ?? 0) * (listing.salePrice ?? 0),
       snoozedUntil: state?.status === "snoozed" ? state.snoozedUntil : null,
       decidedAt: visibility.bucket !== "active" && state ? state.statusChangedAt : null,
+      links: buildActionLinks({
+        rule: args.rule,
+        mlItemId: listing.mlItemId,
+        catalogListing: listing.catalogListing,
+        catalogProductId: listing.catalogProductId,
+        related: args.relatedListing
+          ? {
+              mlItemId: args.relatedListing.mlItemId,
+              catalogProductId:
+                entities.get(args.relatedListing.mlItemId)?.health?.catalogProductId ?? null,
+            }
+          : null,
+      }),
     });
   }
 
