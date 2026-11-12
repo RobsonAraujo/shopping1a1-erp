@@ -2,9 +2,11 @@ import { rotinaConfig } from "@/config/rotina";
 import type { ListingHealthRun } from "@/generated/prisma";
 import { prisma } from "@/lib/db/db";
 import { decimalToNumber } from "@/lib/catalog-report/catalog-competition";
+import { parseCatalogCompetitionSummary } from "@/lib/catalog-report/catalog-competitors";
 import {
+  resolveRecentRaise,
   resolveStatusSince,
-  type CatalogStatusPoint,
+  type CatalogPricePoint,
 } from "@/lib/rotina/catalog-history";
 import { healthRowToSnapshot } from "@/lib/rotina/health-row";
 import { loadListingTargets } from "@/lib/rotina/listing-targets";
@@ -42,12 +44,21 @@ function toRunSummary(run: ListingHealthRun | null): RotinaRunSummary | null {
 }
 
 function groupPoints(
-  rows: { mlItemId: string; status: CatalogLiveStatus; snapshotAt: Date }[],
-): Map<string, CatalogStatusPoint[]> {
-  const byItem = new Map<string, CatalogStatusPoint[]>();
+  rows: {
+    mlItemId: string;
+    status: CatalogLiveStatus;
+    snapshotAt: Date;
+    sellerPrice?: unknown;
+  }[],
+): Map<string, CatalogPricePoint[]> {
+  const byItem = new Map<string, CatalogPricePoint[]>();
   for (const row of rows) {
     const list = byItem.get(row.mlItemId) ?? [];
-    list.push({ status: row.status, snapshotAt: row.snapshotAt.toISOString() });
+    list.push({
+      status: row.status,
+      snapshotAt: row.snapshotAt.toISOString(),
+      sellerPrice: decimalToNumber(row.sellerPrice),
+    });
     byItem.set(row.mlItemId, list);
   }
   return byItem;
@@ -82,6 +93,8 @@ export async function loadRotinaView(
           catalogSellerPrice: true,
           catalogPriceToWin: true,
           catalogPolledAt: true,
+          catalogProductId: true,
+          catalogCompetitors: true,
         },
       }),
       prisma.listingActionState.findMany({
@@ -121,7 +134,8 @@ export async function loadRotinaView(
               gte: new Date(now.getTime() - rotinaConfig.catalogHistoryDays * DAY_MS),
             },
           },
-          select: { mlItemId: true, status: true, snapshotAt: true },
+          // O preço entra para achar "você subiu de X para Y" antes da perda.
+          select: { mlItemId: true, status: true, snapshotAt: true, sellerPrice: true },
         })
       : Promise.resolve([]),
     winningIds.length > 0
@@ -165,6 +179,10 @@ export async function loadRotinaView(
         status === "winning" &&
         !since.truncated &&
         isoIsToday(since.since, now, timeZone),
+      catalogProductId: row.catalogProductId,
+      competition:
+        status === "winning" ? parseCatalogCompetitionSummary(row.catalogCompetitors) : null,
+      recentRaise: status === "winning" ? null : resolveRecentRaise(history),
     };
   });
 

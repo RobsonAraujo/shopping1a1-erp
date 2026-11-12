@@ -34,6 +34,7 @@ export function buildActionLinks(args: {
   switch (args.rule) {
     case "catalog_losing":
     case "catalog_shared":
+    case "catalog_raise_price":
       return { primary: editPrice, extra: competition(args.catalogProductId) };
     case "margin_below_min":
     case "below_pma":

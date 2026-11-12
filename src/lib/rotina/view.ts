@@ -5,6 +5,10 @@ import {
 } from "@/lib/lucratividade/margin-summary";
 import { buyerFacingItemPermalink } from "@/lib/mercadolibre/item-permalink";
 import { buildActionLinks, type ActionLinks } from "@/lib/rotina/action-links";
+import {
+  catalogRaiseQualifies,
+  type CatalogRaiseEstimate,
+} from "@/lib/rotina/catalog-raise";
 import { roundMoney } from "@/lib/pricing/financial-margin";
 import {
   buildFloorView,
@@ -31,6 +35,7 @@ import {
   type RotinaSegment,
 } from "@/lib/rotina/rule-registry";
 import {
+  catalogRaiseFor,
   effectiveMinMarginPercent,
   effectiveTacosTargetPercent,
   evaluateCatalogRules,
@@ -46,6 +51,7 @@ import type {
   ActionStateSnapshot,
   ListingTargetValues,
   RotinaCatalogLive,
+  RotinaFloorBand,
   RotinaListingSnapshot,
   RotinaRunSummary,
   CatalogLiveStatus,
@@ -152,6 +158,8 @@ export type RotinaActionView = {
     sellerPrice: number | null;
     /** Preço sugerido para ganhar sem furar o mínimo (abaixo de uma faixa proibida). */
     suggestedPrice: number | null;
+    /** "Subir preço no catálogo": estimativa de até onde dá para subir. */
+    raise: CatalogRaiseEstimate | null;
   } | null;
   impact: number;
   snoozedUntil: string | null;
@@ -170,6 +178,11 @@ export type RotinaInfoItem = {
   note: string;
   /** Resolvidos: o que o dado de agora mostra ("Agora em promoção a R$ 89,90"). */
   outcome?: string;
+  /**
+   * Tom do resultado. Sem tom = deu certo (o padrão dos resolvidos). Só a
+   * subida de preço no catálogo pode dar errado depois do "feito".
+   */
+  outcomeTone?: "ok" | "warn" | "bad";
 };
 
 export type RotinaLinkedPair = {
@@ -196,6 +209,8 @@ export type RotinaListingRow = {
   tacosPercent: number | null;
   catalogStatus: CatalogLiveStatus | null;
   priceToWin: number | null;
+  /** Estimativa do teto para seguir ganhando sozinho (catálogo ganhando com concorrência). */
+  raiseCeiling: number | null;
   unitsPerDay: number | null;
   openActions: number;
   target: RotinaListingTargetView;
@@ -357,7 +372,7 @@ function identity(
         ? health.tacosPercent
         : null,
     adsPeriodDays: health?.adsPeriodDays ?? null,
-    catalogProductId: health?.catalogProductId ?? null,
+    catalogProductId: health?.catalogProductId ?? catalog?.catalogProductId ?? null,
     hasHealth: health !== null,
   };
 }
@@ -434,18 +449,146 @@ function resolvedOutcome(
   }
 }
 
+/**
+ * Toda subida lembra que é estimativa e que precisa conferir depois — vai na
+ * caixa de veredito do card (neutra), para não sumir entre as linhas cinza.
+ */
+export const CATALOG_RAISE_CHECK_LINE =
+  "É uma estimativa: simule antes e, depois de subir, confira se continua ganhando. A Central confere na próxima leitura do catálogo (~1h).";
+
+/** Uma subida "explica" o status de agora se o episódio começou até 1 dia depois dela. */
+const RAISE_EXPLAINS_WITHIN_MS = 24 * 60 * 60 * 1000;
+
+function raiseBeforeEpisode(
+  catalog: RotinaCatalogLive | null,
+): RotinaCatalogLive["recentRaise"] {
+  const raise = catalog?.recentRaise ?? null;
+  const since = catalog?.statusSince ?? null;
+  if (!raise || !since || catalog?.statusSinceTruncated) return null;
+  const gap = new Date(since).getTime() - new Date(raise.at).getTime();
+  return gap >= 0 && gap <= RAISE_EXPLAINS_WITHIN_MS ? raise : null;
+}
+
+function describeRaise(
+  raise: CatalogRaiseEstimate | null,
+  listing: RotinaActionListing,
+): { headline: string; details: string[] } {
+  if (!raise) return { headline: "Ganhando no catálogo", details: [] };
+  const details: string[] = [];
+  const ownOtherLine = raise.ownOther
+    ? `Seu outro anúncio neste produto (${raise.ownOther.itemId}) está a ${formatMoney(
+        raise.ownOther.price,
+      )}: acima disso, a vitrine tende a passar para ele. Para a alta valer, suba os dois.`
+    : null;
+  if (raise.alone || raise.cheapest === null || raise.winCeiling === null) {
+    details.push(`Hoje: ${formatMoney(raise.currentPrice)} · nenhum outro vendedor neste produto`);
+    details.push(
+      "Sem concorrente, não há teto pela disputa do catálogo. O ML ainda pode rebaixar um preço muito acima do mercado.",
+    );
+    if (ownOtherLine) details.push(ownOtherLine);
+    return { headline: "Ganhando sem concorrente no catálogo", details };
+  }
+
+  const cheapestLabel = raise.cheapestLogisticLabel ? ` (${raise.cheapestLogisticLabel})` : "";
+  details.push(
+    `Estimativa: ganhar sozinho até ~${formatMoney(raise.winCeiling)} · dividir o 1º lugar a ~${formatMoney(
+      raise.shareCeiling ?? raise.cheapest.price,
+    )} · hoje ${formatMoney(raise.currentPrice)}`,
+  );
+  if (raise.gainPerUnit !== null) {
+    const monthly =
+      listing.unitsPerDay !== null && listing.unitsPerDay > 0
+        ? ` · ≈ ${formatMoney(roundMoney(raise.gainPerUnit * listing.unitsPerDay * 30))}/mês a mais, antes de taxa e imposto`
+        : "";
+    details.push(
+      `+${formatMoney(raise.gainPerUnit)} por venda (+${formatPercent(raise.gainPercent)})${monthly}`,
+    );
+  }
+  details.push(
+    `${raise.competitorCount} outro${raise.competitorCount === 1 ? "" : "s"} vendedor${
+      raise.competitorCount === 1 ? "" : "es"
+    } no produto`,
+  );
+  if (raise.belowBand) {
+    details.push("O teto ficou logo abaixo da faixa em que o frete passa a ser seu.");
+  }
+  if (raise.betterLogistics) {
+    details.push(
+      `Há concorrente com entrega melhor que a sua${
+        raise.betterLogistics.label ? ` (${raise.betterLogistics.label})` : ""
+      } a ${formatMoney(raise.betterLogistics.price)}: a folga real pode ser menor.`,
+    );
+  }
+  if (ownOtherLine) details.push(ownOtherLine);
+  return {
+    headline: `Ganhando com folga: o concorrente mais barato está a ${formatMoney(
+      raise.cheapest.price,
+    )}${cheapestLabel}`,
+    details,
+  };
+}
+
+/**
+ * Depois do "feito" numa subida, o que a leitura de catálogo mais nova mostra.
+ * Diferente das outras regras, aqui o resultado pode ser ruim (passou a
+ * dividir ou a perder), e a frase diz o preço para voltar.
+ */
+function raiseOutcome(
+  catalog: RotinaCatalogLive | null,
+  settings: RotinaSettings,
+): { outcome: string; tone: NonNullable<RotinaInfoItem["outcomeTone"]> } {
+  if (!isRuleEnabled(settings, "catalog_raise_price")) {
+    return { outcome: "Regra desligada em Metas", tone: "ok" };
+  }
+  if (!catalog || catalog.mlStatus !== "active") {
+    return { outcome: "Anúncio não está mais ativo no ML", tone: "ok" };
+  }
+  const price = catalog.sellerPrice !== null ? ` a ${formatMoney(catalog.sellerPrice)}` : "";
+  if (catalog.status === "winning") {
+    return { outcome: `Continua ganhando${price}`, tone: "ok" };
+  }
+  const toWin =
+    catalog.priceToWin !== null ? formatMoney(catalog.priceToWin) : "o preço que o ML indicar";
+  if (catalog.status === "shared") {
+    return {
+      outcome: `Passou a dividir o 1º lugar${price}: para ganhar sozinho, ${toWin}`,
+      tone: "warn",
+    };
+  }
+  if (catalog.status === "losing") {
+    return { outcome: `Passou a perder${price}: preço p/ ganhar ${toWin}`, tone: "bad" };
+  }
+  return { outcome: "Sem leitura do catálogo agora", tone: "ok" };
+}
+
+/** O teto da tabela, só quando a subida vira tarefa (folga acima do mínimo). */
+function raiseCeilingFor(
+  catalog: RotinaCatalogLive | null,
+  settings: RotinaSettings,
+  now: Date,
+  bands: readonly RotinaFloorBand[],
+): number | null {
+  const estimate = catalogRaiseFor(catalog, settings, { now, bands });
+  return catalogRaiseQualifies(estimate, settings.catalogRaiseMinPercent)
+    ? (estimate?.winCeiling ?? null)
+    : null;
+}
+
 /** Frase principal + linhas de apoio de cada regra. */
 function describe(
   rule: RotinaRuleKey,
   entity: Entity,
   listing: RotinaActionListing,
   floor: RotinaFloorView | null,
-  ctx: { now: Date; timeZone: string },
+  ctx: { now: Date; timeZone: string; raise: CatalogRaiseEstimate | null },
 ): { headline: string; details: string[] } {
   const { health, catalog } = entity;
   const details: string[] = [];
 
   switch (rule) {
+    case "catalog_raise_price":
+      return describeRaise(ctx.raise, listing);
+
     case "catalog_losing":
     case "catalog_shared": {
       const since = formatSince(
@@ -461,6 +604,16 @@ function describe(
           `${label}: ${formatMoney(catalog.priceToWin)}${
             catalog.sellerPrice !== null ? ` · você: ${formatMoney(catalog.sellerPrice)}` : ""
           }`,
+        );
+      }
+      const raise = raiseBeforeEpisode(catalog);
+      if (raise) {
+        details.push(
+          `Você subiu de ${formatMoney(raise.from)} para ${formatMoney(raise.to)} ${formatWhen(
+            raise.at,
+            ctx.now,
+            ctx.timeZone,
+          )}, quando estava ganhando.`,
         );
       }
       return { headline: since ? `${verb} ${since}` : verb, details };
@@ -651,14 +804,20 @@ export function buildRotinaView(input: RotinaViewInput): RotinaView {
       args.entity.health && FLOOR_RULES.has(args.rule)
         ? buildFloorView(args.entity.health, listing.minMarginPercent)
         : null;
-    const verdict =
+    const verdict: CatalogVerdictView | null =
       args.rule === "catalog_losing" || args.rule === "catalog_shared"
         ? verdictView(floor, args.entity.catalog?.priceToWin ?? null, args.entity.health !== null)
+        : args.rule === "catalog_raise_price"
+          ? { tone: "neutral", text: CATALOG_RAISE_CHECK_LINE }
+          : null;
+    const live = args.entity.catalog;
+    const raise =
+      args.rule === "catalog_raise_price"
+        ? catalogRaiseFor(live, settings, { now, bands: args.entity.health?.floorBands })
         : null;
     const text =
       args.headlineOverride ??
-      describe(args.rule, args.entity, listing, floor, { now, timeZone });
-    const live = args.entity.catalog;
+      describe(args.rule, args.entity, listing, floor, { now, timeZone, raise });
     const verdictData =
       live && floor && live.priceToWin !== null ? catalogVerdict(floor, live.priceToWin) : null;
 
@@ -691,9 +850,14 @@ export function buildRotinaView(input: RotinaViewInput): RotinaView {
               verdictData?.kind === "can_win" && verdictData.belowBand
                 ? verdictData.suggestedPrice
                 : null,
+            raise,
           }
         : null,
-      impact: (listing.unitsPerDay ?? 0) * (listing.salePrice ?? 0),
+      // Na subida, o que importa é quanto entra a mais por dia.
+      impact:
+        raise !== null
+          ? (listing.unitsPerDay ?? 0) * (raise.gainPerUnit ?? 0)
+          : (listing.unitsPerDay ?? 0) * (listing.salePrice ?? 0),
       snoozedUntil: state?.status === "snoozed" ? state.snoozedUntil : null,
       decidedAt: visibility.bucket !== "active" && state ? state.statusChangedAt : null,
       links: buildActionLinks({
@@ -738,8 +902,25 @@ export function buildRotinaView(input: RotinaViewInput): RotinaView {
       }
     }
 
-    const catalogHits = evaluateCatalogRules(entity.catalog, settings);
+    const catalogHits = evaluateCatalogRules(entity.catalog, settings, {
+      now,
+      bands: entity.health?.floorBands,
+    });
     for (const rule of catalogHits) {
+      if (rule === "catalog_raise_price") {
+        // Sem "desde quando": o histórico de quem ganha cobre só 3 dias, e a
+        // folga muda a cada leitura dos concorrentes.
+        pushAction({
+          rule,
+          entity,
+          stateItemId: entity.mlItemId,
+          dataAt: entity.catalog?.polledAt ?? null,
+          episodeStart: null,
+          isNew: false,
+          ageLabel: null,
+        });
+        continue;
+      }
       const since = entity.catalog?.statusSince ?? null;
       const truncated = entity.catalog?.statusSinceTruncated ?? false;
       pushAction({
@@ -859,6 +1040,34 @@ export function buildRotinaView(input: RotinaViewInput): RotinaView {
       ),
     });
   }
+  // Subidas feitas hoje que a leitura de catálogo já conferiu (a regra não
+  // dispara mais): o resultado, bom ou ruim.
+  const activeRaiseIds = new Set(
+    actions
+      .filter((action) => action.rule === "catalog_raise_price")
+      .map((action) => action.stateItemId),
+  );
+  for (const state of input.states) {
+    if (state.rule !== "catalog_raise_price" || state.status !== "done") continue;
+    if (!isoIsToday(state.statusChangedAt, now, timeZone)) continue;
+    if (activeRaiseIds.has(state.mlItemId)) continue;
+    const entity = entities.get(state.mlItemId);
+    if (!entity) continue;
+    const polledAt = entity.catalog?.polledAt ?? null;
+    if (polledAt === null || polledAt <= state.statusChangedAt) continue;
+    const listing = identity(entity, settings, null);
+    const result = raiseOutcome(entity.catalog, settings);
+    resolvedToday.push({
+      mlItemId: entity.mlItemId,
+      title: listing.title,
+      sku: listing.sku,
+      imageUrl: listing.imageUrl,
+      permalink: listing.permalink,
+      note: ROTINA_RULES.catalog_raise_price.taskLabel,
+      outcome: result.outcome,
+      outcomeTone: result.tone,
+    });
+  }
   for (const entity of entities.values()) {
     if (!entity.catalog?.wonBackToday) continue;
     const listing = identity(entity, settings, null);
@@ -906,6 +1115,7 @@ export function buildRotinaView(input: RotinaViewInput): RotinaView {
       tacosPercent: health.tacosPercent,
       catalogStatus: entity.catalog?.status ?? null,
       priceToWin: entity.catalog?.priceToWin ?? null,
+      raiseCeiling: raiseCeilingFor(entity.catalog, settings, now, health.floorBands),
       unitsPerDay: health.unitsPerDay,
       openActions: openByItem.get(health.mlItemId) ?? 0,
       target: listingTargetView(health.catalogListing, settings, target),

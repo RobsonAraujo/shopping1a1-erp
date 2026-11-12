@@ -33,3 +33,31 @@ export function resolveStatusSince(
   // Acabou o histórico ainda no mesmo status: está assim há mais que a janela.
   return { since, truncated: since !== null };
 }
+
+export type CatalogPricePoint = CatalogStatusPoint & { sellerPrice: number | null };
+
+/**
+ * A última subida de preço feita a partir de "ganhando": o ponto em que o
+ * preço passou a ser maior que o do snapshot anterior, que estava ganhando.
+ * Serve para o card de perdendo/dividindo dizer "você subiu de X para Y" —
+ * quem decide se a subida explica o status de agora é a view (pela data).
+ */
+export function resolveRecentRaise(
+  points: readonly CatalogPricePoint[],
+): { from: number; to: number; at: string } | null {
+  const known = points
+    .filter(
+      (point): point is CatalogPricePoint & { sellerPrice: number } =>
+        point.status !== "unknown" && point.sellerPrice !== null,
+    )
+    .slice()
+    .sort((a, b) => a.snapshotAt.localeCompare(b.snapshotAt));
+  for (let i = known.length - 1; i >= 1; i -= 1) {
+    const previous = known[i - 1];
+    const current = known[i];
+    if (previous.status === "winning" && current.sellerPrice > previous.sellerPrice + 0.005) {
+      return { from: previous.sellerPrice, to: current.sellerPrice, at: current.snapshotAt };
+    }
+  }
+  return null;
+}

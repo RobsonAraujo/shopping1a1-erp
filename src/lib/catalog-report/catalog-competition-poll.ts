@@ -6,16 +6,22 @@ import {
   loadLatestCatalogCompetitionSnapshots,
   shouldRecordCatalogSnapshot,
 } from "@/lib/catalog-report/catalog-competition";
+import {
+  summarizeCatalogCompetitors,
+  type CatalogCompetitionSummary,
+} from "@/lib/catalog-report/catalog-competitors";
 import { prisma } from "@/lib/db/db";
 import {
   fetchAllUserItemIds,
+  fetchCatalogProductItems,
   fetchItemPriceToWin,
   fetchItemsByIdsBatched,
 } from "@/lib/mercadolibre/api";
 import { upsertListingFromItem } from "@/lib/mercadolibre/listing-sync";
 import { fromDbSellerId } from "@/lib/mercadolibre/seller-id";
+import type { ItemBody } from "@/lib/mercadolibre/types";
 import { logServerError } from "@/lib/infra/server-public-error";
-import type { CatalogCompetitionSource } from "@/generated/prisma/client";
+import { Prisma, type CatalogCompetitionSource } from "@/generated/prisma/client";
 
 export type CatalogPollSource = Extract<
   CatalogCompetitionSource,
@@ -31,6 +37,17 @@ export type CatalogPollResult = {
 function decimalOrNull(value: number | null): string | null {
   if (value === null || !Number.isFinite(value)) return null;
   return String(value);
+}
+
+function readCatalogProductId(
+  payload: Record<string, unknown>,
+  item: ItemBody | undefined,
+): string | null {
+  const fromPayload = payload.catalog_product_id;
+  if (typeof fromPayload === "string" && fromPayload.trim()) return fromPayload.trim();
+  const fromItem = item?.catalog_product_id;
+  if (typeof fromItem === "string" && fromItem.trim()) return fromItem.trim();
+  return null;
 }
 
 export async function pollCatalogCompetitionForSeller(
@@ -86,12 +103,44 @@ export async function pollCatalogCompetitionForSeller(
         timeZone: reportsConfig.catalogCompetitionTimezone,
       });
 
+      const catalogProductId = readCatalogProductId(payload, item);
+      // Concorrentes: só de quem está ganhando (base do "Subir preço no
+      // catálogo"). Falha não apaga o que havia: a Central descarta o dado
+      // velho pelo `catalogCompetitorsAt`. Fora de "ganhando", zera.
+      let competitorFields: {
+        catalogCompetitors?: Prisma.InputJsonValue | typeof Prisma.DbNull;
+        catalogCompetitorsAt?: Date | null;
+      } = {};
+      let competitors: CatalogCompetitionSummary | null = null;
+      if (status === "winning" && catalogProductId) {
+        try {
+          const results = await fetchCatalogProductItems(accessToken, catalogProductId);
+          competitors = summarizeCatalogCompetitors({
+            results,
+            ownSellerId: mlUserId,
+            myItemId: itemId,
+            myLogisticType: item?.shipping?.logistic_type ?? null,
+            fetchedAt: new Date(),
+          });
+          competitorFields = {
+            catalogCompetitors: competitors as unknown as Prisma.InputJsonValue,
+            catalogCompetitorsAt: new Date(competitors.fetchedAt),
+          };
+        } catch (e) {
+          logServerError(`catalog-competitors item=${itemId} product=${catalogProductId}`, e);
+        }
+      } else if (status !== "winning") {
+        competitorFields = { catalogCompetitors: Prisma.DbNull, catalogCompetitorsAt: null };
+      }
+
       const catalogFields = {
         catalogListing: true,
         catalogStatus: status,
         catalogSellerPrice: decimalOrNull(sellerPrice),
         catalogPriceToWin: decimalOrNull(priceToWin),
         catalogPolledAt: polledAt,
+        ...(catalogProductId ? { catalogProductId } : {}),
+        ...competitorFields,
       };
 
       await prisma.$transaction(async (tx) => {
@@ -125,6 +174,9 @@ export async function pollCatalogCompetitionForSeller(
             JSON.stringify({
               priceToWin: payload,
               item: item ?? null,
+              // Guardado para calibrar a folga do "Subir preço" com o
+              // histórico real (o que o ML fez depois de cada subida).
+              ...(competitors ? { competitors } : {}),
             }),
           );
           try {

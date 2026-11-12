@@ -190,3 +190,35 @@ export type ItemPriceToWinResponse = {
   // Doc fields can vary by category/site; keep flexible for raw persistence.
   [key: string]: unknown;
 };
+
+/**
+ * Uma oferta de `/products/{catalog_product_id}/items`: os anúncios (de todos
+ * os vendedores) que disputam a página do produto de catálogo. Campos todos
+ * opcionais de propósito — o formato não está validado com resposta real
+ * (`scripts/probe-catalog-competitors.ts`), e quem lê
+ * (`summarizeCatalogCompetitors`) descarta a oferta sem preço.
+ */
+export type CatalogProductItem = {
+  item_id?: string;
+  seller_id?: number | string;
+  price?: number | string | null;
+  original_price?: number | string | null;
+  currency_id?: string;
+  condition?: string;
+  listing_type_id?: string;
+  official_store_id?: number | null;
+  shipping?: {
+    free_shipping?: boolean;
+    mode?: string;
+    logistic_type?: string;
+    tags?: string[];
+  } | null;
+  tags?: string[];
+  deal_ids?: string[];
+  [key: string]: unknown;
+};
+
+export type CatalogProductItemsResponse = {
+  results?: CatalogProductItem[];
+  paging?: { total?: number; offset?: number; limit?: number };
+};

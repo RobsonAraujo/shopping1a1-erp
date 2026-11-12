@@ -10,6 +10,16 @@ export const rotinaConfig = {
   catalogMinMarginPercent: 2,
   /** TACOS (%) a partir do qual um anúncio próprio entra em "TACOS acima da meta". */
   ownTacosTargetPercent: 10,
+  /**
+   * "Subir preço no catálogo": o teto de ganhar sozinho fica esta % abaixo do
+   * concorrente mais barato. Nos snapshots reais o ML pediu ~1–3% abaixo de
+   * quem ganhava para tomar a vitrine; 3% é o lado conservador.
+   */
+  catalogRaiseCushionPercent: 3,
+  /** Alta mínima (% sobre o preço de hoje) para a subida virar tarefa. */
+  catalogRaiseMinPercent: 2,
+  /** Concorrentes lidos há mais que isto não valem para estimar a subida. */
+  catalogCompetitorsMaxAgeMs: 3 * 60 * 60_000,
   /** Fuso que decide o que é "hoje" (novo hoje, feito hoje, resolvido hoje). */
   timeZone: "America/Sao_Paulo",
   /**

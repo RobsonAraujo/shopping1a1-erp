@@ -25,6 +25,8 @@ import {
   type CalendarMonthLabels,
 } from "./revenue-periods";
 import type {
+  CatalogProductItem,
+  CatalogProductItemsResponse,
   CategoryBody,
   ItemBody,
   ItemPriceToWinResponse,
@@ -189,6 +191,46 @@ export async function fetchItemPriceToWin(
     cache: "no-store",
   });
   return res.json() as Promise<ItemPriceToWinResponse>;
+}
+
+/** Teto de ofertas lidas por produto: o mais barato quase sempre está no começo. */
+/**
+ * Até 3 páginas (o ML devolve 100 por página). A ordem da lista é quase por
+ * preço, mas não estrita (no probe de 2026-11-12, ofertas de R$ 61,90 e
+ * R$ 69,49 vieram no fim de uma página que ia até R$ 136,85): cortar na
+ * primeira página poderia esconder o concorrente mais barato.
+ */
+const CATALOG_PRODUCT_ITEMS_MAX = 300;
+
+/**
+ * As ofertas (todos os vendedores, inclusive o próprio) de um produto de
+ * catálogo, paginando até `CATALOG_PRODUCT_ITEMS_MAX`. Lança em erro HTTP (via
+ * `fetchWithRetry`): quem chama decide que falha não vira dado.
+ */
+export async function fetchCatalogProductItems(
+  accessToken: string,
+  catalogProductId: string,
+): Promise<CatalogProductItem[]> {
+  const { apiBase } = getMercadoLibreConfig();
+  const items: CatalogProductItem[] = [];
+  let offset = 0;
+  while (items.length < CATALOG_PRODUCT_ITEMS_MAX) {
+    const url = new URL(`${apiBase}/products/${encodeURIComponent(catalogProductId)}/items`);
+    if (offset > 0) url.searchParams.set("offset", String(offset));
+    const res = await fetchWithRetry(url.toString(), {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    });
+    const body = (await res.json()) as CatalogProductItemsResponse;
+    const results = Array.isArray(body.results) ? body.results : [];
+    items.push(...results);
+    const total = body.paging?.total ?? items.length;
+    const limit = body.paging?.limit ?? results.length;
+    if (results.length === 0 || limit <= 0) break;
+    offset += limit;
+    if (offset >= total) break;
+  }
+  return items.slice(0, CATALOG_PRODUCT_ITEMS_MAX);
 }
 
 export type SalesWindowDateField = "date_closed" | "date_created";

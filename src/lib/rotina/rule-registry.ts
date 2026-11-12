@@ -13,6 +13,7 @@ export const ROTINA_RULE_KEYS = [
   "below_pma",
   "tacos_above",
   "catalog_shared",
+  "catalog_raise_price",
   "ads_missing",
   "promo_missing",
 ] as const;
@@ -124,6 +125,17 @@ export const ROTINA_RULES: Record<RotinaRuleKey, RotinaRuleDefinition> = {
     settingsLabel: "Catálogo dividindo o 1º lugar",
     settingsHint:
       "Você divide a vitrine com outro vendedor; às vezes uns centavos resolvem.",
+  },
+  catalog_raise_price: {
+    key: "catalog_raise_price",
+    kind: "condition",
+    source: "catalog",
+    segments: ["catalog"],
+    taskLabel: "Subir preço no catálogo",
+    shortLabel: "pode subir",
+    settingsLabel: "Catálogo ganhando com folga para subir",
+    settingsHint:
+      "Ganhando sozinho e o concorrente mais barato bem acima: estimativa de até onde dá para subir e continuar ganhando (ou dividir).",
   },
   ads_missing: {
     key: "ads_missing",

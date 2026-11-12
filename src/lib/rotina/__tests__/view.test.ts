@@ -1,13 +1,26 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildRotinaView, type RotinaViewInput } from "@/lib/rotina/view";
+import {
+  CATALOG_RAISE_CHECK_LINE,
+  buildRotinaView,
+  type RotinaViewInput,
+} from "@/lib/rotina/view";
 import {
   applyActionOverrides,
   groupActiveByRule,
   summarizeActions,
 } from "@/lib/rotina/view-summary";
 import type { PromotionWindow } from "@/lib/mercadolibre/promotion-coverage";
-import { NOW, TZ, catalogLive, listing, settings, state } from "./fixtures";
+import {
+  NOW,
+  TZ,
+  catalogLive,
+  competition,
+  listing,
+  settings,
+  state,
+  winningWithRoom,
+} from "./fixtures";
 
 function input(overrides: Partial<RotinaViewInput> = {}): RotinaViewInput {
   return {
@@ -399,6 +412,143 @@ describe("buildRotinaView", () => {
     assert.equal(losing.verdict?.tone, "neutral");
     assert.equal(view.hasHealth, false);
     assert.equal(view.dataIsFromToday, false);
+  });
+});
+
+describe("buildRotinaView: subir preço no catálogo", () => {
+  const raised = winningWithRoom({ mlItemId: "CAT5", title: "Cabo USB (catálogo)" });
+
+  it("shows both estimates, the gain and the check-after line, labelled as estimate", () => {
+    const view = buildRotinaView(input({ catalogLive: [raised] }));
+    const action = view.actions.find((item) => item.id === "catalog_raise_price:CAT5");
+    assert.ok(action);
+    assert.equal(action.segment, "catalog");
+    assert.equal(action.ageLabel, null);
+    assert.equal(action.catalog?.raise?.winCeiling, 43.65);
+    assert.equal(action.catalog?.raise?.shareCeiling, 45);
+    assert.match(action.headline, /concorrente mais barato está a R\$\s?45,00 \(Flex\)/);
+    assert.ok(
+      action.details.some((line) =>
+        /^Estimativa: ganhar sozinho até ~R\$\s?43,65 · dividir o 1º lugar a ~R\$\s?45,00/.test(line),
+      ),
+    );
+    assert.deepEqual(action.verdict, { tone: "neutral", text: CATALOG_RAISE_CHECK_LINE });
+    assert.equal(action.floor, null, "subir não precisa do piso");
+    assert.equal(action.links.primary.label, "Editar preço");
+    assert.equal(action.links.extra[0]?.label, "Ver concorrência");
+  });
+
+  it("warns when your other listing in the same product sits below the ceiling", () => {
+    const sibling = winningWithRoom({
+      mlItemId: "CAT6",
+      competition: competition({
+        ownOfferCount: 2,
+        ownOther: { itemId: "MLB-IRMAO", price: 41.5, logisticType: "fulfillment" },
+      }),
+    });
+    const view = buildRotinaView(input({ catalogLive: [sibling] }));
+    const action = view.actions.find((item) => item.id === "catalog_raise_price:CAT6");
+    assert.ok(action);
+    assert.ok(
+      action.details.some((line) =>
+        /^Seu outro anúncio neste produto \(MLB-IRMAO\) está a R\$\s?41,50: .*suba os dois\.$/.test(line),
+      ),
+    );
+  });
+
+  it("puts the estimated ceiling on the listings table only when it is a task", () => {
+    const health = listing({ mlItemId: "CAT5", catalogListing: true, salePrice: 40 });
+    const view = buildRotinaView(input({ health: [health], catalogLive: [raised] }));
+    assert.equal(view.listings.find((row) => row.mlItemId === "CAT5")?.raiseCeiling, 43.65);
+
+    const tight = buildRotinaView(
+      input({
+        health: [health],
+        catalogLive: [raised],
+        settings: settings({ catalogRaiseMinPercent: 50 }),
+      }),
+    );
+    assert.equal(tight.listings.find((row) => row.mlItemId === "CAT5")?.raiseCeiling, null);
+  });
+
+  it("after 'feito', the next catalog reading tells how it went", () => {
+    const done = state({
+      mlItemId: "CAT5",
+      rule: "catalog_raise_price",
+      status: "done",
+      statusChangedAt: "2026-11-10T12:00:00.000Z",
+    });
+    // Leitura das 14h (depois do clique): subiu para 45 e passou a dividir.
+    const shared = buildRotinaView(
+      input({
+        states: [done],
+        catalogLive: [
+          catalogLive({
+            mlItemId: "CAT5",
+            status: "shared",
+            sellerPrice: 45,
+            priceToWin: 43.9,
+            statusSince: "2026-11-10T13:05:00.000Z",
+            recentRaise: { from: 40, to: 45, at: "2026-11-10T13:05:00.000Z" },
+          }),
+        ],
+      }),
+    );
+    const outcome = shared.info.resolvedToday.find((item) => item.mlItemId === "CAT5");
+    assert.equal(outcome?.outcomeTone, "warn");
+    assert.match(outcome?.outcome ?? "", /Passou a dividir o 1º lugar a R\$\s?45,00: para ganhar sozinho, R\$\s?43,90/);
+    const sharedCard = shared.actions.find((item) => item.id === "catalog_shared:CAT5");
+    assert.ok(
+      sharedCard?.details.some((line) => /Você subiu de R\$\s?40,00 para R\$\s?45,00/.test(line)),
+    );
+
+    // Leitura das 14h: subiu para 43,50 e continua ganhando, sem folga nova.
+    const fine = buildRotinaView(
+      input({
+        states: [done],
+        catalogLive: [
+          winningWithRoom({
+            mlItemId: "CAT5",
+            sellerPrice: 43.5,
+            priceToWin: 43.5,
+          }),
+        ],
+      }),
+    );
+    const ok = fine.info.resolvedToday.find((item) => item.mlItemId === "CAT5");
+    assert.equal(ok?.outcomeTone, "ok");
+    assert.match(ok?.outcome ?? "", /Continua ganhando a R\$\s?43,50/);
+  });
+
+  it("stays in 'feitos hoje' until a newer catalog reading arrives", () => {
+    const done = state({
+      mlItemId: "CAT5",
+      rule: "catalog_raise_price",
+      status: "done",
+      statusChangedAt: "2026-11-10T14:30:00.000Z",
+    });
+    const view = buildRotinaView(input({ states: [done], catalogLive: [raised] }));
+    const action = view.actions.find((item) => item.id === "catalog_raise_price:CAT5");
+    assert.equal(action?.bucket, "done");
+    assert.equal(action?.doneToday, true);
+    assert.equal(view.info.resolvedToday.some((item) => item.mlItemId === "CAT5"), false);
+  });
+
+  it("does not blame an old raise for a recent loss", () => {
+    const view = buildRotinaView(
+      input({
+        catalogLive: [
+          catalogLive({
+            mlItemId: "CAT6",
+            statusSince: "2026-11-10T13:05:00.000Z",
+            recentRaise: { from: 40, to: 45, at: "2026-11-05T10:00:00.000Z" },
+          }),
+        ],
+      }),
+    );
+    const losing = view.actions.find((item) => item.id === "catalog_losing:CAT6");
+    assert.ok(losing);
+    assert.equal(losing.details.some((line) => line.startsWith("Você subiu")), false);
   });
 });
 

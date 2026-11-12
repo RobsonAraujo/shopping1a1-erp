@@ -107,8 +107,9 @@ function simulatorFor(row: RotinaListingRow) {
       floor: row.floor,
       salePrice: row.salePrice,
       discounts: row.catalogListing ? undefined : [5, 10, 15, 20],
+      raise: row.raiseCeiling !== null ? { winCeiling: row.raiseCeiling, shareCeiling: null } : null,
     }),
-    defaultPrice: priceToWin ?? row.floor.effectivePrice ?? row.salePrice,
+    defaultPrice: priceToWin ?? row.raiseCeiling ?? row.floor.effectivePrice ?? row.salePrice,
   };
 }
 
@@ -201,6 +202,9 @@ export function RotinaAllListingsTable({
                   <SegmentTag segment={segmentOf(row)} />
                   <span className="truncate">{row.sku ?? row.mlItemId}</span>
                   {row.catalogStatus ? <CatalogPill status={row.catalogStatus} /> : null}
+                  {row.raiseCeiling !== null ? (
+                    <span className="tabular-nums">sobe até ~{formatMoney(row.raiseCeiling)}</span>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -347,6 +351,14 @@ export function RotinaAllListingsTable({
                   {row.priceToWin !== null && row.catalogStatus !== "winning" ? (
                     <span className="mt-0.5 block text-[var(--muted-foreground)]">
                       p/ ganhar {formatMoney(row.priceToWin)}
+                    </span>
+                  ) : null}
+                  {row.raiseCeiling !== null ? (
+                    <span
+                      className="mt-0.5 block text-[var(--muted-foreground)]"
+                      title="Estimativa pelo concorrente mais barato: confira depois de mudar."
+                    >
+                      sobe até ~{formatMoney(row.raiseCeiling)}
                     </span>
                   ) : null}
                 </td>

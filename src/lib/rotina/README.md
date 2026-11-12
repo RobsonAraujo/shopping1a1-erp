@@ -12,7 +12,8 @@ src/lib/rotina/
   settings-shared.ts    # tipo + defaults + limites das metas (client-safe)
   rules.ts              # predicados das regras e meta efetiva. Puro
   floor-view.ts         # piso que vale (margem × PMA), desconto máx., faixas, veredito de catálogo. Puro
-  catalog-history.ts    # "perdendo desde": começo da sequência atual nos snapshots. Puro
+  catalog-raise.ts      # "Subir preço no catálogo": teto estimado pelo concorrente mais barato. Puro
+  catalog-history.ts    # "perdendo desde" e "você subiu de X para Y", pelos snapshots. Puro
   visibility.ts         # feito / adiado / ignorado / continua. Puro
   reconcile.ts          # memória das ações a cada rodada (abre, reabre, resolve). Puro
   links.ts              # catálogo → próprio, e vínculo novo. Puro
@@ -32,7 +33,7 @@ UI: `src/app/dashboard/central-anuncios/` + `src/components/rotina/`. Rotas: `/a
 | Fonte | O que traz | Frescor |
 |---|---|---|
 | **Rodada** (`ListingHealth`, botão Atualizar) | margem MC e após ADS, os dois mínimos, ADS/TACOS, promoção, vendas/dia, tags e vínculos | quando o usuário clica (sem cron na v1) |
-| **Catálogo ao vivo** (`Listing.catalog*`, cron de catálogo) | perdendo / dividindo / ganhando, preço p/ ganhar | ~1h por seller |
+| **Catálogo ao vivo** (`Listing.catalog*`, cron de catálogo) | perdendo / dividindo / ganhando, preço p/ ganhar; enquanto ganha, as ofertas dos concorrentes (`catalogCompetitors`) | ~1h por seller |
 
 A página **só lê o banco**: abrir não chama o ML. As regras são avaliadas **na leitura**, então mudar uma meta vale na hora. O que muda com a meta e exige ML é só o preço mínimo: ele aparece como "calculado com outra meta" até recalcular.
 
@@ -47,6 +48,7 @@ A página **só lê o banco**: abrir não chama o ML. As regras são avaliadas *
 | `below_pma` | Ambos | condição | preço < PMA |
 | `tacos_above` | Próp. | condição | ADS ativo e TACOS 7d > meta, ou gasto sem venda |
 | `catalog_shared` | Cat. | condição | `catalogStatus = shared` |
+| `catalog_raise_price` | Cat. | condição | `catalogStatus = winning`, concorrentes lidos há ≤ 3h e teto estimado ≥ preço de hoje + alta mínima (ou nenhum outro vendedor no produto) |
 | `ads_missing` | Próp. | condição | `adsStatus` ≠ `active` (usa `adsStatus`, não `hasActiveAds`, que conta pausado como ativo) |
 | `promo_missing` | Próp. | condição | consulta de preço OK e sem desconto |
 
@@ -55,6 +57,30 @@ Promoção programada: a rodada guarda em `promotion_windows` as promoções `st
 Invariante herdado da Home: **consulta que falha não vira problema**.
 - Falha de preço → `promotionKnown=false` → não entra em "sem promoção". Antes, a Lucratividade engolia a falha com fallback; agora marca a linha.
 - Product Ads fora do ar → nenhuma regra de ADS.
+
+## Subir preço no catálogo (estimativa)
+
+`price_to_win` não dá teto: quando o anúncio ganha, ele devolve o próprio preço e o próprio anúncio como vencedor. O teto sai de `GET /products/{catalog_product_id}/items`, lido pelo poll de catálogo **só para quem está ganhando** (+1 a 3 chamadas por catálogo ganhando por hora: 100 ofertas por página, até 300). O resumo (`summarizeCatalogCompetitors`) fica em `Listing.catalogCompetitors` e também no `rawResponse` do snapshot, para calibrar a folga depois. As ofertas do próprio vendedor não contam como concorrência, mas o "irmão" mais barato fica em `ownOther`.
+
+- **Modelo**, tirado dos snapshots reais: preço igual ao do vencedor divide o 1º lugar; tomar a vitrine exigiu ~1–3% abaixo dele. Com C = concorrente mais barato:
+  - **dividir** ≈ C;
+  - **ganhar sozinho** ≈ C × (1 − folga). A folga padrão é 3% (`catalogRaiseCushionPercent`).
+- **Conservador:** não dá crédito pelo seu Full contra quem não é Full. Concorrente perto do mais barato com entrega melhor que a sua vira aviso no card.
+- **Faixa do frete:** se o teto cair numa faixa conhecida (`floorBands`), fica logo abaixo dela. As faixas só cobrem preços até o de hoje, então o card pede para simular antes de mudar.
+- **Sempre dito como estimativa.** A caixa do card diz "É uma estimativa: simule antes e, depois de subir, confira…".
+- **Depois do "feito":** a leitura de catálogo seguinte mostra o resultado em "Resolvidos hoje":
+  - continua ganhando (verde);
+  - passou a dividir (amarelo);
+  - passou a perder (vermelho), com o preço para voltar.
+  
+  O card de perdendo/dividindo que reaparece diz "Você subiu de X para Y", quando a subida veio até 1 dia antes do status de agora.
+- **Outro anúncio seu no mesmo produto** (`ownOther`): se ele está entre o preço de hoje e o teto, o card avisa que, passando dele, a vitrine tende a ir para ele, e pede para subir os dois.
+- **Formato validado com resposta real** (`scripts/probe-catalog-competitors.ts`, só GETs, rodado em 2026-11-12):
+  - `price` já é o preço de venda, com promoção (`original_price` é o de antes). `seller_id` é número, e a logística vem em `shipping.logistic_type`.
+  - A lista **inclui as ofertas do próprio vendedor**, e a ordem é quase por preço, mas não estrita. Ordenamos aqui e lemos até 300 ofertas.
+  - `/products/{id}` traz `buy_box_winner: null`, mesmo quando o anúncio ganha. Não serve.
+  - `price_to_win` `version=v2` devolve o mesmo status e preço. Muda só `boosts`: em vez de um objeto de booleanos, vem uma lista com `boosted`/`opportunity`, e também os `boosts` do vencedor. O código segue no v1, porque nada lê `boosts` hoje.
+  - **O ML pesa o que a lista não mostra.** Num produto, um Full a R$ 53,82 (loja oficial, entrega no mesmo dia) ganhava de ofertas a R$ 51,65 e R$ 53. Para outro Full no mesmo preço tomar a vitrine, o ML pedia R$ 47,09, ou seja, 12,5% abaixo. A folga de 3% vale para o caso comum; com concorrente mais forte, o card pode errar para cima, e por isso a tela pede para conferir depois.
 
 ## Preço mínimo
 
@@ -92,6 +118,8 @@ Invariante herdado da Home: **consulta que falha não vira problema**.
 
 ## Deploy
 
-`prisma migrate deploy` **antes** do código: `loadOperationalSettings` lê todas as colunas de `operational_settings`. São duas migrations:
+`prisma migrate deploy` **antes** do código: `loadOperationalSettings` lê todas as colunas de `operational_settings`. Migrations da Central:
 - `20261110120000_rotina`: tabelas e colunas `rotina_*`
 - `20261110150000_rotina_pricing_inputs`: `listing_health.pricing_inputs`, usado pelo simulador
+- `20261112120000_listing_health_promotion_windows`: `listing_health.promotion_windows`
+- `20261112150000_catalog_raise_price`: `listings.catalog_product_id`, `listings.catalog_competitors(_at)` e `operational_settings.rotina_catalog_raise_*`

@@ -38,8 +38,8 @@ model Organization {
   createdAt       DateTime           @default(now()) @map("created_at")
   updatedAt       DateTime           @updatedAt @map("updated_at")
 
-  members   OrganizationMember[]
-  mlSellers OrganizationMlSeller[]
+  members         OrganizationMember[]
+  mlSellers       OrganizationMlSeller[]
   dashboardLayout DashboardLayout?
 
   @@map("organizations")
@@ -132,26 +132,32 @@ model DashboardLayout {
 /// Só `CatalogCompetitionSnapshot` mantém FK real: catalog report lê
 /// `titleSnapshot`/`skuSnapshot`/`imageUrlSnapshot` direto do banco.
 model Listing {
-  mlItemId           String                    @id @map("ml_item_id")
-  organizationId     String                    @map("organization_id")
-  titleSnapshot      String?                   @map("title_snapshot")
+  mlItemId             String                    @id @map("ml_item_id")
+  organizationId       String                    @map("organization_id")
+  titleSnapshot        String?                   @map("title_snapshot")
   /// Só para exibição (catalog report, thumbnail em "Meus produtos") — sem
   /// garantia de frescor exigida por identidade de produto. Ver
   /// `ProductIdentityLink` para o vínculo anúncio → produto.
-  skuSnapshot        String?                   @map("sku_snapshot")
-  imageUrlSnapshot   String?                   @map("image_url_snapshot")
-  catalogListing     Boolean?                  @map("catalog_listing")
-  lastSyncedAt       DateTime?                 @map("last_synced_at")
-  activeOnMl         Boolean                   @default(true) @map("active_on_ml")
+  skuSnapshot          String?                   @map("sku_snapshot")
+  imageUrlSnapshot     String?                   @map("image_url_snapshot")
+  catalogListing       Boolean?                  @map("catalog_listing")
+  lastSyncedAt         DateTime?                 @map("last_synced_at")
+  activeOnMl           Boolean                   @default(true) @map("active_on_ml")
   /// Status ML do anúncio (`active`, `paused`, …); preenchido no poll/sync.
-  mlStatus           String?                   @map("ml_status")
+  mlStatus             String?                   @map("ml_status")
   /// Último status de competição confirmado pelo poll (mesmo sem novo snapshot).
-  catalogStatus      CatalogCompetitionStatus? @map("catalog_status")
-  catalogSellerPrice Decimal?                  @map("catalog_seller_price") @db.Decimal(18, 2)
-  catalogPriceToWin  Decimal?                  @map("catalog_price_to_win") @db.Decimal(18, 2)
-  catalogPolledAt    DateTime?                 @map("catalog_polled_at")
-  createdAt          DateTime                  @default(now()) @map("created_at")
-  updatedAt          DateTime                  @updatedAt @map("updated_at")
+  catalogStatus        CatalogCompetitionStatus? @map("catalog_status")
+  catalogSellerPrice   Decimal?                  @map("catalog_seller_price") @db.Decimal(18, 2)
+  catalogPriceToWin    Decimal?                  @map("catalog_price_to_win") @db.Decimal(18, 2)
+  catalogPolledAt      DateTime?                 @map("catalog_polled_at")
+  /// Produto de catálogo (`MLB…` de produto) do anúncio; gravado pelo poll de catálogo.
+  catalogProductId     String?                   @map("catalog_product_id")
+  /// Resumo das ofertas dos concorrentes (`CatalogCompetitionSummary`), lido
+  /// só quando o anúncio está ganhando — base do "Subir preço no catálogo".
+  catalogCompetitors   Json?                     @map("catalog_competitors")
+  catalogCompetitorsAt DateTime?                 @map("catalog_competitors_at")
+  createdAt            DateTime                  @default(now()) @map("created_at")
+  updatedAt            DateTime                  @updatedAt @map("updated_at")
 
   competitionSnapshots CatalogCompetitionSnapshot[]
 
@@ -394,7 +400,7 @@ model ListingHealth {
   /// quando o anúncio segue com desconto. `null` = não consultado (sem
   /// promoção, catálogo ou linha antiga): vale `promotionEndsAt`.
   promotionWindows      Json?     @map("promotion_windows")
-  marginPercent        Decimal?  @map("margin_percent") @db.Decimal(9, 2)
+  marginPercent         Decimal?  @map("margin_percent") @db.Decimal(9, 2)
   marginValue           Decimal?  @map("margin_value") @db.Decimal(18, 2)
   marginAfterAdsPercent Decimal?  @map("margin_after_ads_percent") @db.Decimal(9, 2)
   marginAfterAdsValue   Decimal?  @map("margin_after_ads_value") @db.Decimal(18, 2)
@@ -973,21 +979,25 @@ model OperationalSettings {
   rotationMediumDailyAvg   Int? @map("rotation_medium_daily_avg")
 
   /// Dias de antecedência para alertar no painel que uma promoção do Mercado Livre está terminando.
-  promotionExpiringSoonDays Int? @map("promotion_expiring_soon_days")
+  promotionExpiringSoonDays       Int?     @map("promotion_expiring_soon_days")
   /// Acompanhar promoções de anúncios próprios no painel Início.
-  promotionMonitorOwnListings Boolean? @map("promotion_monitor_own_listings")
+  promotionMonitorOwnListings     Boolean? @map("promotion_monitor_own_listings")
   /// Acompanhar promoções de anúncios de catálogo no painel Início. Custa uma chamada ao Mercado Livre por anúncio.
   promotionMonitorCatalogListings Boolean? @map("promotion_monitor_catalog_listings")
 
   /// Rotina: margem mínima (após ADS, %) dos anúncios próprios. Também é a
   /// meta do preço mínimo mostrado nas ações (promoção, ajuste de preço).
-  rotinaOwnMinMarginPercent     Decimal? @map("rotina_own_min_margin_percent") @db.Decimal(6, 2)
+  rotinaOwnMinMarginPercent        Decimal? @map("rotina_own_min_margin_percent") @db.Decimal(6, 2)
   /// Rotina: margem mínima (após ADS, %) dos anúncios de catálogo.
-  rotinaCatalogMinMarginPercent Decimal? @map("rotina_catalog_min_margin_percent") @db.Decimal(6, 2)
+  rotinaCatalogMinMarginPercent    Decimal? @map("rotina_catalog_min_margin_percent") @db.Decimal(6, 2)
   /// Rotina: TACOS (%) a partir do qual um anúncio próprio entra em "TACOS acima da meta".
-  rotinaOwnTacosTargetPercent   Decimal? @map("rotina_own_tacos_target_percent") @db.Decimal(6, 2)
+  rotinaOwnTacosTargetPercent      Decimal? @map("rotina_own_tacos_target_percent") @db.Decimal(6, 2)
   /// Rotina: regras desligadas pelo usuário (chaves de `ROTINA_RULE_KEYS`). Vazio = todas ligadas.
-  rotinaDisabledRules           String[] @default([]) @map("rotina_disabled_rules")
+  rotinaDisabledRules              String[] @default([]) @map("rotina_disabled_rules")
+  /// Rotina: folga (%) abaixo do concorrente mais barato para estimar o teto de "ganhar sozinho" no catálogo.
+  rotinaCatalogRaiseCushionPercent Decimal? @map("rotina_catalog_raise_cushion_percent") @db.Decimal(6, 2)
+  /// Rotina: alta mínima (%) sobre o preço de hoje para "Subir preço no catálogo" virar tarefa.
+  rotinaCatalogRaiseMinPercent     Decimal? @map("rotina_catalog_raise_min_percent") @db.Decimal(6, 2)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

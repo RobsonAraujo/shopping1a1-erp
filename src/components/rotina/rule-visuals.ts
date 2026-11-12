@@ -10,6 +10,7 @@ import {
   Store,
   Tag,
   TrendingDown,
+  TrendingUp,
   Users,
 } from "lucide-react";
 import type { RotinaRuleKey, RotinaSegment } from "@/lib/rotina/rule-registry";
@@ -28,14 +29,15 @@ import {
  *   promoção, ADS. Pinta o ícone do grupo, então todo grupo tem cor e a cor
  *   diz de que assunto ele é. Nunca quer dizer "bom" ou "ruim".
  * - **Estado** (`tone`): urgência, só dentro do card — catálogo **perdendo** é
- *   vermelho, **dividindo** o 1º lugar é amarelo (faixa lateral + pílula).
+ *   vermelho, **dividindo** o 1º lugar é amarelo, **ganhando com folga para
+ *   subir** é verde (faixa lateral + pílula).
  */
 export type RuleTheme = "catalog" | "price" | "promo" | "ads";
 
 export type RuleVisual = {
   icon: LucideIcon;
   theme: RuleTheme;
-  tone: Extract<StatusTone, "danger" | "warning" | "neutral">;
+  tone: Extract<StatusTone, "danger" | "warning" | "ok" | "neutral">;
   /** Rótulo da pílula de estado no card (só regras com cor). */
   pill: string | null;
   /**
@@ -68,6 +70,13 @@ export const RULE_VISUALS: Record<RotinaRuleKey, RuleVisual> = {
     pill: "Dividindo o 1º lugar",
     taskHint: "anúncios dividindo o 1º lugar",
   },
+  catalog_raise_price: {
+    icon: TrendingUp,
+    theme: "catalog",
+    tone: "ok",
+    pill: "Ganhando com folga",
+    taskHint: "estimativa: concorrência acima do seu preço",
+  },
   catalog_takeover: { icon: Copy, theme: "catalog", tone: "neutral", pill: null, taskHint: null },
   promo_expiring: { icon: Hourglass, theme: "promo", tone: "neutral", pill: null, taskHint: null },
   promo_missing: { icon: Tag, theme: "promo", tone: "neutral", pill: null, taskHint: null },
@@ -98,6 +107,7 @@ export function ruleIconClass(rule: RotinaRuleKey): string {
 export const RULE_ACCENT_CLASS: Record<RuleVisual["tone"], string> = {
   danger: "border-l-4 border-l-rose-500",
   warning: "border-l-4 border-l-amber-400",
+  ok: "border-l-4 border-l-emerald-500",
   neutral: "",
 };
 

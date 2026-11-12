@@ -36,6 +36,8 @@ export function buildSimulatorSuggestions(args: {
   salePrice: number | null;
   /** Atalhos de desconto (promoção): % sobre o preço original. */
   discounts?: number[];
+  /** Subir preço no catálogo: as duas estimativas. */
+  raise?: { winCeiling: number | null; shareCeiling: number | null } | null;
 }): SimulatorSuggestion[] {
   const list: SimulatorSuggestion[] = [];
   const push = (label: string, price: number | null | undefined) => {
@@ -44,6 +46,8 @@ export function buildSimulatorSuggestions(args: {
     if (list.some((entry) => Math.abs(entry.price - rounded) < 0.005)) return;
     list.push({ label, price: rounded });
   };
+  push("Ganhar sozinho (estim.)", args.raise?.winCeiling);
+  push("Dividir (estim.)", args.raise?.shareCeiling);
   push("Preço p/ ganhar", args.priceToWin);
   push("Abaixo da faixa", args.suggestedPrice);
   push("Mínimo", args.floor?.effectivePrice);

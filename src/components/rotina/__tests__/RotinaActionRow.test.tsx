@@ -13,6 +13,7 @@ import {
   catalogLive,
   listing,
   settings,
+  winningWithRoom,
 } from "@/lib/rotina/__tests__/fixtures";
 
 function viewWith(health: Parameters<typeof listing>[0][], live = [] as ReturnType<typeof catalogLive>[]) {
@@ -177,6 +178,28 @@ describe("RotinaActionRow", () => {
     assert.match(content, /PMA\s*R\$ 89,90/);
     // Meta de TACOS do fixture: 10%.
     assert.match(content, /TACOS 7d\s*5,2%\s*· meta 10%/);
+  });
+
+  it("shows a raise as an estimate, in green, and opens the simulator at the ceiling", () => {
+    const view = viewWith(
+      [],
+      [winningWithRoom({ mlItemId: "CAT5", title: "Cabo USB (catálogo)", imageUrl: null })],
+    );
+    const action = view.actions.find((candidate) => candidate.rule === "catalog_raise_price")!;
+    assert.ok(action);
+    const rendered = render(action);
+    cleanup = rendered.unmount;
+    const row = rendered.container.querySelector("li")!;
+    assert.match(row.className, /border-l-emerald-500/);
+    const content = text(rendered.container);
+    assert.match(content, /Ganhando com folga/);
+    assert.match(content, /Estimativa: ganhar sozinho até ~R\$ 43,65 · dividir o 1º lugar a ~R\$ 45,00/);
+    assert.match(content, /É uma estimativa: simule antes e, depois de subir, confira se continua ganhando/);
+    const simulateButton = [...rendered.container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Simular a"),
+    );
+    assert.ok(simulateButton);
+    assert.match(text(simulateButton), /Simular a R\$ 43,65/);
   });
 
   it("marks losing catalog in red and simulates the price to win", async () => {

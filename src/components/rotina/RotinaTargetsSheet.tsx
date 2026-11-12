@@ -24,6 +24,8 @@ import {
 } from "@/lib/rotina/rule-registry";
 import {
   ROTINA_MARGIN_LIMITS,
+  ROTINA_RAISE_CUSHION_LIMITS,
+  ROTINA_RAISE_MIN_LIMITS,
   ROTINA_TACOS_LIMITS,
   type RotinaSettings,
 } from "@/lib/rotina/settings-shared";
@@ -65,6 +67,8 @@ export type RotinaTargetsDraft = {
   ownMinMarginPercent: number;
   catalogMinMarginPercent: number;
   ownTacosTargetPercent: number;
+  catalogRaiseCushionPercent: number;
+  catalogRaiseMinPercent: number;
   disabledRules: RotinaRuleKey[];
 };
 
@@ -100,6 +104,8 @@ export function RotinaTargetsSheet({
     String(settings.catalogMinMarginPercent),
   );
   const [tacos, setTacos] = useState(String(settings.ownTacosTargetPercent));
+  const [raiseCushion, setRaiseCushion] = useState(String(settings.catalogRaiseCushionPercent));
+  const [raiseMin, setRaiseMin] = useState(String(settings.catalogRaiseMinPercent));
   const [disabled, setDisabled] = useState<Set<RotinaRuleKey>>(
     () => new Set(settings.disabledRules),
   );
@@ -125,11 +131,35 @@ export function RotinaTargetsSheet({
       setError(`TACOS meta entre ${ROTINA_TACOS_LIMITS.min}% e ${ROTINA_TACOS_LIMITS.max}%.`);
       return;
     }
+    const cushionValue = toNumber(raiseCushion);
+    if (
+      cushionValue === null ||
+      cushionValue < ROTINA_RAISE_CUSHION_LIMITS.min ||
+      cushionValue > ROTINA_RAISE_CUSHION_LIMITS.max
+    ) {
+      setError(
+        `Folga abaixo do mais barato entre ${ROTINA_RAISE_CUSHION_LIMITS.min}% e ${ROTINA_RAISE_CUSHION_LIMITS.max}%.`,
+      );
+      return;
+    }
+    const raiseMinValue = toNumber(raiseMin);
+    if (
+      raiseMinValue === null ||
+      raiseMinValue < ROTINA_RAISE_MIN_LIMITS.min ||
+      raiseMinValue > ROTINA_RAISE_MIN_LIMITS.max
+    ) {
+      setError(
+        `Alta mínima entre ${ROTINA_RAISE_MIN_LIMITS.min}% e ${ROTINA_RAISE_MIN_LIMITS.max}%.`,
+      );
+      return;
+    }
     setError(null);
     onSave({
       ownMinMarginPercent: own!,
       catalogMinMarginPercent: catalog!,
       ownTacosTargetPercent: tacosValue,
+      catalogRaiseCushionPercent: cushionValue,
+      catalogRaiseMinPercent: raiseMinValue,
       disabledRules: ROTINA_RULE_KEYS.filter((rule) => disabled.has(rule)),
     });
   }
@@ -192,6 +222,41 @@ export function RotinaTargetsSheet({
                 Configurações › Planejamento
               </Link>
               ).
+            </p>
+          </section>
+
+          <section className="space-y-3">
+            <h3 className={SECTION_TITLE_CLASS}>Subir preço no catálogo</h3>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="space-y-1.5">
+                <span className="block text-xs font-medium text-[var(--foreground)]">
+                  Folga abaixo do concorrente mais barato
+                </span>
+                <PercentField
+                  label="Folga abaixo do concorrente mais barato (%)"
+                  value={raiseCushion}
+                  onChange={setRaiseCushion}
+                />
+              </label>
+              <label className="space-y-1.5">
+                <span className="block text-xs font-medium text-[var(--foreground)]">
+                  Alta mínima para virar tarefa
+                </span>
+                <PercentField
+                  label="Alta mínima para virar tarefa (%)"
+                  value={raiseMin}
+                  onChange={setRaiseMin}
+                />
+              </label>
+            </div>
+            <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
+              É uma <strong>estimativa</strong>: o ML não publica como pesa preço, entrega e
+              reputação. O teto para ganhar sozinho é o concorrente mais barato menos a folga;
+              no mesmo preço dele, o normal é dividir o 1º lugar. Em leituras reais do ML,
+              tomar a vitrine exigiu em geral ficar de 1% a 3% abaixo de quem ganhava, mas
+              quando o concorrente tinha vantagens que a lista não mostra (como entrega no
+              mesmo dia), o ML chegou a pedir 12% abaixo. Depois de subir, confira se continua
+              ganhando.
             </p>
           </section>
 

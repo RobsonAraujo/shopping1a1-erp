@@ -8,7 +8,15 @@ import {
   marginForRules,
 } from "@/lib/rotina/rules";
 import type { PromotionWindow } from "@/lib/mercadolibre/promotion-coverage";
-import { NOW, TZ, catalogLive, listing, settings } from "./fixtures";
+import {
+  NOW,
+  TZ,
+  catalogLive,
+  competition,
+  listing,
+  settings,
+  winningWithRoom,
+} from "./fixtures";
 
 function rules(
   overrides: Parameters<typeof listing>[0] = {},
@@ -171,14 +179,61 @@ describe("evaluateRefreshRules — margem e PMA", () => {
 });
 
 describe("evaluateCatalogRules", () => {
+  const ctx = { now: NOW };
+
   it("maps live catalog status to rules, only for active listings", () => {
-    assert.deepEqual(evaluateCatalogRules(catalogLive(), settings()), ["catalog_losing"]);
+    assert.deepEqual(evaluateCatalogRules(catalogLive(), settings(), ctx), ["catalog_losing"]);
     assert.deepEqual(
-      evaluateCatalogRules(catalogLive({ status: "shared" }), settings()),
+      evaluateCatalogRules(catalogLive({ status: "shared" }), settings(), ctx),
       ["catalog_shared"],
     );
-    assert.deepEqual(evaluateCatalogRules(catalogLive({ status: "winning" }), settings()), []);
-    assert.deepEqual(evaluateCatalogRules(catalogLive({ mlStatus: "paused" }), settings()), []);
-    assert.deepEqual(evaluateCatalogRules(null, settings()), []);
+    assert.deepEqual(
+      evaluateCatalogRules(catalogLive({ status: "winning" }), settings(), ctx),
+      [],
+    );
+    assert.deepEqual(
+      evaluateCatalogRules(catalogLive({ mlStatus: "paused" }), settings(), ctx),
+      [],
+    );
+    assert.deepEqual(evaluateCatalogRules(null, settings(), ctx), []);
+  });
+
+  it("raise: winning with a cheaper-than-ceiling gap becomes a task", () => {
+    assert.deepEqual(evaluateCatalogRules(winningWithRoom(), settings(), ctx), [
+      "catalog_raise_price",
+    ]);
+  });
+
+  it("raise: not when the gain is below the minimum, stale, or disabled", () => {
+    // Mais barato a R$ 41: teto 39,77 < hoje.
+    const tight = winningWithRoom({
+      competition: competition({
+        top: [{ itemId: "C", sellerId: "1", price: 41, logisticType: null, freeShipping: null }],
+      }),
+    });
+    assert.deepEqual(evaluateCatalogRules(tight, settings(), ctx), []);
+    assert.deepEqual(
+      evaluateCatalogRules(winningWithRoom(), settings({ catalogRaiseMinPercent: 20 }), ctx),
+      [],
+    );
+    const stale = winningWithRoom({
+      competition: competition({ fetchedAt: "2026-11-10T08:00:00.000Z" }),
+    });
+    assert.deepEqual(evaluateCatalogRules(stale, settings(), ctx), []);
+    assert.deepEqual(
+      evaluateCatalogRules(
+        winningWithRoom(),
+        settings({ disabledRules: ["catalog_raise_price"] }),
+        ctx,
+      ),
+      [],
+    );
+  });
+
+  it("raise: never for losing or shared, even with competition data", () => {
+    assert.deepEqual(
+      evaluateCatalogRules(winningWithRoom({ status: "shared" }), settings(), ctx),
+      ["catalog_shared"],
+    );
   });
 });

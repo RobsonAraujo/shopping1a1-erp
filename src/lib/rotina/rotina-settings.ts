@@ -22,6 +22,8 @@ export async function loadRotinaSettings(
       rotinaOwnMinMarginPercent: true,
       rotinaCatalogMinMarginPercent: true,
       rotinaOwnTacosTargetPercent: true,
+      rotinaCatalogRaiseCushionPercent: true,
+      rotinaCatalogRaiseMinPercent: true,
       rotinaDisabledRules: true,
       promotionExpiringSoonDays: true,
       salesAverageWindowDays: true,
@@ -31,6 +33,8 @@ export async function loadRotinaSettings(
   const ownMin = decimalToNumber(row?.rotinaOwnMinMarginPercent);
   const catalogMin = decimalToNumber(row?.rotinaCatalogMinMarginPercent);
   const tacos = decimalToNumber(row?.rotinaOwnTacosTargetPercent);
+  const raiseCushion = decimalToNumber(row?.rotinaCatalogRaiseCushionPercent);
+  const raiseMin = decimalToNumber(row?.rotinaCatalogRaiseMinPercent);
   const disabledRules = normalizeDisabledRules(row?.rotinaDisabledRules);
 
   return {
@@ -38,6 +42,9 @@ export async function loadRotinaSettings(
     catalogMinMarginPercent:
       catalogMin ?? ROTINA_SETTINGS_DEFAULTS.catalogMinMarginPercent,
     ownTacosTargetPercent: tacos ?? ROTINA_SETTINGS_DEFAULTS.ownTacosTargetPercent,
+    catalogRaiseCushionPercent:
+      raiseCushion ?? ROTINA_SETTINGS_DEFAULTS.catalogRaiseCushionPercent,
+    catalogRaiseMinPercent: raiseMin ?? ROTINA_SETTINGS_DEFAULTS.catalogRaiseMinPercent,
     disabledRules,
     promotionExpiringSoonDays:
       row?.promotionExpiringSoonDays ??
@@ -49,6 +56,8 @@ export async function loadRotinaSettings(
       ownMin !== null ||
       catalogMin !== null ||
       tacos !== null ||
+      raiseCushion !== null ||
+      raiseMin !== null ||
       disabledRules.length > 0,
   };
 }
@@ -57,6 +66,8 @@ export type RotinaSettingsUpdate = Partial<{
   ownMinMarginPercent: number;
   catalogMinMarginPercent: number;
   ownTacosTargetPercent: number;
+  catalogRaiseCushionPercent: number;
+  catalogRaiseMinPercent: number;
   disabledRules: RotinaRuleKey[];
 }>;
 
@@ -73,6 +84,12 @@ export async function updateRotinaSettings(
       : {}),
     ...(input.ownTacosTargetPercent !== undefined
       ? { rotinaOwnTacosTargetPercent: input.ownTacosTargetPercent }
+      : {}),
+    ...(input.catalogRaiseCushionPercent !== undefined
+      ? { rotinaCatalogRaiseCushionPercent: input.catalogRaiseCushionPercent }
+      : {}),
+    ...(input.catalogRaiseMinPercent !== undefined
+      ? { rotinaCatalogRaiseMinPercent: input.catalogRaiseMinPercent }
       : {}),
     ...(input.disabledRules !== undefined
       ? { rotinaDisabledRules: normalizeDisabledRules(input.disabledRules) }

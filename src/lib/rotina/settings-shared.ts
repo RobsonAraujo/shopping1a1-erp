@@ -16,6 +16,10 @@ export type RotinaSettings = {
   catalogMinMarginPercent: number;
   /** TACOS meta (%) dos próprios. */
   ownTacosTargetPercent: number;
+  /** Folga (%) abaixo do concorrente mais barato no teto de "ganhar sozinho". */
+  catalogRaiseCushionPercent: number;
+  /** Alta mínima (%) para "Subir preço no catálogo" virar tarefa. */
+  catalogRaiseMinPercent: number;
   disabledRules: RotinaRuleKey[];
   /** De Configurações > Planejamento — o mesmo prazo do widget Promoções da Home. */
   promotionExpiringSoonDays: number;
@@ -28,11 +32,15 @@ export type RotinaSettings = {
 /** Margem mínima pode ser levemente negativa: há quem aceite perder um pouco para segurar a vitrine. */
 export const ROTINA_MARGIN_LIMITS = { min: -20, max: 100 } as const;
 export const ROTINA_TACOS_LIMITS = { min: 0, max: 100 } as const;
+export const ROTINA_RAISE_CUSHION_LIMITS = { min: 0, max: 20 } as const;
+export const ROTINA_RAISE_MIN_LIMITS = { min: 0, max: 50 } as const;
 
 export const ROTINA_SETTINGS_DEFAULTS = {
   ownMinMarginPercent: rotinaConfig.ownMinMarginPercent,
   catalogMinMarginPercent: rotinaConfig.catalogMinMarginPercent,
   ownTacosTargetPercent: rotinaConfig.ownTacosTargetPercent,
+  catalogRaiseCushionPercent: rotinaConfig.catalogRaiseCushionPercent,
+  catalogRaiseMinPercent: rotinaConfig.catalogRaiseMinPercent,
 } as const;
 
 /** Só chaves conhecidas, sem repetição, na ordem do registro. */

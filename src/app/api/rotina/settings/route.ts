@@ -6,7 +6,12 @@ import { parseJsonBody } from "@/lib/api/api-validation";
 import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 import { loadRotinaSettings, updateRotinaSettings } from "@/lib/rotina/rotina-settings";
 import { ROTINA_RULE_KEYS } from "@/lib/rotina/rule-registry";
-import { ROTINA_MARGIN_LIMITS, ROTINA_TACOS_LIMITS } from "@/lib/rotina/settings-shared";
+import {
+  ROTINA_MARGIN_LIMITS,
+  ROTINA_RAISE_CUSHION_LIMITS,
+  ROTINA_RAISE_MIN_LIMITS,
+  ROTINA_TACOS_LIMITS,
+} from "@/lib/rotina/settings-shared";
 
 export async function GET() {
   const auth = await requireOrganization();
@@ -30,11 +35,19 @@ const patchSchema = z
       .min(ROTINA_MARGIN_LIMITS.min)
       .max(ROTINA_MARGIN_LIMITS.max),
     ownTacosTargetPercent: z.number().min(ROTINA_TACOS_LIMITS.min).max(ROTINA_TACOS_LIMITS.max),
+    catalogRaiseCushionPercent: z
+      .number()
+      .min(ROTINA_RAISE_CUSHION_LIMITS.min)
+      .max(ROTINA_RAISE_CUSHION_LIMITS.max),
+    catalogRaiseMinPercent: z
+      .number()
+      .min(ROTINA_RAISE_MIN_LIMITS.min)
+      .max(ROTINA_RAISE_MIN_LIMITS.max),
     disabledRules: z.array(z.enum(ROTINA_RULE_KEYS)).max(ROTINA_RULE_KEYS.length),
   })
   .partial();
 
-/** Metas da Rotina (margens mínimas, TACOS meta, regras desligadas). */
+/** Metas da Rotina (margens mínimas, TACOS meta, folga de subida no catálogo, regras desligadas). */
 export async function PATCH(request: NextRequest) {
   const auth = await requireOrganization();
   if (!auth.ok) {

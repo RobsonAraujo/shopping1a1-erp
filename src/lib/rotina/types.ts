@@ -3,6 +3,7 @@
  * string: tudo aqui atravessa a fronteira RSC → client sem conversão.
  */
 
+import type { CatalogCompetitionSummary } from "@/lib/catalog-report/catalog-competitors";
 import type { PromotionWindow } from "@/lib/mercadolibre/promotion-coverage";
 
 export type RotinaFloorBand = { from: number; to: number };
@@ -91,6 +92,15 @@ export type RotinaCatalogLive = {
   statusSinceTruncated: boolean;
   /** Estava perdendo/dividindo e voltou a ganhar hoje. */
   wonBackToday: boolean;
+  /** Produto de catálogo, gravado pelo poll (a rodada também tem, em `ListingHealth`). */
+  catalogProductId: string | null;
+  /** Ofertas dos concorrentes, lidas pelo poll só enquanto ganha. */
+  competition: CatalogCompetitionSummary | null;
+  /**
+   * Última subida de preço vinda de "ganhando" (histórico de snapshots, até
+   * `catalogHistoryDays`): explica um "perdendo" que veio logo depois dela.
+   */
+  recentRaise: { from: number; to: number; at: string } | null;
 };
 
 export type ActionStateStatus =

@@ -82,6 +82,7 @@ const VERDICT_CLASS = {
 function simulatorSetup(action: RotinaActionView) {
   const catalog = action.catalog;
   const contested = catalog?.status === "losing" || catalog?.status === "shared";
+  const raise = action.rule === "catalog_raise_price" ? (catalog?.raise ?? null) : null;
   const promo = action.rule === "promo_missing" || action.rule === "promo_expiring";
   const suggestions = buildSimulatorSuggestions({
     priceToWin: contested ? (catalog?.priceToWin ?? null) : null,
@@ -89,11 +90,16 @@ function simulatorSetup(action: RotinaActionView) {
     floor: action.floor,
     salePrice: action.listing.salePrice,
     discounts: promo ? [5, 10, 15, 20] : undefined,
+    raise,
   });
-  const defaultPrice = contested
-    ? (catalog?.suggestedPrice ?? catalog?.priceToWin ?? action.listing.salePrice)
-    : (action.floor?.effectivePrice ?? action.listing.salePrice);
-  return { suggestions, defaultPrice: defaultPrice ?? null, contested };
+  const defaultPrice = raise
+    ? (raise.winCeiling ?? action.listing.salePrice)
+    : contested
+      ? (catalog?.suggestedPrice ?? catalog?.priceToWin ?? action.listing.salePrice)
+      : (action.floor?.effectivePrice ?? action.listing.salePrice);
+  // O botão diz o preço quando ele é o alvo da tarefa (ganhar ou subir).
+  const pricedLabel = contested || (raise !== null && raise.winCeiling !== null);
+  return { suggestions, defaultPrice: defaultPrice ?? null, contested: pricedLabel };
 }
 
 export function RotinaActionRow({

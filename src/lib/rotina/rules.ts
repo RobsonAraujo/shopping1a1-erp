@@ -1,3 +1,9 @@
+import { rotinaConfig } from "@/config/rotina";
+import {
+  catalogRaiseQualifies,
+  estimateCatalogRaise,
+  type CatalogRaiseEstimate,
+} from "@/lib/rotina/catalog-raise";
 import {
   promotionCoverage,
   type PromotionCoverage,
@@ -12,6 +18,7 @@ import {
 import type {
   ListingTargetValues,
   RotinaCatalogLive,
+  RotinaFloorBand,
   RotinaListingSnapshot,
 } from "@/lib/rotina/types";
 
@@ -215,14 +222,52 @@ export function evaluateRefreshRules(
   return hits.filter((rule) => isRuleEnabled(ctx.settings, rule));
 }
 
+export type CatalogRuleSettings = Pick<
+  RotinaSettings,
+  "disabledRules" | "catalogRaiseCushionPercent" | "catalogRaiseMinPercent"
+>;
+
+export type CatalogRuleContext = {
+  now: Date;
+  /** Faixas conhecidas em que o frete passa a ser seu (da rodada). */
+  bands?: readonly RotinaFloorBand[];
+};
+
+/** Estimativa de subida de um catálogo ativo (null fora de "ganhando" ou sem concorrentes frescos). */
+export function catalogRaiseFor(
+  catalog: RotinaCatalogLive | null,
+  settings: Pick<RotinaSettings, "catalogRaiseCushionPercent">,
+  ctx: CatalogRuleContext,
+): CatalogRaiseEstimate | null {
+  if (!catalog || catalog.mlStatus !== "active") return null;
+  return estimateCatalogRaise({
+    status: catalog.status,
+    sellerPrice: catalog.sellerPrice,
+    competition: catalog.competition,
+    now: ctx.now,
+    cushionPercent: settings.catalogRaiseCushionPercent,
+    maxAgeMs: rotinaConfig.catalogCompetitorsMaxAgeMs,
+    bands: ctx.bands,
+  });
+}
+
 /** Regras de catálogo, sobre o status ao vivo do cron. */
 export function evaluateCatalogRules(
   catalog: RotinaCatalogLive | null,
-  settings: Pick<RotinaSettings, "disabledRules">,
+  settings: CatalogRuleSettings,
+  ctx: CatalogRuleContext,
 ): RotinaRuleKey[] {
   if (!catalog?.status || catalog.mlStatus !== "active") return [];
   const hits: RotinaRuleKey[] = [];
   if (catalog.status === "losing") hits.push("catalog_losing");
   if (catalog.status === "shared") hits.push("catalog_shared");
+  if (
+    catalogRaiseQualifies(
+      catalogRaiseFor(catalog, settings, ctx),
+      settings.catalogRaiseMinPercent,
+    )
+  ) {
+    hits.push("catalog_raise_price");
+  }
   return hits.filter((rule) => isRuleEnabled(settings, rule));
 }

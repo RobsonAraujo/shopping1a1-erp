@@ -1,3 +1,4 @@
+import type { CatalogCompetitionSummary } from "@/lib/catalog-report/catalog-competitors";
 import type { RotinaSettings } from "@/lib/rotina/settings-shared";
 import type {
   ActionStateSnapshot,
@@ -14,6 +15,8 @@ export function settings(overrides: Partial<RotinaSettings> = {}): RotinaSetting
     ownMinMarginPercent: 2,
     catalogMinMarginPercent: 2,
     ownTacosTargetPercent: 10,
+    catalogRaiseCushionPercent: 3,
+    catalogRaiseMinPercent: 2,
     disabledRules: [],
     promotionExpiringSoonDays: 3,
     salesAverageWindowDays: 30,
@@ -87,8 +90,43 @@ export function catalogLive(
     statusSince: "2026-11-10T13:05:00.000Z",
     statusSinceTruncated: false,
     wonBackToday: false,
+    catalogProductId: "MLB-P9",
+    competition: null,
+    recentRaise: null,
     ...overrides,
   };
+}
+
+/** Concorrência lida pelo poll, a 1h de `NOW` (fresca). */
+export function competition(
+  overrides: Partial<CatalogCompetitionSummary> = {},
+): CatalogCompetitionSummary {
+  return {
+    version: 1,
+    fetchedAt: "2026-11-10T14:00:00.000Z",
+    competitorCount: 2,
+    top: [
+      { itemId: "MLB-C1", sellerId: "111", price: 45, logisticType: "self_service", freeShipping: true },
+      { itemId: "MLB-C2", sellerId: "222", price: 52, logisticType: "fulfillment", freeShipping: true },
+    ],
+    ownOfferCount: 0,
+    ownOther: null,
+    myLogisticType: "fulfillment",
+    ...overrides,
+  };
+}
+
+/** Catálogo ganhando a R$ 40 com o mais barato a R$ 45 (Flex). */
+export function winningWithRoom(
+  overrides: Partial<RotinaCatalogLive> = {},
+): RotinaCatalogLive {
+  return catalogLive({
+    status: "winning",
+    sellerPrice: 40,
+    priceToWin: 40,
+    competition: competition(),
+    ...overrides,
+  });
 }
 
 export function state(

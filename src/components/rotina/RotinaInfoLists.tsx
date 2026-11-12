@@ -2,7 +2,15 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ArrowRight, Check, ChevronRight, Eye, History } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  Check,
+  ChevronRight,
+  Eye,
+  History,
+  XCircle,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { RotinaThumb } from "@/components/rotina/RotinaThumb";
 import { SegmentTag } from "@/components/rotina/SegmentTag";
@@ -135,14 +143,24 @@ function doneDetail(action: RotinaActionView, timeZone: string): string {
   const when = action.decidedAt ? ` ${whenLabel(action.decidedAt, timeZone)}` : "";
   if (action.kind === "event") return `${definition.taskLabel} · ciente${when}`;
   const check =
-    definition.source === "catalog"
-      ? "confere na próxima leitura do catálogo"
-      : "confere no próximo Atualizar";
+    action.rule === "catalog_raise_price"
+      ? "estimativa: confira se continua ganhando na próxima leitura do catálogo"
+      : definition.source === "catalog"
+        ? "confere na próxima leitura do catálogo"
+        : "confere no próximo Atualizar";
   return `${definition.taskLabel} · feito${when} · ${check}`;
 }
 
+const OUTCOME_TONE = {
+  ok: { className: "text-emerald-800", icon: Check },
+  warn: { className: "text-amber-800", icon: AlertTriangle },
+  bad: { className: "text-rose-700", icon: XCircle },
+} as const;
+
 /** Resolvido: o problema que havia → o que o dado de agora mostra. */
 function ResolvedDetail({ item }: { item: RotinaInfoItem }) {
+  const tone = OUTCOME_TONE[item.outcomeTone ?? "ok"];
+  const Icon = tone.icon;
   return (
     <span className="flex flex-wrap items-center gap-x-1.5">
       <span>{item.note}</span>
@@ -150,8 +168,8 @@ function ResolvedDetail({ item }: { item: RotinaInfoItem }) {
         <>
           <ArrowRight className="size-3 shrink-0 opacity-60" aria-hidden />
           <span className="sr-only">agora:</span>
-          <span className="inline-flex items-center gap-1 font-medium text-emerald-800">
-            <Check className="size-3 shrink-0" aria-hidden />
+          <span className={cn("inline-flex items-center gap-1 font-medium", tone.className)}>
+            <Icon className="size-3 shrink-0" aria-hidden />
             {item.outcome}
           </span>
         </>
