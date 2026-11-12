@@ -5,6 +5,7 @@ import {
   Calculator,
   Check,
   CheckCircle2,
+  ChevronDown,
   Clock,
   ExternalLink,
   EyeOff,
@@ -59,6 +60,10 @@ export const SNOOZE_OPTIONS = [
 
 const MENU_ITEM_CLASS =
   "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-[var(--foreground)] hover:bg-[var(--muted)] focus-visible:bg-[var(--muted)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50";
+
+/** Um botão dentro do grupo Feito | Adiar | ⋯: sem borda, canto ou "pulo" próprio. */
+const SEGMENT_CLASS =
+  "h-10 rounded-none px-3 shadow-none active:scale-100 focus-visible:ring-inset focus-visible:ring-offset-0 data-[state=open]:bg-[var(--accent)] data-[state=open]:text-[var(--foreground)] sm:h-9";
 
 const VERDICT_CLASS = {
   ok: "border-emerald-200/80 bg-emerald-50 text-emerald-900",
@@ -302,12 +307,34 @@ export function RotinaActionRow({
           ))}
         </div>
 
-        <div className="ml-auto flex items-center gap-1.5">
+        {/* Triagem num controle só: concluir, adiar, mais opções. */}
+        <div
+          role="group"
+          aria-label="Decidir esta ação"
+          className="ml-auto inline-flex items-stretch divide-x divide-[var(--border)] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-sm"
+        >
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => handlers.onDone(action)}
+            disabled={handlers.busy}
+            className={cn(SEGMENT_CLASS, "text-emerald-800 hover:bg-emerald-50 hover:text-emerald-900")}
+          >
+            <Check aria-hidden />
+            {action.kind === "event" ? "Ciente" : "Feito"}
+          </Button>
+
           <Popover open={snoozeOpen} onOpenChange={setSnoozeOpen}>
             <PopoverTrigger asChild>
-              <Button size="sm" variant="ghost" disabled={handlers.busy}>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={handlers.busy}
+                className={cn(SEGMENT_CLASS, "gap-1.5 text-[var(--muted-foreground)]")}
+              >
                 <Clock aria-hidden />
                 Adiar
+                <ChevronDown className="size-3.5! opacity-60" aria-hidden />
               </Button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-44 p-1">
@@ -335,7 +362,13 @@ export function RotinaActionRow({
             }}
           >
             <PopoverTrigger asChild>
-              <Button size="icon-sm" variant="ghost" aria-label="Mais opções" disabled={handlers.busy}>
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-label="Mais opções"
+                disabled={handlers.busy}
+                className={cn(SEGMENT_CLASS, "w-10 px-0 text-[var(--muted-foreground)] sm:w-9")}
+              >
                 <MoreHorizontal aria-hidden />
               </Button>
             </PopoverTrigger>
@@ -414,16 +447,6 @@ export function RotinaActionRow({
             </PopoverContent>
           </Popover>
 
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => handlers.onDone(action)}
-            disabled={handlers.busy}
-            className="hover:bg-emerald-50 hover:text-emerald-800"
-          >
-            <Check aria-hidden />
-            {action.kind === "event" ? "Ciente" : "Feito"}
-          </Button>
         </div>
       </div>
 
