@@ -1,7 +1,7 @@
 import type { TableSort } from "@/components/ui/sortable-th";
 import type { ProductView } from "@/lib/products/product-data";
 
-export type ProductSortKey = "sku" | "ncm" | "pricingCost" | "taxPercent";
+export type ProductSortKey = "sku" | "ncm" | "pricingCost" | "taxPercent" | "pmaPrice";
 
 export type ProductsTableProps = {
   loading: boolean;

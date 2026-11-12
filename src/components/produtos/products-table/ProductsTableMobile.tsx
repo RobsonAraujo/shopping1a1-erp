@@ -172,6 +172,14 @@ export function ProductsTableMobile({
                   <PlanningInfoTrigger content={taxPercentExplainer(product)} />
                 </div>
               </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-[var(--muted-foreground)]">
+                  PMA
+                </p>
+                <p className="mt-0.5 text-sm font-medium tabular-nums">
+                  {product.pmaPrice !== null ? formatFinancialMoney(product.pmaPrice) : "—"}
+                </p>
+              </div>
             </div>
 
             {showFiscalFlags &&

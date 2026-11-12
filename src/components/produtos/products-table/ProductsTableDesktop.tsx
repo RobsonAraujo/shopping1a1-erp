@@ -29,11 +29,11 @@ export function ProductsTableDesktop({
   onSyncSku,
   syncingSkuId,
 }: ProductsTableProps) {
-  const columnCount = showFiscalFlags ? 8 : 5;
+  const columnCount = showFiscalFlags ? 9 : 6;
   return (
     <Card className="overflow-hidden p-0 shadow-sm">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[56rem] text-sm">
+        <table className="w-full min-w-[62rem] text-sm">
           <thead className="border-b border-[var(--border)] bg-[var(--muted)]/80 text-left text-xs text-[var(--muted-foreground)]">
             <tr>
               <SortableTh
@@ -63,6 +63,14 @@ export function ProductsTableDesktop({
               <SortableTh
                 label="Imposto %"
                 sortKey="taxPercent"
+                sort={sort}
+                onSortChange={onSortChange}
+                align="right"
+                className="px-4 py-3 font-semibold uppercase tracking-wide"
+              />
+              <SortableTh
+                label="PMA"
+                sortKey="pmaPrice"
                 sort={sort}
                 onSortChange={onSortChange}
                 align="right"
@@ -148,6 +156,13 @@ export function ProductsTableDesktop({
                         : "—"}
                       <PlanningInfoTrigger content={taxPercentExplainer(product)} />
                     </div>
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums">
+                    {product.pmaPrice !== null ? (
+                      formatFinancialMoney(product.pmaPrice)
+                    ) : (
+                      <span className="text-[var(--muted-foreground)]">—</span>
+                    )}
                   </td>
                   {showFiscalFlags ? (
                     <>

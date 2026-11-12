@@ -808,6 +808,8 @@ export function ProductsClient() {
           return product.pricingCost ?? Number.NEGATIVE_INFINITY;
         case "taxPercent":
           return product.taxPercent ?? Number.NEGATIVE_INFINITY;
+        case "pmaPrice":
+          return product.pmaPrice ?? Number.NEGATIVE_INFINITY;
         default:
           return "";
       }
