@@ -61,7 +61,14 @@ export const SNOOZE_OPTIONS = [
 const MENU_ITEM_CLASS =
   "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-[var(--foreground)] hover:bg-[var(--muted)] focus-visible:bg-[var(--muted)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50";
 
-/** Um botão dentro do grupo Feito | Adiar | ⋯: sem borda, canto ou "pulo" próprio. */
+/**
+ * Controle unido do rodapé. No celular empilha (cada linha do tamanho do card);
+ * a partir de `sm` vira uma barra só.
+ */
+const GROUP_CLASS =
+  "flex w-full flex-col divide-y divide-[var(--border)] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-sm sm:inline-flex sm:flex-row sm:items-stretch sm:divide-x sm:divide-y-0";
+
+/** Um botão dentro de um grupo: sem borda, canto ou "pulo" próprio. */
 const SEGMENT_CLASS =
   "h-10 rounded-none px-3 shadow-none active:scale-100 focus-visible:ring-inset focus-visible:ring-offset-0 data-[state=open]:bg-[var(--accent)] data-[state=open]:text-[var(--foreground)] sm:h-9";
 
@@ -277,48 +284,65 @@ export function RotinaActionRow({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] bg-[var(--muted)]/20 px-3 py-2 sm:px-4">
-        <div className="flex flex-wrap items-center gap-1.5">
+        {/* Executar: simular aqui, ou abrir a tela do ML onde a tarefa é feita. */}
+        <div role="group" aria-label="Executar a tarefa" className={cn(GROUP_CLASS, "sm:w-auto")}>
           {simulator ? (
             <Button
               size="sm"
-              variant={simulating ? "secondary" : "outline"}
+              variant="ghost"
               onClick={() => setSimulating((open) => !open)}
               aria-expanded={simulating}
+              className={cn(
+                SEGMENT_CLASS,
+                "justify-between text-[var(--primary)] hover:text-[var(--primary)] aria-expanded:bg-[var(--accent)] sm:justify-center",
+              )}
             >
-              <Calculator aria-hidden />
-              {simulator.contested && simulator.defaultPrice !== null
-                ? `Simular a ${formatMoney(simulator.defaultPrice)}`
-                : "Simular preço"}
+              <span className="inline-flex items-center gap-2">
+                <Calculator aria-hidden />
+                {simulator.contested && simulator.defaultPrice !== null
+                  ? `Simular a ${formatMoney(simulator.defaultPrice)}`
+                  : "Simular preço"}
+              </span>
+              <ChevronDown
+                className={cn(
+                  "size-3.5! opacity-60 transition-transform",
+                  simulating && "rotate-180",
+                )}
+                aria-hidden
+              />
             </Button>
           ) : null}
-          <Button asChild variant="outline" size="sm">
-            <a href={action.links.primary.href} target="_blank" rel="noopener noreferrer">
-              {action.links.primary.label}
-              <ExternalLink aria-hidden />
-            </a>
-          </Button>
-          {action.links.extra.map((link) => (
-            <Button key={link.href} asChild variant="ghost" size="sm">
+          {[action.links.primary, ...action.links.extra].map((link) => (
+            <Button
+              key={link.href}
+              asChild
+              variant="ghost"
+              size="sm"
+              className={cn(SEGMENT_CLASS, "justify-between sm:justify-center")}
+            >
               <a href={link.href} target="_blank" rel="noopener noreferrer">
-                {link.label}
-                <ExternalLink aria-hidden />
+                <span>{link.label}</span>
+                <ExternalLink className="size-3.5! opacity-60" aria-hidden />
               </a>
             </Button>
           ))}
         </div>
 
-        {/* Triagem num controle só: concluir, adiar, mais opções. */}
+        {/* Decidir num controle só: concluir, adiar, mais opções. */}
         <div
           role="group"
           aria-label="Decidir esta ação"
-          className="ml-auto inline-flex items-stretch divide-x divide-[var(--border)] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-sm"
+          className={cn(GROUP_CLASS, "flex-row divide-x divide-y-0 sm:ml-auto sm:w-auto")}
         >
           <Button
             size="sm"
             variant="ghost"
             onClick={() => handlers.onDone(action)}
             disabled={handlers.busy}
-            className={cn(SEGMENT_CLASS, "text-emerald-800 hover:bg-emerald-50 hover:text-emerald-900")}
+            className={cn(
+              SEGMENT_CLASS,
+              "flex-1 text-emerald-800 hover:bg-emerald-50 hover:text-emerald-900 sm:flex-none",
+            )}
           >
             <Check aria-hidden />
             {action.kind === "event" ? "Ciente" : "Feito"}
@@ -330,7 +354,7 @@ export function RotinaActionRow({
                 size="sm"
                 variant="ghost"
                 disabled={handlers.busy}
-                className={cn(SEGMENT_CLASS, "gap-1.5 text-[var(--muted-foreground)]")}
+                className={cn(SEGMENT_CLASS, "flex-1 gap-1.5 text-[var(--muted-foreground)] sm:flex-none")}
               >
                 <Clock aria-hidden />
                 Adiar
