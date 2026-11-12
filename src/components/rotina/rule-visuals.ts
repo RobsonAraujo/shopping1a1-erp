@@ -30,18 +30,33 @@ export type RuleVisual = {
   tone: Extract<StatusTone, "danger" | "warning" | "neutral">;
   /** Rótulo da pílula de estado no card (só regras com cor). */
   pill: string | null;
+  /**
+   * Explicação curta, menor, ao lado do nome do grupo — onde o nome da tarefa
+   * sozinho não diz qual é a situação ("Brigar no catálogo" × "Ganhar sozinho").
+   */
+  taskHint: string | null;
 };
 
 export const RULE_VISUALS: Record<RotinaRuleKey, RuleVisual> = {
-  catalog_losing: { icon: TrendingDown, tone: "danger", pill: "Perdendo" },
-  catalog_shared: { icon: Users, tone: "warning", pill: "Dividindo o 1º lugar" },
-  promo_expiring: { icon: Hourglass, tone: "neutral", pill: null },
-  catalog_takeover: { icon: Copy, tone: "neutral", pill: null },
-  margin_below_min: { icon: Percent, tone: "neutral", pill: null },
-  below_pma: { icon: ShieldAlert, tone: "neutral", pill: null },
-  tacos_above: { icon: Gauge, tone: "neutral", pill: null },
-  ads_missing: { icon: Megaphone, tone: "neutral", pill: null },
-  promo_missing: { icon: Tag, tone: "neutral", pill: null },
+  catalog_losing: {
+    icon: TrendingDown,
+    tone: "danger",
+    pill: "Perdendo",
+    taskHint: "anúncios perdendo",
+  },
+  catalog_shared: {
+    icon: Users,
+    tone: "warning",
+    pill: "Dividindo o 1º lugar",
+    taskHint: "anúncios dividindo o 1º lugar",
+  },
+  promo_expiring: { icon: Hourglass, tone: "neutral", pill: null, taskHint: null },
+  catalog_takeover: { icon: Copy, tone: "neutral", pill: null, taskHint: null },
+  margin_below_min: { icon: Percent, tone: "neutral", pill: null, taskHint: null },
+  below_pma: { icon: ShieldAlert, tone: "neutral", pill: null, taskHint: null },
+  tacos_above: { icon: Gauge, tone: "neutral", pill: null, taskHint: null },
+  ads_missing: { icon: Megaphone, tone: "neutral", pill: null, taskHint: null },
+  promo_missing: { icon: Tag, tone: "neutral", pill: null, taskHint: null },
 };
 
 /** Fundo + cor do ícone no cabeçalho do grupo. */
