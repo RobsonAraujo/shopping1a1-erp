@@ -7,6 +7,16 @@ export function formatMoney(value: number): string {
   return formatMoneyBRL(value);
 }
 
+/** Reais inteiros ("R$ 1.322"): para estimativas, em que centavo é precisão falsa. */
+export function formatMoneyWhole(value: number): string {
+  return value.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
+}
+
 export function formatPercent(value: number | null, digits = 1): string {
   if (value === null || !Number.isFinite(value)) return "—";
   return `${value.toLocaleString("pt-BR", {

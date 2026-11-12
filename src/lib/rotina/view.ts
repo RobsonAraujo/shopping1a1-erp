@@ -161,12 +161,27 @@ export type RotinaActionView = {
     /** "Subir preço no catálogo": estimativa de até onde dá para subir. */
     raise: CatalogRaiseEstimate | null;
   } | null;
+  /** Painel "Até onde dá para subir" do card de subida (só quando há teto). */
+  raisePanel: RotinaRaisePanel | null;
   impact: number;
   snoozedUntil: string | null;
   /** Quando o usuário decidiu (feito/ciente/adiado/ignorado); null se a ação está aberta. */
   decidedAt: string | null;
   /** Onde executar a tarefa no ML (promoções, editor, Product Ads, concorrência). */
   links: ActionLinks;
+};
+
+/** Os números da subida, para o painel ao lado do card (como o do piso). */
+export type RotinaRaisePanel = {
+  currentPrice: number;
+  winCeiling: number;
+  shareCeiling: number;
+  gainPerUnit: number;
+  gainPercent: number;
+  /** ≈ ganho por mês em reais inteiros (alta × vendas/dia × 30); `null` sem vendas. */
+  monthlyGain: number | null;
+  /** Avisos que mudam a leitura do teto (faixa do frete, entrega melhor, anúncio irmão). */
+  warnings: string[];
 };
 
 export type RotinaInfoItem = {
@@ -469,62 +484,76 @@ function raiseBeforeEpisode(
   return gap >= 0 && gap <= RAISE_EXPLAINS_WITHIN_MS ? raise : null;
 }
 
-function describeRaise(
-  raise: CatalogRaiseEstimate | null,
-  listing: RotinaActionListing,
-): { headline: string; details: string[] } {
+function ownOtherWarning(raise: CatalogRaiseEstimate): string | null {
+  if (!raise.ownOther) return null;
+  return `Seu outro anúncio neste produto (${raise.ownOther.itemId}) está a ${formatMoney(
+    raise.ownOther.price,
+  )}: acima disso, a vitrine tende a passar para ele. Para a alta valer, suba os dois.`;
+}
+
+function describeRaise(raise: CatalogRaiseEstimate | null): { headline: string; details: string[] } {
   if (!raise) return { headline: "Ganhando no catálogo", details: [] };
-  const details: string[] = [];
-  const ownOtherLine = raise.ownOther
-    ? `Seu outro anúncio neste produto (${raise.ownOther.itemId}) está a ${formatMoney(
-        raise.ownOther.price,
-      )}: acima disso, a vitrine tende a passar para ele. Para a alta valer, suba os dois.`
-    : null;
   if (raise.alone || raise.cheapest === null || raise.winCeiling === null) {
-    details.push(`Hoje: ${formatMoney(raise.currentPrice)} · nenhum outro vendedor neste produto`);
-    details.push(
+    const details = [
+      `Hoje: ${formatMoney(raise.currentPrice)} · nenhum outro vendedor neste produto`,
       "Sem concorrente, não há teto pela disputa do catálogo. O ML ainda pode rebaixar um preço muito acima do mercado.",
-    );
-    if (ownOtherLine) details.push(ownOtherLine);
+    ];
+    const own = ownOtherWarning(raise);
+    if (own) details.push(own);
     return { headline: "Ganhando sem concorrente no catálogo", details };
   }
+  // Os números (teto, dividir, ganho) vão no painel ao lado; aqui, só o porquê.
+  const logistic = raise.cheapestLogisticLabel ? ` (${raise.cheapestLogisticLabel})` : "";
+  const price = `${formatMoney(raise.cheapest.price)}${logistic}`;
+  return {
+    headline: "Ganhando com folga no catálogo",
+    details: [
+      raise.competitorCount === 1
+        ? `Único concorrente: ${price}`
+        : `Concorrente mais barato: ${price} · ${raise.competitorCount} outros vendedores no produto`,
+    ],
+  };
+}
 
-  const cheapestLabel = raise.cheapestLogisticLabel ? ` (${raise.cheapestLogisticLabel})` : "";
-  details.push(
-    `Estimativa: ganhar sozinho até ~${formatMoney(raise.winCeiling)} · dividir o 1º lugar a ~${formatMoney(
-      raise.shareCeiling ?? raise.cheapest.price,
-    )} · hoje ${formatMoney(raise.currentPrice)}`,
-  );
-  if (raise.gainPerUnit !== null) {
-    const monthly =
-      listing.unitsPerDay !== null && listing.unitsPerDay > 0
-        ? ` · ≈ ${formatMoney(roundMoney(raise.gainPerUnit * listing.unitsPerDay * 30))}/mês a mais, antes de taxa e imposto`
-        : "";
-    details.push(
-      `+${formatMoney(raise.gainPerUnit)} por venda (+${formatPercent(raise.gainPercent)})${monthly}`,
-    );
+/** Painel da subida: `null` sem teto (sozinho no produto) ou sem estimativa. */
+export function buildRaisePanel(
+  raise: CatalogRaiseEstimate | null,
+  unitsPerDay: number | null,
+): RotinaRaisePanel | null {
+  if (
+    !raise ||
+    raise.alone ||
+    raise.winCeiling === null ||
+    raise.shareCeiling === null ||
+    raise.gainPerUnit === null ||
+    raise.gainPercent === null
+  ) {
+    return null;
   }
-  details.push(
-    `${raise.competitorCount} outro${raise.competitorCount === 1 ? "" : "s"} vendedor${
-      raise.competitorCount === 1 ? "" : "es"
-    } no produto`,
-  );
+  const warnings: string[] = [];
   if (raise.belowBand) {
-    details.push("O teto ficou logo abaixo da faixa em que o frete passa a ser seu.");
+    warnings.push("O teto ficou logo abaixo da faixa em que o frete passa a ser seu.");
   }
   if (raise.betterLogistics) {
-    details.push(
+    warnings.push(
       `Há concorrente com entrega melhor que a sua${
         raise.betterLogistics.label ? ` (${raise.betterLogistics.label})` : ""
       } a ${formatMoney(raise.betterLogistics.price)}: a folga real pode ser menor.`,
     );
   }
-  if (ownOtherLine) details.push(ownOtherLine);
+  const own = ownOtherWarning(raise);
+  if (own) warnings.push(own);
   return {
-    headline: `Ganhando com folga: o concorrente mais barato está a ${formatMoney(
-      raise.cheapest.price,
-    )}${cheapestLabel}`,
-    details,
+    currentPrice: raise.currentPrice,
+    winCeiling: raise.winCeiling,
+    shareCeiling: raise.shareCeiling,
+    gainPerUnit: raise.gainPerUnit,
+    gainPercent: raise.gainPercent,
+    monthlyGain:
+      unitsPerDay !== null && unitsPerDay > 0
+        ? Math.round(raise.gainPerUnit * unitsPerDay * 30)
+        : null,
+    warnings,
   };
 }
 
@@ -587,7 +616,7 @@ function describe(
 
   switch (rule) {
     case "catalog_raise_price":
-      return describeRaise(ctx.raise, listing);
+      return describeRaise(ctx.raise);
 
     case "catalog_losing":
     case "catalog_shared": {
@@ -840,6 +869,7 @@ export function buildRotinaView(input: RotinaViewInput): RotinaView {
       details: text.details,
       floor,
       verdict,
+      raisePanel: buildRaisePanel(raise, listing.unitsPerDay),
       related: args.relatedListing ?? null,
       catalog: live
         ? {

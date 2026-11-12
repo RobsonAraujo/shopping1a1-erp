@@ -193,7 +193,10 @@ describe("RotinaActionRow", () => {
     assert.match(row.className, /border-l-emerald-500/);
     const content = text(rendered.container);
     assert.match(content, /Ganhando com folga/);
-    assert.match(content, /Estimativa: ganhar sozinho até ~R\$ 43,65 · dividir o 1º lugar a ~R\$ 45,00/);
+    assert.match(content, /Concorrente mais barato: R\$ 45,00 \(Flex\)/);
+    assert.match(content, /Até onde dá para subir · estimativa/);
+    assert.match(content, /Ganhar sozinho até:\s*~R\$ 43,65\s*\+R\$ 3,65 por venda \(\+9,1%\)/);
+    assert.match(content, /Hoje\s*R\$ 40,00\s*Dividir o 1º lugar\s*~R\$ 45,00/);
     assert.match(content, /É uma estimativa: simule antes e, depois de subir, confira se continua ganhando/);
     const simulateButton = [...rendered.container.querySelectorAll("button")].find((button) =>
       button.textContent?.includes("Simular a"),

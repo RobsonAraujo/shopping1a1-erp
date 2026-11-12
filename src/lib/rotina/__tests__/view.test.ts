@@ -426,12 +426,23 @@ describe("buildRotinaView: subir preço no catálogo", () => {
     assert.equal(action.ageLabel, null);
     assert.equal(action.catalog?.raise?.winCeiling, 43.65);
     assert.equal(action.catalog?.raise?.shareCeiling, 45);
-    assert.match(action.headline, /concorrente mais barato está a R\$\s?45,00 \(Flex\)/);
-    assert.ok(
-      action.details.some((line) =>
-        /^Estimativa: ganhar sozinho até ~R\$\s?43,65 · dividir o 1º lugar a ~R\$\s?45,00/.test(line),
-      ),
+    assert.equal(action.headline, "Ganhando com folga no catálogo");
+    // O texto diz o porquê; os números vão no painel ao lado.
+    assert.equal(action.details.length, 1);
+    assert.match(
+      action.details[0],
+      /^Concorrente mais barato: R\$\s?45,00 \(Flex\) · 2 outros vendedores no produto$/,
     );
+    assert.deepEqual(action.raisePanel, {
+      currentPrice: 40,
+      winCeiling: 43.65,
+      shareCeiling: 45,
+      gainPerUnit: 3.65,
+      gainPercent: 9.13,
+      // Sem retrato da rodada, não há leitura de vendas: sem estimativa por mês.
+      monthlyGain: null,
+      warnings: [],
+    });
     assert.deepEqual(action.verdict, { tone: "neutral", text: CATALOG_RAISE_CHECK_LINE });
     assert.equal(action.floor, null, "subir não precisa do piso");
     assert.equal(action.links.primary.label, "Editar preço");
@@ -449,10 +460,10 @@ describe("buildRotinaView: subir preço no catálogo", () => {
     const view = buildRotinaView(input({ catalogLive: [sibling] }));
     const action = view.actions.find((item) => item.id === "catalog_raise_price:CAT6");
     assert.ok(action);
-    assert.ok(
-      action.details.some((line) =>
-        /^Seu outro anúncio neste produto \(MLB-IRMAO\) está a R\$\s?41,50: .*suba os dois\.$/.test(line),
-      ),
+    assert.equal(action.raisePanel?.warnings.length, 1);
+    assert.match(
+      action.raisePanel?.warnings[0] ?? "",
+      /^Seu outro anúncio neste produto \(MLB-IRMAO\) está a R\$\s?41,50: .*suba os dois\.$/,
     );
   });
 
@@ -460,6 +471,11 @@ describe("buildRotinaView: subir preço no catálogo", () => {
     const health = listing({ mlItemId: "CAT5", catalogListing: true, salePrice: 40 });
     const view = buildRotinaView(input({ health: [health], catalogLive: [raised] }));
     assert.equal(view.listings.find((row) => row.mlItemId === "CAT5")?.raiseCeiling, 43.65);
+    // 2 vendas/dia × R$ 3,65 × 30 = R$ 219 por mês, em reais inteiros.
+    assert.equal(
+      view.actions.find((item) => item.id === "catalog_raise_price:CAT5")?.raisePanel?.monthlyGain,
+      219,
+    );
 
     const tight = buildRotinaView(
       input({

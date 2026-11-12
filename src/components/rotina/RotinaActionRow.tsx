@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { RotinaFloorBox } from "@/components/rotina/RotinaFloorBox";
+import { RotinaRaiseBox } from "@/components/rotina/RotinaRaiseBox";
 import {
   RotinaListingTargetForm,
   type ListingTargetDraft,
@@ -284,6 +285,9 @@ export function RotinaActionRow({
                 recalculateDisabled={handlers.busy}
                 className="lg:w-72 lg:shrink-0"
               />
+            ) : null}
+            {action.raisePanel ? (
+              <RotinaRaiseBox panel={action.raisePanel} className="lg:w-72 lg:shrink-0" />
             ) : null}
           </div>
         </div>
