@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { SegmentTag } from "@/components/rotina/SegmentTag";
-import { RULE_ICON_CLASS, RULE_VISUALS } from "@/components/rotina/rule-visuals";
+import { RULE_VISUALS, ruleIconClass } from "@/components/rotina/rule-visuals";
 import { formatPercent } from "@/lib/rotina/format";
 import {
   ROTINA_RULE_KEYS,
@@ -215,7 +215,7 @@ export function RotinaTargetsSheet({
                     <span
                       className={cn(
                         "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg",
-                        RULE_ICON_CLASS[visual.tone],
+                        ruleIconClass(rule),
                       )}
                     >
                       <Icon className="size-3.5" aria-hidden />

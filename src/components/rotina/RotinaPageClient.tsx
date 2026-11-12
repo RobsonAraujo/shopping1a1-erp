@@ -21,6 +21,12 @@ import {
   RotinaTargetsSheet,
   type RotinaTargetsDraft,
 } from "@/components/rotina/RotinaTargetsSheet";
+import {
+  RULE_THEME_LABEL,
+  RULE_VISUALS,
+  themeTextClass,
+  type RuleTheme,
+} from "@/components/rotina/rule-visuals";
 import { useRotinaRefresh } from "@/components/rotina/use-rotina-refresh";
 import { useUpdatedToday } from "@/components/rotina/use-updated-today";
 import { useBeforeUnloadGuard } from "@/hooks/use-before-unload-guard";
@@ -33,8 +39,10 @@ import {
   groupActiveByRule,
   summarizeActions,
   type ActionOverride,
+  type ActionGroup,
   type SegmentFilter,
 } from "@/lib/rotina/view-summary";
+import { cn } from "@/lib/utils";
 
 type ViewTab = "acoes" | "anuncios";
 
@@ -142,6 +150,22 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
     },
   ];
   const allGroupsOpen = groups.length > 0 && groups.every((group) => openGroups.has(group.rule));
+  // Tarefas do mesmo tema (mesma cor) juntas. `groups` já vem do mais urgente
+  // para o mais rotineiro, então o tema entra na ordem da sua tarefa mais urgente.
+  const themes = useMemo(() => {
+    const byTheme = new Map<RuleTheme, ActionGroup[]>();
+    for (const group of groups) {
+      const theme = RULE_VISUALS[group.rule].theme;
+      const list = byTheme.get(theme) ?? [];
+      list.push(group);
+      byTheme.set(theme, list);
+    }
+    return [...byTheme].map(([theme, list]) => ({
+      theme,
+      groups: list,
+      count: list.reduce((total, group) => total + group.actions.length, 0),
+    }));
+  }, [groups]);
 
   const toggleGroup = useCallback((rule: RotinaRuleKey) => {
     setOpenGroups((current) => {
@@ -419,17 +443,40 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
                     {allGroupsOpen ? "Fechar todas" : "Abrir todas"}
                   </Button>
                 </div>
-                {groups.map((group) => (
-                  <RotinaTaskGroup
-                    key={group.rule}
-                    rule={group.rule}
-                    actions={group.actions}
-                    handlers={handlers}
-                    timeZone={view.timeZone}
-                    open={openGroups.has(group.rule)}
-                    onToggle={() => toggleGroup(group.rule)}
-                  />
-                ))}
+                <div className="space-y-6">
+                  {themes.map((entry) => (
+                    <section
+                      key={entry.theme}
+                      aria-labelledby={`rotina-theme-${entry.theme}`}
+                      className="space-y-2"
+                    >
+                      <h2
+                        id={`rotina-theme-${entry.theme}`}
+                        className={cn(
+                          "flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-wide",
+                          themeTextClass(entry.theme),
+                        )}
+                      >
+                        <span className="size-1.5 rounded-full bg-current" aria-hidden />
+                        {RULE_THEME_LABEL[entry.theme]}
+                        <span className="font-normal normal-case tracking-normal text-[var(--muted-foreground)]">
+                          · {entry.count} {entry.count === 1 ? "ação" : "ações"}
+                        </span>
+                      </h2>
+                      {entry.groups.map((group) => (
+                        <RotinaTaskGroup
+                          key={group.rule}
+                          rule={group.rule}
+                          actions={group.actions}
+                          handlers={handlers}
+                          timeZone={view.timeZone}
+                          open={openGroups.has(group.rule)}
+                          onToggle={() => toggleGroup(group.rule)}
+                        />
+                      ))}
+                    </section>
+                  ))}
+                </div>
               </div>
             )}
 

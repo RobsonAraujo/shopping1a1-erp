@@ -6,11 +6,7 @@ import {
   type RotinaActionHandlers,
 } from "@/components/rotina/RotinaActionRow";
 import { RotinaThumb } from "@/components/rotina/RotinaThumb";
-import {
-  RULE_COUNT_PILL_CLASS,
-  RULE_ICON_CLASS,
-  RULE_VISUALS,
-} from "@/components/rotina/rule-visuals";
+import { RULE_VISUALS, ruleIconClass } from "@/components/rotina/rule-visuals";
 import { ROTINA_RULES, type RotinaRuleKey } from "@/lib/rotina/rule-registry";
 import type { RotinaActionView } from "@/lib/rotina/view";
 import { cn } from "@/lib/utils";
@@ -65,7 +61,7 @@ export function RotinaTaskGroup({
         open ? "shadow-sm" : "hover:shadow-sm",
       )}
     >
-      <h2>
+      <h3>
         <button
           type="button"
           onClick={onToggle}
@@ -83,7 +79,7 @@ export function RotinaTaskGroup({
           <span
             className={cn(
               "flex size-9 shrink-0 items-center justify-center rounded-lg",
-              RULE_ICON_CLASS[visual.tone],
+              ruleIconClass(rule),
             )}
           >
             <Icon className="size-[18px]" aria-hidden />
@@ -99,10 +95,7 @@ export function RotinaTaskGroup({
                 ) : null}
               </span>
               <span
-                className={cn(
-                  "rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
-                  RULE_COUNT_PILL_CLASS[visual.tone],
-                )}
+                className="rounded-full bg-[var(--muted)] px-2 py-0.5 text-xs font-semibold tabular-nums text-[var(--foreground)]"
               >
                 {actions.length}
               </span>
@@ -140,7 +133,7 @@ export function RotinaTaskGroup({
             </span>
           ) : null}
         </button>
-      </h2>
+      </h3>
       {open ? (
         <ul
           id={panelId}
