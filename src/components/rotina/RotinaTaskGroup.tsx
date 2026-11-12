@@ -92,6 +92,11 @@ export function RotinaTaskGroup({
             <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
               <span className="text-[15px] font-semibold text-[var(--foreground)]">
                 {definition.taskLabel}
+                {visual.taskHint ? (
+                  <span className="ml-1.5 text-xs font-normal text-[var(--muted-foreground)]">
+                    ({visual.taskHint})
+                  </span>
+                ) : null}
               </span>
               <span
                 className={cn(
