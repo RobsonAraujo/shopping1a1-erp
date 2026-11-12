@@ -1,6 +1,7 @@
-import type { ListingHealth } from "@/generated/prisma";
+import { Prisma, type ListingHealth } from "@/generated/prisma";
 import type { FinancialEvaluationRow } from "@/lib/lucratividade/financial-evaluation-data";
 import { decimalToNumber } from "@/lib/catalog-report/catalog-competition";
+import type { PromotionWindow } from "@/lib/mercadolibre/promotion-coverage";
 import type {
   RotinaFloorBand,
   RotinaListingSnapshot,
@@ -60,6 +61,34 @@ export function parseFloorBands(value: unknown): RotinaFloorBand[] {
   return bands;
 }
 
+function isoString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
+}
+
+/** `promotion_windows` é Json: `null` (não consultado) segue `null`. */
+export function parsePromotionWindows(value: unknown): PromotionWindow[] | null {
+  if (!Array.isArray(value)) return null;
+  const windows: PromotionWindow[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const raw = entry as Record<string, unknown>;
+    const status = raw.status === "started" || raw.status === "pending" ? raw.status : null;
+    const endsAt = isoString(raw.endsAt);
+    const startsAt = isoString(raw.startsAt);
+    if (!status || !endsAt || (status === "pending" && !startsAt)) continue;
+    windows.push({
+      status,
+      name: typeof raw.name === "string" ? raw.name : null,
+      type: typeof raw.type === "string" ? raw.type : "UNKNOWN",
+      startsAt,
+      endsAt,
+    });
+  }
+  return windows;
+}
+
 function iso(value: Date | null): string | null {
   return value ? value.toISOString() : null;
 }
@@ -81,6 +110,7 @@ export function healthRowToSnapshot(row: ListingHealth): RotinaListingSnapshot {
     promotionType: row.promotionType,
     promotionEndsAt: iso(row.promotionEndsAt),
     promotionEndKnown: row.promotionEndKnown,
+    promotionWindows: parsePromotionWindows(row.promotionWindows),
     marginPercent: decimalToNumber(row.marginPercent),
     marginValue: decimalToNumber(row.marginValue),
     marginAfterAdsPercent: decimalToNumber(row.marginAfterAdsPercent),
@@ -128,6 +158,9 @@ export function snapshotToHealthData(snapshot: RotinaListingSnapshot, runId: str
     promotionType: snapshot.promotionType,
     promotionEndsAt: date(snapshot.promotionEndsAt),
     promotionEndKnown: snapshot.promotionEndKnown,
+    // Grava `null` de propósito: janela de uma rodada antiga não pode sobrar
+    // num anúncio que saiu da promoção.
+    promotionWindows: snapshot.promotionWindows ?? Prisma.DbNull,
     marginPercent: snapshot.marginPercent,
     marginValue: snapshot.marginValue,
     marginAfterAdsPercent: snapshot.marginAfterAdsPercent,

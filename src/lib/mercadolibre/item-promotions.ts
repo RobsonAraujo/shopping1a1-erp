@@ -1,5 +1,6 @@
 import { getMercadoLibreConfig } from "./config";
 import { fetchWithRetry, MlApiFetchError } from "./fetch-with-retry";
+import { calendarDayDiff, getCalendarDateParts } from "./promotion-coverage";
 
 export type ItemPromotionRecord = {
   id?: string;
@@ -33,35 +34,8 @@ export function parsePromotionFinishDate(value: string | undefined): Date | null
   return Number.isFinite(parsed.getTime()) ? parsed : null;
 }
 
-export function getCalendarDateParts(
-  date: Date,
-  timeZone: string,
-): { year: number; month: number; day: number } {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(date);
-
-  return {
-    year: Number(parts.find((p) => p.type === "year")?.value),
-    month: Number(parts.find((p) => p.type === "month")?.value),
-    day: Number(parts.find((p) => p.type === "day")?.value),
-  };
-}
-
-export function calendarDayDiff(
-  from: Date,
-  to: Date,
-  timeZone: string,
-): number {
-  const fromParts = getCalendarDateParts(from, timeZone);
-  const toParts = getCalendarDateParts(to, timeZone);
-  const fromUtc = Date.UTC(fromParts.year, fromParts.month - 1, fromParts.day);
-  const toUtc = Date.UTC(toParts.year, toParts.month - 1, toParts.day);
-  return Math.round((toUtc - fromUtc) / (24 * 60 * 60 * 1000));
-}
+// Os helpers de dia civil vivem no módulo puro (importável no client).
+export { calendarDayDiff, getCalendarDateParts };
 
 /** Início do dia local no timezone informado. */
 export function startOfDayInTimeZone(date: Date, timeZone: string): Date {

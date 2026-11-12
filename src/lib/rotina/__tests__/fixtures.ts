@@ -41,6 +41,7 @@ export function listing(
     promotionType: "PRICE_DISCOUNT",
     promotionEndsAt: "2026-11-30T03:00:00.000Z",
     promotionEndKnown: true,
+    promotionWindows: null,
     marginPercent: 15,
     marginValue: 15,
     marginAfterAdsPercent: 12,

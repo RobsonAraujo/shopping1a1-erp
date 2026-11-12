@@ -3,6 +3,8 @@
  * string: tudo aqui atravessa a fronteira RSC → client sem conversão.
  */
 
+import type { PromotionWindow } from "@/lib/mercadolibre/promotion-coverage";
+
 export type RotinaFloorBand = { from: number; to: number };
 
 /**
@@ -39,6 +41,8 @@ export type RotinaListingSnapshot = {
   promotionType: string | null;
   promotionEndsAt: string | null;
   promotionEndKnown: boolean;
+  /** Ativas + programadas. `null` = não consultado: vale `promotionEndsAt`. */
+  promotionWindows: PromotionWindow[] | null;
   marginPercent: number | null;
   marginValue: number | null;
   marginAfterAdsPercent: number | null;

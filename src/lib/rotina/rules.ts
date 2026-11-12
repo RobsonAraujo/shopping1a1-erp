@@ -1,3 +1,8 @@
+import {
+  promotionCoverage,
+  type PromotionCoverage,
+  type PromotionWindow,
+} from "@/lib/mercadolibre/promotion-coverage";
 import { localDayDiff } from "@/lib/rotina/time";
 import type { RotinaRuleKey } from "@/lib/rotina/rule-registry";
 import {
@@ -90,13 +95,58 @@ export function marginForRules(
   return { percent: listing.marginPercent, basis: "contribution", fallback: null };
 }
 
+export type ListingPromotionCoverage = {
+  /** Quando o anúncio fica de fato sem promoção. */
+  endsAt: string | null;
+  /** A promoção que termina por último na cobertura (`null` sem as janelas). */
+  last: PromotionWindow | null;
+  /** Programadas que emendam na ativa. */
+  extendedBy: PromotionWindow[];
+  nextAfterGap: PromotionCoverage["nextAfterGap"];
+};
+
+/**
+ * Ativa + programadas que emendam. Sem as janelas (linha de antes da coluna,
+ * ou a consulta não trouxe nenhuma ativa), vale a data da ativa, como antes.
+ */
+export function listingPromotionCoverage(
+  listing: Pick<RotinaListingSnapshot, "promotionEndsAt" | "promotionWindows">,
+  timeZone: string,
+): ListingPromotionCoverage {
+  const fallback: ListingPromotionCoverage = {
+    endsAt: listing.promotionEndsAt,
+    last: null,
+    extendedBy: [],
+    nextAfterGap: null,
+  };
+  if (!listing.promotionWindows) return fallback;
+  const coverage = promotionCoverage(listing.promotionWindows, timeZone);
+  if (!coverage.coveredUntil) return fallback;
+  const endsAtMs = new Date(coverage.coveredUntil).getTime();
+  const last =
+    coverage.extendedBy.at(-1) ??
+    listing.promotionWindows.find(
+      (window) =>
+        window.status === "started" && new Date(window.endsAt).getTime() === endsAtMs,
+    ) ??
+    null;
+  return {
+    endsAt: coverage.coveredUntil,
+    last,
+    extendedBy: coverage.extendedBy,
+    nextAfterGap: coverage.nextAfterGap,
+  };
+}
+
+/** Dias até o anúncio ficar sem promoção (contando as programadas que emendam). */
 export function promotionDaysLeft(
-  listing: Pick<RotinaListingSnapshot, "promotionEndsAt">,
+  listing: Pick<RotinaListingSnapshot, "promotionEndsAt" | "promotionWindows">,
   now: Date,
   timeZone: string,
 ): number | null {
-  if (!listing.promotionEndsAt) return null;
-  const end = new Date(listing.promotionEndsAt);
+  const { endsAt } = listingPromotionCoverage(listing, timeZone);
+  if (!endsAt) return null;
+  const end = new Date(endsAt);
   if (!Number.isFinite(end.getTime())) return null;
   return localDayDiff(now, end, timeZone);
 }

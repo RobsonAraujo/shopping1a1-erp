@@ -41,7 +41,7 @@ A página **só lê o banco**: abrir não chama o ML. As regras são avaliadas *
 | Chave | Seg. | Tipo | Dispara quando |
 |---|---|---|---|
 | `catalog_losing` | Cat. | condição | `catalogStatus = losing` |
-| `promo_expiring` | Próp. | condição | promoção termina em ≤ `promotionExpiringSoonDays` |
+| `promo_expiring` | Próp. | condição | o anúncio fica **sem promoção** em ≤ `promotionExpiringSoonDays`: a ativa mais as programadas (`pending`) que emendam nela, começando até o dia seguinte (ver abaixo) |
 | `catalog_takeover` | Próp. | evento | catálogo **novo** ligado a um próprio |
 | `margin_below_min` | Ambos | condição | margem **após ADS** < mínimo (MC se o ADS não serve) |
 | `below_pma` | Ambos | condição | preço < PMA |
@@ -49,6 +49,8 @@ A página **só lê o banco**: abrir não chama o ML. As regras são avaliadas *
 | `catalog_shared` | Cat. | condição | `catalogStatus = shared` |
 | `ads_missing` | Próp. | condição | `adsStatus` ≠ `active` (usa `adsStatus`, não `hasActiveAds`, que conta pausado como ativo) |
 | `promo_missing` | Próp. | condição | consulta de preço OK e sem desconto |
+
+Promoção programada: a rodada guarda em `promotion_windows` as promoções `started` e `pending` da mesma consulta `/seller-promotions/items/{id}` que já lia a data de término, sem chamada nova. `promotionCoverage` (`src/lib/mercadolibre/promotion-coverage.ts`) emenda as programadas que começam até o dia seguinte ao fim da cobertura (dia civil de SP). Se houver buraco, a tarefa fica e o card diz quantos dias sem promoção. A Home (widget Promoções, lista "vencendo") usa a mesma função. `promo_missing` não olha programadas: anúncio sem promoção hoje é tarefa.
 
 Invariante herdado da Home: **consulta que falha não vira problema**.
 - Falha de preço → `promotionKnown=false` → não entra em "sem promoção". Antes, a Lucratividade engolia a falha com fallback; agora marca a linha.

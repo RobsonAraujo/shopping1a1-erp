@@ -11,6 +11,10 @@ import {
   isPromotionExpiringWithinDays,
   pickEarliestActivePromotion,
 } from "@/lib/mercadolibre/item-promotions";
+import {
+  promotionCoverage,
+  toPromotionWindows,
+} from "@/lib/mercadolibre/promotion-coverage";
 import { getItemSku } from "@/lib/mercadolibre/item-sku";
 import { fetchItemSalePrice } from "@/lib/mercadolibre/item-sale-price";
 import type { ItemBody } from "@/lib/mercadolibre/types";
@@ -27,6 +31,8 @@ export type PromotionSummaryRow = {
   promotionName: string | null;
   promotionEndsAt: string | null;
   daysUntilEnd: number | null;
+  /** O prazo conta uma promoção programada que emenda na ativa. */
+  scheduledInChain: boolean;
   catalogListing: boolean;
   soldQuantity: number;
 };
@@ -99,6 +105,7 @@ function buildBaseRow(
     promotionName: null,
     promotionEndsAt: null,
     daysUntilEnd: null,
+    scheduledInChain: false,
     catalogListing: item.catalog_listing === true,
     soldQuantity: item.sold_quantity ?? 0,
   };
@@ -175,22 +182,26 @@ async function scanItemPromotion(
       };
     }
 
-    const daysUntilEnd = daysUntilPromotionEnd(
-      active.finishDate,
-      now,
-      timeZone,
-    );
+    // Vence quando o anúncio fica de fato sem promoção: a ativa mais as
+    // programadas que emendam nela (mesma regra da Central de anúncios).
+    const coverage = promotionCoverage(toPromotionWindows(promotions), timeZone);
+    const endsAt = coverage.coveredUntil
+      ? new Date(coverage.coveredUntil)
+      : active.finishDate;
+
+    const daysUntilEnd = daysUntilPromotionEnd(endsAt, now, timeZone);
 
     const enriched: PromotionSummaryRow = {
       ...baseRow,
       promotionType: active.type,
       promotionName: active.name,
-      promotionEndsAt: active.finishDate.toISOString(),
+      promotionEndsAt: endsAt.toISOString(),
       daysUntilEnd,
+      scheduledInChain: coverage.extendedBy.length > 0,
     };
 
     const expiring = isPromotionExpiringWithinDays(
-      active.finishDate,
+      endsAt,
       now,
       expiringSoonDays,
       timeZone,

@@ -19,6 +19,10 @@ import {
   fetchItemPromotions,
   pickEarliestActivePromotion,
 } from "@/lib/mercadolibre/item-promotions";
+import {
+  toPromotionWindows,
+  type PromotionWindow,
+} from "@/lib/mercadolibre/promotion-coverage";
 import { getItemSku } from "@/lib/mercadolibre/item-sku";
 import { siteIdFromItemId } from "@/lib/mercadolibre/listing-fees";
 import { fetchUnitsSoldForItemsInWindowCached } from "@/lib/mercadolibre/sales-window-cache";
@@ -230,6 +234,7 @@ async function buildSnapshot(
   let promotionType: string | null = null;
   let promotionEndsAt: string | null = null;
   let promotionEndKnown = true;
+  let promotionWindows: PromotionWindow[] | null = null;
   const promotionKnown = row.promotionKnown !== false;
   if (!row.catalogListing && row.hasPromotion && promotionKnown) {
     try {
@@ -238,6 +243,9 @@ async function buildSnapshot(
         maxAttempts: 1,
       });
       const active = pickEarliestActivePromotion(promotions);
+      // A mesma resposta traz as programadas: é o que diz se o anúncio fica
+      // mesmo sem promoção quando a ativa acabar.
+      promotionWindows = toPromotionWindows(promotions);
       if (active) {
         promotionName = active.name;
         promotionType = active.type;
@@ -274,6 +282,7 @@ async function buildSnapshot(
     promotionType,
     promotionEndsAt,
     promotionEndKnown,
+    promotionWindows,
     marginPercent: row.breakdown?.marginPercent ?? null,
     marginValue: row.breakdown?.marginValue ?? null,
     marginAfterAdsPercent: row.marginAfterAdsPercent,

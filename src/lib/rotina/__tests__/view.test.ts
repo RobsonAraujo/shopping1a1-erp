@@ -6,6 +6,7 @@ import {
   groupActiveByRule,
   summarizeActions,
 } from "@/lib/rotina/view-summary";
+import type { PromotionWindow } from "@/lib/mercadolibre/promotion-coverage";
 import { NOW, TZ, catalogLive, listing, settings, state } from "./fixtures";
 
 function input(overrides: Partial<RotinaViewInput> = {}): RotinaViewInput {
@@ -214,6 +215,66 @@ describe("buildRotinaView", () => {
       PAUSED: ["Abaixo do PMA", "Anúncio não está mais ativo no ML"],
       CAT9: ["Catálogo", "Voltou a ganhar a vitrine às 11h05"],
     });
+  });
+
+  it("tells when a scheduled promotion continues, and when it leaves a gap", () => {
+    const active: PromotionWindow = {
+      status: "started",
+      name: "Oferta",
+      type: "PRICE_DISCOUNT",
+      startsAt: "2026-11-01T03:00:00.000Z",
+      endsAt: "2026-11-12T02:59:00.000Z",
+    };
+    const pending = (name: string, startsAt: string, endsAt: string): PromotionWindow => ({
+      status: "pending",
+      name,
+      type: "DEAL",
+      startsAt,
+      endsAt,
+    });
+    const view = buildRotinaView(
+      input({
+        health: [
+          listing({
+            mlItemId: "GAP",
+            promotionName: "Oferta",
+            promotionEndsAt: active.endsAt,
+            promotionWindows: [
+              active,
+              pending("Relâmpago", "2026-11-12T03:00:00.000Z", "2026-11-13T02:59:00.000Z"),
+              pending("Black", "2026-11-16T03:00:00.000Z", "2026-11-30T02:59:00.000Z"),
+            ],
+          }),
+          listing({
+            mlItemId: "CONTINUES",
+            promotionName: "Oferta",
+            promotionEndsAt: active.endsAt,
+            promotionWindows: [
+              active,
+              pending("Black", "2026-11-12T03:00:00.000Z", "2026-11-30T02:59:00.000Z"),
+            ],
+          }),
+        ],
+        states: [
+          state({
+            mlItemId: "CONTINUES",
+            rule: "promo_expiring",
+            status: "resolved",
+            resolvedAt: "2026-11-10T09:00:00.000Z",
+          }),
+        ],
+      }),
+    );
+
+    const gap = view.actions.find((action) => action.id === "promo_expiring:GAP");
+    assert.ok(gap);
+    assert.equal(gap.headline, "Promoção programada “Relâmpago” termina em 2 dias (12/11)");
+    assert.ok(gap.details.includes("Emenda com “Oferta”, que termina 11/11"));
+    assert.ok(gap.details.includes("Programada “Black” só começa 16/11: 3 dias sem promoção"));
+
+    assert.ok(!view.actions.some((action) => action.id === "promo_expiring:CONTINUES"));
+    const resolved = view.info.resolvedToday.find((item) => item.mlItemId === "CONTINUES");
+    assert.equal(resolved?.outcome, "Promoção programada “Black” até 29/11");
   });
 
   it("gives every listing row its own target and the segment default", () => {

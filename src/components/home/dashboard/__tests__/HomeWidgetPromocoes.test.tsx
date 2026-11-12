@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
 import { act, renderIntoDocument } from "@/test-setup/render";
 import { clearWidgetFetch } from "@/lib/home/dashboard/widget-fetch-cache";
+import { sellerPromotionsUrl } from "@/lib/mercadolibre/seller-listing-url";
 import { HomeWidgetPromocoes } from "@/components/home/dashboard/widgets/HomeWidgetPromocoes";
 import {
   flush,
@@ -103,6 +104,7 @@ describe("HomeWidgetPromocoes", () => {
       promotionName: null,
       promotionEndsAt: null,
       daysUntilEnd: null,
+      scheduledInChain: false,
       catalogListing: false,
       soldQuantity: index,
       ...overrides,
@@ -126,6 +128,39 @@ describe("HomeWidgetPromocoes", () => {
     assert.match(text, /Sem promoção/);
     assert.match(text, /SKU-2/);
     assert.match(text, /2 vendidos/);
+    unmount();
+  });
+
+  it("leva à página de promoções do ML, e as linhas seguem abrindo o anúncio", async () => {
+    const { container, unmount } = await renderWidget(() =>
+      Response.json(
+        emptyPayload({ expiringSoon: [row(1, { daysUntilEnd: 2, promotionName: "Oferta" })] }),
+      ),
+    );
+    const links = [...container.querySelectorAll("a")];
+    const promotions = links.find((link) => link.textContent?.includes("Abrir promoções"));
+    assert.equal(promotions?.getAttribute("href"), sellerPromotionsUrl());
+    assert.equal(promotions?.getAttribute("target"), "_blank");
+    assert.ok(
+      links.some((link) => link.getAttribute("href") === "https://produto.mercadolivre.com.br/MLB-1"),
+    );
+    unmount();
+  });
+
+  it("marca quando o prazo conta uma promoção programada", async () => {
+    const { container, unmount } = await renderWidget(() =>
+      Response.json(
+        emptyPayload({
+          expiringSoon: [
+            row(1, { daysUntilEnd: 2, promotionName: "Oferta", scheduledInChain: true }),
+            row(3, { daysUntilEnd: 1, promotionName: "Outra" }),
+          ],
+        }),
+      ),
+    );
+    const text = container.textContent ?? "";
+    assert.match(text, /Oferta · \+ programada/);
+    assert.doesNotMatch(text, /Outra · \+ programada/);
     unmount();
   });
 

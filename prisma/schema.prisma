@@ -390,7 +390,11 @@ model ListingHealth {
   promotionEndsAt       DateTime? @map("promotion_ends_at")
   /// `false` = há promoção, mas a consulta da data de término falhou.
   promotionEndKnown     Boolean   @default(true) @map("promotion_end_known")
-  marginPercent         Decimal?  @map("margin_percent") @db.Decimal(9, 2)
+  /// Promoções ativas e programadas (`PromotionWindow[]`), para saber até
+  /// quando o anúncio segue com desconto. `null` = não consultado (sem
+  /// promoção, catálogo ou linha antiga): vale `promotionEndsAt`.
+  promotionWindows      Json?     @map("promotion_windows")
+  marginPercent        Decimal?  @map("margin_percent") @db.Decimal(9, 2)
   marginValue           Decimal?  @map("margin_value") @db.Decimal(18, 2)
   marginAfterAdsPercent Decimal?  @map("margin_after_ads_percent") @db.Decimal(9, 2)
   marginAfterAdsValue   Decimal?  @map("margin_after_ads_value") @db.Decimal(18, 2)

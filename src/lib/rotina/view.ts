@@ -35,6 +35,7 @@ import {
   effectiveTacosTargetPercent,
   evaluateCatalogRules,
   evaluateRefreshRules,
+  listingPromotionCoverage,
   marginForRules,
   promotionDaysLeft,
 } from "@/lib/rotina/rules";
@@ -375,6 +376,11 @@ function related(entity: Entity | undefined, fallbackId: string): RotinaRelatedL
  * pela regra: ela também some se o anúncio foi pausado, se a regra foi
  * desligada em Metas ou se a meta mudou.
  */
+/** ` “Nome”` para emendar numa frase; vazio sem nome. */
+function quotedName(name: string | null): string {
+  return name ? ` “${name}”` : "";
+}
+
 function resolvedOutcome(
   rule: RotinaRuleKey,
   health: RotinaListingSnapshot,
@@ -391,11 +397,15 @@ function resolvedOutcome(
       return health.hasPromotion
         ? `Agora em promoção a ${formatMoney(health.salePrice)}`
         : fallback;
-    case "promo_expiring":
+    case "promo_expiring": {
       if (!health.hasPromotion) return "A promoção terminou";
-      return health.promotionEndsAt
-        ? `Promoção vai até ${formatShortDate(health.promotionEndsAt, timeZone)}`
-        : "Promoção renovada";
+      const coverage = listingPromotionCoverage(health, timeZone);
+      if (!coverage.endsAt) return "Promoção renovada";
+      const until = formatShortDate(coverage.endsAt, timeZone);
+      return coverage.last?.status === "pending"
+        ? `Promoção programada${quotedName(coverage.last.name)} até ${until}`
+        : `Promoção vai até ${until}`;
+    }
     case "margin_below_min": {
       const margin = marginForRules(health);
       if (margin.percent === null) return "Sem dados para calcular a margem agora";
@@ -457,15 +467,22 @@ function describe(
     }
 
     case "promo_expiring": {
+      const coverage = health ? listingPromotionCoverage(health, ctx.timeZone) : null;
       const days = health ? promotionDaysLeft(health, ctx.now, ctx.timeZone) : null;
-      const name = health?.promotionName ? `“${health.promotionName}”` : "Promoção";
+      // Com programada emendada, o que vence é a última da fila, não a ativa.
+      const scheduled = coverage?.last?.status === "pending" ? coverage.last : null;
+      const activeName = coverage?.last?.name ?? health?.promotionName ?? null;
+      const subject = scheduled
+        ? `Promoção programada${quotedName(scheduled.name)}`
+        : activeName
+          ? `“${activeName}”`
+          : "Promoção";
+      const endsAt = coverage?.endsAt ?? null;
       const when =
         days === null
           ? "em breve"
           : `${formatDaysUntil(days)}${
-              days > 1 && health?.promotionEndsAt
-                ? ` (${formatShortDate(health.promotionEndsAt, ctx.timeZone)})`
-                : ""
+              days > 1 && endsAt ? ` (${formatShortDate(endsAt, ctx.timeZone)})` : ""
             }`;
       if (health) {
         details.push(
@@ -475,8 +492,24 @@ function describe(
               : ""
           }`,
         );
+        if (scheduled && health.promotionEndsAt) {
+          details.push(
+            `Emenda com ${
+              health.promotionName ? `“${health.promotionName}”` : "a promoção atual"
+            }, que termina ${formatShortDate(health.promotionEndsAt, ctx.timeZone)}`,
+          );
+        }
+        const gap = coverage?.nextAfterGap;
+        if (gap?.window.startsAt) {
+          details.push(
+            `Programada${quotedName(gap.window.name)} só começa ${formatShortDate(
+              gap.window.startsAt,
+              ctx.timeZone,
+            )}: ${gap.daysWithout} dia${gap.daysWithout === 1 ? "" : "s"} sem promoção`,
+          );
+        }
       }
-      return { headline: `${name} termina ${when}`, details };
+      return { headline: `${subject} termina ${when}`, details };
     }
 
     case "promo_missing":

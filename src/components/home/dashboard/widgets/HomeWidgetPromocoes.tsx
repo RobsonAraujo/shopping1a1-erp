@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { ExternalLink } from "lucide-react";
 import { useInView } from "@/hooks/use-in-view";
 import { useWidgetFetch } from "@/hooks/use-widget-fetch";
 import {
@@ -9,9 +10,11 @@ import {
   HomeWidgetExpandableList,
   HomeWidgetListRow,
 } from "@/components/home/dashboard/HomeWidgetCard";
+import { Button } from "@/components/ui/button";
 import { UserFeedback } from "@/components/ui/user-feedback";
 import { PROMOTION_SUMMARY_ENDPOINT } from "@/config/dashboard-summary";
 import { formatApiErrorMessage, readApiError } from "@/lib/api/api-client-error";
+import { sellerPromotionsUrl } from "@/lib/mercadolibre/seller-listing-url";
 import { formatFinancialMoney } from "@/lib/pricing/financial-margin";
 import type {
   PromotionSummaryPayload,
@@ -65,6 +68,7 @@ function ExpiringRow({ row }: { row: PromotionSummaryRow }) {
       subtitle={joinSubtitle([
         formatFinancialMoney(row.salePrice),
         row.promotionName,
+        row.scheduledInChain && "+ programada",
         row.catalogListing && "Catálogo",
       ])}
       trailing={daysUntilLabel(row.daysUntilEnd)}
@@ -137,6 +141,17 @@ export function HomeWidgetPromocoes() {
         pending={entry.status === "loading"}
         error={entry.status === "error" ? entry.error : null}
         count={expiringSoon.length + withoutTotal}
+        actions={
+          // Onde a promoção é criada ou renovada, como na Central de anúncios.
+          // O link é da lista do painel, não de um anúncio: as linhas seguem
+          // abrindo o anúncio.
+          <Button asChild variant="ghost" size="sm" className="gap-1.5 px-2">
+            <a href={sellerPromotionsUrl()} target="_blank" rel="noopener noreferrer">
+              Abrir promoções
+              <ExternalLink className="size-3.5! opacity-60" aria-hidden />
+            </a>
+          </Button>
+        }
       >
         {data?.warnings?.length ? (
           <div className="mb-3">

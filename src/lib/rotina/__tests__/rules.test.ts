@@ -7,6 +7,7 @@ import {
   evaluateRefreshRules,
   marginForRules,
 } from "@/lib/rotina/rules";
+import type { PromotionWindow } from "@/lib/mercadolibre/promotion-coverage";
 import { NOW, TZ, catalogLive, listing, settings } from "./fixtures";
 
 function rules(
@@ -61,6 +62,32 @@ describe("evaluateRefreshRules — promoções", () => {
         { promotionEndsAt: "2026-11-20T03:00:00.000Z" },
         { settings: settings({ promotionExpiringSoonDays: 10 }) },
       ).includes("promo_expiring"),
+    );
+  });
+
+  it("doesn't flag a promotion that a scheduled one continues", () => {
+    // NOW é 10/11 ao meio-dia em SP; a ativa acaba 11/11 23:59.
+    const endsSoon = "2026-11-12T02:59:00.000Z";
+    const windows = (start: string, end = "2026-11-30T02:59:00.000Z"): PromotionWindow[] => [
+      {
+        status: "started",
+        name: "Oferta",
+        type: "PRICE_DISCOUNT",
+        startsAt: "2026-11-01T03:00:00.000Z",
+        endsAt: endsSoon,
+      },
+      { status: "pending", name: "Black", type: "DEAL", startsAt: start, endsAt: end },
+    ];
+    const expiring = (promotionWindows: PromotionWindow[] | null) =>
+      rules({ promotionEndsAt: endsSoon, promotionWindows }).includes("promo_expiring");
+
+    assert.equal(expiring(null), true, "without the windows it's today's behavior");
+    assert.equal(expiring(windows("2026-11-12T03:00:00.000Z")), false, "starts the next day");
+    assert.equal(expiring(windows("2026-11-16T03:00:00.000Z")), true, "gap of 4 days");
+    assert.equal(
+      expiring(windows("2026-11-12T03:00:00.000Z", "2026-11-13T02:59:00.000Z")),
+      true,
+      "the scheduled one also ends inside the window",
     );
   });
 
