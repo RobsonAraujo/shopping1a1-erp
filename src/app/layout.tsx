@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { siteUrl } from "@/lib/infra/site-url";
+import { GoogleTag } from "@/components/shared/GoogleTag";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -64,6 +65,7 @@ export default function RootLayout({
       <body className="flex min-h-full flex-col bg-[var(--background)] text-[var(--foreground)]">
         {children}
       </body>
+      <GoogleTag />
     </html>
   );
 }

@@ -1,20 +1,17 @@
 /**
  * Dados da empresa usados nas páginas institucionais (/privacidade, /termos,
- * /sobre) e no rodapé.
- *
- * ⚠️ PREENCHER ANTES DE PUBLICAR: razão social, CNPJ e endereço estão como
- * placeholder. O Mercado Livre exige uma URL de política de privacidade válida
- * na revisão do aplicativo, e os textos de /privacidade e /termos precisam de
- * revisão jurídica antes de irem ao ar.
+ * /sobre) e no rodapé. Razão social, CNPJ e endereço conforme o cartão CNPJ
+ * da Receita (matriz).
  */
 export const LEGAL = {
   productName: "Maipo",
-  legalName: "[RAZÃO SOCIAL]",
-  cnpj: "[CNPJ]",
-  address: "[ENDEREÇO COMPLETO]",
+  legalName: "SHOPPING UM A UM LTDA",
+  cnpj: "53.991.838/0001-50",
+  address:
+    "Av. Paulista, 1636, conj. 03, pavimento 1, salas 103 e 105, anexo 416, Bela Vista, São Paulo/SP, CEP 01310-200",
   supportEmail: "contato.shop1a1@gmail.com",
   /** Data da última revisão dos textos legais; atualizar a cada alteração. */
-  updatedAt: "22 de setembro de 2026",
+  updatedAt: "14 de novembro de 2026",
 } as const;
 
 export function legalUpdatedLabel() {

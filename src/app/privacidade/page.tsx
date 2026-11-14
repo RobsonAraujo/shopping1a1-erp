@@ -146,6 +146,13 @@ export default async function PrivacidadePage() {
             <strong>Monitoramento de erros</strong>: captura de falhas da
             aplicação para diagnóstico técnico.
           </li>
+          <li>
+            <strong>Google (Google Ads)</strong>: medição dos nossos próprios
+            anúncios. A tag do Google grava cookies no navegador para registrar
+            se a visita veio de um anúncio e se a conta foi conectada em
+            seguida, a partir das páginas visitadas. Não enviamos ao Google
+            dados da sua loja, como vendas, custos ou anúncios.
+          </li>
         </ul>
         <p>
           Também podemos divulgar dados quando houver{" "}
