@@ -103,6 +103,8 @@ export type RotinaActionListing = {
   imageUrl: string | null;
   permalink: string;
   catalogListing: boolean;
+  /** Clássico/Premium (`null` sem retrato ou em retrato antigo). */
+  listingTypeId: string | null;
   salePrice: number | null;
   unitsPerDay: number | null;
   marginPercent: number | null;
@@ -212,6 +214,8 @@ export type RotinaListingRow = {
   imageUrl: string | null;
   permalink: string;
   catalogListing: boolean;
+  /** Clássico/Premium (`null` em retrato antigo). */
+  listingTypeId: string | null;
   mlStatus: string;
   salePrice: number;
   regularPrice: number | null;
@@ -370,6 +374,7 @@ function identity(
     imageUrl: health?.imageUrl ?? catalog?.imageUrl ?? null,
     permalink: buyerFacingItemPermalink(health?.permalink ?? "", entity.mlItemId),
     catalogListing,
+    listingTypeId: health?.listingTypeId ?? null,
     salePrice: health?.salePrice ?? catalog?.sellerPrice ?? null,
     unitsPerDay: health?.unitsPerDay ?? null,
     marginPercent: health?.marginPercent ?? null,
@@ -1133,6 +1138,7 @@ export function buildRotinaView(input: RotinaViewInput): RotinaView {
       imageUrl: health.imageUrl,
       permalink: buyerFacingItemPermalink(health.permalink, health.mlItemId),
       catalogListing: health.catalogListing,
+      listingTypeId: health.listingTypeId,
       mlStatus: health.mlStatus,
       salePrice: health.salePrice,
       regularPrice: health.regularPrice,

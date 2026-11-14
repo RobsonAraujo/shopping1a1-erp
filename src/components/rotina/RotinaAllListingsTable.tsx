@@ -21,6 +21,7 @@ import {
 import type { ListingTargetDraft } from "@/components/rotina/RotinaListingTargetForm";
 import { RotinaListingTargetPopover } from "@/components/rotina/RotinaListingTargetPopover";
 import { RotinaThumb } from "@/components/rotina/RotinaThumb";
+import { ListingTypeTag } from "@/components/rotina/ListingTypeTag";
 import { SegmentTag } from "@/components/rotina/SegmentTag";
 import { STATUS_PILL_CLASS } from "@/components/rotina/rule-visuals";
 import { formatMoney, formatPercent, formatUnitsRate } from "@/lib/rotina/format";
@@ -200,6 +201,7 @@ export function RotinaAllListingsTable({
                 </a>
                 <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-[var(--muted-foreground)]">
                   <SegmentTag segment={segmentOf(row)} />
+                  <ListingTypeTag listingTypeId={row.listingTypeId} />
                   <span className="truncate">{row.sku ?? row.mlItemId}</span>
                   {row.catalogStatus ? <CatalogPill status={row.catalogStatus} /> : null}
                   {row.raiseCeiling !== null ? (
@@ -296,6 +298,7 @@ export function RotinaAllListingsTable({
                       </a>
                       <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
                         <SegmentTag segment={segmentOf(row)} />
+                        <ListingTypeTag listingTypeId={row.listingTypeId} />
                         <span className="truncate">
                           {row.sku ?? row.mlItemId} · {formatUnitsRate(row.unitsPerDay)}
                           {row.mlStatus !== "active" ? " · pausado" : ""}
@@ -433,6 +436,7 @@ export function RotinaAllListingsTable({
                     <SheetTitle className="line-clamp-2">{simulating.title}</SheetTitle>
                     <SheetDescription className="mt-1 flex flex-wrap items-center gap-1.5">
                       <SegmentTag segment={segmentOf(simulating)} />
+                      <ListingTypeTag listingTypeId={simulating.listingTypeId} />
                       <span>
                         {simulating.mlItemId} · hoje a {formatMoney(simulating.salePrice)}
                       </span>
@@ -444,6 +448,7 @@ export function RotinaAllListingsTable({
                 <RotinaPriceSimulator
                   key={simulating.mlItemId}
                   mlItemId={simulating.mlItemId}
+                  listingTypeId={simulating.listingTypeId}
                   suggestions={simulation.suggestions}
                   defaultPrice={simulation.defaultPrice}
                   timeZone={timeZone}

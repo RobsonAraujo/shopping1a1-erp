@@ -18,6 +18,8 @@ export type RotinaPricingInputs = {
   taxRatePercent: number | null;
   /** Desconto de tarifa da última venda (só em anúncio com promoção). */
   mlFeeRebate: number | null;
+  /** `gold_special` (Clássico) / `gold_pro` (Premium). Ausente em retrato antigo. */
+  listingTypeId: string | null;
   listingTypeLabel: string | null;
   adsMetricsAvailable: boolean;
   tacosPercent: number | null;
@@ -33,6 +35,8 @@ export type RotinaListingSnapshot = {
   imageUrl: string | null;
   permalink: string;
   catalogListing: boolean;
+  /** Tipo do anúncio (lido de `pricing_inputs`); `null` em retrato antigo. */
+  listingTypeId: string | null;
   mlStatus: string;
   salePrice: number;
   regularPrice: number | null;

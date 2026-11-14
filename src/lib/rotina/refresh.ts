@@ -273,6 +273,7 @@ async function buildSnapshot(
     imageUrl: row.imageUrl,
     permalink: row.permalink,
     catalogListing: row.catalogListing,
+    listingTypeId: row.listingTypeId,
     mlStatus: row.status,
     salePrice: row.salePrice,
     regularPrice: row.regularPrice,

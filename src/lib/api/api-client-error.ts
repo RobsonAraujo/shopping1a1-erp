@@ -26,6 +26,8 @@ const API_ERROR_MESSAGES: Record<string, string> = {
   rotina_listing_not_found: "Este anúncio não está mais na Central de anúncios. Atualize a página.",
   rotina_simulate_failed:
     "Não foi possível consultar taxa e frete no Mercado Livre agora. Tente de novo.",
+  rotina_simulate_floor_failed:
+    "Não foi possível calcular o mínimo no outro tipo agora. Tente de novo.",
   dre_load_failed: "Não foi possível carregar o DRE. Tente novamente.",
   dre_sync_failed: "Não foi possível sincronizar o mês com o Mercado Livre.",
   dre_cost_value_failed: "Não foi possível salvar o valor do custo fixo.",

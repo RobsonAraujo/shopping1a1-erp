@@ -72,13 +72,25 @@ export function marginPercentAtPrice(
   return breakdown.marginPercent;
 }
 
+/**
+ * O item como se fosse de outro tipo (Clássico ↔ Premium): a taxa e o fallback
+ * do frete leem `listing_type_id` do item. A cotação principal do frete é por
+ * `item_id` e não muda.
+ */
+export function itemAsListingType(item: ItemBody, listingTypeId?: string | null): ItemBody {
+  if (!listingTypeId || listingTypeId === item.listing_type_id) return item;
+  return { ...item, listing_type_id: listingTypeId };
+}
+
 export async function resolveMlCostsAtPrice(
   accessToken: string,
   userId: number,
-  item: ItemBody,
+  sourceItem: ItemBody,
   price: number,
   currencyId: string | null,
+  options?: { listingTypeId?: string | null },
 ): Promise<MlCostsAtPrice | null> {
+  const item = itemAsListingType(sourceItem, options?.listingTypeId);
   if (!item.category_id || !item.listing_type_id) return null;
 
   const siteId = siteIdFromItemId(item.id);

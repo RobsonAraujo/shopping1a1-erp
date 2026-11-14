@@ -35,6 +35,7 @@ export function listing(
     imageUrl: null,
     permalink: "https://produto.mercadolivre.com.br/MLB-1",
     catalogListing: false,
+    listingTypeId: "gold_special",
     mlStatus: "active",
     salePrice: 100,
     regularPrice: 120,

@@ -21,6 +21,7 @@ export function pricingInputsFromRow(row: FinancialEvaluationRow): RotinaPricing
     extraCosts: row.extraCosts,
     taxRatePercent: row.taxRatePercent,
     mlFeeRebate: row.mlFeeRebate,
+    listingTypeId: row.listingTypeId,
     listingTypeLabel: row.listingTypeLabel,
     adsMetricsAvailable: row.adsMetricsAvailable,
     tacosPercent: row.tacosPercent,
@@ -38,6 +39,8 @@ export function parsePricingInputs(value: unknown): RotinaPricingInputs | null {
     extraCosts: finiteOrNull(raw.extraCosts),
     taxRatePercent: finiteOrNull(raw.taxRatePercent),
     mlFeeRebate: finiteOrNull(raw.mlFeeRebate),
+    listingTypeId:
+      typeof raw.listingTypeId === "string" && raw.listingTypeId ? raw.listingTypeId : null,
     listingTypeLabel: typeof raw.listingTypeLabel === "string" ? raw.listingTypeLabel : null,
     adsMetricsAvailable: raw.adsMetricsAvailable === true,
     tacosPercent: finiteOrNull(raw.tacosPercent),
@@ -101,6 +104,8 @@ export function healthRowToSnapshot(row: ListingHealth): RotinaListingSnapshot {
     imageUrl: row.imageUrl,
     permalink: row.permalink,
     catalogListing: row.catalogListing,
+    // O tipo viaja no JSON `pricing_inputs` (sem coluna própria).
+    listingTypeId: parsePricingInputs(row.pricingInputs)?.listingTypeId ?? null,
     mlStatus: row.mlStatus,
     salePrice: decimalToNumber(row.salePrice) ?? 0,
     regularPrice: decimalToNumber(row.regularPrice),

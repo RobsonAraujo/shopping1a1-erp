@@ -98,7 +98,21 @@ Invariante herdado da Home: **consulta que falha não vira problema**.
 - Mesma conta da Lucratividade e do preço mínimo (`computeFinancialMargin` + `computeMarginAfterAds`, em `simulate-margin.ts`). Simular o preço mínimo devolve a margem-alvo.
 - Custo, imposto, rebate e ADS vêm de `ListingHealth.pricingInputs`, gravado na rodada. Taxa e frete são cotados no ML para cada preço: 1 + 2 chamadas por simulação.
   - Sem retrato (catálogo antes da primeira atualização), monta a linha da Lucratividade na hora: mais lento.
-- Rota `POST /api/rotina/simulate` (`{ mlItemId, prices[] }`, até 5). Preço já simulado não consulta o ML de novo; os testados ficam em "Comparar".
+- Rota `POST /api/rotina/simulate` (`{ mlItemId, prices[], listingTypeId? }`, até 5 preços). Preço já simulado não consulta o ML de novo; os testados ficam em "Comparar".
+
+### Clássico ↔ Premium
+
+- Seletor **Tipo do anúncio** na calculadora, só para `gold_special`/`gold_pro`. O tipo de hoje vem do item ao vivo e leva o selo "atual".
+- No outro tipo, **só a taxa muda**: `listing_prices` com o outro `listing_type_id` (`resolveMlCostsAtPrice(..., { listingTypeId })`, via `itemAsListingType`). Frete, custo, imposto, rebate da última venda, TACOS, meta e PMA continuam os de hoje.
+  - O frete é cotado por `item_id`, então não muda de tipo. Só o fallback sem `item_id` manda o tipo simulado.
+- Trocar o tipo refaz o preço do campo nesse tipo. Os resultados ficam por (preço, tipo), e "Comparar" etiqueta o tipo quando mistura os dois.
+- **Mínimo no outro tipo**: `POST /api/rotina/simulate/floor` (`{ mlItemId, listingTypeId }`), uma vez por tipo.
+  - É a mesma busca da rodada (`computeFloorsFromSeed`, MC e após ADS, ciente das faixas de frete), com a meta de agora.
+  - Depois passa por `buildFloorView`, então o PMA segue piso duro.
+  - Faz ~20–40 cotações, por isso fica separado da margem.
+  - No outro tipo, o atalho "Mínimo" da rodada some e entra "Mínimo no Premium/Clássico".
+- **Etiqueta Clássico/Premium** (`ListingTypeTag`, tom neutro) no card, na tabela Anúncios e na folha do simulador.
+  - O tipo viaja em `pricing_inputs.listingTypeId` (JSON, sem coluna nova). Retrato anterior a esta versão não tem etiqueta até o próximo Atualizar.
 
 ## Rodada (`refresh.ts`)
 

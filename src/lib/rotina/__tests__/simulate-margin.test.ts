@@ -10,6 +10,7 @@ function inputs(overrides: Partial<RotinaPricingInputs> = {}): RotinaPricingInpu
     extraCosts: 0,
     taxRatePercent: 10,
     mlFeeRebate: 0,
+    listingTypeId: "gold_pro",
     listingTypeLabel: "Premium",
     adsMetricsAvailable: true,
     tacosPercent: 3,
@@ -63,6 +64,42 @@ describe("simulateMarginAtPrice", () => {
     );
     assert.equal(unavailable.decidingBasis, "contribution");
     assert.equal(unavailable.meetsTarget, false);
+  });
+
+  it("labels the fee by the simulated listing type and keeps the same fee rebate", () => {
+    // Mesmo preço, só a taxa muda: Clássico 12% × Premium 17%. O rebate (R$ 3)
+    // da última venda vale nos dois tipos.
+    const classic = simulateMarginAtPrice(
+      100,
+      { mlFeeAmount: 12, shippingCost: 20 },
+      inputs({ listingTypeId: "gold_special", listingTypeLabel: "Clássico", mlFeeRebate: 3 }),
+      2,
+    );
+    const premium = simulateMarginAtPrice(
+      100,
+      { mlFeeAmount: 17, shippingCost: 20 },
+      inputs({ listingTypeId: "gold_pro", listingTypeLabel: "Premium", mlFeeRebate: 3 }),
+      2,
+    );
+    assert.equal(classic.listingTypeId, "gold_special");
+    assert.equal(premium.listingTypeId, "gold_pro");
+    assert.equal(classic.lines.find((line) => line.key === "mlFee")?.label, "Taxa Clássico");
+    assert.equal(premium.lines.find((line) => line.key === "mlFee")?.label, "Taxa Premium");
+    assert.equal(classic.lines.find((line) => line.key === "mlFeeRebate")?.value, -3);
+    assert.equal(premium.lines.find((line) => line.key === "mlFeeRebate")?.value, -3);
+    // 100 − 12 + 3 − 20 − 40 − 10 = 21 → 21%; Premium: 100 − 17 + 3 − 20 − 40 − 10 = 16.
+    assert.equal(classic.marginPercent, 21);
+    assert.equal(premium.marginPercent, 16);
+  });
+
+  it("caps the fee rebate at the fee of the simulated type", () => {
+    const result = simulateMarginAtPrice(
+      100,
+      { mlFeeAmount: 2, shippingCost: 0 },
+      inputs({ mlFeeRebate: 5 }),
+      2,
+    );
+    assert.equal(result.lines.find((line) => line.key === "mlFeeRebate")?.value, -2);
   });
 
   it("returns an unquoted result when ML did not price it", () => {

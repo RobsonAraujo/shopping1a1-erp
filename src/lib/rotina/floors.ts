@@ -19,6 +19,8 @@ import {
   type ShippingQuoteFn,
 } from "@/lib/pricing/min-price-segments";
 import type { MarginAtPriceParams } from "@/lib/pricing/refine-min-sale-price";
+import { pricingInputsFromRow } from "@/lib/rotina/health-row";
+import type { RotinaPricingInputs } from "@/lib/rotina/types";
 
 /**
  * Os dois preços mínimos de um anúncio (MC e após ADS) com cotação real do ML
@@ -44,7 +46,7 @@ function createPriceQuotes(
   userId: number,
   item: ItemBody,
   seed: { price: number; mlFeeAmount: number; shippingCost: number },
-): { quote: PriceQuoteFn; shippingAt: ShippingQuoteFn; calls: () => number } {
+): FloorQuotes {
   const feeMemo = new Map<number, Promise<number | null>>();
   const shippingMemo = new Map<number, Promise<number | null>>();
   let calls = 0;
@@ -104,68 +106,73 @@ function createPriceQuotes(
   return { quote, shippingAt, calls: () => calls };
 }
 
-export async function computeListingFloors(
-  accessToken: string,
-  userId: number,
-  row: FinancialEvaluationRow,
-  item: ItemBody,
-  targetPercent: number,
-): Promise<ListingFloors> {
-  const empty = {
+export type FloorQuotes = {
+  quote: PriceQuoteFn;
+  shippingAt: ShippingQuoteFn;
+  calls: () => number;
+};
+
+/**
+ * Ponto de partida da busca: o preço de hoje com taxa e frete já cotados, os
+ * insumos da conta e as margens atuais (para o "já está na meta").
+ */
+export type FloorSeed = {
+  salePrice: number;
+  mlFeeAmount: number;
+  shippingCost: number;
+  inputs: RotinaPricingInputs;
+  currentContributionMarginPercent: number | null;
+  currentAfterAdsMarginPercent: number | null;
+};
+
+function emptyFloors(targetPercent: number, reason: MinSalePriceReason): ListingFloors {
+  return {
     targetPercent,
     mcPrice: null,
     afterAdsPrice: null,
+    reason,
     refined: false,
     bands: [],
     mlCalls: 0,
   };
+}
 
-  // Sem custo/alíquota/kit completo o mínimo sairia com R$ 0 / 0% no lugar —
-  // um número pior que nenhum.
-  const exclusion = marginExclusionReason(row);
-  if (exclusion === "missing_cost") return { ...empty, reason: "missing_product_cost" };
-  if (exclusion) return { ...empty, reason: "incomplete" };
-  if (
-    row.mlFeeAmount === null ||
-    row.shippingCost === null ||
-    !row.breakdown ||
-    row.salePrice <= 0 ||
-    row.productCost === null
-  ) {
-    return { ...empty, reason: "incomplete" };
-  }
+/** Os dois mínimos a partir da semente, com cotação injetada (testável). */
+export async function computeFloorsWithQuotes(
+  seed: FloorSeed,
+  targetPercent: number,
+  quotes: FloorQuotes,
+): Promise<ListingFloors> {
+  const { inputs } = seed;
+  if (inputs.productCost === null) return emptyFloors(targetPercent, "missing_product_cost");
+  if (seed.salePrice <= 0) return emptyFloors(targetPercent, "incomplete");
 
-  const { quote, shippingAt, calls } = createPriceQuotes(accessToken, userId, item, {
-    price: row.salePrice,
-    mlFeeAmount: row.mlFeeAmount,
-    shippingCost: row.shippingCost,
-  });
-
+  const { quote, shippingAt, calls } = quotes;
   const input: MinSalePriceInput = {
-    salePrice: row.salePrice,
-    mlFeeAmount: row.mlFeeAmount,
-    mlFeeRebate: row.mlFeeRebate ?? 0,
-    shippingCost: row.shippingCost,
-    productCost: row.productCost,
-    extraCosts: row.extraCosts,
-    taxRatePercent: row.taxRatePercent,
+    salePrice: seed.salePrice,
+    mlFeeAmount: seed.mlFeeAmount,
+    mlFeeRebate: inputs.mlFeeRebate ?? 0,
+    shippingCost: seed.shippingCost,
+    productCost: inputs.productCost,
+    extraCosts: inputs.extraCosts,
+    taxRatePercent: inputs.taxRatePercent,
     targetMarginPercent: targetPercent,
     marginBasis: "contribution",
-    tacosPercent: row.tacosPercent,
-    currentContributionMarginPercent: row.breakdown.marginPercent,
-    currentAfterAdsMarginPercent: row.marginAfterAdsPercent,
+    tacosPercent: inputs.tacosPercent,
+    currentContributionMarginPercent: seed.currentContributionMarginPercent,
+    currentAfterAdsMarginPercent: seed.currentAfterAdsMarginPercent,
   };
   const params: MarginAtPriceParams = {
-    mlFeeRebate: row.mlFeeRebate ?? 0,
-    productCost: row.productCost,
-    extraCosts: row.extraCosts ?? 0,
-    taxRatePercent: row.taxRatePercent ?? 0,
-    listingTypeLabel: row.listingTypeLabel,
+    mlFeeRebate: inputs.mlFeeRebate ?? 0,
+    productCost: inputs.productCost,
+    extraCosts: inputs.extraCosts ?? 0,
+    taxRatePercent: inputs.taxRatePercent ?? 0,
+    listingTypeLabel: inputs.listingTypeLabel,
     marginBasis: "contribution",
-    tacosPercent: row.tacosPercent,
-    adsCost: row.adsCost,
-    adsUnitsSold: row.adsUnitsSold,
-    adsMetricsAvailable: row.adsMetricsAvailable,
+    tacosPercent: inputs.tacosPercent,
+    adsCost: inputs.adsCost,
+    adsUnitsSold: inputs.adsUnitsSold,
+    adsMetricsAvailable: inputs.adsMetricsAvailable,
   };
 
   const mc = await findMinSalePriceBySegments(input, params, quote, shippingAt);
@@ -173,10 +180,10 @@ export async function computeListingFloors(
   // Após ADS = MC com meta + TACOS. Sem ADS (TACOS 0) é o mesmo número; com
   // gasto sem venda (TACOS indefinido) ou ADS fora do ar, não existe.
   let afterAds: SegmentedMinPriceResult | null = null;
-  const spendWithoutSales = row.tacosPercent === null && (row.adsCost ?? 0) > 0;
-  if (row.adsMetricsAvailable && !spendWithoutSales) {
+  const spendWithoutSales = inputs.tacosPercent === null && (inputs.adsCost ?? 0) > 0;
+  if (inputs.adsMetricsAvailable && !spendWithoutSales) {
     afterAds =
-      (row.tacosPercent ?? 0) === 0
+      (inputs.tacosPercent ?? 0) === 0
         ? mc
         : await findMinSalePriceBySegments(
             { ...input, marginBasis: "afterAds" },
@@ -196,4 +203,61 @@ export async function computeListingFloors(
     bands: effective.bands,
     mlCalls: calls(),
   };
+}
+
+/**
+ * Os dois mínimos com cotação real do ML. O `item` define o tipo cotado: para
+ * simular o outro tipo, passe `itemAsListingType(item, tipo)`.
+ */
+export async function computeFloorsFromSeed(
+  accessToken: string,
+  userId: number,
+  item: ItemBody,
+  seed: FloorSeed,
+  targetPercent: number,
+): Promise<ListingFloors> {
+  const quotes = createPriceQuotes(accessToken, userId, item, {
+    price: seed.salePrice,
+    mlFeeAmount: seed.mlFeeAmount,
+    shippingCost: seed.shippingCost,
+  });
+  return computeFloorsWithQuotes(seed, targetPercent, quotes);
+}
+
+export async function computeListingFloors(
+  accessToken: string,
+  userId: number,
+  row: FinancialEvaluationRow,
+  item: ItemBody,
+  targetPercent: number,
+): Promise<ListingFloors> {
+  // Sem custo/alíquota/kit completo o mínimo sairia com R$ 0 / 0% no lugar —
+  // um número pior que nenhum.
+  const exclusion = marginExclusionReason(row);
+  if (exclusion === "missing_cost") return emptyFloors(targetPercent, "missing_product_cost");
+  if (exclusion) return emptyFloors(targetPercent, "incomplete");
+  if (
+    row.mlFeeAmount === null ||
+    row.shippingCost === null ||
+    !row.breakdown ||
+    row.salePrice <= 0 ||
+    row.productCost === null
+  ) {
+    return emptyFloors(targetPercent, "incomplete");
+  }
+
+  return computeFloorsFromSeed(
+    accessToken,
+    userId,
+    item,
+    {
+      salePrice: row.salePrice,
+      mlFeeAmount: row.mlFeeAmount,
+      shippingCost: row.shippingCost,
+      inputs: pricingInputsFromRow(row),
+      currentContributionMarginPercent: row.breakdown.marginPercent,
+      currentAfterAdsMarginPercent: row.marginAfterAdsPercent,
+    },
+    targetPercent,
+  );
 }

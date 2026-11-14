@@ -28,6 +28,7 @@ import {
   buildSimulatorSuggestions,
 } from "@/components/rotina/RotinaPriceSimulator";
 import { RotinaThumb } from "@/components/rotina/RotinaThumb";
+import { ListingTypeTag } from "@/components/rotina/ListingTypeTag";
 import { SegmentTag } from "@/components/rotina/SegmentTag";
 import {
   RULE_ACCENT_CLASS,
@@ -208,6 +209,7 @@ export function RotinaActionRow({
           </div>
           <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-[var(--muted-foreground)]">
             <SegmentTag segment={action.segment} />
+            <ListingTypeTag listingTypeId={listing.listingTypeId} />
             <span className="min-w-0 truncate tabular-nums">{meta.join(" · ")}</span>
           </div>
 
@@ -488,6 +490,7 @@ export function RotinaActionRow({
         <div className="border-t border-[var(--border)] bg-[var(--muted)]/20 px-3 pb-3 sm:px-4 sm:pb-4">
           <RotinaPriceSimulator
             mlItemId={listing.mlItemId}
+            listingTypeId={listing.listingTypeId}
             suggestions={simulator.suggestions}
             defaultPrice={simulator.defaultPrice}
             timeZone={timeZone}

@@ -269,3 +269,143 @@ describe("RotinaActionRow", () => {
     assert.deepEqual(sent, { mlItemId: "CAT1", prices: [94.9] });
   });
 });
+
+describe("RotinaActionRow: Clássico ↔ Premium", () => {
+  it("tags the listing type and simulates the same price in Premium, with its own minimum", async () => {
+    const view = viewWith(
+      [
+        {
+          mlItemId: "CAT2",
+          imageUrl: null,
+          catalogListing: true,
+          listingTypeId: "gold_special",
+          floorAfterAdsPrice: 91.2,
+          floorMcPrice: 88.7,
+        },
+      ],
+      [catalogLive({ mlItemId: "CAT2", priceToWin: 94.9 })],
+    );
+    const action = view.actions.find((candidate) => candidate.rule === "catalog_losing")!;
+    const fetchMock = mock.method(globalThis, "fetch", async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      const body = JSON.parse(String(init?.body)) as {
+        prices?: number[];
+        listingTypeId?: string;
+      };
+      if (url.endsWith("/api/rotina/simulate/floor")) {
+        return Response.json({
+          mlItemId: "CAT2",
+          listingTypeId: body.listingTypeId,
+          blocked: null,
+          floor: {
+            targetPercent: 2,
+            stale: false,
+            mcPrice: 97.1,
+            afterAdsPrice: 99.4,
+            afterAdsMissing: null,
+            marginFloor: 99.4,
+            pmaPrice: null,
+            effectivePrice: 99.4,
+            boundBy: "margin",
+            discountBase: 100,
+            maxDiscountPercent: 0,
+            bands: [],
+            reason: "ok",
+            refined: true,
+          },
+        });
+      }
+      const premium = body.listingTypeId === "gold_pro";
+      return Response.json({
+        mlItemId: "CAT2",
+        targetPercent: 2,
+        inputsFrom: "refresh",
+        inputsAt: "2026-11-10T09:00:00.000Z",
+        feeRebate: null,
+        currentListingTypeId: "gold_special",
+        listingTypeId: premium ? "gold_pro" : "gold_special",
+        blocked: null,
+        results: [
+          {
+            price: body.prices![0],
+            listingTypeId: premium ? "gold_pro" : "gold_special",
+            quoted: true,
+            mlFeeAmount: premium ? 16.13 : 11.39,
+            shippingCost: 20,
+            marginPercent: premium ? 1.2 : 6.2,
+            marginValue: premium ? 1.14 : 5.88,
+            marginAfterAdsPercent: premium ? -1.8 : 3.2,
+            marginAfterAdsValue: premium ? -1.71 : 3.04,
+            decidingBasis: "afterAds",
+            meetsTarget: !premium,
+            lines: [],
+          },
+        ],
+      });
+    });
+
+    const rendered = render(action);
+    cleanup = rendered.unmount;
+    // O tipo aparece no card, ao lado de Próprio/Catálogo.
+    assert.match(text(rendered.container), /Catálogo\s*Clássico/);
+
+    const simulateButton = [...rendered.container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Simular a"),
+    )!;
+    await act(async () => {
+      simulateButton.click();
+    });
+    await waitFor(() => {
+      assert.match(text(rendered.container), /A R\$ 94,90:\s*Após ADS\s*3,2%/);
+    });
+    // No tipo de hoje vale o mínimo da rodada.
+    assert.match(text(rendered.container), /Mínimo\s*R\$ 91,20/);
+
+    const premiumTab = [...rendered.container.querySelectorAll('[role="tab"]')].find((tab) =>
+      tab.textContent?.includes("Premium"),
+    ) as HTMLButtonElement;
+    assert.ok(premiumTab);
+    await act(async () => {
+      premiumTab.click();
+    });
+    await waitFor(() => {
+      assert.match(text(rendered.container), /A R\$ 94,90 no Premium:\s*Após ADS\s*-1,8%/);
+      assert.match(text(rendered.container), /Mínimo no Premium\s*R\$ 99,40/);
+    });
+    const content = text(rendered.container);
+    assert.match(content, /abaixo do mínimo de 2%/);
+    // O mínimo da rodada (Clássico) some no outro tipo.
+    assert.doesNotMatch(content, /Mínimo\s*R\$ 91,20/);
+    assert.match(content, /No Premium só muda a taxa do Mercado Livre/);
+    // O Clássico testado antes fica em "Comparar", com a etiqueta do tipo.
+    assert.match(content, /Comparar\s*R\$ 94,90\s*Clássico/);
+
+    const calls = fetchMock.mock.calls.map((call) => ({
+      url: String(call.arguments[0]),
+      body: JSON.parse(String(call.arguments[1]?.body)),
+    }));
+    assert.deepEqual(
+      calls.filter((call) => call.url.endsWith("/api/rotina/simulate")).map((call) => call.body),
+      [
+        { mlItemId: "CAT2", prices: [94.9] },
+        { mlItemId: "CAT2", prices: [94.9], listingTypeId: "gold_pro" },
+      ],
+    );
+    assert.deepEqual(
+      calls.filter((call) => call.url.endsWith("/floor")).map((call) => call.body),
+      [{ mlItemId: "CAT2", listingTypeId: "gold_pro" }],
+    );
+  });
+
+  it("shows no type tag or switch when the snapshot has no listing type", () => {
+    const view = viewWith(
+      [{ mlItemId: "OWN9", imageUrl: null, listingTypeId: null, marginAfterAdsPercent: 0.5 }],
+    );
+    const action = view.actions.find((candidate) => candidate.listing.mlItemId === "OWN9")!;
+    assert.ok(action);
+    const rendered = render(action);
+    cleanup = rendered.unmount;
+    const content = text(rendered.container);
+    assert.doesNotMatch(content, /Clássico|Premium/);
+  });
+});

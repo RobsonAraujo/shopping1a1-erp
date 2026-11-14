@@ -15,6 +15,8 @@ import type { RotinaPricingInputs } from "@/lib/rotina/types";
 
 export type SimulatedPrice = {
   price: number;
+  /** Tipo cotado (Clássico/Premium): o de hoje ou o simulado. */
+  listingTypeId: string | null;
   /** `false` = o ML não cotou taxa/frete neste preço. */
   quoted: boolean;
   mlFeeAmount: number | null;
@@ -43,6 +45,7 @@ export function simulateMarginAtPrice(
   if (!costs) {
     return {
       price,
+      listingTypeId: inputs.listingTypeId,
       quoted: false,
       mlFeeAmount: null,
       shippingCost: null,
@@ -83,6 +86,7 @@ export function simulateMarginAtPrice(
 
   return {
     price,
+    listingTypeId: inputs.listingTypeId,
     quoted: true,
     mlFeeAmount: costs.mlFeeAmount,
     shippingCost: costs.shippingCost,

@@ -57,6 +57,44 @@ afterEach(() => {
 });
 
 describe("RotinaAllListingsTable", () => {
+  it("tags each listing as Clássico or Premium, and nothing on an old snapshot", () => {
+    const rows = buildRotinaView({
+      now: NOW,
+      timeZone: TZ,
+      settings: settings(),
+      health: [
+        listing({ mlItemId: "OWN1", title: "Kit Escova", imageUrl: null, listingTypeId: "gold_pro" }),
+        listing({ mlItemId: "OWN2", title: "Mouse W", imageUrl: null, listingTypeId: null }),
+      ],
+      catalogLive: [],
+      targets: new Map(),
+      states: [],
+      lastRun: null,
+      lastCompleteRunAt: "2026-11-10T09:00:00.000Z",
+    }).listings;
+    const rendered = renderIntoDocument(
+      <TooltipProvider>
+        <RotinaAllListingsTable
+          rows={rows}
+          segment="all"
+          timeZone={TZ}
+          busy={false}
+          onSaveTarget={async () => true}
+        />
+      </TooltipProvider>,
+    );
+    cleanup = rendered.unmount;
+    const premiumRow = [...rendered.container.querySelectorAll("tr")].find((tr) =>
+      tr.textContent?.includes("Kit Escova"),
+    );
+    const plainRow = [...rendered.container.querySelectorAll("tr")].find((tr) =>
+      tr.textContent?.includes("Mouse W"),
+    );
+    assert.ok(premiumRow && plainRow);
+    assert.match(premiumRow.textContent ?? "", /Premium/);
+    assert.doesNotMatch(plainRow.textContent ?? "", /Clássico|Premium/);
+  });
+
   it("lets any listing get its own target, even without a task today", async () => {
     const rows = rowsWith(new Map([["OWN1", { minMarginPercent: 5, tacosTargetPercent: null }]]));
     const onSaveTarget = mock.fn<
