@@ -60,5 +60,10 @@ export function buildActionLinks(args: {
         },
         extra: competition(args.related.catalogProductId),
       };
+    case "no_recent_sales":
+      return {
+        primary: editPrice,
+        extra: args.catalogListing ? competition(args.catalogProductId) : [],
+      };
   }
 }

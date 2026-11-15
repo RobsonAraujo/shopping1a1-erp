@@ -26,7 +26,10 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/dre-mercado-livre)",
       "Bash(npm run *)",
-      "Bash(node --env-file=.env --experimental-test-module-mocks --import tsx --import ./src/test-setup/jsdom-setup.ts --test src/hooks/__tests__/use-before-unload-guard.test.tsx)"
+      "Bash(node --env-file=.env --experimental-test-module-mocks --import tsx --import ./src/test-setup/jsdom-setup.ts --test src/hooks/__tests__/use-before-unload-guard.test.tsx)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(grep -nE \"title|beta|R\\\\\\\\$|grátis|trial\" src/app/precos/page.tsx)",
+      "Bash(grep -rhoE \"https?://[a-z0-9.-]*\\(maipo|shopping1a1|1a1\\)[a-z0-9.-]*\\\\.[a-z]{2,}\" src docs .env.example)"
     ],
     "additionalDirectories": [
       "/Users/robsonaraujocarmo/Documents/Robson - Repos/shopping Um a Um/shopping1a1-erp/src/components/home"

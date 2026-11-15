@@ -423,6 +423,12 @@ model ListingHealth {
   pricingInputs         Json?     @map("pricing_inputs")
   pmaPrice              Decimal?  @map("pma_price") @db.Decimal(18, 2)
   unitsPerDay           Decimal?  @map("units_per_day") @db.Decimal(12, 3)
+  /// Data da venda mais recente na janela lida nesta rodada. `null` com
+  /// `salesWindowDays` preenchido = nenhuma venda na janela. Os dois nulos =
+  /// leitura de vendas falhou ou retrato anterior a esta coluna.
+  lastSaleAt            DateTime? @map("last_sale_at")
+  /// Tamanho (dias) da janela usada em `unitsPerDay` / `lastSaleAt`.
+  salesWindowDays       Int?      @map("sales_window_days")
   /// `false` = a API de Product Ads não respondeu: nada de "sem ADS"/TACOS.
   adsAvailable          Boolean   @map("ads_available")
   adsStatus             String?   @map("ads_status")
@@ -626,6 +632,10 @@ model SalesWindowSnapshot {
   /// "date_closed" | "date_created" (SalesWindowDateField).
   dateField      String   @map("date_field")
   unitsSold      Int      @map("units_sold")
+  /// Venda mais recente na janela. `null` com `unitsSold = 0` é válido;
+  /// `null` com `unitsSold > 0` é linha antiga (pré-coluna) — o cache trata
+  /// como miss pra forçar uma nova varredura.
+  lastSaleAt     DateTime? @map("last_sale_at")
   computedAt     DateTime @map("computed_at")
 
   @@unique([organizationId, mlItemId, windowDays, dateField])

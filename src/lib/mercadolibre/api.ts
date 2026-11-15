@@ -756,9 +756,28 @@ export async function fetchRevenueByItemForCalendarMonths(
   };
 }
 
+/** Unidades vendidas + data da venda mais recente na janela (mesma varredura). */
+export type SalesWindowItemResult = {
+  unitsSold: number;
+  /** Pedido mais recente que contou; `null` se não houve venda na janela. */
+  lastSaleAt: Date | null;
+};
+
+function orderTimestamp(
+  order: OrderSearchOrder,
+  dateField: SalesWindowDateField,
+): Date | null {
+  const raw =
+    dateField === "date_closed" ? order.date_closed : order.date_created;
+  if (typeof raw !== "string") return null;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 /**
  * Soma **unidades** (soma de `quantity` em cada linha de `order_items`) de **um**
- * anúncio na janela.
+ * anúncio na janela e guarda a data do pedido mais recente (a lista vem
+ * `date_desc`, então o primeiro pedido válido já é o mais novo).
  *
  * - Por padrão, exclui `status === "cancelled"`.
  * - Com `includeCancelled: true`, conta todos os pedidos retornados pela API.
@@ -771,9 +790,10 @@ async function fetchUnitsSoldForOneItem(
   toStr: string,
   dateField: SalesWindowDateField,
   options?: { includeCancelled?: boolean },
-): Promise<number> {
+): Promise<SalesWindowItemResult> {
   const { apiBase } = getMercadoLibreConfig();
   let sum = 0;
+  let lastSaleAt: Date | null = null;
   let offset = 0;
   const limit = 50;
   let total = Infinity;
@@ -803,9 +823,15 @@ async function fetchUnitsSoldForOneItem(
     const batch = data.results ?? [];
     for (const order of batch) {
       if (!options?.includeCancelled && order.status === "cancelled") continue;
+      const at = orderTimestamp(order, dateField);
       for (const line of order.order_items ?? []) {
         if (listingIdFromOrderLine(line) !== itemId) continue;
-        sum += quantityFromOrderLine(line);
+        const units = quantityFromOrderLine(line);
+        if (units <= 0) continue;
+        sum += units;
+        if (at && (lastSaleAt === null || at.getTime() > lastSaleAt.getTime())) {
+          lastSaleAt = at;
+        }
       }
     }
 
@@ -814,24 +840,13 @@ async function fetchUnitsSoldForOneItem(
     if (batch.length < limit) break;
   }
 
-  return sum;
+  return { unitsSold: sum, lastSaleAt };
 }
 
 export type ItemSaleEvent = {
   at: Date;
   units: number;
 };
-
-function orderTimestamp(
-  order: OrderSearchOrder,
-  dateField: SalesWindowDateField,
-): Date | null {
-  const raw =
-    dateField === "date_closed" ? order.date_closed : order.date_created;
-  if (typeof raw !== "string") return null;
-  const d = new Date(raw);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
 
 /** Paid order lines for one listing with timestamp (for status-interval sales). */
 export async function fetchItemSaleEventsInDateRange(
@@ -912,10 +927,10 @@ export function countItemSaleEventsBetween(
 }
 
 /**
- * Unidades vendidas por id de anúncio (MLB…) na janela (todos os pedidos exceto cancelados).
- * Uma sequência de requests paginados por anúncio (`item` + intervalo de data).
+ * Unidades + última venda por id de anúncio (MLB…) na janela (todos os pedidos
+ * exceto cancelados). Uma sequência de requests paginados por anúncio.
  */
-export async function fetchUnitsSoldForItemsInWindow(
+export async function fetchSalesWindowForItemsInWindow(
   accessToken: string,
   sellerId: number,
   itemIds: string[],
@@ -925,8 +940,8 @@ export async function fetchUnitsSoldForItemsInWindow(
    * termina) — permite ao chamador transmitir os resultados aos poucos
    * (ex.: SSE) em vez de esperar o item mais lento do lote. Mesmo padrão de
    * `enrichItemsWithFulfillmentStock`. */
-  onItem?: (itemId: string, unitsSold: number) => void,
-): Promise<Record<string, number>> {
+  onItem?: (itemId: string, result: SalesWindowItemResult) => void,
+): Promise<Record<string, SalesWindowItemResult>> {
   const unique = [...new Set(itemIds.filter(Boolean))];
   if (unique.length === 0 || windowDays <= 0) return {};
 
@@ -938,7 +953,7 @@ export async function fetchUnitsSoldForItemsInWindow(
 
   const results = await Promise.all(
     unique.map(async (itemId) => {
-      const n = await fetchUnitsSoldForOneItem(
+      const result = await fetchUnitsSoldForOneItem(
         accessToken,
         sellerId,
         itemId,
@@ -946,12 +961,39 @@ export async function fetchUnitsSoldForItemsInWindow(
         toStr,
         dateField,
       );
-      onItem?.(itemId, n);
-      return [itemId, n] as const;
+      onItem?.(itemId, result);
+      return [itemId, result] as const;
     }),
   );
 
   return Object.fromEntries(results);
+}
+
+/**
+ * Unidades vendidas por id de anúncio (MLB…) na janela (todos os pedidos exceto cancelados).
+ * Uma sequência de requests paginados por anúncio (`item` + intervalo de data).
+ */
+export async function fetchUnitsSoldForItemsInWindow(
+  accessToken: string,
+  sellerId: number,
+  itemIds: string[],
+  windowDays: number,
+  dateField: SalesWindowDateField = "date_closed",
+  onItem?: (itemId: string, unitsSold: number) => void,
+): Promise<Record<string, number>> {
+  const details = await fetchSalesWindowForItemsInWindow(
+    accessToken,
+    sellerId,
+    itemIds,
+    windowDays,
+    dateField,
+    onItem
+      ? (itemId, result) => onItem(itemId, result.unitsSold)
+      : undefined,
+  );
+  return Object.fromEntries(
+    Object.entries(details).map(([itemId, result]) => [itemId, result.unitsSold]),
+  );
 }
 
 /** Todos os ids de anúncios do vendedor (paginação interna). */
@@ -1043,21 +1085,21 @@ export async function fetchItemsByIdsBatched(
   return results.flat();
 }
 
-/** Mesmo que `fetchUnitsSoldForItemsInWindow`, mas em lotes para limitar paralelismo. */
-export async function fetchUnitsSoldForItemsInWindowBatched(
+/** Mesmo que `fetchSalesWindowForItemsInWindow`, mas em lotes para limitar paralelismo. */
+export async function fetchSalesWindowForItemsInWindowBatched(
   accessToken: string,
   sellerId: number,
   itemIds: string[],
   windowDays: number,
   dateField: SalesWindowDateField = "date_closed",
   chunkSize = 12,
-  onItem?: (itemId: string, unitsSold: number) => void,
-): Promise<Record<string, number>> {
+  onItem?: (itemId: string, result: SalesWindowItemResult) => void,
+): Promise<Record<string, SalesWindowItemResult>> {
   const unique = [...new Set(itemIds.filter(Boolean))];
-  const out: Record<string, number> = {};
+  const out: Record<string, SalesWindowItemResult> = {};
   for (let i = 0; i < unique.length; i += chunkSize) {
     const chunk = unique.slice(i, i + chunkSize);
-    const part = await fetchUnitsSoldForItemsInWindow(
+    const part = await fetchSalesWindowForItemsInWindow(
       accessToken,
       sellerId,
       chunk,
@@ -1068,6 +1110,32 @@ export async function fetchUnitsSoldForItemsInWindowBatched(
     Object.assign(out, part);
   }
   return out;
+}
+
+/** Mesmo que `fetchUnitsSoldForItemsInWindow`, mas em lotes para limitar paralelismo. */
+export async function fetchUnitsSoldForItemsInWindowBatched(
+  accessToken: string,
+  sellerId: number,
+  itemIds: string[],
+  windowDays: number,
+  dateField: SalesWindowDateField = "date_closed",
+  chunkSize = 12,
+  onItem?: (itemId: string, unitsSold: number) => void,
+): Promise<Record<string, number>> {
+  const details = await fetchSalesWindowForItemsInWindowBatched(
+    accessToken,
+    sellerId,
+    itemIds,
+    windowDays,
+    dateField,
+    chunkSize,
+    onItem
+      ? (itemId, result) => onItem(itemId, result.unitsSold)
+      : undefined,
+  );
+  return Object.fromEntries(
+    Object.entries(details).map(([itemId, result]) => [itemId, result.unitsSold]),
+  );
 }
 
 /** Unidades vendidas por anúncio em intervalo explícito. */
@@ -1095,7 +1163,7 @@ export async function fetchUnitsSoldForItemsInDateRangeBatched(
     const chunk = unique.slice(i, i + chunkSize);
     const results = await Promise.all(
       chunk.map(async (itemId) => {
-        const n = await fetchUnitsSoldForOneItem(
+        const result = await fetchUnitsSoldForOneItem(
           accessToken,
           sellerId,
           itemId,
@@ -1104,7 +1172,7 @@ export async function fetchUnitsSoldForItemsInDateRangeBatched(
           dateField,
           { includeCancelled: options?.includeCancelled === true },
         );
-        return [itemId, n] as const;
+        return [itemId, result.unitsSold] as const;
       }),
     );
     for (const [itemId, units] of results) {

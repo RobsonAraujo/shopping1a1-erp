@@ -235,6 +235,26 @@ export type RotinaListingRow = {
   target: RotinaListingTargetView;
 };
 
+/**
+ * Candidatos a "Sem venda recente". A página filtra pelo prazo N no client
+ * (`isNoRecentSales`) — mudar o dia não relê o banco.
+ */
+export type RotinaStaleSalesCandidate = {
+  mlItemId: string;
+  title: string;
+  sku: string | null;
+  imageUrl: string | null;
+  permalink: string;
+  catalogListing: boolean;
+  listingTypeId: string | null;
+  mlStatus: string;
+  salePrice: number;
+  lastSaleAt: string | null;
+  salesWindowDays: number;
+  listedAt: string | null;
+  firstSeenAt: string;
+};
+
 export type RotinaView = {
   generatedAt: string;
   todayLabel: string;
@@ -247,6 +267,8 @@ export type RotinaView = {
   dataIsFromToday: boolean;
   hasHealth: boolean;
   actions: RotinaActionView[];
+  /** Ativos com vendas lidas na última rodada — filtro de dias no client. */
+  staleSalesCandidates: RotinaStaleSalesCandidate[];
   info: {
     dataMissing: RotinaInfoItem[];
     catalogEligible: RotinaInfoItem[];
@@ -776,6 +798,9 @@ function describe(
 
     case "catalog_takeover":
       return { headline: "O ML criou um anúncio de catálogo ligado a este", details };
+
+    case "no_recent_sales":
+      return { headline: "Sem venda recente", details };
   }
 }
 
@@ -1226,6 +1251,29 @@ export function buildRotinaView(input: RotinaViewInput): RotinaView {
   }
   targetOverrides.sort((a, b) => a.title.localeCompare(b.title, "pt-BR"));
 
+  // Candidatos a "Sem venda recente": só quem tem a janela lida. O prazo N é
+  // filtro no client — anúncio novo / com venda recente sai na hora.
+  const staleSalesCandidates: RotinaStaleSalesCandidate[] = [];
+  for (const health of input.health) {
+    if (health.mlStatus !== "active") continue;
+    if (health.salesWindowDays === null || health.salesWindowDays <= 0) continue;
+    staleSalesCandidates.push({
+      mlItemId: health.mlItemId,
+      title: health.title,
+      sku: health.sku,
+      imageUrl: health.imageUrl,
+      permalink: buyerFacingItemPermalink(health.permalink, health.mlItemId),
+      catalogListing: health.catalogListing,
+      listingTypeId: health.listingTypeId,
+      mlStatus: health.mlStatus,
+      salePrice: health.salePrice,
+      lastSaleAt: health.lastSaleAt,
+      salesWindowDays: health.salesWindowDays,
+      listedAt: health.listedAt,
+      firstSeenAt: health.firstSeenAt,
+    });
+  }
+
   return {
     generatedAt: nowIso,
     todayLabel: formatTodayLabel(now, timeZone),
@@ -1239,6 +1287,7 @@ export function buildRotinaView(input: RotinaViewInput): RotinaView {
     dataIsFromToday: isoIsToday(input.lastCompleteRunAt, now, timeZone),
     hasHealth: input.health.length > 0,
     actions,
+    staleSalesCandidates,
     info: { dataMissing, catalogEligible, linkedCatalog, resolvedToday },
     listings,
     targetOverrides,

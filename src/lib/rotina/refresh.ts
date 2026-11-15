@@ -25,7 +25,8 @@ import {
 } from "@/lib/mercadolibre/promotion-coverage";
 import { getItemSku } from "@/lib/mercadolibre/item-sku";
 import { siteIdFromItemId } from "@/lib/mercadolibre/listing-fees";
-import { fetchUnitsSoldForItemsInWindowCached } from "@/lib/mercadolibre/sales-window-cache";
+import { fetchSalesWindowForItemsInWindowCached } from "@/lib/mercadolibre/sales-window-cache";
+import type { SalesWindowItemResult } from "@/lib/mercadolibre/api";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import { computeListingFloors, type ListingFloors } from "@/lib/rotina/floors";
 import { pricingInputsFromRow, snapshotToHealthData } from "@/lib/rotina/health-row";
@@ -199,7 +200,9 @@ type BuildContext = {
   settings: RotinaSettings;
   targets: Map<string, ListingTargetValues>;
   links: Map<string, string>;
-  unitsSold: Record<string, number> | null;
+  /** `null` = a varredura de vendas falhou nesta rodada. */
+  salesWindow: Record<string, SalesWindowItemResult> | null;
+  salesWindowDays: number;
   previous: Map<string, PreviousHealth>;
 };
 
@@ -257,11 +260,13 @@ async function buildSnapshot(
     }
   }
 
-  const sold = ctx.unitsSold?.[row.mlItemId];
+  const sold = ctx.salesWindow?.[row.mlItemId];
   const unitsPerDay =
-    sold !== undefined && ctx.settings.salesAverageWindowDays > 0
-      ? Math.round((sold / ctx.settings.salesAverageWindowDays) * 1000) / 1000
+    sold !== undefined && ctx.salesWindowDays > 0
+      ? Math.round((sold.unitsSold / ctx.salesWindowDays) * 1000) / 1000
       : null;
+  const lastSaleAt = sold?.lastSaleAt?.toISOString() ?? null;
+  const salesWindowDays = sold !== undefined ? ctx.salesWindowDays : null;
 
   const previous = ctx.previous.get(row.mlItemId);
   const now = new Date().toISOString();
@@ -297,6 +302,8 @@ async function buildSnapshot(
     floorBands: floors.bands,
     pmaPrice: row.pmaPrice,
     unitsPerDay,
+    lastSaleAt,
+    salesWindowDays,
     adsAvailable: row.adsMetricsAvailable,
     adsStatus: row.adsStatus,
     adsCost: row.adsCost,
@@ -613,7 +620,7 @@ export async function runRotinaRefresh(
 
     const pendingIds = pending.map((item) => item.id);
     let adsLoad: AdsLoad = { map: new Map(), available: true, unavailableReason: null };
-    let unitsSold: Record<string, number> | null = null;
+    let salesWindow: Record<string, SalesWindowItemResult> | null = null;
     if (pendingIds.length > 0) {
       emit({ type: "stage", stage: "computing", message: "Lendo ADS e vendas recentes…" });
       adsLoad = await time("ads", () =>
@@ -622,8 +629,8 @@ export async function runRotinaRefresh(
       if (!adsLoad.available) {
         warnings.push("O Product Ads não respondeu: as regras de ADS ficam de fora nesta rodada.");
       }
-      unitsSold = await time("units", () =>
-        fetchUnitsSoldForItemsInWindowCached(
+      salesWindow = await time("units", () =>
+        fetchSalesWindowForItemsInWindowCached(
           organizationId,
           params.token,
           params.userId,
@@ -644,7 +651,8 @@ export async function runRotinaRefresh(
       settings,
       targets,
       links,
-      unitsSold,
+      salesWindow,
+      salesWindowDays: settings.salesAverageWindowDays,
       previous,
     };
 

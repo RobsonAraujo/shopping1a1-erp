@@ -61,6 +61,13 @@ export type RotinaListingSnapshot = {
   floorBands: RotinaFloorBand[];
   pmaPrice: number | null;
   unitsPerDay: number | null;
+  /**
+   * Venda mais recente na janela desta rodada. `null` com `salesWindowDays`
+   * preenchido = zero vendas na janela. Ambos nulos = vendas não lidas.
+   */
+  lastSaleAt: string | null;
+  /** Dias da janela usada em `unitsPerDay` / `lastSaleAt`. */
+  salesWindowDays: number | null;
   adsAvailable: boolean;
   adsStatus: string | null;
   adsCost: number | null;

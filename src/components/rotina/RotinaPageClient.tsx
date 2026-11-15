@@ -16,6 +16,7 @@ import type { ListingTargetDraft } from "@/components/rotina/RotinaListingTarget
 import { RotinaHeader } from "@/components/rotina/RotinaHeader";
 import { RotinaInfoLists } from "@/components/rotina/RotinaInfoLists";
 import { RotinaRefreshOverlay } from "@/components/rotina/RotinaRefreshOverlay";
+import { RotinaStaleSalesGroup } from "@/components/rotina/RotinaStaleSalesGroup";
 import { RotinaTaskGroup } from "@/components/rotina/RotinaTaskGroup";
 import {
   RotinaTargetsSheet,
@@ -32,7 +33,12 @@ import { useUpdatedToday } from "@/components/rotina/use-updated-today";
 import { useBeforeUnloadGuard } from "@/hooks/use-before-unload-guard";
 import { usePersistedJson } from "@/hooks/use-persisted-json";
 import { readApiError } from "@/lib/api/api-client-error";
+import {
+  NO_RECENT_SALES_DEFAULT_DAYS,
+  isNoRecentSales,
+} from "@/lib/rotina/no-recent-sales";
 import { ROTINA_RULES, type RotinaRuleKey } from "@/lib/rotina/rule-registry";
+import { isRuleEnabled } from "@/lib/rotina/settings-shared";
 import type { RotinaActionView, RotinaView } from "@/lib/rotina/view";
 import {
   applyActionOverrides,
@@ -43,6 +49,12 @@ import {
   type SegmentFilter,
 } from "@/lib/rotina/view-summary";
 import { cn } from "@/lib/utils";
+
+const STALE_SALES_DAYS_DEFAULT = NO_RECENT_SALES_DEFAULT_DAYS;
+
+function isStaleSalesDays(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 90;
+}
 
 type ViewTab = "acoes" | "anuncios";
 
@@ -83,6 +95,13 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
     "all",
   );
   const segment: SegmentFilter = isSegment(storedSegment) ? storedSegment : "all";
+  const [storedStaleDays, setStoredStaleDays] = usePersistedJson<unknown>(
+    "rotina-stale-sales-days",
+    STALE_SALES_DAYS_DEFAULT,
+  );
+  const staleSalesDays = isStaleSalesDays(storedStaleDays)
+    ? storedStaleDays
+    : STALE_SALES_DAYS_DEFAULT;
   const [tab, setTab] = useState<ViewTab>("acoes");
   const [overrides, setOverrides] = useState<Map<string, ActionOverride>>(new Map());
   const [targetsOpen, setTargetsOpen] = useState(
@@ -120,16 +139,70 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
   );
   const summary = useMemo(() => summarizeActions(actions), [actions]);
   const groups = useMemo(() => groupActiveByRule(actions, segment), [actions, segment]);
+  const staleSalesEnabled = isRuleEnabled(view.settings, "no_recent_sales");
+  const staleSalesNow = useMemo(() => new Date(view.generatedAt), [view.generatedAt]);
+  const staleSalesMatching = useMemo(() => {
+    if (!staleSalesEnabled) return [];
+    return view.staleSalesCandidates
+      .filter((row) =>
+        isNoRecentSales({
+          mlStatus: row.mlStatus,
+          lastSaleAt: row.lastSaleAt,
+          salesWindowDays: row.salesWindowDays,
+          listedAt: row.listedAt,
+          firstSeenAt: row.firstSeenAt,
+          days: staleSalesDays,
+          now: staleSalesNow,
+        }),
+      )
+      .sort((a, b) => {
+        const aMs = a.lastSaleAt ? new Date(a.lastSaleAt).getTime() : 0;
+        const bMs = b.lastSaleAt ? new Date(b.lastSaleAt).getTime() : 0;
+        if (aMs !== bMs) return aMs - bMs;
+        return a.title.localeCompare(b.title, "pt-BR");
+      });
+  }, [staleSalesEnabled, view.staleSalesCandidates, staleSalesDays, staleSalesNow]);
+  const staleSalesRows = useMemo(() => {
+    if (segment === "own") return staleSalesMatching.filter((row) => !row.catalogListing);
+    if (segment === "catalog") return staleSalesMatching.filter((row) => row.catalogListing);
+    return staleSalesMatching;
+  }, [staleSalesMatching, segment]);
+  const staleSalesWindowDays = useMemo(() => {
+    let max: number | null = null;
+    for (const row of view.staleSalesCandidates) {
+      if (max === null || row.salesWindowDays > max) max = row.salesWindowDays;
+    }
+    return max;
+  }, [view.staleSalesCandidates]);
+  const showStaleSalesGroup =
+    staleSalesEnabled &&
+    (staleSalesRows.length > 0 ||
+      view.staleSalesCandidates.length === 0 ||
+      (staleSalesWindowDays !== null && staleSalesDays > staleSalesWindowDays));
+  const staleSalesEmptyHint =
+    view.staleSalesCandidates.length === 0
+      ? view.hasHealth
+        ? "Depois do próximo Atualizar, os anúncios sem venda na janela lida aparecem aqui."
+        : "Clique em Atualizar para ler as vendas recentes dos anúncios."
+      : staleSalesRows.length === 0 &&
+          !(staleSalesWindowDays !== null && staleSalesDays > staleSalesWindowDays)
+        ? "Nenhum anúncio ativo sem venda neste prazo."
+        : null;
   const listingCounts = useMemo(() => {
     const catalog = view.listings.filter((row) => row.catalogListing).length;
     return { all: view.listings.length, own: view.listings.length - catalog, catalog };
   }, [view.listings]);
+  const staleSalesSegmentCount = {
+    all: staleSalesMatching.length,
+    own: staleSalesMatching.filter((row) => !row.catalogListing).length,
+    catalog: staleSalesMatching.filter((row) => row.catalogListing).length,
+  };
   const segmentCounts =
     tab === "acoes"
       ? {
-          all: summary.active,
-          own: summary.bySegment.own,
-          catalog: summary.bySegment.catalog,
+          all: summary.active + staleSalesSegmentCount.all,
+          own: summary.bySegment.own + staleSalesSegmentCount.own,
+          catalog: summary.bySegment.catalog + staleSalesSegmentCount.catalog,
         }
       : listingCounts;
   const segmentTabs = [
@@ -137,11 +210,13 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
     { id: "own" as const, label: "Próprios", badge: countBadge(segmentCounts.own) },
     { id: "catalog" as const, label: "Catálogo", badge: countBadge(segmentCounts.catalog) },
   ];
+  const activeTaskCount =
+    groups.reduce((total, group) => total + group.actions.length, 0) + staleSalesRows.length;
   const viewTabs = [
     {
       id: "acoes" as const,
       label: "Ações do dia",
-      badge: countBadge(groups.reduce((total, group) => total + group.actions.length, 0)),
+      badge: countBadge(activeTaskCount),
     },
     {
       id: "anuncios" as const,
@@ -149,7 +224,13 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
       badge: countBadge(listingCounts[segment]),
     },
   ];
-  const allGroupsOpen = groups.length > 0 && groups.every((group) => openGroups.has(group.rule));
+  const visibleGroupKeys: RotinaRuleKey[] = [
+    ...groups.map((group) => group.rule),
+    ...(showStaleSalesGroup ? (["no_recent_sales"] as const) : []),
+  ];
+  const allGroupsOpen =
+    visibleGroupKeys.length > 0 &&
+    visibleGroupKeys.every((rule) => openGroups.has(rule));
   // Tarefas do mesmo tema (mesma cor) juntas. `groups` já vem do mais urgente
   // para o mais rotineiro, então o tema entra na ordem da sua tarefa mais urgente.
   const themes = useMemo(() => {
@@ -352,7 +433,14 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
       <div className="space-y-5">
         <RotinaHeader
           todayLabel={freshness.todayLabel}
-          summary={summary}
+          summary={{
+            ...summary,
+            active: summary.active + staleSalesMatching.length,
+            bySegment: {
+              own: summary.bySegment.own + staleSalesSegmentCount.own,
+              catalog: summary.bySegment.catalog + staleSalesSegmentCount.catalog,
+            },
+          }}
           updatedToday={freshness.updatedToday}
           lastCompleteRunLabel={freshness.lastRunLabel}
           onRefresh={() => void runRefresh()}
@@ -400,7 +488,7 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
             aria-labelledby={tabId("rotina-view", "acoes")}
             className="space-y-6"
           >
-            {groups.length === 0 ? (
+            {groups.length === 0 && !showStaleSalesGroup ? (
               <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card)]/50 px-4 py-12 text-center">
                 <span className="flex size-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
                   <CheckCircle2 className="size-7" aria-hidden />
@@ -422,7 +510,8 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
                   <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                     Tarefas de hoje
                     <span className="ml-1.5 font-normal normal-case tracking-normal">
-                      · {groups.length} {groups.length === 1 ? "tarefa" : "tarefas"}
+                      · {visibleGroupKeys.length}{" "}
+                      {visibleGroupKeys.length === 1 ? "tarefa" : "tarefas"}
                     </span>
                   </p>
                   <Button
@@ -430,9 +519,7 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
                     size="sm"
                     className="-mr-2 text-[var(--muted-foreground)]"
                     onClick={() =>
-                      setOpenGroups(
-                        allGroupsOpen ? new Set() : new Set(groups.map((group) => group.rule)),
-                      )
+                      setOpenGroups(allGroupsOpen ? new Set() : new Set(visibleGroupKeys))
                     }
                   >
                     {allGroupsOpen ? (
@@ -444,6 +531,37 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
                   </Button>
                 </div>
                 <div className="space-y-6">
+                  {showStaleSalesGroup ? (
+                    <section
+                      aria-labelledby="rotina-theme-sales"
+                      className="space-y-2"
+                    >
+                      <h2
+                        id="rotina-theme-sales"
+                        className={cn(
+                          "flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-wide",
+                          themeTextClass("sales"),
+                        )}
+                      >
+                        <span className="size-1.5 rounded-full bg-current" aria-hidden />
+                        {RULE_THEME_LABEL.sales}
+                        <span className="font-normal normal-case tracking-normal text-[var(--muted-foreground)]">
+                          · {staleSalesRows.length}{" "}
+                          {staleSalesRows.length === 1 ? "ação" : "ações"}
+                        </span>
+                      </h2>
+                      <RotinaStaleSalesGroup
+                        rows={staleSalesRows}
+                        days={staleSalesDays}
+                        onDaysChange={setStoredStaleDays}
+                        salesWindowDays={staleSalesWindowDays}
+                        now={staleSalesNow}
+                        open={openGroups.has("no_recent_sales")}
+                        onToggle={() => toggleGroup("no_recent_sales")}
+                        emptyHint={staleSalesEmptyHint}
+                      />
+                    </section>
+                  ) : null}
                   {themes.map((entry) => (
                     <section
                       key={entry.theme}

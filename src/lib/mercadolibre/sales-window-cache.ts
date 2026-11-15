@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/db/db";
 import {
-  fetchUnitsSoldForItemsInWindowBatched,
+  fetchSalesWindowForItemsInWindowBatched,
   type SalesWindowDateField,
+  type SalesWindowItemResult,
 } from "@/lib/mercadolibre/api";
 import { mapWithConcurrency } from "@/lib/mercadolibre/concurrency";
 import { logServerError } from "@/lib/infra/server-public-error";
@@ -17,18 +18,25 @@ const SALES_WINDOW_CACHE_TTL_MS = 20 * 60 * 1000;
 
 const WRITE_CONCURRENCY = 10;
 
+function unitsOnly(
+  details: Record<string, SalesWindowItemResult>,
+): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(details).map(([itemId, result]) => [itemId, result.unitsSold]),
+  );
+}
+
 /**
  * Só a leitura do cache (`SalesWindowSnapshot`), sem buscar ao vivo o que
- * faltar — usada pelo render rápido inicial dos kanbans (Compras/Operações
- * Full), que não pode esperar a varredura ML pra pintar a tela. Itens fora
- * do retorno simplesmente não estavam em cache (ou o snapshot expirou).
+ * faltar. Linha antiga com venda e sem `lastSaleAt` conta como miss (a
+ * coluna veio depois): força uma varredura só daquele anúncio.
  */
-export async function readCachedUnitsSoldForItemsInWindow(
+export async function readCachedSalesWindowForItemsInWindow(
   organizationId: string,
   itemIds: string[],
   windowDays: number,
   dateField: SalesWindowDateField,
-): Promise<Record<string, number>> {
+): Promise<Record<string, SalesWindowItemResult>> {
   const uniqueIds = [...new Set(itemIds.filter(Boolean))];
   if (uniqueIds.length === 0 || windowDays <= 0) return {};
 
@@ -41,13 +49,111 @@ export async function readCachedUnitsSoldForItemsInWindow(
       dateField,
       computedAt: { gte: cutoff },
     },
-    select: { mlItemId: true, unitsSold: true },
+    select: { mlItemId: true, unitsSold: true, lastSaleAt: true },
   });
 
-  const result: Record<string, number> = {};
+  const result: Record<string, SalesWindowItemResult> = {};
   for (const row of cached) {
-    result[row.mlItemId] = row.unitsSold;
+    // Retrato pré-coluna: vendeu e não tem data → miss.
+    if (row.unitsSold > 0 && row.lastSaleAt === null) continue;
+    result[row.mlItemId] = {
+      unitsSold: row.unitsSold,
+      lastSaleAt: row.lastSaleAt,
+    };
   }
+  return result;
+}
+
+/**
+ * Só a leitura do cache (`SalesWindowSnapshot`), sem buscar ao vivo o que
+ * faltar — usada pelo render rápido inicial dos kanbans (Compras/Operações
+ * Full), que não pode esperar a varredura ML pra pintar a tela. Itens fora
+ * do retorno simplesmente não estavam em cache (ou o snapshot expirou).
+ */
+export async function readCachedUnitsSoldForItemsInWindow(
+  organizationId: string,
+  itemIds: string[],
+  windowDays: number,
+  dateField: SalesWindowDateField,
+): Promise<Record<string, number>> {
+  return unitsOnly(
+    await readCachedSalesWindowForItemsInWindow(
+      organizationId,
+      itemIds,
+      windowDays,
+      dateField,
+    ),
+  );
+}
+
+/**
+ * Mesmo contrato de `fetchSalesWindowForItemsInWindowBatched`, com cache em
+ * banco (TTL curto). Itens fora do cache (ou com snapshot expirado / sem
+ * `lastSaleAt` quando havia venda) são buscados ao vivo.
+ */
+export async function fetchSalesWindowForItemsInWindowCached(
+  organizationId: string,
+  accessToken: string,
+  sellerId: number,
+  itemIds: string[],
+  windowDays: number,
+  dateField: SalesWindowDateField,
+  /** Chamado só pros itens que precisaram de busca ao vivo (cache miss). */
+  onItem?: (itemId: string, result: SalesWindowItemResult) => void,
+): Promise<Record<string, SalesWindowItemResult>> {
+  const uniqueIds = [...new Set(itemIds.filter(Boolean))];
+  if (uniqueIds.length === 0 || windowDays <= 0) return {};
+
+  const result = await readCachedSalesWindowForItemsInWindow(
+    organizationId,
+    uniqueIds,
+    windowDays,
+    dateField,
+  );
+
+  const missingIds = uniqueIds.filter((id) => !(id in result));
+  if (missingIds.length === 0) return result;
+
+  const fresh = await fetchSalesWindowForItemsInWindowBatched(
+    accessToken,
+    sellerId,
+    missingIds,
+    windowDays,
+    dateField,
+    undefined,
+    onItem,
+  );
+  Object.assign(result, fresh);
+
+  const computedAt = new Date();
+  void mapWithConcurrency(
+    Object.entries(fresh),
+    WRITE_CONCURRENCY,
+    ([mlItemId, { unitsSold, lastSaleAt }]) =>
+      prisma.salesWindowSnapshot.upsert({
+        where: {
+          organizationId_mlItemId_windowDays_dateField: {
+            organizationId,
+            mlItemId,
+            windowDays,
+            dateField,
+          },
+        },
+        create: {
+          organizationId,
+          mlItemId,
+          windowDays,
+          dateField,
+          unitsSold,
+          lastSaleAt,
+          computedAt,
+        },
+        update: { unitsSold, lastSaleAt, computedAt },
+      }),
+  ).catch((e: unknown) => {
+    logServerError("sales-window-cache write", e);
+  });
+
   return result;
 }
 
@@ -71,49 +177,16 @@ export async function fetchUnitsSoldForItemsInWindowCached(
    * disponível antes desta chamada começar. */
   onItem?: (itemId: string, unitsSold: number) => void,
 ): Promise<Record<string, number>> {
-  const uniqueIds = [...new Set(itemIds.filter(Boolean))];
-  if (uniqueIds.length === 0 || windowDays <= 0) return {};
-
-  const result = await readCachedUnitsSoldForItemsInWindow(
+  const details = await fetchSalesWindowForItemsInWindowCached(
     organizationId,
-    uniqueIds,
-    windowDays,
-    dateField,
-  );
-
-  const missingIds = uniqueIds.filter((id) => !(id in result));
-  if (missingIds.length === 0) return result;
-
-  const fresh = await fetchUnitsSoldForItemsInWindowBatched(
     accessToken,
     sellerId,
-    missingIds,
+    itemIds,
     windowDays,
     dateField,
-    undefined,
-    onItem,
+    onItem
+      ? (itemId, result) => onItem(itemId, result.unitsSold)
+      : undefined,
   );
-  Object.assign(result, fresh);
-
-  // Gravação do cache é só pra próxima leitura — não faz sentido a resposta
-  // atual (já computada em `result`) esperar essa escrita terminar.
-  const computedAt = new Date();
-  void mapWithConcurrency(Object.entries(fresh), WRITE_CONCURRENCY, ([mlItemId, unitsSold]) =>
-    prisma.salesWindowSnapshot.upsert({
-      where: {
-        organizationId_mlItemId_windowDays_dateField: {
-          organizationId,
-          mlItemId,
-          windowDays,
-          dateField,
-        },
-      },
-      create: { organizationId, mlItemId, windowDays, dateField, unitsSold, computedAt },
-      update: { unitsSold, computedAt },
-    }),
-  ).catch((e: unknown) => {
-    logServerError("sales-window-cache write", e);
-  });
-
-  return result;
+  return unitsOnly(details);
 }

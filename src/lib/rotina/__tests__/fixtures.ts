@@ -59,6 +59,8 @@ export function listing(
     floorBands: [],
     pmaPrice: null,
     unitsPerDay: 2,
+    lastSaleAt: "2026-11-09T12:00:00.000Z",
+    salesWindowDays: 30,
     adsAvailable: true,
     adsStatus: "active",
     adsCost: 21,

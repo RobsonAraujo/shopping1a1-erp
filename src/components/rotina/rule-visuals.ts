@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  CircleOff,
   Copy,
   Gauge,
   Hourglass,
@@ -26,13 +27,13 @@ import {
  * Duas famílias de cor, que não se misturam (ver `src/lib/ui/tone.ts`):
  *
  * - **Tema** (tom de categoria): a família da tarefa — catálogo, preço,
- *   promoção, ADS. Pinta o ícone do grupo, então todo grupo tem cor e a cor
+ *   promoção, ADS, vendas. Pinta o ícone do grupo, então todo grupo tem cor e a cor
  *   diz de que assunto ele é. Nunca quer dizer "bom" ou "ruim".
  * - **Estado** (`tone`): urgência, só dentro do card — catálogo **perdendo** é
  *   vermelho, **dividindo** o 1º lugar é amarelo, **ganhando com folga para
  *   subir** é verde (faixa lateral + pílula).
  */
-export type RuleTheme = "catalog" | "price" | "promo" | "ads";
+export type RuleTheme = "catalog" | "price" | "promo" | "ads" | "sales";
 
 export type RuleVisual = {
   icon: LucideIcon;
@@ -53,6 +54,7 @@ const THEME_TONE: Record<RuleTheme, CategoryTone> = {
   price: "rose",
   promo: "amber",
   ads: "emerald",
+  sales: "primary",
 };
 
 export const RULE_VISUALS: Record<RotinaRuleKey, RuleVisual> = {
@@ -62,6 +64,13 @@ export const RULE_VISUALS: Record<RotinaRuleKey, RuleVisual> = {
     tone: "danger",
     pill: "Perdendo",
     taskHint: "anúncios perdendo",
+  },
+  no_recent_sales: {
+    icon: CircleOff,
+    theme: "sales",
+    tone: "warning",
+    pill: "Parado",
+    taskHint: "sem nenhuma venda no prazo",
   },
   catalog_shared: {
     icon: Users,
@@ -91,6 +100,7 @@ export const RULE_THEME_LABEL: Record<RuleTheme, string> = {
   price: "Preço e margem",
   promo: "Promoção",
   ads: "ADS",
+  sales: "Vendas",
 };
 
 /** Cor do título do tema na lista do dia. */

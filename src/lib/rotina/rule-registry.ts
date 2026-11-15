@@ -7,6 +7,7 @@
  */
 export const ROTINA_RULE_KEYS = [
   "catalog_losing",
+  "no_recent_sales",
   "promo_expiring",
   "catalog_takeover",
   "margin_below_min",
@@ -33,8 +34,10 @@ export type RotinaRuleKind = "condition" | "event";
  * `refresh`: avaliada sobre o retrato da última rodada (`ListingHealth`).
  * `catalog`: avaliada ao vivo sobre `Listing.catalogStatus`, que o cron de
  * catálogo atualiza — não depende do "Atualizar".
+ * `display`: montada na leitura da página a partir do retrato (ex.: sem
+ * venda recente); não abre linha em `listing_action_states`.
  */
-export type RotinaRuleSource = "refresh" | "catalog";
+export type RotinaRuleSource = "refresh" | "catalog" | "display";
 
 export type RotinaRuleDefinition = {
   key: RotinaRuleKey;
@@ -60,6 +63,17 @@ export const ROTINA_RULES: Record<RotinaRuleKey, RotinaRuleDefinition> = {
     shortLabel: "perdendo",
     settingsLabel: "Catálogo perdendo",
     settingsHint: "Anúncio de catálogo que não está ganhando a vitrine.",
+  },
+  no_recent_sales: {
+    key: "no_recent_sales",
+    kind: "condition",
+    source: "display",
+    segments: ["own", "catalog"],
+    taskLabel: "Sem venda recente",
+    shortLabel: "sem venda",
+    settingsLabel: "Sem venda recente",
+    settingsHint:
+      "Anúncio ativo sem nenhuma venda nos últimos dias (prazo na lista do dia; padrão 3).",
   },
   promo_expiring: {
     key: "promo_expiring",
@@ -170,3 +184,7 @@ export const REFRESH_CONDITION_RULES: readonly RotinaRuleKey[] =
       ROTINA_RULES[key].source === "refresh" &&
       ROTINA_RULES[key].kind === "condition",
   );
+
+/** Regras que abrem estado (feito/adiado); as de `display` ficam de fora. */
+export const ACTIONABLE_ROTINA_RULE_KEYS: readonly RotinaRuleKey[] =
+  ROTINA_RULE_KEYS.filter((key) => ROTINA_RULES[key].source !== "display");

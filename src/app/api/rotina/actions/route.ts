@@ -7,11 +7,19 @@ import {
   RotinaActionNotFoundError,
   applyRotinaActionOp,
 } from "@/lib/rotina/action-state-data";
-import { ROTINA_RULE_KEYS } from "@/lib/rotina/rule-registry";
+import {
+  ACTIONABLE_ROTINA_RULE_KEYS,
+  type RotinaRuleKey,
+} from "@/lib/rotina/rule-registry";
+
+const actionableRuleKeys = ACTIONABLE_ROTINA_RULE_KEYS as [
+  RotinaRuleKey,
+  ...RotinaRuleKey[],
+];
 
 const bodySchema = z.object({
   mlItemId: z.string().regex(/^[A-Z]{3}\d+$/, "mlItemId inválido"),
-  rule: z.enum(ROTINA_RULE_KEYS),
+  rule: z.enum(actionableRuleKeys),
   op: z.enum(["done", "ack", "snooze", "dismiss", "reopen"]),
   days: z.number().int().min(1).max(30).optional(),
 });
