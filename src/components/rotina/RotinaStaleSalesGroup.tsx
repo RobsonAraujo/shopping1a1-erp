@@ -56,7 +56,6 @@ export function RotinaStaleSalesGroup({
   now,
   open,
   onToggle,
-  emptyHint,
 }: {
   rows: RotinaStaleSalesCandidate[];
   days: number;
@@ -66,7 +65,6 @@ export function RotinaStaleSalesGroup({
   now: Date;
   open: boolean;
   onToggle: () => void;
-  emptyHint: string | null;
 }) {
   const definition = ROTINA_RULES.no_recent_sales;
   const visual = RULE_VISUALS.no_recent_sales;
@@ -75,8 +73,6 @@ export function RotinaStaleSalesGroup({
   const panelId = `${sectionId}-panel`;
   const thumbs = rows.slice(0, PREVIEW_THUMBS);
   const extraThumbs = rows.length - thumbs.length;
-  const windowTooSmall =
-    salesWindowDays !== null && days > salesWindowDays;
 
   function setDays(next: number) {
     if (!Number.isFinite(next) || next < 1 || next > 90) return;
@@ -203,86 +199,71 @@ export function RotinaStaleSalesGroup({
             ) : null}
           </div>
 
-          {windowTooSmall ? (
-            <p className="px-3 py-3 text-sm text-amber-800 sm:px-4">
-              Não dá para confirmar sem venda há {days} dias: a última atualização
-              só leu {salesWindowDays} {salesWindowDays === 1 ? "dia" : "dias"}.
-            </p>
-          ) : null}
-
-          {emptyHint && rows.length === 0 && !windowTooSmall ? (
-            <p className="px-3 py-3 text-sm text-[var(--muted-foreground)] sm:px-4">
-              {emptyHint}
-            </p>
-          ) : null}
-
-          {rows.length > 0 ? (
-            <ul className="space-y-2.5 p-2 sm:p-3">
-              {rows.map((row) => (
-                <li
-                  key={row.mlItemId}
-                  className={cn(
-                    "overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]",
-                    RULE_ACCENT_CLASS[visual.tone],
-                  )}
-                >
-                  <div className="flex gap-3 px-3 py-3 sm:px-4">
-                    <RotinaThumb src={row.imageUrl} size={56} className="size-14 shrink-0 rounded-lg" />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {visual.pill ? (
+          <ul className="space-y-2.5 p-2 sm:p-3">
+            {rows.map((row) => (
+              <li
+                key={row.mlItemId}
+                className={cn(
+                  "overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]",
+                  RULE_ACCENT_CLASS[visual.tone],
+                )}
+              >
+                <div className="flex gap-3 px-3 py-3 sm:px-4">
+                  <RotinaThumb src={row.imageUrl} size={56} className="size-14 shrink-0 rounded-lg" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {visual.pill ? (
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                            STATUS_PILL_CLASS[visual.tone].wrap,
+                          )}
+                        >
                           <span
-                            className={cn(
-                              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                              STATUS_PILL_CLASS[visual.tone].wrap,
-                            )}
-                          >
-                            <span
-                              className={cn("size-1.5 rounded-full", STATUS_PILL_CLASS[visual.tone].dot)}
-                              aria-hidden
-                            />
-                            {visual.pill}
-                          </span>
-                        ) : null}
-                      </div>
-                      <p className="mt-1 truncate text-[15px] font-medium text-[var(--foreground)]">
-                        {row.title}
-                      </p>
-                      <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-[var(--muted-foreground)]">
-                        <SegmentTag segment={row.catalogListing ? "catalog" : "own"} />
-                        <ListingTypeTag listingTypeId={row.listingTypeId} />
-                        {row.sku ? (
-                          <span className="truncate font-mono tabular-nums">{row.sku}</span>
-                        ) : null}
-                        <span className="tabular-nums">{formatMoney(row.salePrice)}</span>
-                      </div>
-                      <p className="mt-1.5 text-[13px] text-[var(--muted-foreground)]">
-                        {saleNote(row, now)}
-                      </p>
+                            className={cn("size-1.5 rounded-full", STATUS_PILL_CLASS[visual.tone].dot)}
+                            aria-hidden
+                          />
+                          {visual.pill}
+                        </span>
+                      ) : null}
                     </div>
+                    <p className="mt-1 truncate text-[15px] font-medium text-[var(--foreground)]">
+                      {row.title}
+                    </p>
+                    <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-[var(--muted-foreground)]">
+                      <SegmentTag segment={row.catalogListing ? "catalog" : "own"} />
+                      <ListingTypeTag listingTypeId={row.listingTypeId} />
+                      {row.sku ? (
+                        <span className="truncate font-mono tabular-nums">{row.sku}</span>
+                      ) : null}
+                      <span className="tabular-nums">{formatMoney(row.salePrice)}</span>
+                    </div>
+                    <p className="mt-1.5 text-[13px] text-[var(--muted-foreground)]">
+                      {saleNote(row, now)}
+                    </p>
                   </div>
-                  <div className="flex flex-wrap gap-2 border-t border-[var(--border)] bg-[var(--muted)]/20 px-3 py-2 sm:px-4">
-                    <Button asChild size="sm" variant="outline" className="h-8">
-                      <a
-                        href={sellerListingModifyUrl(row.mlItemId)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        Editar anúncio
-                        <ExternalLink className="size-3.5 opacity-60" aria-hidden />
-                      </a>
-                    </Button>
-                    <Button asChild size="sm" variant="ghost" className="h-8">
-                      <a href={row.permalink} target="_blank" rel="noopener noreferrer">
-                        Ver no ML
-                        <ExternalLink className="size-3.5 opacity-60" aria-hidden />
-                      </a>
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : null}
+                </div>
+                <div className="flex flex-wrap gap-2 border-t border-[var(--border)] bg-[var(--muted)]/20 px-3 py-2 sm:px-4">
+                  <Button asChild size="sm" variant="outline" className="h-8">
+                    <a
+                      href={sellerListingModifyUrl(row.mlItemId)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Editar anúncio
+                      <ExternalLink className="size-3.5 opacity-60" aria-hidden />
+                    </a>
+                  </Button>
+                  <Button asChild size="sm" variant="ghost" className="h-8">
+                    <a href={row.permalink} target="_blank" rel="noopener noreferrer">
+                      Ver no ML
+                      <ExternalLink className="size-3.5 opacity-60" aria-hidden />
+                    </a>
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
     </section>

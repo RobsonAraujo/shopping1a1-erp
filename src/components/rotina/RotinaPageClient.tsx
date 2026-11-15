@@ -174,20 +174,7 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
     }
     return max;
   }, [view.staleSalesCandidates]);
-  const showStaleSalesGroup =
-    staleSalesEnabled &&
-    (staleSalesRows.length > 0 ||
-      view.staleSalesCandidates.length === 0 ||
-      (staleSalesWindowDays !== null && staleSalesDays > staleSalesWindowDays));
-  const staleSalesEmptyHint =
-    view.staleSalesCandidates.length === 0
-      ? view.hasHealth
-        ? "Depois do próximo Atualizar, os anúncios sem venda na janela lida aparecem aqui."
-        : "Clique em Atualizar para ler as vendas recentes dos anúncios."
-      : staleSalesRows.length === 0 &&
-          !(staleSalesWindowDays !== null && staleSalesDays > staleSalesWindowDays)
-        ? "Nenhum anúncio ativo sem venda neste prazo."
-        : null;
+  const showStaleSalesGroup = staleSalesEnabled && staleSalesRows.length > 0;
   const listingCounts = useMemo(() => {
     const catalog = view.listings.filter((row) => row.catalogListing).length;
     return { all: view.listings.length, own: view.listings.length - catalog, catalog };
@@ -558,7 +545,6 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
                         now={staleSalesNow}
                         open={openGroups.has("no_recent_sales")}
                         onToggle={() => toggleGroup("no_recent_sales")}
-                        emptyHint={staleSalesEmptyHint}
                       />
                     </section>
                   ) : null}
