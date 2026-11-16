@@ -35,7 +35,9 @@ export type RotinaRuleKind = "condition" | "event";
  * `catalog`: avaliada ao vivo sobre `Listing.catalogStatus`, que o cron de
  * catálogo atualiza — não depende do "Atualizar".
  * `display`: montada na leitura da página a partir do retrato (ex.: sem
- * venda recente); não abre linha em `listing_action_states`.
+ * venda recente, com o prazo N aplicado no client). Abre linha em
+ * `listing_action_states` só quando o usuário decide (feito/adiado/ignorado);
+ * a rodada não reconcilia essas linhas.
  */
 export type RotinaRuleSource = "refresh" | "catalog" | "display";
 
@@ -185,6 +187,5 @@ export const REFRESH_CONDITION_RULES: readonly RotinaRuleKey[] =
       ROTINA_RULES[key].kind === "condition",
   );
 
-/** Regras que abrem estado (feito/adiado); as de `display` ficam de fora. */
-export const ACTIONABLE_ROTINA_RULE_KEYS: readonly RotinaRuleKey[] =
-  ROTINA_RULE_KEYS.filter((key) => ROTINA_RULES[key].source !== "display");
+/** Regras que aceitam decisão do usuário (feito/adiado/ignorado) — hoje, todas. */
+export const ACTIONABLE_ROTINA_RULE_KEYS: readonly RotinaRuleKey[] = ROTINA_RULE_KEYS;

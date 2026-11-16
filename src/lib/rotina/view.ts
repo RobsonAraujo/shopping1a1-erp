@@ -46,6 +46,7 @@ import {
 } from "@/lib/rotina/rules";
 import { stateKey } from "@/lib/rotina/reconcile";
 import { isRuleEnabled, type RotinaSettings } from "@/lib/rotina/settings-shared";
+import { noRecentSalesNote } from "@/lib/rotina/no-recent-sales";
 import { isoIsToday, localDayDiff } from "@/lib/rotina/time";
 import type {
   ActionStateSnapshot,
@@ -144,6 +145,8 @@ export type RotinaActionView = {
   stateItemId: string;
   bucket: ActionBucket;
   doneToday: boolean;
+  /** Decidida hoje (feito, adiado ou ignorado) — conta no progresso do dia. */
+  handledToday: boolean;
   continues: boolean;
   isNew: boolean;
   ageLabel: string | null;
@@ -171,6 +174,19 @@ export type RotinaActionView = {
   decidedAt: string | null;
   /** Onde executar a tarefa no ML (promoções, editor, Product Ads, concorrência). */
   links: ActionLinks;
+  /** Só em "Sem venda recente": o que o client usa para aplicar o prazo N. */
+  staleSales?: RotinaStaleSalesFacts;
+};
+
+/** Dados de venda do retrato + o que dá para mexer no anúncio. */
+export type RotinaStaleSalesFacts = {
+  lastSaleAt: string | null;
+  salesWindowDays: number;
+  listedAt: string | null;
+  firstSeenAt: string;
+  mlStatus: string;
+  /** "Sem ADS", "Sem promoção", "Margem 12%"… — vazio se nada se destaca. */
+  diagnosis: string[];
 };
 
 /** Os números da subida, para o painel ao lado do card (como o do piso). */
@@ -235,26 +251,6 @@ export type RotinaListingRow = {
   target: RotinaListingTargetView;
 };
 
-/**
- * Candidatos a "Sem venda recente". A página filtra pelo prazo N no client
- * (`isNoRecentSales`) — mudar o dia não relê o banco.
- */
-export type RotinaStaleSalesCandidate = {
-  mlItemId: string;
-  title: string;
-  sku: string | null;
-  imageUrl: string | null;
-  permalink: string;
-  catalogListing: boolean;
-  listingTypeId: string | null;
-  mlStatus: string;
-  salePrice: number;
-  lastSaleAt: string | null;
-  salesWindowDays: number;
-  listedAt: string | null;
-  firstSeenAt: string;
-};
-
 export type RotinaView = {
   generatedAt: string;
   todayLabel: string;
@@ -267,8 +263,11 @@ export type RotinaView = {
   dataIsFromToday: boolean;
   hasHealth: boolean;
   actions: RotinaActionView[];
-  /** Ativos com vendas lidas na última rodada — filtro de dias no client. */
-  staleSalesCandidates: RotinaStaleSalesCandidate[];
+  /**
+   * "Sem venda recente": um card por anúncio ativo com vendas lidas na última
+   * rodada. O prazo N é filtro no client — mudar o dia não relê o banco.
+   */
+  staleSalesActions: RotinaActionView[];
   info: {
     dataMissing: RotinaInfoItem[];
     catalogEligible: RotinaInfoItem[];
@@ -816,6 +815,31 @@ function compareActions(a: RotinaActionView, b: RotinaActionView): number {
   return a.listing.title.localeCompare(b.listing.title, "pt-BR");
 }
 
+/**
+ * O que dá para mexer num anúncio parado — só o que o retrato sabe com
+ * certeza (ADS não lido ou preço não consultado ficam de fora).
+ */
+function staleSalesDiagnosis(
+  health: RotinaListingSnapshot,
+  catalog: RotinaCatalogLive | null,
+): string[] {
+  const notes: string[] = [];
+  if (catalog?.status === "losing") notes.push("Perdendo o catálogo");
+  else if (catalog?.status === "shared") notes.push("Dividindo o catálogo");
+  if (health.pmaPrice !== null && health.salePrice < health.pmaPrice) {
+    notes.push("Abaixo do PMA");
+  }
+  if (!health.catalogListing && health.adsAvailable && health.adsStatus !== "active") {
+    notes.push("Sem ADS");
+  }
+  if (!health.catalogListing && health.promotionKnown && !health.hasPromotion) {
+    notes.push("Sem promoção");
+  }
+  const margin = health.marginAfterAdsPercent ?? health.marginPercent;
+  if (margin !== null) notes.push(`Margem ${formatPercent(margin)}`);
+  return notes;
+}
+
 export function buildRotinaView(input: RotinaViewInput): RotinaView {
   const { now, timeZone, settings } = input;
   const nowIso = now.toISOString();
@@ -846,6 +870,8 @@ export function buildRotinaView(input: RotinaViewInput): RotinaView {
     ageLabel: string | null;
     relatedListing?: RotinaRelatedListing | null;
     headlineOverride?: { headline: string; details: string[] };
+    staleSales?: RotinaStaleSalesFacts;
+    into?: RotinaActionView[];
   }) {
     const definition = ROTINA_RULES[args.rule];
     const target = input.targets.get(args.entity.mlItemId) ?? null;
@@ -880,7 +906,7 @@ export function buildRotinaView(input: RotinaViewInput): RotinaView {
     const verdictData =
       live && floor && live.priceToWin !== null ? catalogVerdict(floor, live.priceToWin) : null;
 
-    actions.push({
+    (args.into ?? actions).push({
       id: `${args.rule}:${args.stateItemId}`,
       rule: args.rule,
       kind: definition.kind,
@@ -889,6 +915,10 @@ export function buildRotinaView(input: RotinaViewInput): RotinaView {
       bucket: visibility.bucket,
       doneToday:
         visibility.bucket === "done" &&
+        state !== null &&
+        isoIsToday(state.statusChangedAt, now, timeZone),
+      handledToday:
+        visibility.bucket !== "active" &&
         state !== null &&
         isoIsToday(state.statusChangedAt, now, timeZone),
       continues: visibility.continues,
@@ -933,6 +963,7 @@ export function buildRotinaView(input: RotinaViewInput): RotinaView {
             }
           : null,
       }),
+      ...(args.staleSales ? { staleSales: args.staleSales } : {}),
     });
   }
 
@@ -1251,27 +1282,39 @@ export function buildRotinaView(input: RotinaViewInput): RotinaView {
   }
   targetOverrides.sort((a, b) => a.title.localeCompare(b.title, "pt-BR"));
 
-  // Candidatos a "Sem venda recente": só quem tem a janela lida. O prazo N é
-  // filtro no client — anúncio novo / com venda recente sai na hora.
-  const staleSalesCandidates: RotinaStaleSalesCandidate[] = [];
-  for (const health of input.health) {
-    if (health.mlStatus !== "active") continue;
-    if (health.salesWindowDays === null || health.salesWindowDays <= 0) continue;
-    staleSalesCandidates.push({
-      mlItemId: health.mlItemId,
-      title: health.title,
-      sku: health.sku,
-      imageUrl: health.imageUrl,
-      permalink: buyerFacingItemPermalink(health.permalink, health.mlItemId),
-      catalogListing: health.catalogListing,
-      listingTypeId: health.listingTypeId,
-      mlStatus: health.mlStatus,
-      salePrice: health.salePrice,
-      lastSaleAt: health.lastSaleAt,
-      salesWindowDays: health.salesWindowDays,
-      listedAt: health.listedAt,
-      firstSeenAt: health.firstSeenAt,
-    });
+  // "Sem venda recente": só quem tem a janela lida. O prazo N é filtro no
+  // client. Feito volta no próximo Atualizar ("continua"); venda depois da
+  // decisão abre um episódio novo, e a decisão antiga deixa de valer.
+  const staleSalesActions: RotinaActionView[] = [];
+  if (isRuleEnabled(settings, "no_recent_sales")) {
+    for (const entity of entities.values()) {
+      const health = entity.health;
+      if (!health || health.mlStatus !== "active") continue;
+      if (health.salesWindowDays === null || health.salesWindowDays <= 0) continue;
+      const salesWindowDays = health.salesWindowDays;
+      pushAction({
+        rule: "no_recent_sales",
+        entity,
+        stateItemId: entity.mlItemId,
+        dataAt: health.computedAt,
+        episodeStart: health.lastSaleAt,
+        isNew: false,
+        ageLabel: null,
+        headlineOverride: {
+          headline: noRecentSalesNote({ lastSaleAt: health.lastSaleAt, salesWindowDays }, now),
+          details: [],
+        },
+        staleSales: {
+          lastSaleAt: health.lastSaleAt,
+          salesWindowDays,
+          listedAt: health.listedAt,
+          firstSeenAt: health.firstSeenAt,
+          mlStatus: health.mlStatus,
+          diagnosis: staleSalesDiagnosis(health, entity.catalog),
+        },
+        into: staleSalesActions,
+      });
+    }
   }
 
   return {
@@ -1287,7 +1330,7 @@ export function buildRotinaView(input: RotinaViewInput): RotinaView {
     dataIsFromToday: isoIsToday(input.lastCompleteRunAt, now, timeZone),
     hasHealth: input.health.length > 0,
     actions,
-    staleSalesCandidates,
+    staleSalesActions,
     info: { dataMissing, catalogEligible, linkedCatalog, resolvedToday },
     listings,
     targetOverrides,

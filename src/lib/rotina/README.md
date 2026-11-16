@@ -42,7 +42,7 @@ A página **só lê o banco**: abrir não chama o ML. As regras são avaliadas *
 | Chave | Seg. | Tipo | Dispara quando |
 |---|---|---|---|
 | `catalog_losing` | Cat. | condição | `catalogStatus = losing` |
-| `no_recent_sales` | Ambos | exibição | ativo, idade ≥ N dias e **nenhuma venda** nos últimos N dias (padrão 3; filtro na lista). Usa `lastSaleAt` / `salesWindowDays` do Atualizar — não abre estado |
+| `no_recent_sales` | Ambos | exibição | ativo, idade ≥ N dias e **nenhuma venda** nos últimos N dias (padrão 3; filtro na lista). Usa `lastSaleAt` / `salesWindowDays` do Atualizar. Feito/Adiar/Ignorar abrem estado (a rodada não reconcilia); Feito volta "continua" no próximo Atualizar, e venda depois da decisão abre episódio novo |
 | `promo_expiring` | Próp. | condição | o anúncio fica **sem promoção** em ≤ `promotionExpiringSoonDays`: a ativa mais as programadas (`pending`) que emendam nela, começando até o dia seguinte (ver abaixo) |
 | `catalog_takeover` | Próp. | evento | catálogo **novo** ligado a um próprio |
 | `margin_below_min` | Ambos | condição | margem **após ADS** < mínimo (MC se o ADS não serve) |

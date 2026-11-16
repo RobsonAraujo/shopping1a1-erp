@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   Calculator,
   Check,
@@ -60,19 +60,88 @@ export const SNOOZE_OPTIONS = [
   { days: 7, label: "Por 7 dias" },
 ] as const;
 
-const MENU_ITEM_CLASS =
+export const MENU_ITEM_CLASS =
   "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-[var(--foreground)] hover:bg-[var(--muted)] focus-visible:bg-[var(--muted)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50";
 
 /**
  * Controle unido do rodapé. No celular empilha (cada linha do tamanho do card);
  * a partir de `sm` vira uma barra só.
  */
-const GROUP_CLASS =
+export const GROUP_CLASS =
   "flex w-full flex-col divide-y divide-[var(--border)] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-sm sm:inline-flex sm:flex-row sm:items-stretch sm:divide-x sm:divide-y-0";
 
 /** Um botão dentro de um grupo: sem borda, canto ou "pulo" próprio. */
-const SEGMENT_CLASS =
+export const SEGMENT_CLASS =
   "h-10 rounded-none px-3 shadow-none active:scale-100 focus-visible:ring-inset focus-visible:ring-offset-0 data-[state=open]:bg-[var(--accent)] data-[state=open]:text-[var(--foreground)] sm:h-9";
+
+/**
+ * Feito (ou Ciente) + Adiar num controle só; o "⋯" de cada card entra como
+ * `children`. Usado pelo card completo e pelo enxuto de "Sem venda recente".
+ */
+export function RotinaDecisionGroup({
+  action,
+  handlers,
+  children,
+}: {
+  action: RotinaActionView;
+  handlers: Pick<RotinaActionHandlers, "onDone" | "onSnooze" | "busy">;
+  children?: ReactNode;
+}) {
+  const [snoozeOpen, setSnoozeOpen] = useState(false);
+  return (
+    <div
+      role="group"
+      aria-label="Decidir esta ação"
+      className={cn(GROUP_CLASS, "flex-row divide-x divide-y-0 sm:ml-auto sm:w-auto")}
+    >
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => handlers.onDone(action)}
+        disabled={handlers.busy}
+        className={cn(
+          SEGMENT_CLASS,
+          "flex-1 text-emerald-800 hover:bg-emerald-50 hover:text-emerald-900 sm:flex-none",
+        )}
+      >
+        <Check aria-hidden />
+        {action.kind === "event" ? "Ciente" : "Feito"}
+      </Button>
+
+      <Popover open={snoozeOpen} onOpenChange={setSnoozeOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={handlers.busy}
+            className={cn(SEGMENT_CLASS, "flex-1 gap-1.5 text-[var(--muted-foreground)] sm:flex-none")}
+          >
+            <Clock aria-hidden />
+            Adiar
+            <ChevronDown className="size-3.5! opacity-60" aria-hidden />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-44 p-1">
+          {SNOOZE_OPTIONS.map((option) => (
+            <button
+              key={option.days}
+              type="button"
+              className={MENU_ITEM_CLASS}
+              onClick={() => {
+                setSnoozeOpen(false);
+                handlers.onSnooze(action, option.days);
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
+        </PopoverContent>
+      </Popover>
+
+      {children}
+    </div>
+  );
+}
 
 const VERDICT_CLASS = {
   ok: "border-emerald-200/80 bg-emerald-50 text-emerald-900",
@@ -113,7 +182,6 @@ export function RotinaActionRow({
   handlers: RotinaActionHandlers;
   timeZone: string;
 }) {
-  const [snoozeOpen, setSnoozeOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [editingTarget, setEditingTarget] = useState(false);
   const [savingTarget, setSavingTarget] = useState(false);
@@ -341,55 +409,7 @@ export function RotinaActionRow({
         </div>
 
         {/* Decidir num controle só: concluir, adiar, mais opções. */}
-        <div
-          role="group"
-          aria-label="Decidir esta ação"
-          className={cn(GROUP_CLASS, "flex-row divide-x divide-y-0 sm:ml-auto sm:w-auto")}
-        >
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => handlers.onDone(action)}
-            disabled={handlers.busy}
-            className={cn(
-              SEGMENT_CLASS,
-              "flex-1 text-emerald-800 hover:bg-emerald-50 hover:text-emerald-900 sm:flex-none",
-            )}
-          >
-            <Check aria-hidden />
-            {action.kind === "event" ? "Ciente" : "Feito"}
-          </Button>
-
-          <Popover open={snoozeOpen} onOpenChange={setSnoozeOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={handlers.busy}
-                className={cn(SEGMENT_CLASS, "flex-1 gap-1.5 text-[var(--muted-foreground)] sm:flex-none")}
-              >
-                <Clock aria-hidden />
-                Adiar
-                <ChevronDown className="size-3.5! opacity-60" aria-hidden />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-44 p-1">
-              {SNOOZE_OPTIONS.map((option) => (
-                <button
-                  key={option.days}
-                  type="button"
-                  className={MENU_ITEM_CLASS}
-                  onClick={() => {
-                    setSnoozeOpen(false);
-                    handlers.onSnooze(action, option.days);
-                  }}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </PopoverContent>
-          </Popover>
-
+        <RotinaDecisionGroup action={action} handlers={handlers}>
           <Popover
             open={moreOpen}
             onOpenChange={(open) => {
@@ -482,8 +502,7 @@ export function RotinaActionRow({
               )}
             </PopoverContent>
           </Popover>
-
-        </div>
+        </RotinaDecisionGroup>
       </div>
 
       {simulator && simulating ? (

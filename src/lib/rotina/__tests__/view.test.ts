@@ -585,10 +585,105 @@ describe("view summary", () => {
     const after = summarizeActions(
       applyActionOverrides(
         view.actions,
-        new Map([["ads_missing:OWN2", { bucket: "done" as const, doneToday: true }]]),
+        new Map([
+          ["ads_missing:OWN2", { bucket: "done" as const, doneToday: true, handledToday: true }],
+        ]),
       ),
     );
     assert.equal(after.active, 2);
     assert.equal(after.doneToday, 1);
+    assert.equal(after.handledToday, 1);
+  });
+
+  it("counts snoozed and dismissed decisions of today as handled", () => {
+    const today = "2026-11-10T14:00:00.000Z";
+    const yesterday = "2026-11-09T14:00:00.000Z";
+    const view = buildRotinaView(
+      input({
+        health: [ownNoPromo, ownNoAds, catalogRow],
+        catalogLive: [catalogLive({ mlItemId: "CAT1" })],
+        states: [
+          state({
+            mlItemId: "OWN1",
+            rule: "promo_missing",
+            status: "snoozed",
+            statusChangedAt: today,
+            snoozedUntil: "2026-11-12T03:00:00.000Z",
+          }),
+          state({ mlItemId: "OWN2", rule: "ads_missing", status: "dismissed", statusChangedAt: today }),
+          state({
+            mlItemId: "CAT1",
+            rule: "catalog_losing",
+            status: "dismissed",
+            statusChangedAt: yesterday,
+          }),
+        ],
+      }),
+    );
+    const summary = summarizeActions(view.actions);
+    assert.equal(summary.active, 0);
+    assert.equal(summary.doneToday, 0);
+    assert.equal(summary.handledToday, 2, "yesterday's dismiss is not today's work");
+    assert.equal(summary.snoozedToday, 1);
+    assert.equal(summary.dismissedToday, 1);
+  });
+});
+
+describe("buildRotinaView: sem venda recente", () => {
+  const stale = listing({
+    mlItemId: "OWN9",
+    title: "Parado",
+    lastSaleAt: "2026-11-01T12:00:00.000Z",
+    adsStatus: "idle",
+    hasPromotion: false,
+    regularPrice: null,
+  });
+
+  it("builds one card per active listing with sales read, outside the day's actions", () => {
+    const view = buildRotinaView(input({ health: [stale] }));
+    assert.equal(view.actions.some((action) => action.rule === "no_recent_sales"), false);
+    const card = view.staleSalesActions.find((action) => action.id === "no_recent_sales:OWN9");
+    assert.ok(card);
+    assert.equal(card.bucket, "active");
+    assert.equal(card.headline, "Última venda há 9 dias");
+    assert.deepEqual(card.staleSales?.diagnosis, ["Sem ADS", "Sem promoção", "Margem 12%"]);
+  });
+
+  it("hides after Feito and returns as 'continues' after a newer refresh", () => {
+    const doneToday = state({
+      mlItemId: "OWN9",
+      rule: "no_recent_sales",
+      status: "done",
+      statusChangedAt: "2026-11-10T14:00:00.000Z",
+    });
+    const hidden = buildRotinaView(input({ health: [stale], states: [doneToday] }));
+    const hiddenCard = hidden.staleSalesActions[0];
+    assert.equal(hiddenCard.bucket, "done");
+    assert.equal(hiddenCard.doneToday, true);
+    assert.equal(hiddenCard.handledToday, true);
+
+    const doneBeforeRefresh = { ...doneToday, statusChangedAt: "2026-11-10T08:00:00.000Z" };
+    const back = buildRotinaView(input({ health: [stale], states: [doneBeforeRefresh] }));
+    assert.equal(back.staleSalesActions[0].bucket, "active");
+    assert.equal(back.staleSalesActions[0].continues, true);
+  });
+
+  it("a sale after the decision starts a new episode", () => {
+    const oldDone = state({
+      mlItemId: "OWN9",
+      rule: "no_recent_sales",
+      status: "done",
+      statusChangedAt: "2026-10-20T14:00:00.000Z",
+    });
+    const view = buildRotinaView(input({ health: [stale], states: [oldDone] }));
+    assert.equal(view.staleSalesActions[0].bucket, "active");
+    assert.equal(view.staleSalesActions[0].continues, false);
+  });
+
+  it("is empty when the rule is turned off", () => {
+    const view = buildRotinaView(
+      input({ health: [stale], settings: settings({ disabledRules: ["no_recent_sales"] }) }),
+    );
+    assert.equal(view.staleSalesActions.length, 0);
   });
 });

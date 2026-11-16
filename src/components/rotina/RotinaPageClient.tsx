@@ -43,6 +43,7 @@ import type { RotinaActionView, RotinaView } from "@/lib/rotina/view";
 import {
   applyActionOverrides,
   groupActiveByRule,
+  inSegment,
   summarizeActions,
   type ActionOverride,
   type ActionGroup,
@@ -133,63 +134,73 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
     setOverrides(new Map());
   }
 
-  const actions = useMemo(
-    () => applyActionOverrides(view.actions, overrides),
-    [view.actions, overrides],
-  );
-  const summary = useMemo(() => summarizeActions(actions), [actions]);
-  const groups = useMemo(() => groupActiveByRule(actions, segment), [actions, segment]);
   const staleSalesEnabled = isRuleEnabled(view.settings, "no_recent_sales");
   const staleSalesNow = useMemo(() => new Date(view.generatedAt), [view.generatedAt]);
-  const staleSalesMatching = useMemo(() => {
+  // Abertos entram pelo prazo N; os já decididos ficam no histórico do dia
+  // (feito/adiado/ignorado) mesmo que tenham vendido depois.
+  const staleSalesInScope = useMemo(() => {
     if (!staleSalesEnabled) return [];
-    return view.staleSalesCandidates
-      .filter((row) =>
-        isNoRecentSales({
-          mlStatus: row.mlStatus,
-          lastSaleAt: row.lastSaleAt,
-          salesWindowDays: row.salesWindowDays,
-          listedAt: row.listedAt,
-          firstSeenAt: row.firstSeenAt,
-          days: staleSalesDays,
-          now: staleSalesNow,
-        }),
-      )
-      .sort((a, b) => {
-        const aMs = a.lastSaleAt ? new Date(a.lastSaleAt).getTime() : 0;
-        const bMs = b.lastSaleAt ? new Date(b.lastSaleAt).getTime() : 0;
-        if (aMs !== bMs) return aMs - bMs;
-        return a.title.localeCompare(b.title, "pt-BR");
+    return view.staleSalesActions.filter((action) => {
+      if (action.bucket !== "active") return true;
+      const facts = action.staleSales;
+      if (!facts) return false;
+      return isNoRecentSales({
+        mlStatus: facts.mlStatus,
+        lastSaleAt: facts.lastSaleAt,
+        salesWindowDays: facts.salesWindowDays,
+        listedAt: facts.listedAt,
+        firstSeenAt: facts.firstSeenAt,
+        days: staleSalesDays,
+        now: staleSalesNow,
       });
-  }, [staleSalesEnabled, view.staleSalesCandidates, staleSalesDays, staleSalesNow]);
-  const staleSalesRows = useMemo(() => {
-    if (segment === "own") return staleSalesMatching.filter((row) => !row.catalogListing);
-    if (segment === "catalog") return staleSalesMatching.filter((row) => row.catalogListing);
-    return staleSalesMatching;
-  }, [staleSalesMatching, segment]);
+    });
+  }, [staleSalesEnabled, view.staleSalesActions, staleSalesDays, staleSalesNow]);
+
+  const actions = useMemo(
+    () => applyActionOverrides([...view.actions, ...staleSalesInScope], overrides),
+    [view.actions, staleSalesInScope, overrides],
+  );
+  const summary = useMemo(() => summarizeActions(actions), [actions]);
+  const groups = useMemo(
+    () => groupActiveByRule(actions, segment).filter((group) => group.rule !== "no_recent_sales"),
+    [actions, segment],
+  );
+  const staleSalesRows = useMemo(
+    () =>
+      actions
+        .filter(
+          (action) =>
+            action.rule === "no_recent_sales" &&
+            action.bucket === "active" &&
+            inSegment(action, segment),
+        )
+        .sort((a, b) => {
+          const aMs = a.staleSales?.lastSaleAt ? new Date(a.staleSales.lastSaleAt).getTime() : 0;
+          const bMs = b.staleSales?.lastSaleAt ? new Date(b.staleSales.lastSaleAt).getTime() : 0;
+          if (aMs !== bMs) return aMs - bMs;
+          return a.listing.title.localeCompare(b.listing.title, "pt-BR");
+        }),
+    [actions, segment],
+  );
   const staleSalesWindowDays = useMemo(() => {
     let max: number | null = null;
-    for (const row of view.staleSalesCandidates) {
-      if (max === null || row.salesWindowDays > max) max = row.salesWindowDays;
+    for (const action of view.staleSalesActions) {
+      const days = action.staleSales?.salesWindowDays ?? null;
+      if (days !== null && (max === null || days > max)) max = days;
     }
     return max;
-  }, [view.staleSalesCandidates]);
+  }, [view.staleSalesActions]);
   const showStaleSalesGroup = staleSalesEnabled && staleSalesRows.length > 0;
   const listingCounts = useMemo(() => {
     const catalog = view.listings.filter((row) => row.catalogListing).length;
     return { all: view.listings.length, own: view.listings.length - catalog, catalog };
   }, [view.listings]);
-  const staleSalesSegmentCount = {
-    all: staleSalesMatching.length,
-    own: staleSalesMatching.filter((row) => !row.catalogListing).length,
-    catalog: staleSalesMatching.filter((row) => row.catalogListing).length,
-  };
   const segmentCounts =
     tab === "acoes"
       ? {
-          all: summary.active + staleSalesSegmentCount.all,
-          own: summary.bySegment.own + staleSalesSegmentCount.own,
-          catalog: summary.bySegment.catalog + staleSalesSegmentCount.catalog,
+          all: summary.active,
+          own: summary.bySegment.own,
+          catalog: summary.bySegment.catalog,
         }
       : listingCounts;
   const segmentTabs = [
@@ -295,7 +306,12 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
   );
 
   const undo = (action: RotinaActionView) =>
-    decide(action, "reopen", { bucket: "active", doneToday: false, snoozedUntil: null });
+    decide(action, "reopen", {
+      bucket: "active",
+      doneToday: false,
+      handledToday: false,
+      snoozedUntil: null,
+    });
 
   /** Meta de um anúncio — do menu do card ou da aba Anúncios. */
   async function saveListingTarget(
@@ -348,6 +364,7 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
       const saved = await decide(action, event ? "ack" : "done", {
         bucket: "done",
         doneToday: true,
+        handledToday: true,
       });
       confirmWithUndo(saved, action, event ? "Marcado como ciente." : "Marcado como feito.");
     },
@@ -355,13 +372,17 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
       const saved = await decide(
         action,
         "snooze",
-        { bucket: "snoozed", doneToday: false },
+        { bucket: "snoozed", doneToday: false, handledToday: true },
         days,
       );
       confirmWithUndo(saved, action, SNOOZE_TOAST[days] ?? "Adiado.");
     },
     onDismiss: async (action) => {
-      const saved = await decide(action, "dismiss", { bucket: "dismissed", doneToday: false });
+      const saved = await decide(action, "dismiss", {
+        bucket: "dismissed",
+        doneToday: false,
+        handledToday: true,
+      });
       confirmWithUndo(
         saved,
         action,
@@ -420,14 +441,7 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
       <div className="space-y-5">
         <RotinaHeader
           todayLabel={freshness.todayLabel}
-          summary={{
-            ...summary,
-            active: summary.active + staleSalesMatching.length,
-            bySegment: {
-              own: summary.bySegment.own + staleSalesSegmentCount.own,
-              catalog: summary.bySegment.catalog + staleSalesSegmentCount.catalog,
-            },
-          }}
+          summary={summary}
           updatedToday={freshness.updatedToday}
           lastCompleteRunLabel={freshness.lastRunLabel}
           onRefresh={() => void runRefresh()}
@@ -538,11 +552,11 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
                         </span>
                       </h2>
                       <RotinaStaleSalesGroup
-                        rows={staleSalesRows}
+                        actions={staleSalesRows}
+                        handlers={handlers}
                         days={staleSalesDays}
                         onDaysChange={setStoredStaleDays}
                         salesWindowDays={staleSalesWindowDays}
-                        now={staleSalesNow}
                         open={openGroups.has("no_recent_sales")}
                         onToggle={() => toggleGroup("no_recent_sales")}
                       />

@@ -15,6 +15,7 @@ import type { ActionBucket } from "@/lib/rotina/visibility";
 export type ActionOverride = {
   bucket: ActionBucket;
   doneToday: boolean;
+  handledToday: boolean;
   snoozedUntil?: string | null;
 };
 
@@ -32,6 +33,7 @@ export function applyActionOverrides(
       ...action,
       bucket: override.bucket,
       doneToday: override.doneToday,
+      handledToday: override.handledToday,
       continues: override.bucket === "active" ? action.continues : false,
       snoozedUntil:
         override.snoozedUntil !== undefined ? override.snoozedUntil : action.snoozedUntil,
@@ -49,6 +51,10 @@ export type ActionSummary = {
   active: number;
   newToday: number;
   doneToday: number;
+  /** Feitas + adiadas + ignoradas hoje: o que enche a barra do dia. */
+  handledToday: number;
+  snoozedToday: number;
+  dismissedToday: number;
   bySegment: Record<RotinaSegment, number>;
   byRule: Record<RotinaSegment, Partial<Record<RotinaRuleKey, number>>>;
 };
@@ -58,11 +64,19 @@ export function summarizeActions(actions: readonly RotinaActionView[]): ActionSu
     active: 0,
     newToday: 0,
     doneToday: 0,
+    handledToday: 0,
+    snoozedToday: 0,
+    dismissedToday: 0,
     bySegment: { own: 0, catalog: 0 },
     byRule: { own: {}, catalog: {} },
   };
   for (const action of actions) {
     if (action.doneToday) summary.doneToday += 1;
+    if (action.handledToday) {
+      summary.handledToday += 1;
+      if (action.bucket === "snoozed") summary.snoozedToday += 1;
+      if (action.bucket === "dismissed") summary.dismissedToday += 1;
+    }
     if (action.bucket !== "active") continue;
     summary.active += 1;
     if (action.isNew) summary.newToday += 1;

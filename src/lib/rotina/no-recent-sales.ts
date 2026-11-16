@@ -53,3 +53,17 @@ export function daysSinceLastSale(
   if (!Number.isFinite(ms) || ms < 0) return 0;
   return Math.floor(ms / DAY_MS);
 }
+
+/** Frase do card: há quanto tempo vendeu pela última vez. */
+export function noRecentSalesNote(
+  input: { lastSaleAt: string | null; salesWindowDays: number },
+  now: Date,
+): string {
+  if (input.lastSaleAt === null) {
+    return `Nenhuma venda nos últimos ${input.salesWindowDays} dias`;
+  }
+  const days = daysSinceLastSale(input.lastSaleAt, now);
+  if (days <= 0) return "Última venda hoje";
+  if (days === 1) return "Última venda ontem";
+  return `Última venda há ${days} dias`;
+}

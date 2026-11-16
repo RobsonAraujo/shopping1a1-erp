@@ -15,20 +15,21 @@ function Stat({
   value: number;
   className?: string;
 }) {
+  // Só span: o stat também vai dentro do botão do tooltip.
   return (
-    <div className="min-w-0">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+    <span className="block min-w-0">
+      <span className="block text-[11px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
         {label}
-      </p>
-      <p
+      </span>
+      <span
         className={cn(
-          "mt-0.5 text-2xl font-bold leading-none tabular-nums tracking-tight text-[var(--foreground)]",
+          "mt-0.5 block text-2xl font-bold leading-none tabular-nums tracking-tight text-[var(--foreground)]",
           className,
         )}
       >
         {value}
-      </p>
-    </div>
+      </span>
+    </span>
   );
 }
 
@@ -54,9 +55,15 @@ export function RotinaHeader({
   onOpenTargets: () => void;
   busy: boolean;
 }) {
-  const totalToday = summary.active + summary.doneToday;
-  const percent = totalToday > 0 ? Math.round((summary.doneToday / totalToday) * 100) : 0;
-  const dayComplete = summary.active === 0 && summary.doneToday > 0;
+  const handled = summary.handledToday;
+  const totalToday = summary.active + handled;
+  const percent = totalToday > 0 ? Math.round((handled / totalToday) * 100) : 0;
+  const dayComplete = summary.active === 0 && handled > 0;
+  const handledBreakdown = [
+    `${summary.doneToday} ${summary.doneToday === 1 ? "feita" : "feitas"}`,
+    `${summary.snoozedToday} ${summary.snoozedToday === 1 ? "adiada" : "adiadas"}`,
+    `${summary.dismissedToday} ${summary.dismissedToday === 1 ? "ignorada" : "ignoradas"}`,
+  ].join(" · ");
   const label = todayLabel.charAt(0).toUpperCase() + todayLabel.slice(1);
 
   return (
@@ -108,11 +115,22 @@ export function RotinaHeader({
               value={summary.newToday}
               className={summary.newToday > 0 ? "text-amber-700" : undefined}
             />
-            <Stat
-              label="Feitas hoje"
-              value={summary.doneToday}
-              className={summary.doneToday > 0 ? "text-emerald-700" : undefined}
-            />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="cursor-default rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+                  aria-label={`Tratadas hoje: ${handled} (${handledBreakdown})`}
+                >
+                  <Stat
+                    label="Tratadas hoje"
+                    value={handled}
+                    className={handled > 0 ? "text-emerald-700" : undefined}
+                  />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>{handledBreakdown}</TooltipContent>
+            </Tooltip>
           </div>
           <div className="min-w-0">
             <div className="flex items-baseline justify-between gap-3 text-xs text-[var(--muted-foreground)]">
@@ -127,17 +145,17 @@ export function RotinaHeader({
                 )}
               </span>
               <span className="tabular-nums">
-                {summary.doneToday} de {totalToday}
+                {handled} de {totalToday}
               </span>
             </div>
             <div
               className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-[var(--muted)]"
               role="progressbar"
-              aria-label="Ações feitas hoje"
+              aria-label="Ações tratadas hoje"
               aria-valuemin={0}
               aria-valuemax={Math.max(totalToday, 1)}
-              aria-valuenow={summary.doneToday}
-              aria-valuetext={`${summary.doneToday} de ${totalToday} ações feitas`}
+              aria-valuenow={handled}
+              aria-valuetext={`${handled} de ${totalToday} ações tratadas`}
             >
               <div
                 className="h-full rounded-full bg-emerald-600 transition-[width] duration-500"
