@@ -44,6 +44,33 @@ export function faqStructuredData() {
   };
 }
 
+export type FaqItem = { q: string; a: string };
+
+/** Lista sanfonada de perguntas; a `/beta` usa com as próprias perguntas. */
+export function FaqList({ items }: { items: readonly FaqItem[] }) {
+  return (
+    <div className="divide-y divide-[var(--border)] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm">
+      {items.map((item) => (
+        <details
+          key={item.q}
+          className="group px-5 py-1 transition-colors open:bg-[var(--muted)]/25"
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-4 text-left font-medium text-[var(--foreground)] marker:content-none [&::-webkit-details-marker]:hidden">
+            {item.q}
+            <ChevronDown
+              className="size-4 shrink-0 text-[var(--muted-foreground)] transition-transform group-open:rotate-180"
+              aria-hidden
+            />
+          </summary>
+          <p className="pb-4 pr-8 text-sm leading-relaxed text-[var(--muted-foreground)]">
+            {item.a}
+          </p>
+        </details>
+      ))}
+    </div>
+  );
+}
+
 export function MarketingFaq() {
   return (
     <MarketingSection
@@ -55,25 +82,7 @@ export function MarketingFaq() {
       title="Perguntas frequentes"
       lead="Respostas objetivas sobre acesso, trial e o que o painel cobre."
     >
-      <div className="divide-y divide-[var(--border)] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm">
-        {FAQ.map((item) => (
-          <details
-            key={item.q}
-            className="group px-5 py-1 transition-colors open:bg-[var(--muted)]/25"
-          >
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-4 text-left font-medium text-[var(--foreground)] marker:content-none [&::-webkit-details-marker]:hidden">
-              {item.q}
-              <ChevronDown
-                className="size-4 shrink-0 text-[var(--muted-foreground)] transition-transform group-open:rotate-180"
-                aria-hidden
-              />
-            </summary>
-            <p className="pb-4 pr-8 text-sm leading-relaxed text-[var(--muted-foreground)]">
-              {item.a}
-            </p>
-          </details>
-        ))}
-      </div>
+      <FaqList items={FAQ} />
     </MarketingSection>
   );
 }

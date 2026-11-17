@@ -66,7 +66,11 @@ export function MarketingHowItStarts({
       </ol>
 
       <div className="mt-9 flex flex-col items-center gap-4">
-        <OAuthCta isLoggedIn={isLoggedIn} dashboardHref={dashboardHref} />
+        <OAuthCta
+          isLoggedIn={isLoggedIn}
+          dashboardHref={dashboardHref}
+          location="how_it_starts"
+        />
         {!isLoggedIn ? <CtaReassurance /> : null}
       </div>
     </MarketingSection>

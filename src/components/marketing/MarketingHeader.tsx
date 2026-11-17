@@ -117,6 +117,7 @@ export function MarketingHeader({
             <div className="ml-auto flex shrink-0 items-center gap-2">
               <OAuthCta
                 isLoggedIn={isLoggedIn}
+                location="header"
                 dashboardHref={dashboardHref}
                 size="sm"
                 onDark={!solid}

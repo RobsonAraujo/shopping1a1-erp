@@ -72,6 +72,7 @@ export function PageHero({
         <div className="mt-9 flex flex-col items-center gap-5">
           <OAuthCta
             isLoggedIn={isLoggedIn}
+            location="page_hero"
             dashboardHref={dashboardHref}
             onDark
           />

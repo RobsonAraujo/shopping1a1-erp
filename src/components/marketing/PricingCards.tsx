@@ -88,6 +88,7 @@ export function PricingCards({
           <div className="mt-8">
             <OAuthCta
               isLoggedIn={isLoggedIn}
+              location="pricing"
               dashboardHref={dashboardHref}
               className="w-full"
             />

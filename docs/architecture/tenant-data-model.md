@@ -56,6 +56,10 @@ model OrganizationMlSeller {
 
 `Organization.status` fora de `[trialing, active]` → `requireOrganization()` recusa com 402 antes de qualquer query de negócio ou chamada ao Mercado Livre (`src/lib/api/api-auth.ts`). Trocado manualmente hoje (rota `PATCH /api/admin/organizations/[id]/status` com `ADMIN_SECRET`, ou Prisma Studio) — gateway automático (Stripe/Mercado Pago escrevendo `status` via webhook) é a extensão natural quando isso for prioridade; a coluna já foi desenhada pra isso.
 
+## Origem do cadastro e oferta
+
+`Organization.signupSource` (UTM, id de clique do Google, página de entrada), `signupOffer` e `trialEndsAt` são gravados só na criação, pelo callback OAuth (`ensureOrganizationForMlSeller`). `trialEndsAt` é o compromisso da oferta da `/beta` (30 dias garantidos); ainda não bloqueia nada — o gate continua sendo `status`. Fluxo dos cookies em `src/lib/marketing/attribution.ts`.
+
 ## Classificação das tabelas Prisma
 
 | Classificação | Modelos |
@@ -63,6 +67,7 @@ model OrganizationMlSeller {
 | **Por tenant — `organizationId NOT NULL`, guard-rail ativo** (ver abaixo) | `Product`, `CompanyTaxSettings`, `KitItem`, `DreProductCostLeveling`, `DreCostItem`, `Listing`, `WarehouseStock`, `SalesWindowSnapshot`, `ReplenishmentCycle`, `FullShipment`, `Kit`, `TaxFixedCostItem`, `TaxFixedCostMonthValue`, `TaxFixedCostMonthExclusion`, `CatalogCompetitionSnapshot`, `CatalogCompetitionPollRun`, `DreMonthSnapshot`, `DreCostMonthValue`, `DreReconciliationImport`, `DreReconciliationEntry`, `TaxReportSimulationSnapshot`, `SimplesRevenueMonthSnapshot`, `InventoryStockMonthSnapshot`, `ListingTarget`, `ListingHealth`, `ListingActionState`, `ListingHealthRun` |
 | **Parcial ML** (`organizationId` existe e é `NOT NULL`, mas a chave de negócio/unique é `sellerId` — proxy de tenant válido, já que `mlUserId` é `@unique` em `OrganizationMlSeller`) | `TaxReportMonthSnapshot` (`sellerId`+`year`+`month`), `RevenueSimulation` (`sellerId`) |
 | **Storage de token, keyed por `mlUserId`** (não é dado de tenant) | `MlSellerCredentials` |
+| **Pré-tenant / marketing** (existe antes de haver organização; fora de `TENANT_SCOPED_MODELS`) | `Lead` (WhatsApp opcional da tela `/conectar`; `convertedOrganizationId` nullable liga à conta quando o OAuth termina) |
 | **Global** (referência nacional/pública, sem override por org) | `CbsIbsVigencia`, `TaxpayerVerificationCache`, `FlexDistanceTier`, `IcmsInternalRate` (PK `uf` — override por organização **não implementado ainda**, apesar de ter sido cogitado; se um cliente pedir alíquota interna diferente da tabela nacional, é preciso migration nova) |
 
 ## Guard-rail de isolamento (`src/lib/db/db-tenant-guard.ts`)

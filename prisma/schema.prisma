@@ -35,14 +35,44 @@ model Organization {
   status          OrganizationStatus @default(trialing)
   statusUpdatedAt DateTime           @default(now()) @map("status_updated_at")
   statusNote      String?            @map("status_note") @db.Text
+  /// Origem do cadastro (UTM, id de clique do Google, página de entrada),
+  /// gravada só na criação pelo callback OAuth. Ver src/lib/marketing/attribution.ts.
+  signupSource    Json?              @map("signup_source")
+  /// Oferta concedida no cadastro (ex.: "beta-30d-2026-11", página /beta).
+  signupOffer     String?            @map("signup_offer")
+  /// Fim do período grátis garantido pela oferta. Ainda não bloqueia nada:
+  /// é o compromisso a honrar quando a cobrança existir.
+  trialEndsAt     DateTime?          @map("trial_ends_at")
   createdAt       DateTime           @default(now()) @map("created_at")
   updatedAt       DateTime           @updatedAt @map("updated_at")
 
   members         OrganizationMember[]
   mlSellers       OrganizationMlSeller[]
   dashboardLayout DashboardLayout?
+  leads           Lead[]
 
   @@map("organizations")
+}
+
+/// WhatsApp deixado (opcional) na tela /conectar, antes do OAuth do ML.
+/// Nível plataforma, como MlSellerCredentials: existe antes de haver
+/// organização, por isso não tem organizationId nem entra em
+/// TENANT_SCOPED_MODELS. `convertedOrganizationId` liga o lead à conta quando
+/// o OAuth termina; lead sem conversão = alguém que travou no Mercado Livre.
+model Lead {
+  id                      String        @id @default(cuid())
+  /// "55" + DDD + número, só dígitos (src/lib/marketing/lead-phone.ts).
+  phone                   String
+  source                  Json?
+  offer                   String?
+  convertedOrganizationId String?       @map("converted_organization_id")
+  convertedOrganization   Organization? @relation(fields: [convertedOrganizationId], references: [id], onDelete: SetNull)
+  convertedAt             DateTime?     @map("converted_at")
+  createdAt               DateTime      @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([convertedOrganizationId])
+  @@map("leads")
 }
 
 /// Pessoa com acesso ao ERP. Hoje só existe 1 User por Organization (o dono,

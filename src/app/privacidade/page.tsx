@@ -98,6 +98,15 @@ export default async function PrivacidadePage() {
           acesso e erros da aplicação) para manter o serviço no ar e
           investigar falhas.
         </p>
+        <p>
+          Se você deixar o seu <strong>WhatsApp</strong> no campo opcional
+          antes de conectar a conta, guardamos o número só para oferecer ajuda
+          caso a conexão não seja concluída. Não usamos esse número para envio
+          de promoções. Também registramos de qual anúncio ou campanha veio a
+          visita (parâmetros como <code>utm_source</code> e o identificador de
+          clique do Google), num cookie da própria Maipo, para medir os nossos
+          anúncios.
+        </p>
       </LegalSection>
 
       <LegalSection n={4} title="Por que usamos esses dados">

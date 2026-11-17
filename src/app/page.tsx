@@ -55,6 +55,13 @@ export default async function Home({ searchParams }: PageProps) {
     redirect(`/api/auth/mercadolibre/callback?${q.toString()}`);
   }
 
+  // O redirect_uri do app no ML é a raiz: quem cancela a autorização volta
+  // aqui com `?error=`. A `/conectar` explica o aviso do ML, oferece tentar de
+  // novo e registra o `oauth_error` do funil.
+  if (sp.error) {
+    redirect(`/conectar?${new URLSearchParams({ error: sp.error }).toString()}`);
+  }
+
   const cookieStore = await cookies();
   const { isLoggedIn, dashboardHref } = getMarketingCtaState(cookieStore);
 

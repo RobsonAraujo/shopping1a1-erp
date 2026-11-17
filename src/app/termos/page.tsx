@@ -67,6 +67,12 @@ export default async function TermosPage() {
           por e-mail e dentro do painel. <strong>Nenhuma cobrança é feita sem
           aviso prévio e sem a sua contratação expressa.</strong>
         </p>
+        <p>
+          Ofertas promocionais, como dias grátis garantidos em uma página de
+          campanha, valem nas condições e no prazo descritos na própria página
+          da oferta e ficam registradas na sua organização no momento do
+          cadastro.
+        </p>
       </LegalSection>
 
       <LegalSection n={4} title="O que o painel não faz">

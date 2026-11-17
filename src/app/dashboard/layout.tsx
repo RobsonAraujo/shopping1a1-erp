@@ -7,6 +7,7 @@ import { DashboardMobileTabBar } from "@/components/shared/DashboardMobileTabBar
 import { MobileDashboardMenu } from "@/components/shared/MobileDashboardMenu";
 import { Button } from "@/components/ui/button";
 import { AccountBlockedNotice } from "@/components/shared/AccountBlockedNotice";
+import { AuthEventBeacon } from "@/components/shared/AuthEventBeacon";
 import { getOrganizationContext } from "@/lib/organizations/context";
 
 export default async function DashboardLayout({
@@ -85,6 +86,7 @@ export default async function DashboardLayout({
       </main>
       <DashboardMobileTabBar />
       <Toaster position="top-right" richColors closeButton />
+      <AuthEventBeacon />
     </div>
   );
 }

@@ -12,6 +12,21 @@ function fakeResponse(body: unknown, { throwOnJson = false } = {}): Response {
 }
 
 describe("formatApiErrorMessage", () => {
+  it("maps every Mercado Livre login error the callback can send to /conectar", () => {
+    for (const code of [
+      "access_denied",
+      "invalid_state",
+      "missing_code_or_state",
+      "oauth_failed",
+      "oauth_config",
+      "credentials_not_persisted",
+    ]) {
+      const message = formatApiErrorMessage(code);
+      assert.notEqual(message, code, code);
+      assert.doesNotMatch(message, /_/, code);
+    }
+  });
+
   it("maps a known error code to its pt-BR message", () => {
     assert.equal(
       formatApiErrorMessage("products_load_failed"),

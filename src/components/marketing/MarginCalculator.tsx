@@ -441,6 +441,7 @@ export function MarginCalculator({
             </p>
             <OAuthCta
               isLoggedIn={isLoggedIn}
+              location="margin_calculator"
               dashboardHref={dashboardHref}
               size="sm"
               className="shrink-0"

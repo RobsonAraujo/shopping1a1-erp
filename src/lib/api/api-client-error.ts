@@ -150,6 +150,8 @@ const API_ERROR_MESSAGES: Record<string, string> = {
     "Não foi possível iniciar o login com o Mercado Livre. Tente novamente em instantes ou fale com o suporte.",
   access_denied:
     "Login cancelado. Para continuar, autorize o acesso à sua conta do Mercado Livre.",
+  credentials_not_persisted:
+    "Não conseguimos salvar a conexão com o Mercado Livre. Tente de novo em instantes.",
   // Strings técnicas em inglês devolvidas por algumas rotas — ver src/app/api/**/route.ts
   "Cycle not found": "Não encontramos este ciclo de reposição.",
   "Invalid status": "Status inválido para esta operação.",

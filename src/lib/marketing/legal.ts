@@ -11,7 +11,7 @@ export const LEGAL = {
     "Av. Paulista, 1636, conj. 03, pavimento 1, salas 103 e 105, anexo 416, Bela Vista, São Paulo/SP, CEP 01310-200",
   supportEmail: "contato.shop1a1@gmail.com",
   /** Data da última revisão dos textos legais; atualizar a cada alteração. */
-  updatedAt: "14 de novembro de 2026",
+  updatedAt: "16 de novembro de 2026",
 } as const;
 
 export function legalUpdatedLabel() {

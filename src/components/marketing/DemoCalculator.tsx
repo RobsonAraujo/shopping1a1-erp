@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Info } from "lucide-react";
 import { CalculatorPageClient } from "@/components/calculadora/CalculatorPageClient";
 import { OAuthCta } from "@/components/marketing/OauthCta";
+import { track } from "@/lib/analytics/track";
 import {
   DEMO_LISTINGS,
   buildDemoCalculatorData,
@@ -19,9 +20,14 @@ import {
 export function DemoCalculator({
   isLoggedIn,
   dashboardHref,
+  connectHref,
+  ctaLabel,
 }: {
   isLoggedIn: boolean;
   dashboardHref: string;
+  /** A `/beta` passa a `/conectar` com a oferta. */
+  connectHref?: string;
+  ctaLabel?: string;
 }) {
   // Montado uma vez: a demonstração não muda enquanto a página está aberta.
   const [demo] = useState(() => ({
@@ -29,8 +35,21 @@ export function DemoCalculator({
     api: createDemoSimulatorApi(),
   }));
 
+  // Primeiro toque ou tecla na demo vira `demo_interaction` (sinal de interesse
+  // no funil); só uma vez por visita.
+  const interacted = useRef(false);
+  const markInteraction = () => {
+    if (interacted.current) return;
+    interacted.current = true;
+    track("demo_interaction", { demo: "calculadora" });
+  };
+
   return (
-    <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--background)] text-left shadow-[0_1px_2px_rgba(15,18,31,0.04),0_24px_48px_-32px_rgba(27,45,111,0.35)]">
+    <div
+      onPointerDownCapture={markInteraction}
+      onKeyDownCapture={markInteraction}
+      className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--background)] text-left shadow-[0_1px_2px_rgba(15,18,31,0.04),0_24px_48px_-32px_rgba(27,45,111,0.35)]"
+    >
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--card)] px-4 py-3">
         <div>
           <p className="text-sm font-semibold text-[var(--foreground)]">Calculadora de preço</p>
@@ -62,7 +81,10 @@ export function DemoCalculator({
         </p>
         <OAuthCta
           isLoggedIn={isLoggedIn}
+          location="calculator"
           dashboardHref={dashboardHref}
+          connectHref={connectHref}
+          label={ctaLabel}
           size="sm"
           className="shrink-0"
         />

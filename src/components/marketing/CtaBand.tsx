@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 /** Reforço de confiança colado no botão, o ponto da página onde a objeção aparece. */
 const REASSURANCE = [
-  { icon: ShieldCheck, label: "OAuth oficial do Mercado Livre" },
+  { icon: ShieldCheck, label: "API oficial do Mercado Livre" },
   { icon: CreditCard, label: "Sem cartão de crédito" },
   { icon: KeyRound, label: "Sem senha nova" },
 ] as const;
@@ -50,11 +50,15 @@ export function CtaBand({
   dashboardHref,
   title,
   lead,
+  connectHref,
+  ctaLabel,
 }: {
   isLoggedIn: boolean;
   dashboardHref: string;
   title: string;
   lead: string;
+  connectHref?: string;
+  ctaLabel?: string;
 }) {
   return (
     <section className="relative overflow-hidden bg-[#0f1a45] px-4 py-20 text-center text-white sm:px-6 sm:py-24">
@@ -76,7 +80,10 @@ export function CtaBand({
         <div className="mt-9 flex flex-col items-center gap-5">
           <OAuthCta
             isLoggedIn={isLoggedIn}
+            location="final_band"
             dashboardHref={dashboardHref}
+            connectHref={connectHref}
+            label={ctaLabel}
             onDark
           />
           {!isLoggedIn ? <CtaReassurance onDark /> : null}

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Layers, Lock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { UserFeedback } from "@/components/ui/user-feedback";
+import { formatApiErrorMessage } from "@/lib/api/api-client-error";
 import { CtaBand, CtaReassurance } from "@/components/marketing/CtaBand";
 import { DemoCalculator } from "@/components/marketing/DemoCalculator";
 import { DemoCatalog } from "@/components/marketing/DemoCatalog";
@@ -111,7 +112,7 @@ export function MarketingLanding({
                   title="Não foi possível concluir o login"
                   className="mt-6"
                 >
-                  {error}
+                  {formatApiErrorMessage(error)}
                 </UserFeedback>
               ) : null}
 
@@ -119,6 +120,7 @@ export function MarketingLanding({
                 <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
                   <OAuthCta
                     isLoggedIn={isLoggedIn}
+                    location="hero"
                     dashboardHref={dashboardHref}
                     onDark
                     className="w-full sm:w-auto"

@@ -1,5 +1,19 @@
 import { prisma } from "@/lib/db/db";
 import type { Organization } from "@/generated/prisma";
+import type { SignupAttribution } from "@/lib/marketing/attribution";
+
+/** Dados de origem do cadastro, gravados só quando a organização nasce. */
+export type SignupContext = {
+  source?: SignupAttribution | null;
+  offer?: string | null;
+  trialEndsAt?: Date | null;
+};
+
+export type EnsureOrganizationResult = {
+  organization: Organization;
+  /** `true` no primeiro login deste seller: é o `sign_up` do funil. */
+  created: boolean;
+};
 
 /**
  * Resolve a Organization vinculada a um seller ML, criando-a (com o dono e o
@@ -11,12 +25,13 @@ import type { Organization } from "@/generated/prisma";
 export async function ensureOrganizationForMlSeller(
   mlUserId: number,
   profile: { email?: string; nickname?: string },
-): Promise<Organization> {
+  signup: SignupContext = {},
+): Promise<EnsureOrganizationResult> {
   const existing = await prisma.organizationMlSeller.findUnique({
     where: { mlUserId },
     include: { organization: true },
   });
-  if (existing) return existing.organization;
+  if (existing) return { organization: existing.organization, created: false };
 
   return prisma.$transaction(async (tx) => {
     // Corrida entre duas requests do mesmo primeiro login: reconfirma dentro
@@ -25,13 +40,16 @@ export async function ensureOrganizationForMlSeller(
       where: { mlUserId },
       include: { organization: true },
     });
-    if (raceCheck) return raceCheck.organization;
+    if (raceCheck) return { organization: raceCheck.organization, created: false };
 
     const organization = await tx.organization.create({
       data: {
         name: profile.nickname || `Vendedor ${mlUserId}`,
         slug: `org-${mlUserId}`,
         status: "trialing",
+        ...(signup.source ? { signupSource: signup.source } : {}),
+        ...(signup.offer ? { signupOffer: signup.offer } : {}),
+        ...(signup.trialEndsAt ? { trialEndsAt: signup.trialEndsAt } : {}),
       },
     });
 
@@ -47,6 +65,6 @@ export async function ensureOrganizationForMlSeller(
       data: { organizationId: organization.id, mlUserId, isPrimary: true },
     });
 
-    return organization;
+    return { organization, created: true };
   });
 }

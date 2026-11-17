@@ -12,6 +12,9 @@ function org(status: Organization["status"]): Organization {
     status,
     statusUpdatedAt: new Date("2026-01-01T00:00:00.000Z"),
     statusNote: null,
+    signupSource: null,
+    signupOffer: null,
+    trialEndsAt: null,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
   };

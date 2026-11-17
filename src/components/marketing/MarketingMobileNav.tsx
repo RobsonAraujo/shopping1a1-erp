@@ -114,6 +114,7 @@ export function MarketingMobileNav({
           <div className="marketing-nav-item border-t border-[var(--border)] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
             <OAuthCta
               isLoggedIn={isLoggedIn}
+              location="mobile_nav"
               dashboardHref={dashboardHref}
               className="w-full"
             />

@@ -1,10 +1,18 @@
+"use client";
+
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { OauthCtaIcon } from "@/components/marketing/OauthCtaIcon";
 import { Button } from "@/components/ui/button";
+import { track } from "@/lib/analytics/track";
 import { cn } from "@/lib/utils";
 
-const SIGNIN = "/api/auth/mercadolibre/signin";
+/**
+ * Quem não está logado passa antes pela `/conectar`, que avisa que o Mercado
+ * Livre vai mostrar "aplicativo não certificado" e só então segue para o OAuth.
+ * Para voltar ao fluxo direto, apontar para `/api/auth/mercadolibre/signin`.
+ */
+export const CONNECT_PATH = "/conectar";
 
 export function OAuthCta({
   isLoggedIn,
@@ -13,6 +21,9 @@ export function OAuthCta({
   onDark = false,
   className,
   tabIndex,
+  location = "other",
+  label = "Testar grátis",
+  connectHref = CONNECT_PATH,
 }: {
   isLoggedIn: boolean;
   dashboardHref: string;
@@ -21,6 +32,11 @@ export function OAuthCta({
   className?: string;
   /** -1 quando o CTA está visualmente escondido (barra fixa fora de tela). */
   tabIndex?: number;
+  /** Posição do botão na página, vai no evento `cta_click` (hero, sticky…). */
+  location?: string;
+  label?: string;
+  /** A `/beta` passa a `/conectar` com a oferta na query. */
+  connectHref?: string;
 }) {
   const shape =
     size === "sm"
@@ -30,9 +46,6 @@ export function OAuthCta({
   const appearance = onDark
     ? "border-0 bg-white text-[#0f1a45] shadow-[0_10px_30px_-12px_rgba(0,0,0,0.45)] hover:bg-white/90"
     : "border-0 bg-[#1b2d6f] text-white shadow-none hover:bg-[#152456]";
-
-  const href = isLoggedIn ? dashboardHref : SIGNIN;
-  const label = isLoggedIn ? "Ir para o dashboard" : "Testar grátis";
 
   return (
     <Button
@@ -46,18 +59,27 @@ export function OAuthCta({
         // só de o botão aparecer na tela, e um refresh que falhasse ali apagaria
         // a sessão de quem nem clicou.
         <Link
-          href={href}
+          href={dashboardHref}
           tabIndex={tabIndex}
-          prefetch={href.startsWith("/api/") ? false : undefined}
+          prefetch={dashboardHref.startsWith("/api/") ? false : undefined}
         >
-          {label}
+          Ir para o dashboard
           <OauthCtaIcon />
         </Link>
       ) : (
-        <a href={href} tabIndex={tabIndex}>
+        <Link
+          href={connectHref}
+          tabIndex={tabIndex}
+          onClick={() =>
+            track("cta_click", {
+              cta_location: location,
+              page: window.location.pathname,
+            })
+          }
+        >
           {label}
           <ArrowRight />
-        </a>
+        </Link>
       )}
     </Button>
   );

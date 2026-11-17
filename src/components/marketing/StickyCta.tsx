@@ -10,9 +10,18 @@ const REVEAL_AFTER_PX = 720;
 export function MarketingStickyCta({
   isLoggedIn,
   dashboardHref,
+  title = "Grátis durante o beta",
+  subtitle = "Sem cartão · sem senha nova",
+  connectHref,
+  ctaLabel,
 }: {
   isLoggedIn: boolean;
   dashboardHref: string;
+  /** Texto para quem não está logado (a `/beta` troca pela oferta). */
+  title?: string;
+  subtitle?: string;
+  connectHref?: string;
+  ctaLabel?: string;
 }) {
   const [visible, setVisible] = useState(false);
 
@@ -47,17 +56,18 @@ export function MarketingStickyCta({
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-[var(--foreground)]">
-            {isLoggedIn ? "Seu painel está pronto" : "Grátis durante o beta"}
+            {isLoggedIn ? "Seu painel está pronto" : title}
           </p>
           <p className="truncate text-xs text-[var(--muted-foreground)]">
-            {isLoggedIn
-              ? "Continue de onde parou"
-              : "Sem cartão · sem senha nova"}
+            {isLoggedIn ? "Continue de onde parou" : subtitle}
           </p>
         </div>
         <OAuthCta
           isLoggedIn={isLoggedIn}
+          location="sticky"
           dashboardHref={dashboardHref}
+          connectHref={connectHref}
+          label={ctaLabel}
           size="sm"
           className="shrink-0"
           tabIndex={visible ? undefined : -1}
