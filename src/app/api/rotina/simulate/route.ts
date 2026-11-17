@@ -13,13 +13,16 @@ export const maxDuration = 60;
 
 const bodySchema = z.object({
   mlItemId: z.string().regex(/^[A-Z]{3}\d+$/, "mlItemId inválido"),
-  /** Até 5 preços por vez (ex.: preço p/ ganhar + o que o usuário digitou). */
-  prices: z.array(z.number().positive().max(10_000_000)).min(1).max(5),
+  /**
+   * Até 5 preços por vez (ex.: preço p/ ganhar + o que o usuário digitou).
+   * Omitido = o preço de hoje (Calculadora, anúncio ainda sem leitura).
+   */
+  prices: z.array(z.number().positive().max(10_000_000)).min(1).max(5).optional(),
   /** Simular no outro tipo (Clássico ↔ Premium). Omitido = o tipo de hoje. */
   listingTypeId: z.enum(SIMULATABLE_LISTING_TYPES).optional(),
 });
 
-/** "E se eu vender a R$ X?" — margem MC e após ADS em cada preço pedido. */
+/** "E se eu vender a R$ X?" — margem MC e após ADS em cada preço pedido (ou no de hoje). */
 export async function POST(request: NextRequest) {
   const auth = await requireOrganization();
   if (!auth.ok) {

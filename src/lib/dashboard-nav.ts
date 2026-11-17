@@ -3,6 +3,7 @@ import {
   BarChart3,
   Boxes,
   Building2,
+  Calculator,
   ChartNoAxesColumn,
   Kanban,
   LayoutGrid,
@@ -165,6 +166,12 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
         label: "Lucratividade",
         description: "Margem real das vendas por anúncio",
         icon: TrendingUp,
+      },
+      {
+        href: "/dashboard/calculadora",
+        label: "Calculadora",
+        description: "Margem de qualquer anúncio no preço que você quiser",
+        icon: Calculator,
       },
       {
         href: "/dashboard/tributario",

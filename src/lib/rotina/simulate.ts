@@ -51,8 +51,8 @@ type SimulationBlock = "missing_cost" | "missing_tax" | "kit_incomplete" | "inco
 export type RotinaSimulation = {
   mlItemId: string;
   targetPercent: number;
-  /** De onde vieram custo/imposto/ADS. */
-  inputsFrom: "refresh" | "live";
+  /** De onde vieram custo/imposto/ADS (`demo` = exemplo da landing, sem ML). */
+  inputsFrom: "refresh" | "live" | "demo";
   /** Quando esses insumos foram lidos (rodada). */
   inputsAt: string | null;
   /** Rebate de tarifa aplicado em todo preço (só anúncio com promoção). */
@@ -61,15 +61,20 @@ export type RotinaSimulation = {
   currentListingTypeId: string | null;
   /** Tipo usado nesta simulação (o de hoje, ou o outro). */
   listingTypeId: string | null;
+  /** Preço de hoje (retrato, ou linha ao vivo) — o simulado quando não vêm preços. */
+  salePrice: number | null;
   /** Sem custo/alíquota/kit completo a conta não vale: nada é simulado. */
   blocked: SimulationBlock;
   results: SimulatedPrice[];
 };
 
-/** Mínimo para a meta em outro tipo, já com o PMA aplicado. */
+/** Mínimo para uma meta num tipo (o de hoje ou o outro), já com o PMA aplicado. */
 export type RotinaTypeFloor = {
   mlItemId: string;
-  listingTypeId: SimulatableListingType;
+  /** Tipo cotado: o pedido, ou o de hoje. */
+  listingTypeId: string | null;
+  /** A meta usada: a pedida, ou a efetiva do anúncio. */
+  targetPercent: number;
   blocked: SimulationBlock;
   /** `null` quando o ML não cotou o preço de hoje nesse tipo. */
   floor: RotinaFloorView | null;
@@ -194,23 +199,36 @@ function inputsForListingType(
   };
 }
 
+/**
+ * Os preços a cotar: os pedidos (arredondados, sem repetir), ou o de hoje
+ * quando nenhum veio — a Calculadora abre um anúncio ainda sem leitura assim.
+ */
+export function resolveSimulationPrices(
+  requested: number[] | undefined,
+  salePrice: number | null,
+): number[] {
+  const source =
+    requested && requested.length > 0 ? requested : salePrice !== null ? [salePrice] : [];
+  return [...new Set(source.map((price) => roundMoney(price)))].filter((price) => price > 0);
+}
+
 export async function simulateListingPrices(
   organizationId: string,
   params: {
     token: string;
     userId: number;
     mlItemId: string;
-    prices: number[];
+    /** Omitido ou vazio = o preço de hoje. */
+    prices?: number[];
     /** Outro tipo (Clássico ↔ Premium). Omitido = o tipo de hoje. */
     listingTypeId?: SimulatableListingType;
   },
 ): Promise<RotinaSimulation> {
   const { token, userId } = params;
-  const prices = [...new Set(params.prices.map((price) => roundMoney(price)))].filter(
-    (price) => price > 0,
-  );
 
   const ctx = await loadSimulationContext(organizationId, params);
+  const salePrice = ctx.listing.salePrice > 0 ? ctx.listing.salePrice : null;
+  const prices = resolveSimulationPrices(params.prices, salePrice);
   const currentListingTypeId = ctx.item.listing_type_id ?? null;
   const listingTypeId = params.listingTypeId ?? currentListingTypeId;
   const inputs = inputsForListingType(ctx.inputs, currentListingTypeId, listingTypeId);
@@ -223,6 +241,7 @@ export async function simulateListingPrices(
     feeRebate: inputs.mlFeeRebate && inputs.mlFeeRebate > 0 ? inputs.mlFeeRebate : null,
     currentListingTypeId,
     listingTypeId,
+    salePrice,
   };
   if (ctx.blocked) return { ...base, blocked: ctx.blocked, results: [] };
 
@@ -244,33 +263,40 @@ export async function simulateListingPrices(
 }
 
 /**
- * "Mínimo no Premium": a mesma busca da rodada (MC e após ADS, ciente das
- * faixas de frete), com a taxa do outro tipo e a meta de agora. O PMA segue
- * piso duro. ~20–40 cotações, por isso fica numa chamada à parte.
+ * Mínimo para uma meta: a mesma busca da rodada (MC e após ADS, ciente das
+ * faixas de frete), no tipo pedido (ou no de hoje) e com a meta pedida (ou a
+ * efetiva). Serve o "Mínimo no Premium" e o "Calcular mínimo p/ X%" da
+ * Calculadora. O PMA segue piso duro. ~20–40 cotações, por isso fica numa
+ * chamada à parte, só quando o usuário pede (ou troca de tipo).
  */
-export async function computeFloorForListingType(
+export async function computeSimulationFloor(
   organizationId: string,
   params: {
     token: string;
     userId: number;
     mlItemId: string;
-    listingTypeId: SimulatableListingType;
+    /** Omitido = o tipo de hoje. */
+    listingTypeId?: SimulatableListingType;
+    /** Omitida = a meta efetiva do anúncio. */
+    targetPercent?: number;
   },
 ): Promise<RotinaTypeFloor> {
-  const { token, userId, listingTypeId } = params;
+  const { token, userId } = params;
   const ctx = await loadSimulationContext(organizationId, params);
-  const base = { mlItemId: ctx.mlItemId, listingTypeId };
+  const currentListingTypeId = ctx.item.listing_type_id ?? null;
+  const listingTypeId = params.listingTypeId ?? currentListingTypeId;
+  const targetPercent = params.targetPercent ?? ctx.targetPercent;
+  const base = { mlItemId: ctx.mlItemId, listingTypeId, targetPercent };
   if (ctx.blocked) return { ...base, blocked: ctx.blocked, floor: null };
 
   const { salePrice } = ctx.listing;
   if (salePrice <= 0) return { ...base, blocked: null, floor: null };
 
-  const inputs = inputsForListingType(
-    ctx.inputs,
-    ctx.item.listing_type_id ?? null,
-    listingTypeId,
-  );
-  const item = itemAsListingType(ctx.item, listingTypeId);
+  const inputs = inputsForListingType(ctx.inputs, currentListingTypeId, listingTypeId);
+  const item =
+    params.listingTypeId && params.listingTypeId !== currentListingTypeId
+      ? itemAsListingType(ctx.item, params.listingTypeId)
+      : ctx.item;
   const seed = await resolveMlCostsAtPrice(
     token,
     userId,
@@ -280,7 +306,7 @@ export async function computeFloorForListingType(
   ).catch(() => null);
   if (!seed) return { ...base, blocked: null, floor: null };
 
-  const today = simulateMarginAtPrice(salePrice, seed, inputs, ctx.targetPercent);
+  const today = simulateMarginAtPrice(salePrice, seed, inputs, targetPercent);
   const floors = await computeFloorsFromSeed(
     token,
     userId,
@@ -293,7 +319,7 @@ export async function computeFloorForListingType(
       currentContributionMarginPercent: today.marginPercent,
       currentAfterAdsMarginPercent: today.marginAfterAdsPercent,
     },
-    ctx.targetPercent,
+    targetPercent,
   );
 
   const floor = buildFloorView(
@@ -311,7 +337,7 @@ export async function computeFloorForListingType(
       tacosPercent: ctx.listing.tacosPercent,
       adsCost: ctx.listing.adsCost,
     },
-    ctx.targetPercent,
+    targetPercent,
   );
   return { ...base, blocked: null, floor };
 }

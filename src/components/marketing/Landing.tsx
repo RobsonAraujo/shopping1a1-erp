@@ -3,6 +3,7 @@ import { Layers, Lock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { UserFeedback } from "@/components/ui/user-feedback";
 import { CtaBand, CtaReassurance } from "@/components/marketing/CtaBand";
+import { DemoCalculator } from "@/components/marketing/DemoCalculator";
 import { DemoCatalog } from "@/components/marketing/DemoCatalog";
 import { DemoDre } from "@/components/marketing/DemoDre";
 import { DemoHeroSnapshot } from "@/components/marketing/DemoHeroSnapshot";
@@ -12,7 +13,6 @@ import { DemoTributario } from "@/components/marketing/DemoTributario";
 import { MarketingFaq } from "@/components/marketing/Faq";
 import { MarketingFooter, MarketingHeader } from "@/components/marketing/MarketingChrome";
 import { MarketingHowItStarts } from "@/components/marketing/HowItStarts";
-import { MarginCalculator } from "@/components/marketing/MarginCalculator";
 import { MarketingMoreInPanel } from "@/components/marketing/MoreInPanel";
 import { MarketingProblem } from "@/components/marketing/ProblemSection";
 import { MarketingSection } from "@/components/marketing/MarketingSection";
@@ -159,12 +159,12 @@ export function MarketingLanding({
         <MarketingSection
           id="calculadora"
           surface="tint"
-          eyebrow="Faça a conta agora"
-          title="Coloque um anúncio seu e veja o que sobra"
-          lead="Preço, custo, comissão, imposto e ADS numa conta só. Não é uma simulação de marketing: esta calculadora roda exatamente as mesmas funções de margem que o painel usa nas telas de Lucratividade e Precificação."
+          eyebrow="Calculadora de preço"
+          title="Escolha um anúncio e teste qualquer preço"
+          lead="É a calculadora do painel, aqui com anúncios de exemplo. Busque por título, SKU ou MLB, troque Clássico por Premium, mexa na margem mínima que você aceita e veja até onde o preço pode ir. A conta de margem é a mesma do painel."
           align="center"
         >
-          <MarginCalculator
+          <DemoCalculator
             isLoggedIn={isLoggedIn}
             dashboardHref={dashboardHref}
           />

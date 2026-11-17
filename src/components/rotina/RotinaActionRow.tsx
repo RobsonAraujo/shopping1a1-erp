@@ -23,10 +23,7 @@ import {
   RotinaListingTargetForm,
   type ListingTargetDraft,
 } from "@/components/rotina/RotinaListingTargetForm";
-import {
-  RotinaPriceSimulator,
-  buildSimulatorSuggestions,
-} from "@/components/rotina/RotinaPriceSimulator";
+import { RotinaPriceSimulator } from "@/components/rotina/RotinaPriceSimulator";
 import { RotinaThumb } from "@/components/rotina/RotinaThumb";
 import { ListingTypeTag } from "@/components/rotina/ListingTypeTag";
 import { SegmentTag } from "@/components/rotina/SegmentTag";
@@ -37,6 +34,10 @@ import {
 } from "@/components/rotina/rule-visuals";
 import { formatMoney, formatPercent, formatUnitsPerDay } from "@/lib/rotina/format";
 import { ROTINA_RULES } from "@/lib/rotina/rule-registry";
+import {
+  PROMO_DISCOUNT_SHORTCUTS,
+  buildSimulatorSuggestions,
+} from "@/lib/rotina/simulator-suggestions";
 import type { RotinaActionView } from "@/lib/rotina/view";
 import { cn } from "@/lib/utils";
 
@@ -160,7 +161,7 @@ function simulatorSetup(action: RotinaActionView) {
     suggestedPrice: contested ? (catalog?.suggestedPrice ?? null) : null,
     floor: action.floor,
     salePrice: action.listing.salePrice,
-    discounts: promo ? [5, 10, 15, 20] : undefined,
+    discounts: promo ? PROMO_DISCOUNT_SHORTCUTS : undefined,
     raise,
   });
   const defaultPrice = raise

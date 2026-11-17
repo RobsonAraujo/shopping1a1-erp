@@ -4,21 +4,30 @@ import { requireOrganization } from "@/lib/api/api-auth";
 import { parseJsonBody } from "@/lib/api/api-validation";
 import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 import {
-  computeFloorForListingType,
+  computeSimulationFloor,
   RotinaSimulationNotFoundError,
   SIMULATABLE_LISTING_TYPES,
 } from "@/lib/rotina/simulate";
+import { ROTINA_MARGIN_LIMITS } from "@/lib/rotina/settings-shared";
 
 export const maxDuration = 60;
 
 const bodySchema = z.object({
   mlItemId: z.string().regex(/^[A-Z]{3}\d+$/, "mlItemId inválido"),
-  listingTypeId: z.enum(SIMULATABLE_LISTING_TYPES),
+  /** Omitido = o tipo de hoje. */
+  listingTypeId: z.enum(SIMULATABLE_LISTING_TYPES).optional(),
+  /** Margem mínima que o usuário aceita (Calculadora). Omitida = a meta efetiva. */
+  targetPercent: z
+    .number()
+    .min(ROTINA_MARGIN_LIMITS.min)
+    .max(ROTINA_MARGIN_LIMITS.max)
+    .optional(),
 });
 
 /**
- * "Mínimo no Premium/Clássico": o preço mínimo para a meta se o anúncio fosse
- * do outro tipo. Separado do simulador porque faz ~20–40 cotações no ML.
+ * Preço mínimo para uma meta: "Mínimo no Premium/Clássico" (outro tipo) e
+ * "Calcular mínimo p/ X%" (outra meta, na Calculadora). Separado do simulador
+ * porque faz ~20–40 cotações no ML.
  */
 export async function POST(request: NextRequest) {
   const auth = await requireOrganization();
@@ -31,11 +40,12 @@ export async function POST(request: NextRequest) {
   if (!parsedBody.ok) return parsedBody.response;
 
   try {
-    const result = await computeFloorForListingType(organizationId, {
+    const result = await computeSimulationFloor(organizationId, {
       token,
       userId,
       mlItemId: parsedBody.data.mlItemId,
       listingTypeId: parsedBody.data.listingTypeId,
+      targetPercent: parsedBody.data.targetPercent,
     });
     return NextResponse.json(result, {
       headers: { "Cache-Control": "private, no-store" },

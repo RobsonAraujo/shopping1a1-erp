@@ -14,10 +14,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import {
-  RotinaPriceSimulator,
-  buildSimulatorSuggestions,
-} from "@/components/rotina/RotinaPriceSimulator";
+import { RotinaPriceSimulator } from "@/components/rotina/RotinaPriceSimulator";
 import type { ListingTargetDraft } from "@/components/rotina/RotinaListingTargetForm";
 import { RotinaListingTargetPopover } from "@/components/rotina/RotinaListingTargetPopover";
 import { RotinaThumb } from "@/components/rotina/RotinaThumb";
@@ -25,6 +22,7 @@ import { ListingTypeTag } from "@/components/rotina/ListingTypeTag";
 import { SegmentTag } from "@/components/rotina/SegmentTag";
 import { STATUS_PILL_CLASS } from "@/components/rotina/rule-visuals";
 import { formatMoney, formatPercent, formatUnitsRate } from "@/lib/rotina/format";
+import { simulatorSetupForListing } from "@/lib/rotina/simulator-suggestions";
 import type { RotinaListingRow } from "@/lib/rotina/view";
 import type { SegmentFilter } from "@/lib/rotina/view-summary";
 import type { CatalogLiveStatus } from "@/lib/rotina/types";
@@ -98,22 +96,6 @@ function matches(row: RotinaListingRow, query: string): boolean {
   );
 }
 
-function simulatorFor(row: RotinaListingRow) {
-  const contested = row.catalogStatus === "losing" || row.catalogStatus === "shared";
-  const priceToWin = contested ? row.priceToWin : null;
-  return {
-    suggestions: buildSimulatorSuggestions({
-      priceToWin,
-      suggestedPrice: null,
-      floor: row.floor,
-      salePrice: row.salePrice,
-      discounts: row.catalogListing ? undefined : [5, 10, 15, 20],
-      raise: row.raiseCeiling !== null ? { winCeiling: row.raiseCeiling, shareCeiling: null } : null,
-    }),
-    defaultPrice: priceToWin ?? row.raiseCeiling ?? row.floor.effectivePrice ?? row.salePrice,
-  };
-}
-
 function floorText(row: RotinaListingRow): string {
   if (row.floor.effectivePrice === null) return row.exclusionLabel ?? "—";
   return formatMoney(row.floor.effectivePrice);
@@ -139,7 +121,7 @@ export function RotinaAllListingsTable({
 }) {
   const [query, setQuery] = useState("");
   const [simulating, setSimulating] = useState<RotinaListingRow | null>(null);
-  const simulation = simulating ? simulatorFor(simulating) : null;
+  const simulation = simulating ? simulatorSetupForListing(simulating) : null;
   const visible = useMemo(
     () =>
       rows.filter(

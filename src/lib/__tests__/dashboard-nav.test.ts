@@ -77,6 +77,17 @@ describe("isDashboardNavGroupActive / getAllDashboardNavItems", () => {
     );
   });
 
+  it("puts the Calculadora in Financeiro, right after Lucratividade", () => {
+    const financeiro = DASHBOARD_NAV_GROUPS.find((g) => g.id === "financeiro");
+    assert.ok(financeiro);
+    const hrefs = financeiro.items.map((item) => item.href);
+    assert.equal(
+      hrefs[hrefs.indexOf("/dashboard/lucratividade") + 1],
+      "/dashboard/calculadora",
+    );
+    assert.equal(isDashboardNavGroupActive("/dashboard/calculadora", financeiro), true);
+  });
+
   it("lists every nav item once, in display order", () => {
     const items = getAllDashboardNavItems();
     const hrefs = items.map((item) => item.href);

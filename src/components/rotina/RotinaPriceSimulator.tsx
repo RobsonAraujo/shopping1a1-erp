@@ -1,22 +1,27 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+} from "react";
 import { Calculator, Check, ChevronRight, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FormInput } from "@/components/ui/form-input";
 import { SegmentedTabs, tabId, tabPanelId } from "@/components/ui/segmented-tabs";
 import { ListingTypeTag, listingTypeShortLabel } from "@/components/rotina/ListingTypeTag";
-import { readApiError } from "@/lib/api/api-client-error";
 import { formatMoney, formatPercent, formatWhen } from "@/lib/rotina/format";
-import type { RotinaFloorView } from "@/lib/rotina/floor-view";
 import type { RotinaSimulation, RotinaTypeFloor } from "@/lib/rotina/simulate";
 import type { SimulatedPrice } from "@/lib/rotina/simulate-margin";
+import { fetchSimulatorApi, type SimulatorApi } from "@/lib/rotina/simulator-api";
+import type { SimulatorSuggestion } from "@/lib/rotina/simulator-suggestions";
 import { STATUS_PILL_CLASS, valueToneClass } from "@/lib/ui/tone";
 import { cn } from "@/lib/utils";
-
-/** `kind: "floor"` = o mínimo da rodada, que só vale no tipo de hoje. */
-export type SimulatorSuggestion = { label: string; price: number; kind?: "floor" };
 
 type ListingTypeOption = "gold_special" | "gold_pro";
 
@@ -48,39 +53,6 @@ export function parseBrlInput(raw: string): number | null {
 
 function inputValue(price: number): string {
   return price.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-/** Atalhos do simulador conforme o tipo de ação. */
-export function buildSimulatorSuggestions(args: {
-  priceToWin: number | null;
-  suggestedPrice: number | null;
-  floor: RotinaFloorView | null;
-  salePrice: number | null;
-  /** Atalhos de desconto (promoção): % sobre o preço original. */
-  discounts?: number[];
-  /** Subir preço no catálogo: as duas estimativas. */
-  raise?: { winCeiling: number | null; shareCeiling: number | null } | null;
-}): SimulatorSuggestion[] {
-  const list: SimulatorSuggestion[] = [];
-  const push = (label: string, price: number | null | undefined, kind?: "floor") => {
-    if (price === null || price === undefined || price <= 0) return;
-    const rounded = Math.round(price * 100) / 100;
-    if (list.some((entry) => Math.abs(entry.price - rounded) < 0.005)) return;
-    list.push(kind ? { label, price: rounded, kind } : { label, price: rounded });
-  };
-  push("Ganhar sozinho (estim.)", args.raise?.winCeiling);
-  push("Dividir (estim.)", args.raise?.shareCeiling);
-  push("Preço p/ ganhar", args.priceToWin);
-  push("Abaixo da faixa", args.suggestedPrice);
-  push("Mínimo", args.floor?.effectivePrice, "floor");
-  push("Preço de hoje", args.salePrice);
-  const base = args.floor?.discountBase ?? null;
-  if (base !== null) {
-    for (const discount of args.discounts ?? []) {
-      push(`−${discount}%`, base * (1 - discount / 100));
-    }
-  }
-  return list;
 }
 
 function TargetStatus({
@@ -257,21 +229,59 @@ function Breakdown({ result }: { result: SimulatedPrice }) {
   );
 }
 
-/** Por que não saiu um mínimo no outro tipo. */
-function typeFloorNote(state: TypeFloorState | undefined, label: string): string | null {
+/**
+ * Margem mínima na simulação. Na Central é a meta efetiva (vem do servidor);
+ * na Calculadora o usuário mexe à vontade para testar.
+ */
+export type SimulatorTarget = {
+  /** A margem mínima que o usuário quer testar agora. */
+  percent: number;
+  /** A meta efetiva (do anúncio ou do segmento): o "Mínimo" da rodada vale para ela. */
+  saved: number;
+};
+
+function sameTarget(a: number, b: number): boolean {
+  return Math.abs(a - b) < 1e-9;
+}
+
+/** O veredito contra outra meta: a conta de margem não muda, só "dentro/abaixo". */
+export function withTarget(result: SimulatedPrice, percent: number): SimulatedPrice {
+  if (!result.quoted) return result;
+  const deciding =
+    result.decidingBasis === "afterAds" ? result.marginAfterAdsPercent : result.marginPercent;
+  return { ...result, meetsTarget: deciding === null ? null : deciding >= percent - 1e-9 };
+}
+
+/** `null` = o tipo de hoje; `percent: null` = a meta efetiva. */
+function floorKey(type: ListingTypeOption | null, percent: number | null): string {
+  return `${type ?? "atual"}|${percent ?? "meta"}`;
+}
+
+/** Por que não saiu o mínimo pedido (outro tipo e/ou outra margem). */
+function floorNoteFor(
+  state: TypeFloorState | undefined,
+  typeLabel: string,
+  percent: number | null,
+): string | null {
   if (!state || state.status === "loading") return null;
   if (state.status === "error") return state.message;
   const { result } = state;
   if (result.blocked) return null;
-  if (!result.floor) return `O Mercado Livre não cotou a taxa ${label} no preço de hoje.`;
+  if (!result.floor) {
+    return typeLabel
+      ? `O Mercado Livre não cotou a taxa ${typeLabel} no preço de hoje.`
+      : "O Mercado Livre não cotou taxa e frete no preço de hoje.";
+  }
   if (result.floor.effectivePrice !== null) return null;
   switch (result.floor.reason) {
     case "impossible":
-      return `${label[0].toUpperCase()}${label.slice(1)}, nenhum preço fecha a margem mínima.`;
+      return `Nenhum preço${typeLabel ? ` ${typeLabel}` : ""} fecha a margem${
+        percent !== null ? ` de ${formatPercent(percent)}` : " mínima"
+      }.`;
     case "missing_product_cost":
       return "Sem custo cadastrado: não dá para calcular o mínimo.";
     default:
-      return `Não foi possível calcular o mínimo ${label}.`;
+      return `Não foi possível calcular o mínimo${typeLabel ? ` ${typeLabel}` : ""}.`;
   }
 }
 
@@ -282,7 +292,9 @@ function typeFloorNote(state: TypeFloorState | undefined, label: string): string
  * já testados ficam empilhados para comparar.
  *
  * Também simula o outro tipo (Clássico ↔ Premium): só a taxa muda, e o "Mínimo"
- * da rodada vira o mínimo calculado para o outro tipo.
+ * da rodada vira o mínimo calculado para o outro tipo. Com `target` (Calculadora),
+ * a margem mínima é a que o usuário escolhe: o veredito muda na hora, sem
+ * cotação, e o mínimo para ela sai sob demanda ("Calcular mínimo p/ X%").
  */
 export function RotinaPriceSimulator({
   mlItemId,
@@ -291,14 +303,31 @@ export function RotinaPriceSimulator({
   defaultPrice,
   timeZone,
   autoRun = true,
+  priceInputRef,
+  api = fetchSimulatorApi,
+  target = null,
+  controls,
 }: {
   mlItemId: string;
   /** Tipo de hoje pelo retrato; a resposta do simulador (item ao vivo) prevalece. */
   listingTypeId?: string | null;
   suggestions: SimulatorSuggestion[];
+  /**
+   * Preço que o campo já traz. `null` (anúncio sem leitura) = campo vazio e o
+   * botão "Calcular no preço de hoje", que o servidor resolve.
+   */
   defaultPrice: number | null;
   timeZone: string;
+  /** `false` = só simula quando o usuário pede (Calculadora: zero cotação ao navegar). */
   autoRun?: boolean;
+  /** Para quem usa levar o foco ao campo de preço (Calculadora, depois do Enter na lista). */
+  priceInputRef?: Ref<HTMLInputElement>;
+  /** De onde vêm as simulações: as rotas (padrão) ou a demonstração da landing. */
+  api?: SimulatorApi;
+  /** Margem mínima escolhida pelo usuário (Calculadora). `null` = a meta efetiva. */
+  target?: SimulatorTarget | null;
+  /** Controles extras sob o cabeçalho (Calculadora: a margem mínima que aceito). */
+  controls?: ReactNode;
 }) {
   const baseId = useId();
   const [input, setInput] = useState(defaultPrice !== null ? inputValue(defaultPrice) : "");
@@ -309,9 +338,8 @@ export function RotinaPriceSimulator({
   const [openBreakdown, setOpenBreakdown] = useState<string | null>(null);
   /** `null` = o tipo de hoje. */
   const [selectedType, setSelectedType] = useState<ListingTypeOption | null>(null);
-  const [typeFloors, setTypeFloors] = useState<Partial<Record<ListingTypeOption, TypeFloorState>>>(
-    {},
-  );
+  /** Mínimos calculados sob demanda, por tipo e margem (`floorKey`). */
+  const [floors, setFloors] = useState<Record<string, TypeFloorState>>({});
   const ranDefault = useRef(false);
 
   const currentType = meta?.currentListingTypeId ?? listingTypeId;
@@ -320,11 +348,17 @@ export function RotinaPriceSimulator({
   const otherType = canSwitchType && activeType !== currentType;
   /** O tipo a mandar ao servidor (`null` = o de hoje). */
   const runType: ListingTypeOption | null = otherType ? selectedType : null;
+  /** Margem escolhida diferente da meta: o "Mínimo" da rodada deixa de valer. */
+  const targetDiffers = target !== null && !sameTarget(target.percent, target.saved);
+  /** A margem a pedir no cálculo do mínimo (`null` = a meta efetiva). */
+  const floorPercent = targetDiffers ? target.percent : null;
 
+  /** `price: null` = o preço de hoje, resolvido no servidor (anúncio sem leitura). */
   const simulate = useCallback(
-    async (price: number, type: ListingTypeOption | null) => {
+    async (price: number | null, type: ListingTypeOption | null) => {
       const wanted = type ?? currentType;
       const sameEntry = (result: SimulatedPrice) =>
+        price !== null &&
         Math.abs(result.price - price) < 0.005 &&
         (wanted === null || result.listingTypeId === wanted);
       // Já simulado: só traz para o topo, sem nova consulta ao ML.
@@ -336,22 +370,15 @@ export function RotinaPriceSimulator({
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch("/api/rotina/simulate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            mlItemId,
-            prices: [price],
-            ...(type ? { listingTypeId: type } : {}),
-          }),
+        const simulation = await api.simulate({
+          mlItemId,
+          ...(price !== null ? { prices: [price] } : {}),
+          ...(type ? { listingTypeId: type } : {}),
         });
-        if (!response.ok) {
-          throw new Error(await readApiError(response, "rotina_simulate_failed"));
-        }
-        const simulation = (await response.json()) as RotinaSimulation;
         const { results: fresh, ...rest } = simulation;
         setMeta(rest);
         const first = fresh[0];
+        if (first && price === null) setInput(inputValue(first.price));
         if (first) {
           setResults((current) => [
             first,
@@ -368,27 +395,24 @@ export function RotinaPriceSimulator({
         setLoading(false);
       }
     },
-    [mlItemId, results, currentType],
+    [api, mlItemId, results, currentType],
   );
 
-  const loadTypeFloor = useCallback(
-    async (type: ListingTypeOption) => {
-      setTypeFloors((current) => ({ ...current, [type]: { status: "loading" } }));
+  const loadFloor = useCallback(
+    async (type: ListingTypeOption | null, percent: number | null) => {
+      const key = floorKey(type, percent);
+      setFloors((current) => ({ ...current, [key]: { status: "loading" } }));
       try {
-        const response = await fetch("/api/rotina/simulate/floor", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mlItemId, listingTypeId: type }),
+        const result = await api.floor({
+          mlItemId,
+          ...(type ? { listingTypeId: type } : {}),
+          ...(percent !== null ? { targetPercent: percent } : {}),
         });
-        if (!response.ok) {
-          throw new Error(await readApiError(response, "rotina_simulate_floor_failed"));
-        }
-        const result = (await response.json()) as RotinaTypeFloor;
-        setTypeFloors((current) => ({ ...current, [type]: { status: "done", result } }));
+        setFloors((current) => ({ ...current, [key]: { status: "done", result } }));
       } catch (e) {
-        setTypeFloors((current) => ({
+        setFloors((current) => ({
           ...current,
-          [type]: {
+          [key]: {
             status: "error",
             message:
               e instanceof Error ? e.message : "Não foi possível calcular o mínimo agora.",
@@ -396,7 +420,7 @@ export function RotinaPriceSimulator({
         }));
       }
     },
-    [mlItemId],
+    [api, mlItemId],
   );
 
   useEffect(() => {
@@ -405,13 +429,13 @@ export function RotinaPriceSimulator({
     void simulate(defaultPrice, null);
   }, [autoRun, defaultPrice, simulate]);
 
-  /** Troca o tipo; refaz o preço do campo nele e pede o mínimo uma vez por tipo. */
+  /** Troca o tipo; refaz o preço do campo nele e pede o mínimo do outro tipo uma vez. */
   function selectType(type: ListingTypeOption, priceToRun: number | null) {
     setSelectedType(type === currentType ? null : type);
-    // Uma vez por tipo; depois de um erro, trocar de novo tenta outra vez.
-    const floorState = typeFloors[type];
-    if (type !== currentType && (!floorState || floorState.status === "error")) {
-      void loadTypeFloor(type);
+    // Uma vez por tipo e margem; depois de um erro, trocar de novo tenta outra vez.
+    if (type !== currentType) {
+      const state = floors[floorKey(type, floorPercent)];
+      if (!state || state.status === "error") void loadFloor(type, floorPercent);
     }
     if (priceToRun !== null) void simulate(priceToRun, type === currentType ? null : type);
   }
@@ -425,23 +449,48 @@ export function RotinaPriceSimulator({
     void simulate(price, runType);
   }
 
-  const latest = results[0] ?? null;
-  const previous = results.slice(1);
-  const target = meta?.targetPercent ?? null;
+  const shownResults = target ? results.map((result) => withTarget(result, target.percent)) : results;
+  const latest = shownResults[0] ?? null;
+  const previous = shownResults.slice(1);
+  const effectiveTarget = target?.percent ?? meta?.targetPercent ?? null;
   const mixedTypes = new Set(results.map((result) => result.listingTypeId)).size > 1;
   const resultKey = (result: SimulatedPrice) => `${result.listingTypeId ?? ""}:${result.price}`;
 
   const activeLabel = inType(activeType);
-  const floorState = otherType && selectedType ? typeFloors[selectedType] : undefined;
-  const typeFloorPrice =
+  // O "Mínimo" da rodada só vale no tipo de hoje e na meta efetiva; fora disso
+  // entra o calculado para o tipo/margem da tela.
+  const snapshotFloorValid = !otherType && !targetDiffers;
+  const floorState = snapshotFloorValid ? undefined : floors[floorKey(runType, floorPercent)];
+  const computedFloorPrice =
     floorState?.status === "done" ? (floorState.result.floor?.effectivePrice ?? null) : null;
-  const floorNote = otherType ? typeFloorNote(floorState, activeLabel) : null;
-  // No outro tipo o "Mínimo" da rodada não vale: entra o calculado para ele.
-  const shownSuggestions = otherType
-    ? suggestions.filter((suggestion) => suggestion.kind !== "floor")
-    : suggestions;
+  const floorSuffix = `${otherType ? ` ${activeLabel}` : ""}${
+    targetDiffers ? ` p/ ${formatPercent(target.percent)}` : ""
+  }`;
+  const offerFloorButton =
+    !snapshotFloorValid &&
+    !meta?.blocked &&
+    (!floorState || floorState.status === "error");
+  const floorNote = snapshotFloorValid
+    ? null
+    : floorNoteFor(floorState, otherType ? activeLabel : "", floorPercent);
+  const baseSuggestions = snapshotFloorValid
+    ? suggestions
+    : suggestions.filter((suggestion) => suggestion.kind !== "floor");
+  // Anúncio sem leitura: o preço de hoje só chega com a primeira resposta.
+  const todayPrice = meta?.salePrice ?? null;
+  const shownSuggestions =
+    todayPrice !== null &&
+    !baseSuggestions.some((suggestion) => Math.abs(suggestion.price - todayPrice) < 0.005)
+      ? [...baseSuggestions, { label: "Preço de hoje", price: todayPrice }]
+      : baseSuggestions;
+  const offerTodayPrice = defaultPrice === null && meta === null;
   const chipClass =
     "cursor-pointer rounded-full border border-[var(--border)] bg-[var(--card)] px-2.5 py-1 text-xs text-[var(--foreground)] transition-colors hover:border-[var(--primary)]/40 hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-50";
+  const hasChips =
+    shownSuggestions.length > 0 ||
+    computedFloorPrice !== null ||
+    floorState?.status === "loading" ||
+    offerFloorButton;
 
   const panelId = tabPanelId(baseId, activeType ?? "atual");
 
@@ -475,6 +524,8 @@ export function RotinaPriceSimulator({
         ) : null}
       </div>
 
+      {controls}
+
       <div
         id={canSwitchType ? panelId : undefined}
         role={canSwitchType ? "tabpanel" : undefined}
@@ -490,6 +541,7 @@ export function RotinaPriceSimulator({
             }}
           >
             <FormInput
+              ref={priceInputRef}
               label={otherType ? `Se eu vender ${activeLabel} a (R$)` : "Se eu vender a (R$)"}
               inputMode="decimal"
               value={input}
@@ -503,27 +555,51 @@ export function RotinaPriceSimulator({
             </Button>
           </form>
 
-          {shownSuggestions.length > 0 || otherType ? (
+          {offerTodayPrice ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={loading}
+              onClick={() => void simulate(null, runType)}
+              className="sm:h-10"
+            >
+              Calcular no preço de hoje
+            </Button>
+          ) : null}
+
+          {hasChips ? (
             <div className="flex flex-wrap gap-1.5 sm:pb-0.5" aria-label="Atalhos de preço">
-              {otherType && floorState?.status === "loading" ? (
+              {floorState?.status === "loading" ? (
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-[var(--border)] px-2.5 py-1 text-xs text-[var(--muted-foreground)]">
                   <Loader2 className="size-3 animate-spin" aria-hidden />
-                  Calculando o mínimo {activeLabel}…
+                  Calculando o mínimo{floorSuffix}…
                 </span>
               ) : null}
-              {otherType && typeFloorPrice !== null ? (
+              {offerFloorButton ? (
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => void loadFloor(runType, floorPercent)}
+                  className={cn(chipClass, "border-dashed text-[var(--primary)]")}
+                  title="Busca o menor preço que fecha essa margem (leva alguns segundos)"
+                >
+                  Calcular mínimo{floorSuffix}
+                </button>
+              ) : null}
+              {computedFloorPrice !== null ? (
                 <button
                   type="button"
                   disabled={loading}
                   onClick={() => {
-                    setInput(inputValue(typeFloorPrice));
-                    void simulate(typeFloorPrice, runType);
+                    setInput(inputValue(computedFloorPrice));
+                    void simulate(computedFloorPrice, runType);
                   }}
                   className={chipClass}
                 >
-                  Mínimo {activeLabel}{" "}
+                  Mínimo{floorSuffix}{" "}
                   <span className="tabular-nums text-[var(--muted-foreground)]">
-                    {formatMoney(typeFloorPrice)}
+                    {formatMoney(computedFloorPrice)}
                   </span>
                 </button>
               ) : null}
@@ -567,7 +643,7 @@ export function RotinaPriceSimulator({
           </p>
         ) : null}
 
-        {latest && target !== null ? (
+        {latest && effectiveTarget !== null ? (
           <div
             className={cn(
               "rounded-lg border border-[var(--border)] bg-[var(--card)] px-3.5 py-3 text-sm transition-opacity",
@@ -583,7 +659,7 @@ export function RotinaPriceSimulator({
                   : ""}
                 :
               </span>
-              <ResultSummary result={latest} targetPercent={target} emphasis />
+              <ResultSummary result={latest} targetPercent={effectiveTarget} emphasis />
             </div>
             {latest.quoted ? (
               <button
@@ -610,7 +686,7 @@ export function RotinaPriceSimulator({
           </div>
         ) : null}
 
-        {previous.length > 0 && target !== null ? (
+        {previous.length > 0 && effectiveTarget !== null ? (
           <div className="space-y-1">
             <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
               Comparar
@@ -639,7 +715,11 @@ export function RotinaPriceSimulator({
                       {formatMoney(result.price)}
                     </span>
                     {mixedTypes ? <ListingTypeTag listingTypeId={result.listingTypeId} /> : null}
-                    <ResultSummary result={result} targetPercent={target} emphasis={false} />
+                    <ResultSummary
+                      result={result}
+                      targetPercent={effectiveTarget}
+                      emphasis={false}
+                    />
                   </button>
                 </li>
               ))}
@@ -651,17 +731,25 @@ export function RotinaPriceSimulator({
       {meta ? (
         <p className="text-[11px] leading-relaxed text-[var(--muted-foreground)]">
           {otherType
-            ? `${activeLabel[0].toUpperCase()}${activeLabel.slice(1)} só muda a taxa do Mercado Livre: frete, custo, imposto, ADS e meta são os de hoje. `
+            ? `${activeLabel[0].toUpperCase()}${activeLabel.slice(1)} só muda a taxa do Mercado Livre: frete, custo, imposto${
+                target ? " e ADS são" : ", ADS e meta são"
+              } os de hoje. `
             : ""}
-          Taxa e frete cotados agora no Mercado Livre para cada preço. Custo, imposto e
-          ADS (TACOS de 7 dias){" "}
-          {meta.inputsFrom === "refresh" && meta.inputsAt
-            ? `da atualização de ${formatWhen(meta.inputsAt, new Date(), timeZone)}`
-            : "lidos agora (anúncio ainda sem atualização)"}
-          .
-          {meta.feeRebate !== null
-            ? ` Inclui o desconto de tarifa de ${formatMoney(meta.feeRebate)} da última venda em promoção.`
-            : ""}
+          {meta.inputsFrom === "demo" ? (
+            "Dados de exemplo: taxa e frete saem de uma tabela simples do Mercado Livre. Conectado, taxa e frete são cotados no Mercado Livre a cada preço, com o custo, o imposto e o ADS da sua loja."
+          ) : (
+            <>
+              Taxa e frete cotados agora no Mercado Livre para cada preço. Custo, imposto e
+              ADS (TACOS de 7 dias){" "}
+              {meta.inputsFrom === "refresh" && meta.inputsAt
+                ? `da atualização de ${formatWhen(meta.inputsAt, new Date(), timeZone)}`
+                : "lidos agora (anúncio ainda sem atualização)"}
+              .
+              {meta.feeRebate !== null
+                ? ` Inclui o desconto de tarifa de ${formatMoney(meta.feeRebate)} da última venda em promoção.`
+                : ""}
+            </>
+          )}
         </p>
       ) : null}
     </div>

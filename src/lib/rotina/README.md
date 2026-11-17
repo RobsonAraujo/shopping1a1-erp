@@ -26,7 +26,7 @@ src/lib/rotina/
 src/lib/pricing/min-price-segments.ts   # mínimo ciente das faixas de frete (puro, cotação injetada)
 ```
 
-UI: `src/app/dashboard/central-anuncios/` + `src/components/rotina/`. Rotas: `/api/rotina/{refresh,actions,settings,targets/[mlItemId]}`.
+UI: `src/app/dashboard/central-anuncios/` + `src/components/rotina/`. Rotas: `/api/rotina/{refresh,actions,settings,targets/[mlItemId],simulate,simulate/floor}`. Calculadora: `src/app/dashboard/calculadora/` + `src/components/calculadora/` (ver abaixo).
 
 ## Duas fontes de dado
 
@@ -99,7 +99,9 @@ Invariante herdado da Home: **consulta que falha não vira problema**.
 - Mesma conta da Lucratividade e do preço mínimo (`computeFinancialMargin` + `computeMarginAfterAds`, em `simulate-margin.ts`). Simular o preço mínimo devolve a margem-alvo.
 - Custo, imposto, rebate e ADS vêm de `ListingHealth.pricingInputs`, gravado na rodada. Taxa e frete são cotados no ML para cada preço: 1 + 2 chamadas por simulação.
   - Sem retrato (catálogo antes da primeira atualização), monta a linha da Lucratividade na hora: mais lento.
-- Rota `POST /api/rotina/simulate` (`{ mlItemId, prices[], listingTypeId? }`, até 5 preços). Preço já simulado não consulta o ML de novo; os testados ficam em "Comparar".
+- Rota `POST /api/rotina/simulate` (`{ mlItemId, prices?[], listingTypeId? }`, até 5 preços). Sem `prices`, simula no preço de hoje (a resposta traz `salePrice`). Preço já simulado não consulta o ML de novo; os testados ficam em "Comparar".
+- Atalhos (`buildSimulatorSuggestions`, `simulatorSetupForListing`) ficam em `simulator-suggestions.ts`, puro: a Central monta no navegador, a Calculadora no servidor.
+- As chamadas passam por `SimulatorApi` (`simulator-api.ts`): o padrão são as rotas; a demonstração da landing injeta uma versão local.
 
 ### Clássico ↔ Premium
 
@@ -107,13 +109,25 @@ Invariante herdado da Home: **consulta que falha não vira problema**.
 - No outro tipo, **só a taxa muda**: `listing_prices` com o outro `listing_type_id` (`resolveMlCostsAtPrice(..., { listingTypeId })`, via `itemAsListingType`). Frete, custo, imposto, rebate da última venda, TACOS, meta e PMA continuam os de hoje.
   - O frete é cotado por `item_id`, então não muda de tipo. Só o fallback sem `item_id` manda o tipo simulado.
 - Trocar o tipo refaz o preço do campo nesse tipo. Os resultados ficam por (preço, tipo), e "Comparar" etiqueta o tipo quando mistura os dois.
-- **Mínimo no outro tipo**: `POST /api/rotina/simulate/floor` (`{ mlItemId, listingTypeId }`), uma vez por tipo.
+- **Mínimo no outro tipo**: `POST /api/rotina/simulate/floor` (`{ mlItemId, listingTypeId?, targetPercent? }`), uma vez por tipo (e margem).
   - É a mesma busca da rodada (`computeFloorsFromSeed`, MC e após ADS, ciente das faixas de frete), com a meta de agora.
   - Depois passa por `buildFloorView`, então o PMA segue piso duro.
   - Faz ~20–40 cotações, por isso fica separado da margem.
   - No outro tipo, o atalho "Mínimo" da rodada some e entra "Mínimo no Premium/Clássico".
 - **Etiqueta Clássico/Premium** (`ListingTypeTag`, tom neutro) no card, na tabela Anúncios e na folha do simulador.
   - O tipo viaja em `pricing_inputs.listingTypeId` (JSON, sem coluna nova). Retrato anterior a esta versão não tem etiqueta até o próximo Atualizar.
+
+## Calculadora (Financeiro)
+
+Página `/dashboard/calculadora` (menu Financeiro, depois de Lucratividade): todos os anúncios à mão, para testar qualquer preço fora de uma tarefa. É o mesmo simulador, em tela cheia.
+
+- **Fonte**: `loadCalculatorListings` (`calculator-listings-data.ts`) reaproveita `loadRotinaView` (os mesmos números da aba Anúncios) e soma os `Listing` ativos ainda sem leitura da Central. O navegador recebe uma linha **compacta** (`toCalculatorListings`, puro), não o `RotinaListingRow` inteiro.
+- **Sem leitura** (anúncio novo desde o último Atualizar): sem atalhos nem faixa "Hoje"; o botão "Calcular no preço de hoje" chama a rota sem `prices`, que monta a linha da Lucratividade na hora (mais lento).
+- **Custo baixo**: abrir a página e escolher anúncio não chamam o ML. O simulador roda com `autoRun={false}` e a faixa "Hoje" sai do retrato. As últimas 5 calculadoras ficam montadas com `<Activity>`: voltar a uma delas não recota.
+- **Margem mínima que eu aceito**: abre na meta que vale (a própria ou a do segmento) e o usuário mexe à vontade. Não grava nada. O veredito muda no navegador (`withTarget`), sem cotação. O "Mínimo" da rodada só vale para a meta salva: com outra margem, o mínimo sai sob demanda ("Calcular mínimo p/ X%", rota `floor` com `targetPercent`).
+- **Busca** (`calculator-search.ts`): por palavras em qualquer ordem, sem acento, MLB de qualquer jeito (`MLB123`, `mlb-123`, `123`), SKU/MLB exato no topo. ↑/↓ e Enter na lista; `/` volta à busca.
+- **URL**: `?anuncio=MLB…` guarda o anúncio aberto, via `pushState`/`replaceState` (sem refazer o servidor). Entrar na calculadora empilha (o voltar do celular volta à lista); trocar de anúncio substitui. Recentes no `localStorage` do navegador.
+- **Landing** (`#calculadora`): `DemoCalculator` usa a mesma tela no modo `demo` (seleção local, nada gravado, sem atalhos globais) com `calculator-demo.ts`: anúncios de exemplo, a mesma conta de margem (`simulateMarginAtPrice`) e uma tabela simples de taxa e frete (12%/17%, custo fixo abaixo de R$ 79, frete grátis a partir de R$ 79), com o mínimo achado por faixa. Nada sai do navegador. A página `/margem-de-contribuicao-mercado-livre` segue com a calculadora de números digitados (`MarginCalculator`).
 
 ## Rodada (`refresh.ts`)
 
