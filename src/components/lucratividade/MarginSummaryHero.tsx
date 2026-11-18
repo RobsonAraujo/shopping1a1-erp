@@ -1,7 +1,14 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { ChevronRight, FlaskConical, Info, Megaphone, Receipt } from "lucide-react";
+import {
+  ChevronRight,
+  FlaskConical,
+  Info,
+  Megaphone,
+  Receipt,
+  Store,
+} from "lucide-react";
 import { PlanningInfoTrigger } from "@/components/shared/PlanningInfoTrigger";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -26,6 +33,7 @@ import {
 import {
   SALES_CHANNEL_LABEL,
   type ChannelSplit,
+  type ChannelSplitItem,
 } from "@/lib/lucratividade/sales-mix";
 import { valueToneClass } from "@/lib/ui/tone";
 import { cn } from "@/lib/utils";
@@ -165,60 +173,121 @@ function SegmentCompareButton({
 }
 
 /**
- * Varejo × B2B do recorte (só período e só quando houve B2B). Explica a
- * média — a margem de cada canal usa o mesmo custo, imposto e frete de cada
- * anúncio. Envio (Full/Flex/Coleta) fica no painel do anúncio.
+ * Cor fixa de cada canal — slots 1 e 2 da paleta categórica de referência
+ * (azul, laranja), validados contra o fundo branco: luminosidade, croma,
+ * daltonismo e contraste. A cor segue o canal, nunca a posição.
  */
-function ChannelSplitStrip({
+const CHANNEL_SWATCH: Record<ChannelSplitItem["channel"], string> = {
+  retail: "#2a78d6",
+  b2b: "#eb6834",
+};
+
+function formatShare(share: number | null): string {
+  if (share === null) return "—";
+  if (share > 0 && share < 1) return "<1%";
+  return `${Math.round(share)}%`;
+}
+
+/**
+ * Varejo × B2B do recorte (só período e só quando houve B2B). É OUTRA divisão
+ * das mesmas vendas — não continua a faixa Próprios × Catálogo —, por isso
+ * fica num painel embutido, com a própria barra de 100%. A margem de cada
+ * canal usa o mesmo custo, imposto e frete de cada anúncio. Envio
+ * (Full/Flex/Coleta) fica no painel do anúncio.
+ */
+function ChannelSplitPanel({
   split,
   partial,
 }: {
   split: ChannelSplit;
   partial: boolean;
 }) {
+  const parts = split.items.filter((item) => item.revenue > 0);
+  const barLabel = parts
+    .map(
+      (item) =>
+        `${SALES_CHANNEL_LABEL[item.channel]}: ${formatFinancialMoney(item.revenue)} (${formatShare(item.revenueShare)})`,
+    )
+    .join("; ");
+
   return (
-    <div className="border-t border-[var(--border)]">
-      <p className="flex items-center gap-1.5 px-5 pt-3 text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
-        Por canal de venda
-        <PlanningInfoTrigger
-          className="h-5 w-5"
-          content="Varejo e B2B (compra de empresa, marcada pelo Mercado Livre no pedido). Faturamento inclui os anúncios fora da média; a margem de cada canal, só os que entram nela, com o mesmo custo, imposto e frete de cada anúncio. Full, Flex e Coleta: abra o anúncio."
-        />
-      </p>
-      <div
-        role="group"
-        aria-label="Margem por canal de venda"
-        className="grid divide-y divide-[var(--border)] md:grid-cols-2 md:divide-x md:divide-y-0"
+    <div className="border-t border-[var(--border)] px-5 py-4">
+      <section
+        aria-label="Faturamento e margem por canal de venda"
+        className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/30 p-3 sm:p-4"
       >
-        {split.items.map((item) => (
-          <div key={item.channel} className="flex items-center gap-3 px-5 py-3">
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium">{SALES_CHANNEL_LABEL[item.channel]}</p>
-              <p className="text-xs tabular-nums text-[var(--muted-foreground)]">
-                {formatFinancialMoney(item.revenue)} faturados
-                {item.revenueShare !== null
-                  ? ` · ${Math.round(item.revenueShare)}% do total`
-                  : ""}
-              </p>
-              <p className="text-xs tabular-nums text-[var(--muted-foreground)]">
-                {plural(item.units, "un. vendida", "un. vendidas")}
-                {item.marginValue !== null
-                  ? ` · ${formatFinancialMoney(item.marginValue)} de margem`
-                  : ""}
-              </p>
-            </div>
-            <p
-              className={cn(
-                "text-xl font-semibold tabular-nums",
-                valueToneClass(item.marginPercent),
-                partial && "opacity-60",
-              )}
-            >
-              {formatFinancialPercent(item.marginPercent)}
-            </p>
-          </div>
-        ))}
-      </div>
+        <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+          <Store className="size-3.5" aria-hidden />
+          Por canal de venda
+          <PlanningInfoTrigger
+            className="h-5 w-5"
+            content="Varejo e B2B (compra de empresa, marcada pelo Mercado Livre no pedido). O faturamento inclui os anúncios fora da média; a margem de cada canal, só os que entram nela, com o mesmo custo, imposto e frete de cada anúncio. Full, Flex e Coleta: abra o anúncio."
+          />
+        </p>
+        <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+          Outra forma de dividir as mesmas vendas: Varejo + B2B = 100% do faturamento.
+        </p>
+
+        <div
+          role="img"
+          aria-label={`Faturamento por canal — ${barLabel}`}
+          className="mt-3 flex h-2 w-full gap-[2px]"
+        >
+          {parts.map((item) => (
+            <span
+              key={item.channel}
+              title={`${SALES_CHANNEL_LABEL[item.channel]}: ${formatFinancialMoney(item.revenue)} · ${formatShare(item.revenueShare)} do faturamento`}
+              className="h-full min-w-[3px] rounded-full"
+              style={{
+                flexGrow: item.revenue,
+                flexBasis: 0,
+                backgroundColor: CHANNEL_SWATCH[item.channel],
+              }}
+            />
+          ))}
+        </div>
+
+        <ul aria-label="Margem por canal de venda" className="mt-3 space-y-2.5">
+          {split.items.map((item) => (
+            <li key={item.channel} className="flex items-start gap-2.5">
+              <span
+                aria-hidden
+                className="mt-1.5 size-2.5 shrink-0 rounded-full"
+                style={{ backgroundColor: CHANNEL_SWATCH[item.channel] }}
+              />
+              <div className="min-w-0">
+                <p className="text-sm">
+                  <span className="font-medium">{SALES_CHANNEL_LABEL[item.channel]}</span>
+                  <span className="text-[var(--muted-foreground)]"> · </span>
+                  {item.marginPercent === null ? (
+                    <span className="text-xs text-[var(--muted-foreground)]">
+                      sem margem calculada
+                    </span>
+                  ) : (
+                    <>
+                      <span
+                        className={cn(
+                          "font-semibold tabular-nums",
+                          valueToneClass(item.marginPercent),
+                          partial && "opacity-60",
+                        )}
+                      >
+                        {formatFinancialPercent(item.marginPercent)}
+                      </span>
+                      <span className="text-xs text-[var(--muted-foreground)]"> de margem</span>
+                    </>
+                  )}
+                </p>
+                <p className="text-xs tabular-nums text-[var(--muted-foreground)]">
+                  {formatFinancialMoney(item.revenue)} ·{" "}
+                  {formatShare(item.revenueShare)} do faturamento ·{" "}
+                  {plural(item.units, "un.", "un.")}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
     </div>
   );
 }
@@ -508,7 +577,7 @@ export function MarginSummaryHero({
       ) : null}
 
       {weighted && channelSplit?.hasB2b ? (
-        <ChannelSplitStrip split={channelSplit} partial={partial} />
+        <ChannelSplitPanel split={channelSplit} partial={partial} />
       ) : null}
 
       <div className="flex items-start gap-2 border-t border-[var(--border)] px-5 py-2.5 text-xs text-[var(--muted-foreground)]">
