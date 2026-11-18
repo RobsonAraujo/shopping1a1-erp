@@ -390,6 +390,8 @@ function ordersSearchPageFetcher(
   query: {
     dateField: SalesWindowDateField;
     orderStatus?: string;
+    /** Só pedidos deste anúncio (filtro `item=` do `/orders/search`). */
+    itemId?: string;
     signal?: AbortSignal;
   },
 ): ForEachOrdersSearchPageOptions["fetchPage"] {
@@ -399,6 +401,9 @@ function ordersSearchPageFetcher(
     u.searchParams.set("seller", String(sellerId));
     if (query.orderStatus) {
       u.searchParams.set("order.status", query.orderStatus);
+    }
+    if (query.itemId) {
+      u.searchParams.set("item", query.itemId);
     }
     setOrderDateRange(
       u,
@@ -428,6 +433,8 @@ export async function fetchOrdersInDateRange(
   options: {
     dateField?: SalesWindowDateField;
     orderStatus?: string;
+    /** Só pedidos deste anúncio. */
+    itemId?: string;
     /** Chamado a cada página — progresso de buscas longas (ex.: 90 dias). */
     onPage?: (progress: { fetched: number; total: number | null }) => void;
     /** Interrompe a paginação (ex.: o client trocou de período). */
@@ -441,6 +448,7 @@ export async function fetchOrdersInDateRange(
     fetchPage: ordersSearchPageFetcher(accessToken, sellerId, {
       dateField: options.dateField ?? stockPlanningConfig.salesWindowDateField,
       orderStatus: options.orderStatus,
+      itemId: options.itemId,
       signal: options.signal,
     }),
     onOrders: (batch) => {

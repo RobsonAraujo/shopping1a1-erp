@@ -58,6 +58,7 @@ import {
   aggregatePeriodSalesByItem,
   type PeriodSaleAgg,
 } from "@/lib/lucratividade/period-sales-aggregate";
+import type { SalesMixEntry } from "@/lib/lucratividade/sales-mix";
 import { refineMinSalePriceForTargetMargin } from "@/lib/pricing/refine-min-sale-price";
 
 export {
@@ -116,6 +117,10 @@ export type FinancialEvaluationRow = {
    * no intervalo (base da média ponderada). */
   periodUnitsSold?: number;
   periodRevenue?: number;
+  /** Só no modo período: as mesmas vendas por canal (varejo/B2B) × tipo de
+   * anúncio do pedido. Explica a média (painel e faixa por canal do topo);
+   * não muda nenhuma margem. */
+  salesMix?: SalesMixEntry[];
   minSalePriceForTarget?: MinSalePriceResult | null;
   minSalePriceTargetPercent?: number | null;
   minSalePriceMarginBasis?: MarginBasis | null;
@@ -868,6 +873,7 @@ async function buildRowForPeriodItem(
     pmaPrice: resolvePmaPrice(pmaLookup, item.id, sku),
     periodUnitsSold: agg.quantity,
     periodRevenue: roundMoney(agg.revenue),
+    salesMix: agg.mix,
   };
 }
 
@@ -1065,6 +1071,10 @@ export type FinancialEvaluationMeta = {
   /** Só período: vendas de anúncios que o ML não devolveu mais (excluídos/
    * inacessíveis) — somem da tabela, mas são reportadas pra fechar a conta. */
   droppedListings?: { count: number; units: number; revenue: number };
+  /** Só período (ISO): quando a busca de pedidos terminou. O painel usa como
+   * corte (`until`) pra composição bater com a linha — em "Hoje" chegam
+   * pedidos novos depois do carregamento. */
+  ordersFetchedAt?: string;
 };
 
 export type FinancialEvaluationProgress = {
@@ -1315,6 +1325,8 @@ export async function loadFinancialEvaluationRowsForPeriod(
         : undefined,
     },
   );
+  // Depois da busca: todo pedido que entrou na conta fechou até aqui.
+  const ordersFetchedAt = new Date().toISOString();
   const salesByItem = aggregatePeriodSalesByItem(orders);
   const itemIds = [...salesByItem.keys()];
   const salesCount = [...salesByItem.values()].reduce(
@@ -1328,6 +1340,7 @@ export async function loadFinancialEvaluationRowsForPeriod(
       adsAvailable: true,
       adsUnavailableReason: null,
       droppedListings: { count: 0, units: 0, revenue: 0 },
+      ordersFetchedAt,
     };
     options?.onMeta?.(meta);
     return {
@@ -1374,6 +1387,7 @@ export async function loadFinancialEvaluationRowsForPeriod(
     adsAvailable: adsLoad.available,
     adsUnavailableReason: adsLoad.unavailableReason,
     droppedListings: dropped,
+    ordersFetchedAt,
   };
   options?.onMeta?.(meta);
 

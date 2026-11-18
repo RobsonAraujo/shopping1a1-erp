@@ -21,7 +21,9 @@ import {
 import { valueToneClass } from "@/lib/ui/tone";
 import { cn } from "@/lib/utils";
 import { MarginPriceSuggestion } from "@/components/lucratividade/detail-sheet/MarginPriceSuggestion";
+import { SalesMixSection } from "@/components/lucratividade/detail-sheet/SalesMixSection";
 import type { LiveListingRowState } from "@/components/lucratividade/hooks/useLiveListingRow";
+import type { SalesMixPeriod } from "@/components/lucratividade/hooks/useSalesMix";
 
 function SummaryTile({
   label,
@@ -69,6 +71,7 @@ export function MarginTab({
   targetMarginPercent,
   marginBasis,
   taxContext,
+  salesMixPeriod = null,
 }: {
   row: FinancialEvaluationRow;
   live: LiveListingRowState;
@@ -78,6 +81,8 @@ export function MarginTab({
   targetMarginPercent: number;
   marginBasis: MarginBasis;
   taxContext: LucratividadeTaxContext;
+  /** Período da linha (só vendas) — liga a "Composição das vendas". */
+  salesMixPeriod?: SalesMixPeriod | null;
 }) {
   const issues = buildRowIssues(row, taxContext);
   const blockers = issues.filter((issue) => issue.severity === "blocker");
@@ -153,6 +158,10 @@ export function MarginTab({
           />
         </div>
       </div>
+
+      {!isSimulation && salesMixPeriod ? (
+        <SalesMixSection row={row} period={salesMixPeriod} live={live} />
+      ) : null}
 
       {row.breakdown ? (
         <section>

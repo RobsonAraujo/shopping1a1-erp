@@ -112,6 +112,10 @@ const API_ERROR_MESSAGES: Record<string, string> = {
   item_failed: "Não foi possível carregar o anúncio.",
   financial_evaluation_failed:
     "Não foi possível carregar a lucratividade agora. Tente de novo em instantes.",
+  sales_mix_failed:
+    "Não foi possível consultar a forma de envio das vendas agora. Tente de novo em instantes.",
+  invalid_item_id: "Anúncio inválido.",
+  invalid_until: "Horário de corte inválido.",
   ml_unavailable:
     "O Mercado Livre não respondeu a tempo. Aguarde alguns segundos e tente de novo.",
   ml_rate_limited: RATE_LIMIT_USER_ERROR,
