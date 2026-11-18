@@ -1,0 +1,225 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import { computeFinancialMargin, roundMoney } from "@/lib/pricing/financial-margin";
+import {
+  buildSalesMixTable,
+  computeChannelSplit,
+  createSalesMixAccumulator,
+  salesMixLogisticFromShipmentType,
+  type SalesMixEntry,
+  type SalesMixRowInput,
+} from "../sales-mix";
+
+function entry(
+  overrides: Partial<SalesMixEntry> & Pick<SalesMixEntry, "channel" | "units">,
+  unitPrice: number,
+  feePerUnit: number | null,
+): SalesMixEntry {
+  return {
+    listingTypeId: "gold_special",
+    orders: overrides.units,
+    revenue: roundMoney(unitPrice * overrides.units),
+    saleFeeSum: feePerUnit === null ? 0 : roundMoney(feePerUnit * overrides.units),
+    saleFeeKnownQty: feePerUnit === null ? 0 : overrides.units,
+    minUnitPrice: unitPrice,
+    maxUnitPrice: unitPrice,
+    ...overrides,
+  };
+}
+
+/** Linha de período montada como `buildRowForPeriodItem`: média das vendas + custos do cadastro. */
+function periodRow(
+  entries: SalesMixEntry[],
+  opts: { productCost?: number | null; taxRatePercent?: number | null; pending?: boolean } = {},
+): SalesMixRowInput {
+  const units = entries.reduce((s, e) => s + e.units, 0);
+  const revenue = entries.reduce((s, e) => s + e.revenue, 0);
+  const feeSum = entries.reduce((s, e) => s + e.saleFeeSum, 0);
+  const feeQty = entries.reduce((s, e) => s + e.saleFeeKnownQty, 0);
+  const productCost = opts.productCost === undefined ? 18.42 : opts.productCost;
+  const taxRatePercent = opts.taxRatePercent === undefined ? 1.64 : opts.taxRatePercent;
+  const salePrice = roundMoney(revenue / units);
+  const mlFeeAmount = feeQty > 0 ? roundMoney(feeSum / feeQty) : 3.5;
+  const breakdown = computeFinancialMargin({
+    salePrice,
+    mlFeeAmount,
+    mlFeeRebate: 0,
+    shippingCost: 7.35,
+    productCost,
+    extraCosts: 0.3,
+    taxRatePercent,
+  });
+  return {
+    pending: opts.pending,
+    breakdown,
+    productCost,
+    taxRatePercent,
+    kitMissingSkus: [],
+    adsMetricsAvailable: false,
+    marginAfterAdsPercent: null,
+    marginAfterAdsValue: null,
+    periodUnitsSold: units,
+    periodRevenue: roundMoney(revenue),
+    shippingCost: 7.35,
+    mlFeeAmount,
+    extraCosts: 0.3,
+    listingTypeId: "gold_special",
+    salePrice,
+    // a linha do período não tem envio — só o painel traz
+    salesMix: entries.map((e) => {
+      const copy = { ...e };
+      delete copy.logistic;
+      return copy;
+    }),
+  };
+}
+
+// As 39 un. do Alltec em 17/11 até 17:49 (pedidos reais).
+const alltec: SalesMixEntry[] = [
+  entry({ channel: "retail", logistic: "full", units: 28 }, 29.87, 3.58),
+  entry({ channel: "retail", logistic: "flex", units: 2 }, 29.87, 10.23),
+  entry({ channel: "b2b", logistic: "full", units: 9 }, 27.85, 3.34),
+];
+
+describe("salesMixLogisticFromShipmentType", () => {
+  it("maps ML logistic types to Full/Flex/Coleta", () => {
+    assert.equal(salesMixLogisticFromShipmentType("fulfillment"), "full");
+    assert.equal(salesMixLogisticFromShipmentType("self_service"), "flex");
+    assert.equal(salesMixLogisticFromShipmentType("xd_drop_off"), "coleta");
+    assert.equal(salesMixLogisticFromShipmentType("cross_docking"), "coleta");
+    assert.equal(salesMixLogisticFromShipmentType("drop_off"), "coleta");
+    assert.equal(salesMixLogisticFromShipmentType("default"), "other");
+    assert.equal(salesMixLogisticFromShipmentType(null), "unclassified");
+  });
+});
+
+describe("createSalesMixAccumulator", () => {
+  it("sums per key, tracks price range and sorts by units", () => {
+    const acc = createSalesMixAccumulator();
+    const sale = { channel: "retail" as const, listingTypeId: "gold_special", logistic: "full" as const };
+    acc.add({ ...sale, quantity: 1, revenue: 29.87, unitPrice: 29.87, saleFeePerUnit: 3.58 });
+    acc.add({ ...sale, quantity: 3, revenue: 83.55, unitPrice: 27.85, saleFeePerUnit: null });
+    acc.add({ ...sale, logistic: "flex", quantity: 1, revenue: 29.87, unitPrice: 29.87, saleFeePerUnit: 10.23 });
+    const [full, flex] = acc.entries();
+    assert.equal(full?.logistic, "full");
+    assert.equal(full?.units, 4);
+    assert.equal(full?.orders, 2);
+    assert.equal(full?.revenue, 113.42);
+    assert.equal(full?.saleFeeKnownQty, 1); // a venda sem sale_fee não entra na tarifa
+    assert.equal(full?.minUnitPrice, 27.85);
+    assert.equal(full?.maxUnitPrice, 29.87);
+    assert.equal(flex?.logistic, "flex");
+  });
+});
+
+describe("buildSalesMixTable", () => {
+  it("closes on the listing's own margin (only price and fee change per modality)", () => {
+    const row = periodRow(alltec);
+    const table = buildSalesMixTable(row, alltec);
+    const mixTotal = table.rows.reduce((s, r) => s + (r.marginValue ?? 0) * r.units, 0);
+    const rowTotal = row.breakdown!.marginValue * row.periodUnitsSold!;
+    // arredondamento de centavos por unidade (preço/tarifa médios da linha)
+    assert.ok(Math.abs(mixTotal - rowTotal) < 0.5, `${mixTotal} vs ${rowTotal}`);
+    assert.equal(table.total.units, 39);
+    assert.equal(table.total.marginValue, row.breakdown!.marginValue);
+    assert.equal(table.unitsDiff, 0);
+    assert.equal(table.marginAvailable, true);
+  });
+
+  it("explains the −3,40% case: Flex fee and the B2B price pull the average down", () => {
+    const table = buildSalesMixTable(periodRow(alltec), alltec);
+    const byLabel = new Map(table.rows.map((r) => [r.label, r]));
+    const full = byLabel.get("Varejo · Full");
+    const flex = byLabel.get("Varejo · Flex");
+    const b2b = byLabel.get("B2B · Full");
+    assert.ok(full && flex && b2b);
+    assert.equal(flex.feePerUnit, 10.23);
+    assert.equal(b2b.averagePrice, 27.85);
+    assert.ok(flex.marginPercent! < b2b.marginPercent!);
+    assert.ok(b2b.marginPercent! < full.marginPercent!);
+    assert.ok(table.total.marginPercent! < full.marginPercent!);
+    assert.equal(table.hasFlex, true);
+    assert.equal(table.showsListingType, false);
+  });
+
+  it("labels the listing type when the period mixes Clássico and Premium", () => {
+    const entries = [
+      entry({ channel: "retail", units: 5 }, 29.87, 3.58),
+      entry({ channel: "retail", units: 1, listingTypeId: "gold_pro" }, 36.54, 6.21),
+    ];
+    const table = buildSalesMixTable(periodRow(entries), entries);
+    assert.equal(table.showsListingType, true);
+    assert.deepEqual(
+      table.rows.map((r) => r.label),
+      ["Varejo · Clássico", "Varejo · Premium"],
+    );
+  });
+
+  it("falls back to the listing fee when a modality has no sale_fee", () => {
+    const entries = [
+      entry({ channel: "retail", units: 3 }, 29.87, 3.58),
+      entry({ channel: "b2b", units: 1 }, 27.85, null),
+    ];
+    const row = periodRow(entries);
+    const table = buildSalesMixTable(row, entries);
+    const b2b = table.rows.find((r) => r.channel === "b2b");
+    assert.equal(b2b?.feePerUnit, row.mlFeeAmount);
+    assert.equal(b2b?.feeFromRow, true);
+    assert.equal(table.feeFromRow, true);
+  });
+
+  it("shows no margin when the listing is out of the average", () => {
+    const row = periodRow(alltec, { productCost: null });
+    const table = buildSalesMixTable(row, alltec);
+    assert.equal(table.marginAvailable, false);
+    assert.ok(table.rows.every((r) => r.marginValue === null && r.marginPercent === null));
+    assert.equal(table.total.marginValue, null);
+    // vendas e tarifa continuam aparecendo
+    assert.equal(table.rows[0]?.units, 28);
+    assert.equal(table.rows[0]?.feePerUnit, 3.58);
+  });
+
+  it("flags unclassified units and orders that changed since the page loaded", () => {
+    const entries = [
+      ...alltec,
+      entry({ channel: "retail", logistic: "unclassified", units: 2 }, 29.87, 3.58),
+    ];
+    const table = buildSalesMixTable(periodRow(alltec), entries);
+    assert.equal(table.unclassifiedUnits, 2);
+    assert.equal(table.unitsDiff, 2);
+  });
+});
+
+describe("computeChannelSplit", () => {
+  it("splits revenue over all rows but margin only over rows in the average", () => {
+    const outOfAverage = [entry({ channel: "retail", units: 10 }, 30, 3.6)];
+    const split = computeChannelSplit([
+      periodRow(alltec),
+      periodRow(outOfAverage, { productCost: null }),
+    ]);
+    const retail = split.items.find((i) => i.channel === "retail")!;
+    const b2b = split.items.find((i) => i.channel === "b2b")!;
+    assert.equal(split.hasB2b, true);
+    assert.equal(retail.units, 40);
+    assert.equal(retail.revenue, roundMoney(30 * 29.87 + 300));
+    assert.equal(b2b.revenue, 250.65);
+    assert.ok(Math.abs(retail.revenueShare! + b2b.revenueShare! - 100) < 0.02);
+    // margem do varejo = só as 30 un. do Alltec (a outra linha está fora da média)
+    const alltecRetail = buildSalesMixTable(periodRow(alltec), [
+      { ...entry({ channel: "retail", units: 30 }, 29.87, 0), saleFeeSum: 120.7, saleFeeKnownQty: 30 },
+    ]).rows[0]!;
+    assert.equal(retail.marginValue, roundMoney(alltecRetail.marginValue! * 30));
+    assert.ok(b2b.marginPercent! < retail.marginPercent!);
+  });
+
+  it("skips pending rows and reports no B2B when there is none", () => {
+    const retailOnly = [entry({ channel: "retail", units: 4 }, 29.87, 3.58)];
+    const split = computeChannelSplit([
+      periodRow(retailOnly),
+      periodRow(alltec, { pending: true }),
+    ]);
+    assert.equal(split.hasB2b, false);
+    assert.equal(split.items.find((i) => i.channel === "retail")?.units, 4);
+    assert.equal(split.items.find((i) => i.channel === "b2b")?.marginPercent, null);
+  });
+});

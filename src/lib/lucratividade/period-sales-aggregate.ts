@@ -1,7 +1,12 @@
+import { orderChannel } from "@/lib/mercadolibre/order-channel";
 import type {
   OrderSearchOrder,
   OrderSearchOrderItem,
 } from "@/lib/mercadolibre/types";
+import {
+  createSalesMixAccumulator,
+  type SalesMixEntry,
+} from "@/lib/lucratividade/sales-mix";
 
 /** Vendas pagas de um anúncio somadas no período (base da Lucratividade por data). */
 export type PeriodSaleAgg = {
@@ -12,6 +17,9 @@ export type PeriodSaleAgg = {
   saleFeeSum: number;
   /** Unidades cobertas por `saleFeeSum` — divisor da tarifa média por unidade. */
   saleFeeKnownQty: number;
+  /** As mesmas vendas por canal (varejo/B2B) × tipo de anúncio do pedido —
+   * sem envio (esse só no painel, sob demanda). */
+  mix: SalesMixEntry[];
 };
 
 export function quantityFromOrderLine(line: { quantity?: unknown }): number {
@@ -57,13 +65,23 @@ export function listingIdFromOrderLine(
   return line.item?.id ?? line.item_id ?? undefined;
 }
 
+/** `unit_price` válido da linha, ou `null`. */
+export function unitPriceFromOrderLine(line: { unit_price?: unknown }): number | null {
+  const price = line.unit_price;
+  return typeof price === "number" && Number.isFinite(price) && price >= 0
+    ? price
+    : null;
+}
+
 export function aggregatePeriodSalesByItem(
   orders: OrderSearchOrder[],
 ): Map<string, PeriodSaleAgg> {
   const byItem = new Map<string, PeriodSaleAgg>();
+  const mixByItem = new Map<string, ReturnType<typeof createSalesMixAccumulator>>();
 
   for (const order of orders) {
     if (order.status === "cancelled") continue;
+    const channel = orderChannel(order);
     for (const line of order.order_items ?? []) {
       const itemId = listingIdFromOrderLine(line);
       if (!itemId) continue;
@@ -77,6 +95,7 @@ export function aggregatePeriodSalesByItem(
         revenue: 0,
         saleFeeSum: 0,
         saleFeeKnownQty: 0,
+        mix: [],
       };
       existing.quantity += quantity;
       existing.revenue += revenue;
@@ -88,7 +107,22 @@ export function aggregatePeriodSalesByItem(
       }
 
       byItem.set(itemId, existing);
+
+      const mix = mixByItem.get(itemId) ?? createSalesMixAccumulator();
+      mix.add({
+        channel,
+        listingTypeId: line.listing_type_id ?? null,
+        quantity,
+        revenue,
+        unitPrice: unitPriceFromOrderLine(line),
+        saleFeePerUnit: saleFee,
+      });
+      mixByItem.set(itemId, mix);
     }
+  }
+
+  for (const [itemId, agg] of byItem) {
+    agg.mix = mixByItem.get(itemId)?.entries() ?? [];
   }
 
   return byItem;

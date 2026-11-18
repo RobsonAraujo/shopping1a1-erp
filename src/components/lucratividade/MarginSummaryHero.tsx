@@ -23,6 +23,10 @@ import {
   LISTING_SEGMENT_LABEL,
   type ListingSegment,
 } from "@/lib/lucratividade/listing-segment";
+import {
+  SALES_CHANNEL_LABEL,
+  type ChannelSplit,
+} from "@/lib/lucratividade/sales-mix";
 import { valueToneClass } from "@/lib/ui/tone";
 import { cn } from "@/lib/utils";
 
@@ -161,6 +165,65 @@ function SegmentCompareButton({
 }
 
 /**
+ * Varejo × B2B do recorte (só período e só quando houve B2B). Explica a
+ * média — a margem de cada canal usa o mesmo custo, imposto e frete de cada
+ * anúncio. Envio (Full/Flex/Coleta) fica no painel do anúncio.
+ */
+function ChannelSplitStrip({
+  split,
+  partial,
+}: {
+  split: ChannelSplit;
+  partial: boolean;
+}) {
+  return (
+    <div className="border-t border-[var(--border)]">
+      <p className="flex items-center gap-1.5 px-5 pt-3 text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+        Por canal de venda
+        <PlanningInfoTrigger
+          className="h-5 w-5"
+          content="Varejo e B2B (compra de empresa, marcada pelo Mercado Livre no pedido). Faturamento inclui os anúncios fora da média; a margem de cada canal, só os que entram nela, com o mesmo custo, imposto e frete de cada anúncio. Full, Flex e Coleta: abra o anúncio."
+        />
+      </p>
+      <div
+        role="group"
+        aria-label="Margem por canal de venda"
+        className="grid divide-y divide-[var(--border)] md:grid-cols-2 md:divide-x md:divide-y-0"
+      >
+        {split.items.map((item) => (
+          <div key={item.channel} className="flex items-center gap-3 px-5 py-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">{SALES_CHANNEL_LABEL[item.channel]}</p>
+              <p className="text-xs tabular-nums text-[var(--muted-foreground)]">
+                {formatFinancialMoney(item.revenue)} faturados
+                {item.revenueShare !== null
+                  ? ` · ${Math.round(item.revenueShare)}% do total`
+                  : ""}
+              </p>
+              <p className="text-xs tabular-nums text-[var(--muted-foreground)]">
+                {plural(item.units, "un. vendida", "un. vendidas")}
+                {item.marginValue !== null
+                  ? ` · ${formatFinancialMoney(item.marginValue)} de margem`
+                  : ""}
+              </p>
+            </div>
+            <p
+              className={cn(
+                "text-xl font-semibold tabular-nums",
+                valueToneClass(item.marginPercent),
+                partial && "opacity-60",
+              )}
+            >
+              {formatFinancialPercent(item.marginPercent)}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
  * Resumo da margem no topo da Lucratividade. No período a média é ponderada
  * pelo faturamento (margem real); na simulação é simples e vem rotulada como
  * tal. Anúncios incompletos aparecem como "fora da média" — o clique filtra a
@@ -179,6 +242,7 @@ export function MarginSummaryHero({
   segment,
   segmentSummaries,
   onSelectSegment,
+  channelSplit = null,
 }: {
   summary: MarginSummary;
   isSimulation: boolean;
@@ -193,6 +257,8 @@ export function MarginSummaryHero({
   /** Só em Todos — margem de próprios e de catálogo em separado. */
   segmentSummaries: SegmentSummaries | null;
   onSelectSegment: (segment: ListingSegment) => void;
+  /** Só período — Varejo × B2B do recorte; a faixa só aparece se houve B2B. */
+  channelSplit?: ChannelSplit | null;
 }) {
   const weighted = summary.mode === "weighted";
   const hasValue = summary.contributionPercent !== null;
@@ -439,6 +505,10 @@ export function MarginSummaryHero({
             />
           ))}
         </div>
+      ) : null}
+
+      {weighted && channelSplit?.hasB2b ? (
+        <ChannelSplitStrip split={channelSplit} partial={partial} />
       ) : null}
 
       <div className="flex items-start gap-2 border-t border-[var(--border)] px-5 py-2.5 text-xs text-[var(--muted-foreground)]">

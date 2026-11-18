@@ -43,6 +43,7 @@ import {
   type LucratividadeView,
 } from "@/lib/lucratividade/period-presets";
 import type { LucratividadeTaxContext } from "@/lib/lucratividade/row-issues";
+import { computeChannelSplit } from "@/lib/lucratividade/sales-mix";
 import {
   isRowBelowTarget,
   resolveTargetPriceCell,
@@ -65,6 +66,7 @@ import {
   type EvaluationRequest,
 } from "@/components/lucratividade/hooks/useEvaluationStream";
 import { useMinPriceOverlay } from "@/components/lucratividade/hooks/useMinPriceOverlay";
+import type { SalesMixPeriod } from "@/components/lucratividade/hooks/useSalesMix";
 import { useTargetMargin } from "@/components/lucratividade/hooks/useTargetMargin";
 
 type QuickFilter = "all" | "below" | "excluded";
@@ -232,6 +234,21 @@ export function FinancialEvaluationClient({
   const summary = useMemo(
     () => computeMarginSummary(segmentRows, { weighted: !isSimulation }),
     [segmentRows, isSimulation],
+  );
+
+  // Varejo × B2B do recorte — só explica a média do topo, não a muda.
+  const channelSplit = useMemo(
+    () => (isSimulation ? null : computeChannelSplit(segmentRows)),
+    [segmentRows, isSimulation],
+  );
+
+  const ordersFetchedAt = stream.meta?.ordersFetchedAt ?? null;
+  const salesMixPeriod = useMemo<SalesMixPeriod | null>(
+    () =>
+      range && !isSimulation
+        ? { from: range.from, to: range.to, ordersFetchedAt }
+        : null,
+    [range, isSimulation, ordersFetchedAt],
   );
 
   const segmentSummaries = useMemo<SegmentSummaries | null>(
@@ -522,6 +539,7 @@ export function FinancialEvaluationClient({
             segment={segment}
             segmentSummaries={segmentSummaries}
             onSelectSegment={setSegment}
+            channelSplit={channelSplit}
           />
 
           <Card className="space-y-4 p-4">
@@ -645,6 +663,7 @@ export function FinancialEvaluationClient({
             row={selectedRow}
             isSimulation={isSimulation}
             periodLabel={rangeLabel}
+            salesMixPeriod={salesMixPeriod}
             targetMarginPercent={targetMarginPercent}
             marginBasis={marginBasis}
             taxContext={taxContext}

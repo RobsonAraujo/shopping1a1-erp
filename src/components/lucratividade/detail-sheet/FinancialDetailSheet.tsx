@@ -29,6 +29,7 @@ import { MarginTab } from "@/components/lucratividade/detail-sheet/MarginTab";
 import { WholesaleTab } from "@/components/lucratividade/detail-sheet/WholesaleTab";
 import { ExclusionBadge } from "@/components/lucratividade/financial-evaluation-table/shared";
 import { useLiveListingRow } from "@/components/lucratividade/hooks/useLiveListingRow";
+import type { SalesMixPeriod } from "@/components/lucratividade/hooks/useSalesMix";
 
 type DetailTab = "margin" | "wholesale";
 
@@ -46,10 +47,13 @@ export function FinancialDetailSheet({
   wholesaleReductions,
   onSaveWholesaleReductions,
   onClose,
+  salesMixPeriod = null,
 }: {
   row: FinancialEvaluationRow;
   isSimulation: boolean;
   periodLabel: string | null;
+  /** Período de vendas da linha — liga a "Composição das vendas" na aba Margem. */
+  salesMixPeriod?: SalesMixPeriod | null;
   targetMarginPercent: number;
   marginBasis: MarginBasis;
   taxContext: LucratividadeTaxContext;
@@ -152,6 +156,7 @@ export function FinancialDetailSheet({
               targetMarginPercent={targetMarginPercent}
               marginBasis={marginBasis}
               taxContext={taxContext}
+              salesMixPeriod={salesMixPeriod}
             />
           </div>
           {wholesaleMounted ? (

@@ -135,6 +135,12 @@ export type OrderSearchOrderItem = {
   unit_price?: number;
   currency_id?: string;
   sale_fee?: number;
+  /**
+   * Tipo de anúncio desta venda (`gold_special` = Clássico, `gold_pro` =
+   * Premium). Vem nos resultados do `/orders/search` (conferido em nov/2026) —
+   * é o tipo do pedido, não o atual do anúncio.
+   */
+  listing_type_id?: string;
   item?: {
     id?: string;
     seller_sku?: string;
@@ -157,8 +163,14 @@ export type OrderSearchOrder = {
   date_closed?: string;
   date_created?: string;
   pack_id?: number | string | null;
-  /** Ex.: `delivered`, `not_delivered`, `paid`. Devolução pós-entrega costuma ficar `paid` + `delivered`. */
+  /** Ex.: `delivered`, `not_delivered`, `paid`. Devolução pós-entrega costuma ficar `paid` + `delivered`. Venda para empresa traz `b2b` (e `price_per_quantity` quando saiu pelo preço por quantidade). */
   tags?: string[];
+  /** Fluxos do pedido — ex.: `catalog`, `b2b`. Conferido nos resultados do `/orders/search` (nov/2026). */
+  context?: {
+    channel?: string | null;
+    site?: string | null;
+    flows?: string[] | null;
+  } | null;
   payments?: Array<{ status?: string; status_detail?: string }>;
   order_request?: { return?: unknown; change?: unknown };
   order_items?: OrderSearchOrderItem[];

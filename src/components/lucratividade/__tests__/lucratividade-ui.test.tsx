@@ -223,3 +223,57 @@ describe("parseTargetInput", () => {
     assert.equal(parseTargetInput("abc"), null);
   });
 });
+
+describe("MarginSummaryHero — faixa por canal de venda", () => {
+  const split = {
+    totalRevenue: 1146.75,
+    hasB2b: true,
+    items: [
+      { channel: "retail" as const, units: 30, revenue: 896.1, revenueShare: 78.14, marginValue: -21.4, marginPercent: -2.39 },
+      { channel: "b2b" as const, units: 9, revenue: 250.65, revenueShare: 21.86, marginValue: -18.18, marginPercent: -7.25 },
+    ],
+  };
+
+  function renderHero(channelSplit: typeof split | null, isSimulation = false) {
+    return renderIntoDocument(
+      <TooltipProvider>
+        <MarginSummaryHero
+          summary={summary(isSimulation ? { mode: "simple" } : {})}
+          isSimulation={isSimulation}
+          rangeLabel="Hoje"
+          loading={false}
+          afterAdsUnavailableText={null}
+          droppedListings={null}
+          excludedFilterActive={false}
+          onToggleExcludedFilter={noop}
+          segment="catalog"
+          segmentSummaries={null}
+          onSelectSegment={noop}
+          channelSplit={channelSplit}
+        />
+      </TooltipProvider>,
+    );
+  }
+
+  it("shows retail vs B2B revenue share and margin when the period had B2B", () => {
+    const { container, unmount } = renderHero(split);
+    const group = container.querySelector('[aria-label="Margem por canal de venda"]');
+    assert.ok(group, "faixa por canal ausente");
+    const text = group.textContent ?? "";
+    assert.match(text, /Varejo/);
+    assert.match(text, /B2B/);
+    assert.match(text, /78% do total/);
+    assert.match(text, /22% do total/);
+    assert.match(text, /-7,25%/);
+    unmount();
+  });
+
+  it("stays hidden without B2B and in the simulation", () => {
+    const none = renderHero({ ...split, hasB2b: false });
+    assert.equal(none.container.querySelector('[aria-label="Margem por canal de venda"]'), null);
+    none.unmount();
+    const sim = renderHero(split, true);
+    assert.equal(sim.container.querySelector('[aria-label="Margem por canal de venda"]'), null);
+    sim.unmount();
+  });
+});
