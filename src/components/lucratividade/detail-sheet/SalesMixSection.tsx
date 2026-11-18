@@ -1,10 +1,18 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { ChevronDown, Layers, Loader2 } from "lucide-react";
 import { PlanningInfoTrigger } from "@/components/shared/PlanningInfoTrigger";
+import { Badge, type BadgeProps } from "@/components/ui/badge";
+import type { OrderChannel } from "@/lib/mercadolibre/order-channel";
 import type { FinancialEvaluationRow } from "@/lib/lucratividade/financial-evaluation-data";
+import type { LucratividadeTaxContext } from "@/lib/lucratividade/row-issues";
 import {
   buildSalesMixTable,
+  describeMarginPrecision,
+  describeSalesMixRow,
+  salesMixLogisticFromShipmentType,
+  type MarginPrecisionStatus,
+  type SalesMixRowExplanation,
   type SalesMixTableRow,
 } from "@/lib/lucratividade/sales-mix";
 import {
@@ -14,15 +22,56 @@ import {
 import { valueToneClass } from "@/lib/ui/tone";
 import { cn } from "@/lib/utils";
 import {
+  ChannelShareBar,
+  ChannelSwatch,
+  type ChannelSharePart,
+} from "@/components/lucratividade/channel-share";
+import {
   useSalesMix,
   type SalesMixPeriod,
+  type SalesMixState,
 } from "@/components/lucratividade/hooks/useSalesMix";
 import type { LiveListingRowState } from "@/components/lucratividade/hooks/useLiveListingRow";
 
 const cellPad = "py-2 pr-3";
+/** Número numa célula: não quebra (ex.: "-R$ 0,27/un." quebrava no hífen). */
+const numCell = "text-right tabular-nums whitespace-nowrap";
+/** Preço e tarifa viram colunas só do `sm` pra cima; no celular, sublinha. */
+const wideOnly = "hidden sm:table-cell";
+const smallBadge = "px-1.5 py-0 text-[10px] font-medium";
+
+/** Selos calmos — nada de âmbar (avisos de cálculo não devem alarmar). */
+const PRECISION_BADGE: Record<MarginPrecisionStatus, BadgeProps["variant"]> = {
+  real: "success",
+  estimated: "muted",
+  not_applied: "outline",
+  outside: "outline",
+};
 
 function units(n: number) {
   return `${n.toLocaleString("pt-BR")} un.`;
+}
+
+function ComingSoon({ text }: { text: string }) {
+  return (
+    <span className="mt-1 flex items-start gap-1.5">
+      <Badge variant="outline" className={cn(smallBadge, "shrink-0")}>
+        Em breve
+      </Badge>
+      <span>{text.charAt(0).toUpperCase() + text.slice(1)}</span>
+    </span>
+  );
+}
+
+function RowExplainer({ explanation }: { explanation: SalesMixRowExplanation }) {
+  return (
+    <div className="space-y-1.5">
+      {explanation.lines.map((line) => (
+        <p key={line}>{line}</p>
+      ))}
+      {explanation.comingSoon ? <ComingSoon text={explanation.comingSoon} /> : null}
+    </div>
+  );
 }
 
 function PriceCell({ row }: { row: Pick<SalesMixTableRow, "averagePrice" | "minUnitPrice" | "maxUnitPrice"> }) {
@@ -42,22 +91,45 @@ function PriceCell({ row }: { row: Pick<SalesMixTableRow, "averagePrice" | "minU
   );
 }
 
+/** No celular, preço e tarifa embaixo do nome (as colunas somem). */
+function CompactPriceFee({ price, fee }: { price: number; fee: number | null }) {
+  return (
+    <p className="text-[11px] leading-snug text-[var(--muted-foreground)] tabular-nums sm:hidden">
+      {formatFinancialMoney(price)} · tarifa {formatFinancialMoney(fee)}/un.
+    </p>
+  );
+}
+
+function MarginCell({ percent, value }: { percent: number | null; value: number | null }) {
+  return (
+    <td className={cn("py-2", numCell)}>
+      <div className={valueToneClass(percent)}>{formatFinancialPercent(percent)}</div>
+      <div className="text-[11px] font-normal text-[var(--muted-foreground)]">
+        {value !== null ? `${formatFinancialMoney(value)}/un.` : "—"}
+      </div>
+    </td>
+  );
+}
+
 /**
- * "Composição das vendas" do painel (só períodos de venda): o que entrou na
- * média do anúncio, por canal × forma de envio. Não recalcula nada — cada
- * modalidade usa o mesmo custo, imposto e frete da linha, e o total é a
- * própria linha.
+ * "Composição das vendas" do painel (só períodos de venda), num painel
+ * embutido como o "Por canal de venda" do topo. Mostra o que entrou na média
+ * do anúncio e diz, por modalidade e para a conta inteira, o que é real e o
+ * que é estimado. Não recalcula nada: cada modalidade usa o mesmo custo,
+ * imposto e frete da linha, e o total é a própria linha.
  */
-export function SalesMixSection({
+export function SalesMixPanel({
   row,
-  period,
+  state,
   live,
+  taxContext,
 }: {
   row: FinancialEvaluationRow;
-  period: SalesMixPeriod;
+  /** Busca dos envios; `null` = sem busca (só canal × tipo da linha). */
+  state: SalesMixState | null;
   live: LiveListingRowState;
+  taxContext: LucratividadeTaxContext;
 }) {
-  const state = useSalesMix(row.mlItemId, period);
   const ready = state?.status === "ready" ? state.data : null;
   const entries =
     ready && ready.entries.length > 0 ? ready.entries : (row.salesMix ?? []);
@@ -65,22 +137,38 @@ export function SalesMixSection({
 
   const table = buildSalesMixTable(row, entries);
   const showMargin = table.marginAvailable;
+  const listingLogistic = row.shippingLogisticType
+    ? salesMixLogisticFromShipmentType(row.shippingLogisticType)
+    : null;
+  const explainContext = {
+    shippingCost: row.shippingCost,
+    listingLogistic,
+    shipmentsCapped: ready?.shipments.capped ?? false,
+  };
+  const precision = describeMarginPrecision(row, {
+    taxRegime: taxContext.taxRegime,
+    listingLogistic,
+    feeFromRow: table.feeFromRow,
+  });
+
+  const revenueByChannel = new Map<OrderChannel, number>();
+  for (const mixRow of table.rows) {
+    revenueByChannel.set(
+      mixRow.channel,
+      (revenueByChannel.get(mixRow.channel) ?? 0) + mixRow.revenue,
+    );
+  }
+  const mixRevenue = [...revenueByChannel.values()].reduce((sum, v) => sum + v, 0);
+  const channelParts: ChannelSharePart[] = (["retail", "b2b"] as const)
+    .filter((channel) => (revenueByChannel.get(channel) ?? 0) > 0)
+    .map((channel) => ({
+      channel,
+      revenue: revenueByChannel.get(channel)!,
+      revenueShare:
+        mixRevenue > 0 ? (revenueByChannel.get(channel)! / mixRevenue) * 100 : null,
+    }));
+
   const notes: string[] = [];
-  if (table.hasFlex) {
-    notes.push(
-      "Flex: a tarifa do Mercado Livre inclui custo fixo. O frete usado é a estimativa do anúncio — o custo da sua entrega não está no sistema.",
-    );
-  }
-  if (ready && table.unclassifiedUnits > 0) {
-    notes.push(
-      ready.shipments.capped
-        ? `${units(table.unclassifiedUnits)} sem envio classificado: consultamos os ${ready.shipments.classified.toLocaleString("pt-BR")} envios mais recentes do período.`
-        : `${units(table.unclassifiedUnits)} sem envio classificado (o Mercado Livre não informou o envio).`,
-    );
-  }
-  if (table.feeFromRow) {
-    notes.push("Onde o pedido veio sem tarifa, usamos a tarifa média do anúncio.");
-  }
   if (!showMargin) {
     notes.push("A margem por modalidade aparece quando o cadastro do anúncio estiver completo.");
   }
@@ -96,76 +184,106 @@ export function SalesMixSection({
       : null;
 
   return (
-    <section aria-label="Composição das vendas">
-      <div className="mb-1 flex items-center gap-1.5">
-        <p className="text-sm font-semibold">Composição das vendas</p>
+    <section
+      aria-label="Composição das vendas"
+      className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/30 p-3 sm:p-4"
+    >
+      <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+        <Layers className="size-3.5" aria-hidden />
+        Composição das vendas
         <PlanningInfoTrigger
           className="h-5 w-5"
-          content="As vendas do período separadas por canal (varejo ou B2B, compra de empresa) e forma de envio. Cada linha usa o mesmo custo, imposto e frete estimado da margem do anúncio — só o preço e a tarifa mudam — e o total fecha na margem acima."
+          label="Como funciona a composição das vendas"
+          content="As vendas do período separadas por canal (varejo ou B2B) e forma de envio. Preço e tarifa são os de cada venda; frete, custo e imposto são os mesmos da margem do anúncio — por isso o total fecha na margem acima. O (?) de cada linha mostra o que entrou na conta."
         />
-      </div>
-      <div className="overflow-x-auto">
+      </p>
+      <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+        As mesmas vendas da margem acima, separadas por canal e forma de envio.
+      </p>
+
+      {channelParts.length > 1 ? (
+        <ChannelShareBar
+          parts={channelParts}
+          label="Faturamento do anúncio por canal"
+          className="mt-3"
+        />
+      ) : null}
+
+      <div className="mt-3 overflow-x-auto">
         <table className="w-full border-collapse text-xs sm:text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-xs text-[var(--muted-foreground)]">
               <th className={cn(cellPad, "font-medium")}>Modalidade</th>
               <th className={cn(cellPad, "text-right font-medium")}>Vendas</th>
-              <th className={cn(cellPad, "text-right font-medium")}>Preço médio</th>
-              <th className={cn(cellPad, "text-right font-medium")}>Tarifa ML/un.</th>
+              <th className={cn(cellPad, wideOnly, "text-right font-medium")}>Preço médio</th>
+              <th className={cn(cellPad, wideOnly, "text-right font-medium")}>Tarifa ML/un.</th>
               {showMargin ? (
                 <th className="py-2 text-right font-medium">Margem</th>
               ) : null}
             </tr>
           </thead>
           <tbody>
-            {table.rows.map((mixRow) => (
-              <tr key={mixRow.key} className="border-b border-[var(--border)]">
-                <td className={cellPad}>{mixRow.label}</td>
-                <td className={cn(cellPad, "text-right tabular-nums")}>
-                  {units(mixRow.units)}
-                </td>
-                <td className={cn(cellPad, "text-right tabular-nums")}>
-                  <PriceCell row={mixRow} />
-                </td>
-                <td className={cn(cellPad, "text-right tabular-nums")}>
-                  {formatFinancialMoney(mixRow.feePerUnit)}
-                </td>
-                {showMargin ? (
-                  <td className="py-2 text-right tabular-nums">
-                    <div className={valueToneClass(mixRow.marginPercent)}>
-                      {formatFinancialPercent(mixRow.marginPercent)}
-                    </div>
-                    <div className="text-[11px] text-[var(--muted-foreground)]">
-                      {mixRow.marginValue !== null
-                        ? `${formatFinancialMoney(mixRow.marginValue)}/un.`
-                        : "—"}
+            {table.rows.map((mixRow) => {
+              const explanation = describeSalesMixRow(mixRow, explainContext);
+              return (
+                <tr key={mixRow.key} className="border-b border-[var(--border)] align-top">
+                  <td className={cellPad}>
+                    <div className="flex items-start gap-2">
+                      <ChannelSwatch channel={mixRow.channel} className="mt-1.5" />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-0.5">
+                          <span data-mix-label>{mixRow.label}</span>
+                          <PlanningInfoTrigger
+                            className="h-5 w-5"
+                            label={`Como calculamos ${mixRow.label}`}
+                            content={<RowExplainer explanation={explanation} />}
+                          />
+                        </div>
+                        <CompactPriceFee price={mixRow.averagePrice} fee={mixRow.feePerUnit} />
+                        {explanation.shippingNote ? (
+                          <p
+                            data-shipping-note
+                            className="text-[11px] leading-snug text-[var(--muted-foreground)]"
+                          >
+                            {explanation.shippingNote}
+                          </p>
+                        ) : null}
+                      </div>
                     </div>
                   </td>
-                ) : null}
-              </tr>
-            ))}
+                  <td className={cn(cellPad, numCell)}>{units(mixRow.units)}</td>
+                  <td className={cn(cellPad, wideOnly, numCell)}>
+                    <PriceCell row={mixRow} />
+                  </td>
+                  <td className={cn(cellPad, wideOnly, numCell)}>
+                    {formatFinancialMoney(mixRow.feePerUnit)}
+                  </td>
+                  {showMargin ? (
+                    <MarginCell percent={mixRow.marginPercent} value={mixRow.marginValue} />
+                  ) : null}
+                </tr>
+              );
+            })}
             <tr className="font-semibold">
-              <td className={cellPad}>Total do anúncio</td>
-              <td className={cn(cellPad, "text-right tabular-nums")}>
-                {units(table.total.units)}
+              <td className={cellPad}>
+                Total do anúncio
+                <CompactPriceFee
+                  price={table.total.averagePrice}
+                  fee={table.total.feePerUnit}
+                />
               </td>
-              <td className={cn(cellPad, "text-right tabular-nums")}>
+              <td className={cn(cellPad, numCell)}>{units(table.total.units)}</td>
+              <td className={cn(cellPad, wideOnly, numCell)}>
                 {formatFinancialMoney(table.total.averagePrice)}
               </td>
-              <td className={cn(cellPad, "text-right tabular-nums")}>
+              <td className={cn(cellPad, wideOnly, numCell)}>
                 {formatFinancialMoney(table.total.feePerUnit)}
               </td>
               {showMargin ? (
-                <td className="py-2 text-right tabular-nums">
-                  <div className={valueToneClass(table.total.marginPercent)}>
-                    {formatFinancialPercent(table.total.marginPercent)}
-                  </div>
-                  <div className="text-[11px] font-normal text-[var(--muted-foreground)]">
-                    {table.total.marginValue !== null
-                      ? `${formatFinancialMoney(table.total.marginValue)}/un.`
-                      : "—"}
-                  </div>
-                </td>
+                <MarginCell
+                  percent={table.total.marginPercent}
+                  value={table.total.marginValue}
+                />
               ) : null}
             </tr>
           </tbody>
@@ -195,6 +313,53 @@ export function SalesMixSection({
           </li>
         ) : null}
       </ul>
+
+      {/* Fechado por padrão — abre quem quiser o detalhe do que é estimado. */}
+      <details className="group mt-4 border-t border-[var(--border)] pt-3">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)] hover:text-[var(--foreground)] [&::-webkit-details-marker]:hidden">
+          O que é real e o que é estimado
+          <ChevronDown
+            className="size-4 shrink-0 transition-transform group-open:rotate-180"
+            aria-hidden
+          />
+        </summary>
+        <ul aria-label="O que é real e o que é estimado" className="mt-2 space-y-2.5 text-xs">
+          {precision.map((item) => (
+            <li
+              key={item.key}
+              data-precision-key={item.key}
+              className="grid grid-cols-[1fr_auto] items-start gap-x-2 gap-y-0.5 sm:grid-cols-[7.5rem_7.5rem_minmax(0,1fr)]"
+            >
+              <span className="font-medium text-[var(--foreground)]">{item.label}</span>
+              <span className="justify-self-end sm:justify-self-start">
+                <Badge variant={PRECISION_BADGE[item.status]} className={smallBadge}>
+                  {item.statusLabel}
+                </Badge>
+              </span>
+              <span className="col-span-2 text-[var(--muted-foreground)] sm:col-span-1">
+                {item.detail}
+                {item.comingSoon ? <ComingSoon text={item.comingSoon} /> : null}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </details>
     </section>
   );
+}
+
+/** Busca os envios do anúncio (sob demanda) e mostra o painel. */
+export function SalesMixSection({
+  row,
+  period,
+  live,
+  taxContext,
+}: {
+  row: FinancialEvaluationRow;
+  period: SalesMixPeriod;
+  live: LiveListingRowState;
+  taxContext: LucratividadeTaxContext;
+}) {
+  const state = useSalesMix(row.mlItemId, period);
+  return <SalesMixPanel row={row} state={state} live={live} taxContext={taxContext} />;
 }

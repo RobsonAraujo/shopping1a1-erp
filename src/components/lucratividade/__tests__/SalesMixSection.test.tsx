@@ -5,7 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { computeFinancialMargin } from "@/lib/pricing/financial-margin";
 import type { FinancialEvaluationRow } from "@/lib/lucratividade/financial-evaluation-data";
 import type { SalesMixForItem } from "@/lib/lucratividade/sales-mix";
-import { SalesMixSection } from "../detail-sheet/SalesMixSection";
+import { SalesMixPanel, SalesMixSection } from "../detail-sheet/SalesMixSection";
 
 const originalFetch = globalThis.fetch;
 afterEach(() => {
@@ -36,6 +36,7 @@ function alltecRow(): FinancialEvaluationRow {
     listingTypeId: "gold_special",
     listingTypeLabel: "Clássico",
     catalogListing: true,
+    shippingLogisticType: "fulfillment",
     productCost: 18.42,
     extraCosts: 0.3,
     taxRatePercent: 1.64,
@@ -138,9 +139,23 @@ const period = {
   ordersFetchedAt: "2026-11-17T20:50:00.000Z",
 };
 
-function rowTexts(container: HTMLElement) {
-  return [...container.querySelectorAll("tbody tr")].map(
-    (tr) => tr.querySelector("td")?.textContent ?? "",
+const taxContext = { taxRegime: "LUCRO_REAL" as const, simplesRateConfigured: false };
+
+/** Rótulos das modalidades (sem o total). */
+function mixLabels(container: HTMLElement) {
+  return [...container.querySelectorAll("[data-mix-label]")].map((el) => el.textContent ?? "");
+}
+
+function renderSection(row = alltecRow()) {
+  return renderIntoDocument(
+    <TooltipProvider>
+      <SalesMixSection
+        row={row}
+        period={period}
+        live={{ status: "loading" }}
+        taxContext={taxContext}
+      />
+    </TooltipProvider>,
   );
 }
 
@@ -156,14 +171,10 @@ describe("SalesMixSection", () => {
       return Response.json(withShipments);
     }) as typeof fetch;
 
-    const { container, unmount } = renderIntoDocument(
-      <TooltipProvider>
-        <SalesMixSection row={alltecRow()} period={period} live={{ status: "loading" }} />
-      </TooltipProvider>,
-    );
+    const { container, unmount } = renderSection();
 
     // antes da busca: só varejo × B2B (já vem na linha) + aviso de carregamento
-    assert.deepEqual(rowTexts(container), ["Varejo", "B2B", "Total do anúncio"]);
+    assert.deepEqual(mixLabels(container), ["Varejo", "B2B"]);
     assert.match(container.textContent ?? "", /Classificando a forma de envio/);
     assert.match(calls[0] ?? "", /\/api\/financial-evaluation\/sales-mix\?/);
     assert.match(calls[0] ?? "", /itemId=MLB5713296080/);
@@ -172,32 +183,88 @@ describe("SalesMixSection", () => {
     await waitFor(() => assert.ok(gate.release));
     gate.release?.();
     await waitFor(() =>
-      assert.deepEqual(rowTexts(container), [
-        "Varejo · Full",
-        "B2B · Full",
-        "Varejo · Flex",
-        "Total do anúncio",
-      ]),
+      assert.deepEqual(mixLabels(container), ["Varejo · Full", "B2B · Full", "Varejo · Flex"]),
     );
     const text = container.textContent ?? "";
     assert.match(text, /10,23/); // tarifa do Flex
-    assert.match(text, /Flex: a tarifa do Mercado Livre inclui custo fixo/);
     assert.doesNotMatch(text, /Classificando a forma de envio/);
+
+    // só o Flex usa frete de outro envio — e a linha diz qual
+    const notes = [...container.querySelectorAll("[data-shipping-note]")].map(
+      (el) => el.textContent ?? "",
+    );
+    assert.equal(notes.length, 1);
+    assert.match(notes[0] ?? "", /^usa o frete padrão do Full do anúncio \(R\$\s7,35\/un\.\)$/);
+
+    // cada modalidade tem o próprio (?)
+    const triggers = [...container.querySelectorAll("button[aria-label^='Como calculamos']")].map(
+      (b) => b.getAttribute("aria-label"),
+    );
+    assert.deepEqual(triggers, [
+      "Como calculamos Varejo · Full",
+      "Como calculamos B2B · Full",
+      "Como calculamos Varejo · Flex",
+    ]);
+    unmount();
+  });
+
+  it("separates the section, shows the channel bar and what is real vs estimated", async () => {
+    globalThis.fetch = (async () => Response.json(withShipments)) as typeof fetch;
+    const { container, unmount } = renderSection();
+    await waitFor(() => assert.equal(mixLabels(container).length, 3));
+
+    const section = container.querySelector('section[aria-label="Composição das vendas"]');
+    assert.ok(section, "painel da composição ausente");
+    const bar = section.querySelector('[role="img"]');
+    assert.ok(bar, "barra Varejo × B2B ausente");
+    assert.match(bar.getAttribute("aria-label") ?? "", /^Faturamento do anúncio por canal — Varejo: .*; B2B: /);
+
+    // "O que é real e o que é estimado" vem fechado — abre quem quiser
+    const details = section.querySelector("details");
+    assert.ok(details, "quadro real × estimado ausente");
+    assert.equal(details.open, false);
+    assert.match(details.querySelector("summary")?.textContent ?? "", /O que é real e o que é estimado/);
+
+    const items = new Map(
+      [...section.querySelectorAll("[data-precision-key]")].map((li) => [
+        li.getAttribute("data-precision-key"),
+        li.textContent ?? "",
+      ]),
+    );
+    assert.deepEqual([...items.keys()], ["price", "fee", "shipping", "cost", "tax", "returns", "ads"]);
+    assert.match(items.get("price") ?? "", /Real/);
+    assert.match(items.get("fee") ?? "", /Real/);
+    assert.match(items.get("shipping") ?? "", /Estimado.*frete padrão do Full do anúncio \(R\$\s7,35\/un\.\).*Em breve/);
+    assert.match(items.get("cost") ?? "", /Estimado.*cadastro atual.*R\$\s18,72\/un\./i);
+    assert.match(items.get("tax") ?? "", /Estimado.*Tributário.*1,64%.*Em breve/);
+    assert.match(items.get("returns") ?? "", /Não descontadas.*Em breve/);
+    assert.match(items.get("ads") ?? "", /Fora da tabela/);
     unmount();
   });
 
   it("keeps the channel table and explains when the shipping query fails", async () => {
     globalThis.fetch = (async () =>
       Response.json({ error: "sales_mix_failed" }, { status: 502 })) as typeof fetch;
-    const { container, unmount } = renderIntoDocument(
-      <TooltipProvider>
-        <SalesMixSection row={alltecRow()} period={period} live={{ status: "loading" }} />
-      </TooltipProvider>,
-    );
+    const { container, unmount } = renderSection();
     await waitFor(() =>
       assert.match(container.textContent ?? "", /Forma de envio indisponível agora/),
     );
-    assert.deepEqual(rowTexts(container), ["Varejo", "B2B", "Total do anúncio"]);
+    assert.deepEqual(mixLabels(container), ["Varejo", "B2B"]);
+    unmount();
+  });
+
+  it("hides the channel bar when the listing sold through one channel only", () => {
+    const row = alltecRow();
+    const retailOnly = { ...row, salesMix: row.salesMix!.filter((e) => e.channel === "retail") };
+    const { container, unmount } = renderIntoDocument(
+      <TooltipProvider>
+        <SalesMixPanel row={retailOnly} state={null} live={{ status: "loading" }} taxContext={taxContext} />
+      </TooltipProvider>,
+    );
+    const section = container.querySelector('section[aria-label="Composição das vendas"]');
+    assert.ok(section);
+    assert.equal(section.querySelector('[role="img"]'), null);
+    assert.deepEqual(mixLabels(container), ["Varejo"]);
     unmount();
   });
 });

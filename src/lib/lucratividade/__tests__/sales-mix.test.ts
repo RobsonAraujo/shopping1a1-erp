@@ -5,6 +5,8 @@ import {
   buildSalesMixTable,
   computeChannelSplit,
   createSalesMixAccumulator,
+  describeMarginPrecision,
+  describeSalesMixRow,
   salesMixLogisticFromShipmentType,
   type SalesMixEntry,
   type SalesMixRowInput,
@@ -221,5 +223,115 @@ describe("computeChannelSplit", () => {
     assert.equal(split.hasB2b, false);
     assert.equal(split.items.find((i) => i.channel === "retail")?.units, 4);
     assert.equal(split.items.find((i) => i.channel === "b2b")?.marginPercent, null);
+  });
+});
+
+describe("describeSalesMixRow — o que cada modalidade usou", () => {
+  const fullListing = { shippingCost: 7.35, listingLogistic: "full" as const, shipmentsCapped: false };
+
+  it("Flex: says which shipping it borrows and what is coming", () => {
+    const e = describeSalesMixRow({ channel: "retail", logistic: "flex", feeFromRow: false }, fullListing);
+    assert.match(e.shippingNote ?? "", /^usa o frete padrão do Full do anúncio \(R\$\s7,35\/un\.\)$/);
+    assert.ok(e.lines.some((l) => /não cobra frete no Flex/.test(l)));
+    assert.ok(e.lines.some((l) => /custo fixo por unidade/.test(l)));
+    assert.equal(e.comingSoon, "cadastrar o custo da sua entrega Flex.");
+  });
+
+  it("Full on a Full listing: no borrowed shipping, no 'em breve'", () => {
+    const e = describeSalesMixRow({ channel: "retail", logistic: "full", feeFromRow: false }, fullListing);
+    assert.equal(e.shippingNote, null);
+    assert.equal(e.comingSoon, null);
+    assert.ok(e.lines.some((l) => /cotado pelo Mercado Livre/.test(l)));
+  });
+
+  it("Coleta on a Full listing borrows the Full shipping until real shipping per order exists", () => {
+    const e = describeSalesMixRow({ channel: "b2b", logistic: "coleta", feeFromRow: false }, fullListing);
+    assert.match(e.shippingNote ?? "", /frete padrão do Full do anúncio/);
+    assert.equal(e.comingSoon, "frete real de cada pedido.");
+    assert.ok(e.lines[0]?.startsWith("B2B:"));
+  });
+
+  it("unclassified mentions the shipment cap; unknown listing shipping stays generic", () => {
+    const capped = describeSalesMixRow(
+      { channel: "retail", logistic: "unclassified", feeFromRow: false },
+      { ...fullListing, shipmentsCapped: true },
+    );
+    assert.ok(capped.lines.some((l) => /limite de 1\.500 envios/.test(l)));
+    const unknown = describeSalesMixRow(
+      { channel: "retail", logistic: "full", feeFromRow: false },
+      { shippingCost: 7.35, listingLogistic: null, shipmentsCapped: false },
+    );
+    assert.match(unknown.shippingNote ?? "", /^usa a cotação de frete padrão do anúncio/);
+  });
+
+  it("explains the fee fallback and channel-only rows (before shipping loads)", () => {
+    const e = describeSalesMixRow({ channel: "retail", logistic: null, feeFromRow: true }, fullListing);
+    assert.equal(e.shippingNote, null);
+    assert.ok(e.lines.some((l) => /vieram sem tarifa/.test(l)));
+    assert.ok(e.lines.some((l) => /igual para todas as vendas/.test(l)));
+  });
+});
+
+describe("describeMarginPrecision — o que é real e o que é estimado", () => {
+  const row = {
+    shippingCost: 7.35,
+    productCost: 18.42,
+    extraCosts: 0.3,
+    taxRatePercent: 1.64,
+    isKitComposition: false,
+  };
+
+  it("lists every component with its status and what is coming", () => {
+    const items = describeMarginPrecision(row, {
+      taxRegime: "LUCRO_REAL",
+      listingLogistic: "full",
+      feeFromRow: false,
+    });
+    assert.deepEqual(
+      items.map((i) => [i.key, i.status]),
+      [
+        ["price", "real"],
+        ["fee", "real"],
+        ["shipping", "estimated"],
+        ["cost", "estimated"],
+        ["tax", "estimated"],
+        ["returns", "not_applied"],
+        ["ads", "outside"],
+      ],
+    );
+    const byKey = new Map(items.map((i) => [i.key, i]));
+    assert.match(byKey.get("shipping")!.detail, /^O frete padrão do Full do anúncio \(R\$\s7,35\/un\.\)/);
+    assert.match(byKey.get("cost")!.detail, /Cadastro atual \(R\$\s18,72\/un\./);
+    assert.match(byKey.get("tax")!.detail, /Tributário.*1,64%/);
+    assert.equal(byKey.get("tax")!.comingSoon, "imposto de cada venda.");
+    assert.equal(byKey.get("returns")!.comingSoon, "descontar as devoluções.");
+  });
+
+  it("Simples uses the company rate and has nothing coming for tax", () => {
+    const tax = describeMarginPrecision(row, {
+      taxRegime: "SIMPLES",
+      listingLogistic: "full",
+      feeFromRow: false,
+    }).find((i) => i.key === "tax")!;
+    assert.match(tax.detail, /Alíquota efetiva do Simples/);
+    assert.equal(tax.comingSoon, null);
+  });
+
+  it("kit cost, missing cost/tax and the fee fallback", () => {
+    const kit = describeMarginPrecision({ ...row, isKitComposition: true }, {
+      taxRegime: "LUCRO_REAL",
+      listingLogistic: "full",
+      feeFromRow: true,
+    });
+    assert.match(kit.find((i) => i.key === "cost")!.detail, /^Composição do kit/);
+    assert.match(kit.find((i) => i.key === "fee")!.detail, /sem tarifa usam a média/);
+    const missing = describeMarginPrecision({ ...row, productCost: null, taxRatePercent: null }, {
+      taxRegime: "LUCRO_REAL",
+      listingLogistic: null,
+      feeFromRow: false,
+    });
+    assert.match(missing.find((i) => i.key === "cost")!.detail, /Sem custo cadastrado/);
+    assert.match(missing.find((i) => i.key === "tax")!.detail, /Sem alíquota/);
+    assert.match(missing.find((i) => i.key === "shipping")!.detail, /^A cotação de frete padrão do anúncio/);
   });
 });

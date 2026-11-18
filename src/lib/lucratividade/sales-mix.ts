@@ -1,8 +1,11 @@
 import type { OrderChannel } from "@/lib/mercadolibre/order-channel";
 import type { FinancialEvaluationRow } from "@/lib/lucratividade/financial-evaluation-data";
 import { marginExclusionReason } from "@/lib/lucratividade/margin-summary";
+import type { TaxRegime } from "@/lib/lucratividade/row-issues";
 import {
   computeFinancialMargin,
+  formatFinancialMoney,
+  formatFinancialPercent,
   listingTypeLabelFromId,
   roundMoney,
 } from "@/lib/pricing/financial-margin";
@@ -420,4 +423,223 @@ export function computeChannelSplit(rows: SalesMixRowInput[]): ChannelSplit {
     totalRevenue: roundMoney(totalRevenue),
     hasB2b: b2b.units > 0 || b2b.revenue > 0,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Explicações: o que é real e o que é estimado na composição.
+// Os textos seguem as regras do cálculo (period mode de
+// `financial-evaluation-data.ts`) — se uma regra mudar, mude o texto junto.
+// ---------------------------------------------------------------------------
+
+/** "o frete padrão do Full do anúncio" — de onde vem o frete usado em todas as linhas. */
+function listingShippingSource(listingLogistic: SalesMixLogistic | null): string {
+  switch (listingLogistic) {
+    case "full":
+      return "o frete padrão do Full do anúncio";
+    case "flex":
+      return "o frete padrão do Flex do anúncio";
+    case "coleta":
+      return "o frete padrão da Coleta/Agência do anúncio";
+    default:
+      return "a cotação de frete padrão do anúncio";
+  }
+}
+
+function perUnit(value: number | null): string {
+  return value === null ? "" : ` (${formatFinancialMoney(value)}/un.)`;
+}
+
+export type SalesMixRowExplanation = {
+  /** Sublinha da linha quando o frete é o padrão de outro envio — diz qual entrou. */
+  shippingNote: string | null;
+  /** Parágrafos do tooltip da modalidade. */
+  lines: string[];
+  /** O que vai deixar esta linha exata ("Em breve"). */
+  comingSoon: string | null;
+};
+
+const LOGISTIC_MEANING: Record<SalesMixLogistic, string> = {
+  full: "Full: o Mercado Livre armazena e envia.",
+  flex: "Flex: você faz a entrega e recebe um bônus do Mercado Livre por ela.",
+  coleta: "Coleta/Agência: o Mercado Livre coleta o pacote ou você o leva a uma agência.",
+  other: "Envio fora do Mercado Envios (ex.: retirada ou entrega a combinar).",
+  unclassified: "",
+};
+
+/**
+ * Tooltip e sublinha de uma modalidade. Hoje TODAS as linhas usam o mesmo
+ * frete — a cotação do ML para o envio do anúncio (`row.shippingCost`) —, por
+ * isso Flex, outros envios e envio diferente do anúncio são "de referência".
+ */
+export function describeSalesMixRow(
+  tableRow: Pick<SalesMixTableRow, "channel" | "logistic" | "feeFromRow">,
+  ctx: {
+    shippingCost: number | null;
+    listingLogistic: SalesMixLogistic | null;
+    shipmentsCapped: boolean;
+  },
+): SalesMixRowExplanation {
+  const source = listingShippingSource(ctx.listingLogistic);
+  const value = perUnit(ctx.shippingCost);
+  const logistic = tableRow.logistic;
+
+  const lines: string[] = [
+    tableRow.channel === "b2b"
+      ? "B2B: compras de empresas pelo canal B2B do Mercado Livre — podem sair pelo seu preço por quantidade."
+      : "Varejo: vendas fora do canal B2B do Mercado Livre.",
+  ];
+  if (logistic === "unclassified") {
+    lines.push(
+      ctx.shipmentsCapped
+        ? "Não consultamos a forma de envio destes pedidos: o período passou do limite de 1.500 envios por consulta."
+        : "O Mercado Livre não informou a forma de envio destes pedidos.",
+    );
+  } else if (logistic) {
+    lines.push(LOGISTIC_MEANING[logistic]);
+  }
+
+  if (tableRow.feeFromRow) {
+    lines.push("Tarifa: estes pedidos vieram sem tarifa; usamos a tarifa média do anúncio.");
+  } else if (logistic === "flex") {
+    lines.push("Tarifa: a cobrada pelo Mercado Livre nestes pedidos — no Flex ela pode incluir um custo fixo por unidade.");
+  } else {
+    lines.push("Tarifa: a cobrada pelo Mercado Livre nestes pedidos.");
+  }
+
+  const reference =
+    logistic === "flex" ||
+    logistic === "other" ||
+    logistic === "unclassified" ||
+    ((logistic === "full" || logistic === "coleta") && logistic !== ctx.listingLogistic);
+
+  let comingSoon: string | null = null;
+  if (logistic === "flex") {
+    lines.push(
+      `Frete: o Mercado Livre não cobra frete no Flex, e o custo da sua entrega ainda não está cadastrado. Por isso usamos ${source}${value}.`,
+    );
+    comingSoon = "cadastrar o custo da sua entrega Flex.";
+  } else if (logistic === "other") {
+    lines.push(`Frete: sem envio do Mercado Livre; usamos ${source}${value}.`);
+  } else if (reference) {
+    lines.push(`Frete: usamos ${source}${value}, não o frete real destes pedidos.`);
+    if (logistic === "full" || logistic === "coleta") {
+      comingSoon = "frete real de cada pedido.";
+    }
+  } else if (logistic) {
+    lines.push(
+      `Frete: ${source}${value}, cotado pelo Mercado Livre. Pacotes com várias unidades podem custar menos por unidade.`,
+    );
+  } else {
+    lines.push(`Frete: ${source}${value}, igual para todas as vendas.`);
+  }
+
+  return {
+    shippingNote: reference ? `usa ${source}${value}` : null,
+    lines,
+    comingSoon,
+  };
+}
+
+export type MarginPrecisionStatus = "real" | "estimated" | "not_applied" | "outside";
+
+export type MarginPrecisionItem = {
+  key: "price" | "fee" | "shipping" | "cost" | "tax" | "returns" | "ads";
+  label: string;
+  status: MarginPrecisionStatus;
+  statusLabel: string;
+  detail: string;
+  /** O que falta para ficar exato ("Em breve"). */
+  comingSoon: string | null;
+};
+
+/**
+ * "O que é real e o que é estimado" da margem do período — um item por
+ * componente, com o que ainda é média/estimativa e o que vai corrigir isso.
+ */
+export function describeMarginPrecision(
+  row: Pick<
+    FinancialEvaluationRow,
+    "shippingCost" | "productCost" | "extraCosts" | "taxRatePercent" | "isKitComposition"
+  >,
+  ctx: {
+    taxRegime: TaxRegime;
+    listingLogistic: SalesMixLogistic | null;
+    feeFromRow: boolean;
+  },
+): MarginPrecisionItem[] {
+  const source = listingShippingSource(ctx.listingLogistic);
+  const shippingSource = source.charAt(0).toUpperCase() + source.slice(1);
+  const cost =
+    row.productCost === null ? null : roundMoney(row.productCost + (row.extraCosts ?? 0));
+  const simples = ctx.taxRegime === "SIMPLES";
+
+  return [
+    {
+      key: "price",
+      label: "Preço",
+      status: "real",
+      statusLabel: "Real",
+      detail: "Média do que os compradores pagaram em cada modalidade.",
+      comingSoon: null,
+    },
+    {
+      key: "fee",
+      label: "Tarifa do ML",
+      status: "real",
+      statusLabel: "Real",
+      detail: ctx.feeFromRow
+        ? "Cobrada pelo Mercado Livre em cada pedido. Pedidos sem tarifa usam a média do anúncio."
+        : "Cobrada pelo Mercado Livre em cada pedido.",
+      comingSoon: null,
+    },
+    {
+      key: "shipping",
+      label: "Frete",
+      status: "estimated",
+      statusLabel: "Estimado",
+      detail: `${shippingSource}${perUnit(row.shippingCost)}, cotado pelo Mercado Livre e igual para todas as vendas — não é o frete real de cada pedido.`,
+      comingSoon: "frete real de cada pedido e custo da sua entrega Flex.",
+    },
+    {
+      key: "cost",
+      label: "Custo do produto",
+      status: "estimated",
+      statusLabel: "Estimado",
+      detail:
+        cost === null
+          ? "Sem custo cadastrado — por isso o anúncio fica fora da média."
+          : `${row.isKitComposition ? "Composição do kit no cadastro atual" : "Cadastro atual"} (${formatFinancialMoney(cost)}/un. com custos extras), não o custo da época da venda.`,
+      comingSoon: "custo da época da venda.",
+    },
+    {
+      key: "tax",
+      label: "Impostos",
+      status: "estimated",
+      statusLabel: "Estimado",
+      detail:
+        row.taxRatePercent === null
+          ? "Sem alíquota — por isso o anúncio fica fora da média."
+          : simples
+            ? `Alíquota efetiva do Simples cadastrada para a empresa (${formatFinancialPercent(row.taxRatePercent)}), igual para todas as vendas.`
+            : `Alíquota média deste anúncio no Tributário (vendas dos últimos 30 dias): ${formatFinancialPercent(row.taxRatePercent)}. O imposto de cada venda muda com o estado e o tipo do comprador.`,
+      comingSoon: simples ? null : "imposto de cada venda.",
+    },
+    {
+      key: "returns",
+      label: "Devoluções",
+      status: "not_applied",
+      statusLabel: "Não descontadas",
+      detail: "Pedidos devolvidos depois de pagos ainda contam como venda.",
+      comingSoon: "descontar as devoluções.",
+    },
+    {
+      key: "ads",
+      label: "ADS",
+      status: "outside",
+      statusLabel: "Fora da tabela",
+      detail:
+        "No “Após ADS”, o gasto com Product Ads do período é rateado pelo faturamento (TACOS) — é uma média, não o custo de cada venda.",
+      comingSoon: null,
+    },
+  ];
 }

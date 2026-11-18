@@ -85,6 +85,10 @@ export type FinancialEvaluationRow = {
   /** `true` = anúncio de catálogo do ML (MLB próprio, os pedidos apontam pra
    * ele); `false` = anúncio próprio. Base do filtro Próprios/Catálogo. */
   catalogListing: boolean;
+  /** Envio do anúncio (`item.shipping.logistic_type`, ex.: `fulfillment`) — o
+   * tipo cotado no frete da margem. A composição das vendas usa pra dizer qual
+   * frete padrão entrou na conta. */
+  shippingLogisticType?: string | null;
   productCost: number | null;
   extraCosts: number | null;
   taxRatePercent: number | null;
@@ -463,6 +467,7 @@ function buildFastRowPreview(
     hasPromotion: false,
     listingTypeId: item.listing_type_id ?? null,
     catalogListing: item.catalog_listing === true,
+    shippingLogisticType: item.shipping?.logistic_type ?? null,
     listingTypeLabel: listingTypeLabelFromId(item.listing_type_id),
     productCost: costs.productCost,
     extraCosts: costs.extraCosts,
@@ -650,6 +655,7 @@ async function buildRowForItem(
     promotionKnown,
     listingTypeId: item.listing_type_id ?? null,
     catalogListing: item.catalog_listing === true,
+    shippingLogisticType: item.shipping?.logistic_type ?? null,
     listingTypeLabel,
     productCost,
     extraCosts,
@@ -854,6 +860,7 @@ async function buildRowForPeriodItem(
     hasPromotion: false,
     listingTypeId: item.listing_type_id ?? null,
     catalogListing: item.catalog_listing === true,
+    shippingLogisticType: item.shipping?.logistic_type ?? null,
     listingTypeLabel,
     productCost,
     extraCosts,
