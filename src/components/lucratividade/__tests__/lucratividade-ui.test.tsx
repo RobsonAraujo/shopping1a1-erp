@@ -255,25 +255,37 @@ describe("MarginSummaryHero — faixa por canal de venda", () => {
     );
   }
 
-  it("shows retail vs B2B revenue share and margin when the period had B2B", () => {
+  it("shows retail vs B2B as a separate whole: its own 100% bar, share and margin", () => {
     const { container, unmount } = renderHero(split);
-    const group = container.querySelector('[aria-label="Margem por canal de venda"]');
-    assert.ok(group, "faixa por canal ausente");
-    const text = group.textContent ?? "";
+    const panel = container.querySelector(
+      '[aria-label="Faturamento e margem por canal de venda"]',
+    );
+    assert.ok(panel, "painel por canal ausente");
+    // deixa claro que é outra divisão das mesmas vendas, não a continuação da faixa de cima
+    assert.match(panel.textContent ?? "", /Varejo \+ B2B = 100% do faturamento/);
+
+    const bar = panel.querySelector('[role="img"]');
+    assert.ok(bar, "barra de proporção ausente");
+    assert.match(bar.getAttribute("aria-label") ?? "", /Varejo: .*\(78%\); B2B: .*\(22%\)/);
+    assert.equal(bar.children.length, 2);
+
+    const list = panel.querySelector('[aria-label="Margem por canal de venda"]');
+    assert.ok(list);
+    const text = list.textContent ?? "";
     assert.match(text, /Varejo/);
-    assert.match(text, /B2B/);
-    assert.match(text, /78% do total/);
-    assert.match(text, /22% do total/);
+    assert.match(text, /78% do faturamento/);
+    assert.match(text, /22% do faturamento/);
     assert.match(text, /-7,25%/);
     unmount();
   });
 
   it("stays hidden without B2B and in the simulation", () => {
+    const selector = '[aria-label="Faturamento e margem por canal de venda"]';
     const none = renderHero({ ...split, hasB2b: false });
-    assert.equal(none.container.querySelector('[aria-label="Margem por canal de venda"]'), null);
+    assert.equal(none.container.querySelector(selector), null);
     none.unmount();
     const sim = renderHero(split, true);
-    assert.equal(sim.container.querySelector('[aria-label="Margem por canal de venda"]'), null);
+    assert.equal(sim.container.querySelector(selector), null);
     sim.unmount();
   });
 });
