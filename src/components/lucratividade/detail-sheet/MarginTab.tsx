@@ -160,7 +160,12 @@ export function MarginTab({
       </div>
 
       {!isSimulation && salesMixPeriod ? (
-        <SalesMixSection row={row} period={salesMixPeriod} live={live} />
+        <SalesMixSection
+          row={row}
+          period={salesMixPeriod}
+          live={live}
+          taxContext={taxContext}
+        />
       ) : null}
 
       {row.breakdown ? (

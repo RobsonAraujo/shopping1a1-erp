@@ -33,8 +33,12 @@ import {
 import {
   SALES_CHANNEL_LABEL,
   type ChannelSplit,
-  type ChannelSplitItem,
 } from "@/lib/lucratividade/sales-mix";
+import {
+  ChannelShareBar,
+  ChannelSwatch,
+  formatShare,
+} from "@/components/lucratividade/channel-share";
 import { valueToneClass } from "@/lib/ui/tone";
 import { cn } from "@/lib/utils";
 
@@ -173,22 +177,6 @@ function SegmentCompareButton({
 }
 
 /**
- * Cor fixa de cada canal — slots 1 e 2 da paleta categórica de referência
- * (azul, laranja), validados contra o fundo branco: luminosidade, croma,
- * daltonismo e contraste. A cor segue o canal, nunca a posição.
- */
-const CHANNEL_SWATCH: Record<ChannelSplitItem["channel"], string> = {
-  retail: "#2a78d6",
-  b2b: "#eb6834",
-};
-
-function formatShare(share: number | null): string {
-  if (share === null) return "—";
-  if (share > 0 && share < 1) return "<1%";
-  return `${Math.round(share)}%`;
-}
-
-/**
  * Varejo × B2B do recorte (só período e só quando houve B2B). É OUTRA divisão
  * das mesmas vendas — não continua a faixa Próprios × Catálogo —, por isso
  * fica num painel embutido, com a própria barra de 100%. A margem de cada
@@ -202,14 +190,6 @@ function ChannelSplitPanel({
   split: ChannelSplit;
   partial: boolean;
 }) {
-  const parts = split.items.filter((item) => item.revenue > 0);
-  const barLabel = parts
-    .map(
-      (item) =>
-        `${SALES_CHANNEL_LABEL[item.channel]}: ${formatFinancialMoney(item.revenue)} (${formatShare(item.revenueShare)})`,
-    )
-    .join("; ");
-
   return (
     <div className="border-t border-[var(--border)] px-5 py-4">
       <section
@@ -228,33 +208,12 @@ function ChannelSplitPanel({
           Outra forma de dividir as mesmas vendas: Varejo + B2B = 100% do faturamento.
         </p>
 
-        <div
-          role="img"
-          aria-label={`Faturamento por canal — ${barLabel}`}
-          className="mt-3 flex h-2 w-full gap-[2px]"
-        >
-          {parts.map((item) => (
-            <span
-              key={item.channel}
-              title={`${SALES_CHANNEL_LABEL[item.channel]}: ${formatFinancialMoney(item.revenue)} · ${formatShare(item.revenueShare)} do faturamento`}
-              className="h-full min-w-[3px] rounded-full"
-              style={{
-                flexGrow: item.revenue,
-                flexBasis: 0,
-                backgroundColor: CHANNEL_SWATCH[item.channel],
-              }}
-            />
-          ))}
-        </div>
+        <ChannelShareBar parts={split.items} className="mt-3" />
 
         <ul aria-label="Margem por canal de venda" className="mt-3 space-y-2.5">
           {split.items.map((item) => (
             <li key={item.channel} className="flex items-start gap-2.5">
-              <span
-                aria-hidden
-                className="mt-1.5 size-2.5 shrink-0 rounded-full"
-                style={{ backgroundColor: CHANNEL_SWATCH[item.channel] }}
-              />
+              <ChannelSwatch channel={item.channel} className="mt-1.5" />
               <div className="min-w-0">
                 <p className="text-sm">
                   <span className="font-medium">{SALES_CHANNEL_LABEL[item.channel]}</span>

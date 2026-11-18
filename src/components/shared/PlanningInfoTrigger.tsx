@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { CircleHelp } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -10,23 +11,34 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-function ExplainerBody({ content }: { content: string }) {
+function ExplainerBody({ content }: { content: ReactNode }) {
+  if (typeof content === "string") {
+    return (
+      <p className="text-left text-xs leading-relaxed text-[var(--popover-foreground)]">
+        {content}
+      </p>
+    );
+  }
   return (
-    <p className="text-left text-xs leading-relaxed text-[var(--popover-foreground)]">
+    <div className="text-left text-xs leading-relaxed text-[var(--popover-foreground)]">
       {content}
-    </p>
+    </div>
   );
 }
 
 /**
  * Ícone de ajuda: hover mostra tooltip; clique abre popover (melhor em touch).
+ * `content` pode ser texto (vira um parágrafo) ou conteúdo estruturado.
  */
 export function PlanningInfoTrigger({
   content,
   className,
+  label = "Ver detalhes do cálculo",
 }: {
-  content: string;
+  content: ReactNode;
   className?: string;
+  /** Nome acessível do botão — use quando houver vários na mesma tela. */
+  label?: string;
 }) {
   return (
     <TooltipProvider delayDuration={200}>
@@ -40,7 +52,7 @@ export function PlanningInfoTrigger({
                 "inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]",
                 className,
               )}
-              aria-label="Ver detalhes do cálculo"
+              aria-label={label}
             >
               <CircleHelp className="size-[15px]" strokeWidth={2} aria-hidden />
             </button>
