@@ -17,6 +17,8 @@ import {
   type SimulatedPrice,
 } from "@/lib/rotina/simulate-margin";
 import type { RotinaPricingInputs } from "@/lib/rotina/types";
+import { inputsWithAds, type TacosAds, type TacosBasis } from "@/lib/pricing/tacos-basis";
+import { loadListingAds } from "@/lib/pricing/tacos-basis-data";
 
 /**
  * Simulador de preço da Rotina. Custos, imposto, rebate e ADS vêm do retrato
@@ -65,6 +67,12 @@ export type RotinaSimulation = {
   salePrice: number | null;
   /** Sem custo/alíquota/kit completo a conta não vale: nada é simulado. */
   blocked: SimulationBlock;
+  /**
+   * Os insumos da conta (custo, imposto, rebate, ADS), no tipo de hoje. Com
+   * eles o navegador refaz os preços já cotados com outro TACOS (hoje ↔ 7
+   * dias) sem cotar de novo. Ausente na demonstração antiga.
+   */
+  inputs?: RotinaPricingInputs;
   results: SimulatedPrice[];
 };
 
@@ -262,6 +270,7 @@ export async function simulateWithContext(
     currentListingTypeId,
     listingTypeId,
     salePrice,
+    inputs: { ...ctx.inputs, listingTypeId: currentListingTypeId ?? ctx.inputs.listingTypeId },
   };
   if (ctx.blocked) return { ...base, blocked: ctx.blocked, results: [] };
 
@@ -299,10 +308,55 @@ export async function computeSimulationFloor(
     listingTypeId?: SimulatableListingType;
     /** Omitida = a meta efetiva do anúncio. */
     targetPercent?: number;
+    /**
+     * `today` = o mínimo com o TACOS de hoje, lido agora (o retrato da Central
+     * é de 7 dias). Omitido = o do retrato.
+     */
+    tacosBasis?: TacosBasis;
   },
 ): Promise<RotinaTypeFloor> {
-  const ctx = await loadSimulationContext(organizationId, params);
+  const snapshot = await loadSimulationContext(organizationId, params);
+  const ctx =
+    params.tacosBasis === "today"
+      ? contextWithAds(snapshot, await loadListingAds(params.token, params.mlItemId, "today"))
+      : snapshot;
   return floorWithContext(ctx, params);
+}
+
+/**
+ * O ADS de um anúncio da loja agora, numa base: o "Hoje" do simular da Central
+ * (o retrato é de 7 dias). Só anúncio que a Central conhece.
+ */
+export async function readSimulationAds(
+  organizationId: string,
+  params: { token: string; mlItemId: string; basis: TacosBasis },
+): Promise<TacosAds> {
+  const [health, listing] = await Promise.all([
+    prisma.listingHealth.findFirst({
+      where: { organizationId, mlItemId: params.mlItemId },
+      select: { mlItemId: true },
+    }),
+    prisma.listing.findFirst({
+      where: { organizationId, mlItemId: params.mlItemId },
+      select: { mlItemId: true },
+    }),
+  ]);
+  if (!health && !listing) throw new RotinaSimulationNotFoundError();
+  return loadListingAds(params.token, params.mlItemId, params.basis);
+}
+
+/** O contexto com o ADS de outra base: só os campos de ADS mudam. */
+export function contextWithAds(ctx: SimulationContext, ads: TacosAds): SimulationContext {
+  return {
+    ...ctx,
+    inputs: inputsWithAds(ctx.inputs, ads),
+    listing: {
+      ...ctx.listing,
+      adsAvailable: ads.available,
+      tacosPercent: ads.tacosPercent,
+      adsCost: ads.adsCost,
+    },
+  };
 }
 
 /** O mínimo com o contexto já montado (retrato da Central ou leitura da Calculadora). */

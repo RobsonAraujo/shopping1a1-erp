@@ -189,3 +189,13 @@ export const REFRESH_CONDITION_RULES: readonly RotinaRuleKey[] =
 
 /** Regras que aceitam decisão do usuário (feito/adiado/ignorado) — hoje, todas. */
 export const ACTIONABLE_ROTINA_RULE_KEYS: readonly RotinaRuleKey[] = ROTINA_RULE_KEYS;
+
+/**
+ * Tarefas que dependem do TACOS — sempre o dos últimos 7 dias, lido no
+ * Atualizar. O grupo avisa isso, e o "Simular" delas abre em 7 dias (batendo
+ * com a tarefa e com o Mínimo do card); nas outras abre no TACOS de hoje.
+ */
+export const TACOS_RULES: ReadonlySet<RotinaRuleKey> = new Set<RotinaRuleKey>([
+  "margin_below_min",
+  "tacos_above",
+]);

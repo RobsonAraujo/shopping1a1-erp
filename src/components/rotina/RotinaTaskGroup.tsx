@@ -1,13 +1,13 @@
 "use client";
 
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Info } from "lucide-react";
 import {
   RotinaActionRow,
   type RotinaActionHandlers,
 } from "@/components/rotina/RotinaActionRow";
 import { RotinaThumb } from "@/components/rotina/RotinaThumb";
 import { RULE_VISUALS, ruleIconClass } from "@/components/rotina/rule-visuals";
-import { ROTINA_RULES, type RotinaRuleKey } from "@/lib/rotina/rule-registry";
+import { ROTINA_RULES, TACOS_RULES, type RotinaRuleKey } from "@/lib/rotina/rule-registry";
 import type { RotinaActionView } from "@/lib/rotina/view";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +26,23 @@ function rotinaGroupId(rule: RotinaRuleKey): string {
 }
 
 /**
+ * Nas tarefas que dependem do TACOS: a conta é sempre a dos últimos 7 dias do
+ * Atualizar. Aviso discreto (cinza), não alerta.
+ */
+function TacosBasisNote({ lastRunLabel }: { lastRunLabel: string | null }) {
+  return (
+    <p className="mb-2.5 flex items-start gap-1.5 px-1 text-xs leading-relaxed text-[var(--muted-foreground)]">
+      <Info className="mt-0.5 size-3.5 shrink-0 opacity-60" aria-hidden />
+      <span>
+        Margem após ADS e TACOS dos últimos 7 dias
+        {lastRunLabel ? `, da atualização de ${lastRunLabel}` : ""}. Para testar com o TACOS de
+        hoje, use Simular.
+      </span>
+    </p>
+  );
+}
+
+/**
  * Um grupo da lista do dia = uma tarefa ("Colocar promoção: X, Y, Z"). Começa
  * fechado: a pilha de grupos fechados é o resumo do que tem para hoje.
  */
@@ -36,6 +53,7 @@ export function RotinaTaskGroup({
   timeZone,
   open,
   onToggle,
+  lastRunLabel = null,
 }: {
   rule: RotinaRuleKey;
   actions: RotinaActionView[];
@@ -43,6 +61,8 @@ export function RotinaTaskGroup({
   timeZone: string;
   open: boolean;
   onToggle: () => void;
+  /** "hoje às 09:12" — de quando são os números das tarefas (aviso do TACOS). */
+  lastRunLabel?: string | null;
 }) {
   const definition = ROTINA_RULES[rule];
   const visual = RULE_VISUALS[rule];
@@ -135,19 +155,22 @@ export function RotinaTaskGroup({
         </button>
       </h3>
       {open ? (
-        <ul
+        <div
           id={panelId}
-          className="space-y-2.5 border-t border-[var(--border)] bg-[var(--muted)]/30 p-2 sm:p-3"
+          className="border-t border-[var(--border)] bg-[var(--muted)]/30 p-2 sm:p-3"
         >
-          {actions.map((action) => (
-            <RotinaActionRow
-              key={action.id}
-              action={action}
-              handlers={handlers}
-              timeZone={timeZone}
-            />
-          ))}
-        </ul>
+          {TACOS_RULES.has(rule) ? <TacosBasisNote lastRunLabel={lastRunLabel} /> : null}
+          <ul className="space-y-2.5">
+            {actions.map((action) => (
+              <RotinaActionRow
+                key={action.id}
+                action={action}
+                handlers={handlers}
+                timeZone={timeZone}
+              />
+            ))}
+          </ul>
+        </div>
       ) : null}
     </section>
   );

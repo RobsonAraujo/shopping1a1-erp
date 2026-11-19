@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { FormInput } from "@/components/ui/form-input";
 import { SegmentedTabs, tabId, tabPanelId } from "@/components/ui/segmented-tabs";
 import { ListingTypeTag, listingTypeShortLabel } from "@/components/rotina/ListingTypeTag";
+import { rescoreWithInputs, type TacosAds, type TacosBasis } from "@/lib/pricing/tacos-basis";
 import { formatMoney, formatPercent, formatWhen } from "@/lib/rotina/format";
 import type { RotinaSimulation, RotinaTypeFloor } from "@/lib/rotina/simulate";
 import type { SimulatedPrice } from "@/lib/rotina/simulate-margin";
@@ -304,8 +305,9 @@ function floorNoteFor(
  * cotação, e o mínimo para ela sai sob demanda ("Calcular mínimo p/ X%").
  *
  * Na Calculadora os insumos são da leitura ao vivo, não da rodada: sem "Mínimo"
- * pronto (`refreshFloor={false}`), e `rescore` refaz os preços já cotados quando
- * a base do TACOS muda (hoje ↔ 7 dias), sem nova cotação.
+ * pronto (`refreshFloor={false}`). Na Calculadora e no "Simular" da Central,
+ * `adsOverride` refaz os preços já cotados com o TACOS da base escolhida (hoje
+ * ↔ 7 dias), sem nova cotação.
  */
 export function RotinaPriceSimulator({
   mlItemId,
@@ -318,7 +320,8 @@ export function RotinaPriceSimulator({
   api = fetchSimulatorApi,
   target = null,
   controls,
-  rescore,
+  adsOverride = null,
+  tacosBasis,
   floorScope,
   refreshFloor = true,
   inputsNote,
@@ -344,10 +347,13 @@ export function RotinaPriceSimulator({
   /** Controles extras sob o cabeçalho (Calculadora: a margem mínima que aceito). */
   controls?: ReactNode;
   /**
-   * Refaz um preço já cotado com os insumos de agora (Calculadora: outra base
-   * do TACOS). Taxa e frete ficam os cotados; nada vai ao ML.
+   * O ADS a usar na conta (TACOS de hoje ou de 7 dias). Os preços já cotados
+   * são refeitos com os insumos da resposta e este ADS; taxa e frete ficam os
+   * cotados, nada vai ao ML. `null` = o ADS de cada resposta.
    */
-  rescore?: (result: SimulatedPrice) => SimulatedPrice;
+  adsOverride?: TacosAds | null;
+  /** Central: pede o mínimo com o TACOS de hoje (o retrato é de 7 dias). */
+  tacosBasis?: TacosBasis;
   /** Separa os mínimos calculados com insumos diferentes (ex.: base do TACOS). */
   floorScope?: string;
   /**
@@ -437,6 +443,7 @@ export function RotinaPriceSimulator({
           mlItemId,
           ...(type ? { listingTypeId: type } : {}),
           ...(percent !== null ? { targetPercent: percent } : {}),
+          ...(tacosBasis ? { tacosBasis } : {}),
         });
         setFloors((current) => ({ ...current, [key]: { status: "done", result } }));
       } catch (e) {
@@ -450,7 +457,7 @@ export function RotinaPriceSimulator({
         }));
       }
     },
-    [api, mlItemId, floorScope],
+    [api, mlItemId, floorScope, tacosBasis],
   );
 
   useEffect(() => {
@@ -479,7 +486,19 @@ export function RotinaPriceSimulator({
     void simulate(price, runType);
   }
 
-  const scoredResults = rescore ? results.map(rescore) : results;
+  const scoreInputs = meta?.inputs ?? null;
+  const scoredResults =
+    adsOverride && scoreInputs
+      ? results.map((result) =>
+          rescoreWithInputs(
+            result,
+            scoreInputs,
+            meta?.currentListingTypeId ?? listingTypeId,
+            adsOverride,
+            target?.percent ?? meta?.targetPercent ?? 0,
+          ),
+        )
+      : results;
   const shownResults = target
     ? scoredResults.map((result) => withTarget(result, target.percent))
     : scoredResults;

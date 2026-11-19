@@ -16,13 +16,11 @@ import { SegmentTag } from "@/components/rotina/SegmentTag";
 import { fetchCalculatorApi, type CalculatorApi } from "@/lib/calculadora/calculator-api";
 import type { CalculatorListing } from "@/lib/calculadora/calculator-listings";
 import {
-  rescoreSimulated,
   type CalculatorAds,
   type CalculatorReading,
   type TacosBasis,
 } from "@/lib/calculadora/reading";
 import { formatWhen } from "@/lib/rotina/format";
-import type { SimulatedPrice } from "@/lib/rotina/simulate-margin";
 import {
   PROMO_DISCOUNT_SHORTCUTS,
   buildSimulatorSuggestions,
@@ -182,11 +180,6 @@ export function CalculatorPanel({
     () => (reading && ads ? api.simulatorFor(reading, ads) : null),
     [api, reading, ads],
   );
-  const rescore = useCallback(
-    (result: SimulatedPrice) =>
-      reading && ads ? rescoreSimulated(result, reading, ads, targetPercent) : result,
-    [reading, ads, targetPercent],
-  );
   const suggestions = useMemo(
     () => (reading ? suggestionsFor(reading, listing.catalogListing) : []),
     [reading, listing.catalogListing],
@@ -270,7 +263,7 @@ export function CalculatorPanel({
             priceInputRef={priceInputRef}
             api={simulatorApi}
             target={{ percent: targetPercent, saved: reading.targetPercent }}
-            rescore={rescore}
+            adsOverride={ads}
             floorScope={`${ads.basis}|${reading.readAt}`}
             refreshFloor={false}
             inputsNote={

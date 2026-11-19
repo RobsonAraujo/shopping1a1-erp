@@ -590,6 +590,7 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
                           timeZone={view.timeZone}
                           open={openGroups.has(group.rule)}
                           onToggle={() => toggleGroup(group.rule)}
+                          lastRunLabel={freshness.lastRunLabel}
                         />
                       ))}
                     </section>

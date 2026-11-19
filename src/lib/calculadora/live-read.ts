@@ -7,7 +7,6 @@ import type {
   CalculatorAds,
   CalculatorCatalog,
   CalculatorReading,
-  TacosBasis,
 } from "@/lib/calculadora/reading";
 import type {
   CalculatorFloorBody,
@@ -17,16 +16,14 @@ import { logServerError } from "@/lib/infra/server-public-error";
 import {
   loadAdsMetricsByItem,
   loadFinancialEvaluationRowsForItems,
-  type AdsLoad,
   type FinancialEvaluationMeta,
   type FinancialEvaluationRow,
 } from "@/lib/lucratividade/financial-evaluation-data";
 import { fetchItemPriceToWin, fetchItemsByIdsBatched } from "@/lib/mercadolibre/api";
 import { siteIdFromItemId } from "@/lib/mercadolibre/listing-fees";
-import {
-  PRODUCT_ADS_PERIOD_DAYS,
-  getProductAdsDateRange,
-} from "@/lib/mercadolibre/product-ads-metrics";
+import { getProductAdsDateRange } from "@/lib/mercadolibre/product-ads-metrics";
+import { adsFromLoad } from "@/lib/pricing/tacos-basis";
+import { loadListingAds } from "@/lib/pricing/tacos-basis-data";
 import { pricingInputsFromRow } from "@/lib/rotina/health-row";
 import { loadListingTargets } from "@/lib/rotina/listing-targets";
 import { loadRotinaSettings } from "@/lib/rotina/rotina-settings";
@@ -78,39 +75,6 @@ async function assertOwnListing(organizationId: string, mlItemId: string): Promi
     }),
   ]);
   if (!listing && !seen) throw new CalculatorListingNotFoundError();
-}
-
-/** O ADS de um anúncio numa janela, no formato da Calculadora. Puro. */
-export function adsFromLoad(
-  load: AdsLoad,
-  mlItemId: string,
-  basis: TacosBasis,
-  range: { dateFrom: string; dateTo: string },
-): CalculatorAds {
-  const window = { basis, from: range.dateFrom, to: range.dateTo };
-  if (!load.available) {
-    return {
-      ...window,
-      available: false,
-      tacosPercent: null,
-      adsCost: null,
-      adsUnitsSold: null,
-      status: null,
-    };
-  }
-  const metrics = load.map.get(mlItemId);
-  // Sem linha no Product Ads na janela = sem gasto: TACOS 0%, como na Lucratividade.
-  if (!metrics) {
-    return { ...window, available: true, tacosPercent: 0, adsCost: 0, adsUnitsSold: 0, status: null };
-  }
-  return {
-    ...window,
-    available: true,
-    tacosPercent: metrics.tacosPercent,
-    adsCost: metrics.cost,
-    adsUnitsSold: metrics.unitsQuantity,
-    status: metrics.status,
-  };
 }
 
 /** Por que a conta não vale. "Taxa não cotada no preço de hoje" não bloqueia: outro preço pode cotar. */
@@ -205,11 +169,8 @@ export async function readCalculatorAds7d(
   organizationId: string,
   params: { token: string; mlItemId: string },
 ): Promise<CalculatorAds> {
-  const { token, mlItemId } = params;
-  await assertOwnListing(organizationId, mlItemId);
-  const range = getProductAdsDateRange(PRODUCT_ADS_PERIOD_DAYS);
-  const load = await loadAdsMetricsByItem(token, siteIdFromItemId(mlItemId), [mlItemId], range);
-  return adsFromLoad(load, mlItemId, "7d", range);
+  await assertOwnListing(organizationId, params.mlItemId);
+  return loadListingAds(params.token, params.mlItemId, "7d");
 }
 
 /** O contexto da conta a partir da leitura que o navegador devolve, com o item de novo. */

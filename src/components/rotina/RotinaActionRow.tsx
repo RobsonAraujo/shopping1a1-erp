@@ -23,7 +23,7 @@ import {
   RotinaListingTargetForm,
   type ListingTargetDraft,
 } from "@/components/rotina/RotinaListingTargetForm";
-import { RotinaPriceSimulator } from "@/components/rotina/RotinaPriceSimulator";
+import { RotinaTacosSimulator } from "@/components/rotina/RotinaTacosSimulator";
 import { RotinaThumb } from "@/components/rotina/RotinaThumb";
 import { ListingTypeTag } from "@/components/rotina/ListingTypeTag";
 import { SegmentTag } from "@/components/rotina/SegmentTag";
@@ -33,7 +33,7 @@ import {
   STATUS_PILL_CLASS,
 } from "@/components/rotina/rule-visuals";
 import { formatMoney, formatPercent, formatUnitsPerDay } from "@/lib/rotina/format";
-import { ROTINA_RULES } from "@/lib/rotina/rule-registry";
+import { ROTINA_RULES, TACOS_RULES } from "@/lib/rotina/rule-registry";
 import {
   PROMO_DISCOUNT_SHORTCUTS,
   buildSimulatorSuggestions,
@@ -201,14 +201,32 @@ export function RotinaActionRow({
   if (listing.pmaPrice !== null && action.rule !== "below_pma") {
     facts.push({ key: "pma", label: "PMA", value: formatMoney(listing.pmaPrice) });
   }
+  const tacosLabel = listing.adsPeriodDays ? `TACOS ${listing.adsPeriodDays}d` : "TACOS";
   if (listing.tacosPercent !== null && action.rule !== "tacos_above") {
     facts.push({
       key: "tacos",
-      label: listing.adsPeriodDays ? `TACOS ${listing.adsPeriodDays}d` : "TACOS",
+      label: tacosLabel,
       value: formatPercent(listing.tacosPercent),
       hint: `· meta ${formatPercent(listing.tacosTargetPercent)}`,
       warn: listing.tacosPercent > listing.tacosTargetPercent,
     });
+  } else if (action.rule === "margin_below_min" && listing.tacosMissing) {
+    // "Ajustar margem" sempre diz de onde veio o ADS da conta, mesmo sem TACOS.
+    facts.push(
+      listing.tacosMissing === "spend_without_sales"
+        ? {
+            key: "tacos",
+            label: tacosLabel,
+            value: "—",
+            hint: `· ${formatMoney(listing.adsCost ?? 0)} gastos sem venda`,
+            warn: true,
+          }
+        : {
+            key: "tacos",
+            label: tacosLabel,
+            value: listing.tacosMissing === "no_ads" ? "sem ADS" : "indisponível",
+          },
+    );
   }
   const meta = [
     listing.sku,
@@ -508,12 +526,13 @@ export function RotinaActionRow({
 
       {simulator && simulating ? (
         <div className="border-t border-[var(--border)] bg-[var(--muted)]/20 px-3 pb-3 sm:px-4 sm:pb-4">
-          <RotinaPriceSimulator
+          <RotinaTacosSimulator
             mlItemId={listing.mlItemId}
             listingTypeId={listing.listingTypeId}
             suggestions={simulator.suggestions}
             defaultPrice={simulator.defaultPrice}
             timeZone={timeZone}
+            initialBasis={TACOS_RULES.has(action.rule) ? "7d" : "today"}
           />
         </div>
       ) : null}

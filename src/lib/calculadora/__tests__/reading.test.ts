@@ -2,13 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   adsSpendWithoutSales,
-  inputsForType,
   marginNow,
-  rescoreSimulated,
   type CalculatorAds,
   type CalculatorReading,
 } from "@/lib/calculadora/reading";
-import { simulateMarginAtPrice } from "@/lib/rotina/simulate-margin";
 
 function ads(overrides: Partial<CalculatorAds> = {}): CalculatorAds {
   return {
@@ -83,43 +80,5 @@ describe("marginNow", () => {
     const result = marginNow(reading({ costsNow: null }), ads(), 8);
     assert.equal(result.quoted, false);
     assert.equal(result.marginPercent, null);
-  });
-});
-
-describe("rescoreSimulated", () => {
-  it("redoes a quoted price with another TACOS, keeping the quoted fee and shipping", () => {
-    const base = reading();
-    const quoted = simulateMarginAtPrice(
-      120,
-      { mlFeeAmount: 14.4, shippingCost: 20 },
-      { ...base.inputs, tacosPercent: 4 },
-      8,
-    );
-    const rescored = rescoreSimulated(quoted, base, ads({ basis: "7d", tacosPercent: 10 }), 8);
-    assert.equal(rescored.mlFeeAmount, 14.4);
-    assert.equal(rescored.shippingCost, 20);
-    assert.equal(rescored.marginPercent, quoted.marginPercent);
-    assert.equal(
-      rescored.marginAfterAdsPercent,
-      Math.round(((quoted.marginPercent ?? 0) - 10) * 100) / 100,
-    );
-  });
-
-  it("keeps the other listing type's fee label", () => {
-    const base = reading();
-    const premium = simulateMarginAtPrice(
-      100,
-      { mlFeeAmount: 17, shippingCost: 0 },
-      inputsForType(base.inputs, "gold_special", "gold_pro"),
-      8,
-    );
-    const rescored = rescoreSimulated(premium, base, ads(), 8);
-    assert.equal(rescored.listingTypeId, "gold_pro");
-    assert.deepEqual(rescored.lines, premium.lines);
-  });
-
-  it("leaves a price the ML did not quote as it is", () => {
-    const unquoted = simulateMarginAtPrice(80, null, reading().inputs, 8);
-    assert.equal(rescoreSimulated(unquoted, reading(), ads({ tacosPercent: 30 }), 8), unquoted);
   });
 });

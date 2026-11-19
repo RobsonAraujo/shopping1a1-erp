@@ -22,12 +22,14 @@ const bodySchema = z.object({
     .min(ROTINA_MARGIN_LIMITS.min)
     .max(ROTINA_MARGIN_LIMITS.max)
     .optional(),
+  /** `today` = com o TACOS de hoje, lido agora. Omitido = o do retrato (7 dias). */
+  tacosBasis: z.enum(["today", "7d"]).optional(),
 });
 
 /**
- * Preço mínimo para uma meta: "Mínimo no Premium/Clássico" (outro tipo) e
- * "Calcular mínimo p/ X%" (outra meta, na Calculadora). Separado do simulador
- * porque faz ~20–40 cotações no ML.
+ * Preço mínimo para uma meta: "Mínimo no Premium/Clássico" (outro tipo),
+ * "Calcular mínimo p/ X%" (outra meta) e o mínimo com o TACOS de hoje
+ * (`tacosBasis`). Separado do simulador porque faz ~20–40 cotações no ML.
  */
 export async function POST(request: NextRequest) {
   const auth = await requireOrganization();
@@ -46,6 +48,7 @@ export async function POST(request: NextRequest) {
       mlItemId: parsedBody.data.mlItemId,
       listingTypeId: parsedBody.data.listingTypeId,
       targetPercent: parsedBody.data.targetPercent,
+      tacosBasis: parsedBody.data.tacosBasis,
     });
     return NextResponse.json(result, {
       headers: { "Cache-Control": "private, no-store" },

@@ -14,7 +14,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { RotinaPriceSimulator } from "@/components/rotina/RotinaPriceSimulator";
+import { RotinaTacosSimulator } from "@/components/rotina/RotinaTacosSimulator";
 import type { ListingTargetDraft } from "@/components/rotina/RotinaListingTargetForm";
 import { RotinaListingTargetPopover } from "@/components/rotina/RotinaListingTargetPopover";
 import { RotinaThumb } from "@/components/rotina/RotinaThumb";
@@ -248,7 +248,12 @@ export function RotinaAllListingsTable({
               <th className={TH_CLASS}>Anúncio</th>
               <th className={cn(TH_CLASS, "text-right")}>Preço</th>
               <th className={cn(TH_CLASS, "text-right")}>MC</th>
-              <th className={cn(TH_CLASS, "text-right")}>Após ADS</th>
+              <th
+                className={cn(TH_CLASS, "text-right")}
+                title="Com o TACOS dos últimos 7 dias, da atualização. No Simular dá para testar com o de hoje."
+              >
+                Após ADS
+              </th>
               <th className={cn(TH_CLASS, "text-right")}>Mínimo</th>
               <th className={cn(TH_CLASS, "text-right")}>Desc. máx.</th>
               <th className={TH_CLASS}>ADS</th>
@@ -327,7 +332,7 @@ export function RotinaAllListingsTable({
                   {row.adsLabel ?? (row.catalogListing ? "—" : "Fora do ADS")}
                   {row.tacosPercent !== null && row.adsLabel === "ADS ativo" ? (
                     <span className="block text-[var(--muted-foreground)]">
-                      TACOS {formatPercent(row.tacosPercent)}
+                      TACOS 7d {formatPercent(row.tacosPercent)}
                     </span>
                   ) : null}
                 </td>
@@ -427,13 +432,14 @@ export function RotinaAllListingsTable({
                 </div>
               </SheetHeader>
               <SheetBody>
-                <RotinaPriceSimulator
+                <RotinaTacosSimulator
                   key={simulating.mlItemId}
                   mlItemId={simulating.mlItemId}
                   listingTypeId={simulating.listingTypeId}
                   suggestions={simulation.suggestions}
                   defaultPrice={simulation.defaultPrice}
                   timeZone={timeZone}
+                  initialBasis="today"
                 />
               </SheetBody>
             </>

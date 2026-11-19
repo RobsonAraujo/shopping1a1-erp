@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Loader2, RefreshCw } from "lucide-react";
+import { TacosBasisToggle } from "@/components/shared/TacosBasisToggle";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -90,44 +91,6 @@ export function taxSourceLabel(reading: CalculatorReading): string | null {
   if (!source) return null;
   if (source.regime === "simples") return "alíquota do Simples";
   return source.window ? `30 dias · até ${ymdShort(source.window.to)}` : "do Tributário";
-}
-
-/** Escolha leve da base do TACOS: hoje (padrão) ou 7 dias. */
-function TacosBasisToggle({
-  basis,
-  loading7d,
-  onChange,
-}: {
-  basis: TacosBasis;
-  loading7d: boolean;
-  onChange: (basis: TacosBasis) => void;
-}) {
-  const option = (value: TacosBasis, label: string) => {
-    const pressed = basis === value;
-    return (
-      <button
-        type="button"
-        aria-pressed={pressed}
-        onClick={() => onChange(value)}
-        className={cn(
-          "inline-flex h-7 cursor-pointer items-center gap-1 rounded-full border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
-          pressed
-            ? "border-[var(--primary)]/40 bg-[var(--primary)]/10 text-[var(--primary)]"
-            : "border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
-        )}
-      >
-        {value === "7d" && loading7d ? <Loader2 className="size-3 animate-spin" aria-hidden /> : null}
-        {label}
-      </button>
-    );
-  };
-  return (
-    <div role="group" aria-label="Base do TACOS" className="flex items-center gap-1.5">
-      <span className="text-[11px] font-medium text-[var(--muted-foreground)]">TACOS de</span>
-      {option("today", "Hoje")}
-      {option("7d", "7 dias")}
-    </div>
-  );
 }
 
 /**
@@ -271,7 +234,11 @@ export function CalculatorNowStrip({
       </dl>
 
       <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <TacosBasisToggle basis={basis} loading7d={loading7d} onChange={onBasisChange} />
+        <TacosBasisToggle
+          basis={basis}
+          loadingBasis={loading7d ? "7d" : null}
+          onChange={onBasisChange}
+        />
         {error7d ? (
           <span className="text-xs text-rose-700">
             {error7d}{" "}
