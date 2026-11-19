@@ -8,8 +8,8 @@ import { UserFeedback } from "@/components/ui/user-feedback";
 import { publicPageLoadMessage } from "@/lib/infra/server-public-error";
 import { readSession } from "@/lib/mercadolibre/session";
 import { getOrganizationContext } from "@/lib/organizations/context";
-import { normalizeListingParam } from "@/lib/rotina/calculator-listings";
-import { loadCalculatorListings } from "@/lib/rotina/calculator-listings-data";
+import { normalizeListingParam } from "@/lib/calculadora/calculator-listings";
+import { loadCalculatorListings } from "@/lib/calculadora/calculator-listings-data";
 
 const LOAD_ERROR_MESSAGE =
   "Não foi possível carregar a Calculadora agora. Tente de novo em instantes.";
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   title: "Calculadora de preço",
 };
 
-/** Só banco: o ML só é chamado quando o usuário simula um preço. */
+/** Só banco: o ML só é chamado quando o usuário abre um anúncio (leitura ao vivo) ou simula. */
 async function CalculatorSection({
   organizationId,
   initialSelectedId,
@@ -38,10 +38,7 @@ async function CalculatorSection({
   }
   return (
     <div className="space-y-5">
-      <CalculatorPageHeader
-        lastCompleteRunLabel={data.lastCompleteRunLabel}
-        dataIsFromToday={data.dataIsFromToday}
-      />
+      <CalculatorPageHeader />
       <CalculatorPageClient data={data} initialSelectedId={initialSelectedId} />
     </div>
   );

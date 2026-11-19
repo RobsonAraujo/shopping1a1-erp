@@ -13,15 +13,13 @@ import { History, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FormInput } from "@/components/ui/form-input";
 import { SegmentedTabs, tabId, tabPanelId } from "@/components/ui/segmented-tabs";
-import { ListingTypeTag } from "@/components/rotina/ListingTypeTag";
 import { RotinaThumb } from "@/components/rotina/RotinaThumb";
 import { SegmentTag } from "@/components/rotina/SegmentTag";
-import type { CalculatorListing } from "@/lib/rotina/calculator-listings";
+import type { CalculatorListing } from "@/lib/calculadora/calculator-listings";
 import {
   buildCalculatorSearchIndex,
   searchCalculatorIndex,
 } from "@/lib/rotina/calculator-search";
-import { formatMoney, formatPercent } from "@/lib/rotina/format";
 import { cn } from "@/lib/utils";
 
 type SegmentFilter = "all" | "own" | "catalog";
@@ -40,38 +38,11 @@ function inSegment(listing: CalculatorListing, segment: SegmentFilter): boolean 
   return segment === "catalog" ? listing.catalogListing : !listing.catalogListing;
 }
 
-/** A margem que decide, colorida pela meta (não pelo sinal). */
-function MarginHint({ listing }: { listing: CalculatorListing }) {
-  const today = listing.today;
-  if (!today) {
-    return <span className="text-[11px] text-[var(--muted-foreground)]">sem leitura</span>;
-  }
-  if (today.decidingMarginPercent === null) {
-    return (
-      <span className="text-[11px] text-[var(--muted-foreground)]">
-        {today.exclusionLabel ? "sem margem" : "—"}
-      </span>
-    );
-  }
-  return (
-    <span className="text-[11px] tabular-nums text-[var(--muted-foreground)]">
-      {today.decidingBasis === "afterAds" ? "após ADS " : "MC "}
-      <strong
-        className={cn(
-          "font-semibold",
-          today.meetsTarget === false ? "text-rose-700" : "text-emerald-800",
-        )}
-      >
-        {formatPercent(today.decidingMarginPercent)}
-      </strong>
-    </span>
-  );
-}
-
 /**
  * Lista de todos os anúncios da Calculadora: busca por palavras, filtro
  * Próprio/Catálogo, recentes e navegação por teclado (↑/↓ no campo, Enter
- * escolhe). Mostra o preço e a margem de hoje para decidir sem abrir.
+ * escolhe). É só um diretório: preço e margem saem da leitura ao vivo, ao
+ * abrir o anúncio.
  */
 export function CalculatorListingPicker({
   listings,
@@ -118,10 +89,6 @@ export function CalculatorListingPicker({
     [index, deferredQuery, segment],
   );
   const visible = matches.slice(0, limit);
-  const unreadCount = useMemo(
-    () => matches.filter((listing) => listing.today === null).length,
-    [matches],
-  );
   const safeActive = Math.min(activeIndex, Math.max(visible.length - 1, 0));
 
   /** Nova busca ou filtro: volta ao topo e à primeira página. */
@@ -245,7 +212,6 @@ export function CalculatorListingPicker({
         <p className="text-xs tabular-nums text-[var(--muted-foreground)]" aria-live="polite">
           {matches.length === 1 ? "1 anúncio" : `${matches.length} anúncios`}
           {trimmed ? ` para “${trimmed}”` : ""}
-          {unreadCount > 0 ? ` · ${unreadCount} sem leitura` : ""}
         </p>
       </div>
 
@@ -305,20 +271,14 @@ export function CalculatorListingPicker({
                     </p>
                     <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
                       <SegmentTag segment={listing.catalogListing ? "catalog" : "own"} />
-                      <ListingTypeTag listingTypeId={listing.listingTypeId} />
                       <span className="truncate">{listing.sku ?? listing.mlItemId}</span>
                     </p>
                   </div>
-                  <div className="shrink-0 text-right">
-                    <p className="text-sm font-semibold tabular-nums text-[var(--foreground)]">
-                      {listing.today ? formatMoney(listing.today.price) : "—"}
-                    </p>
-                    {listing.mlStatus && listing.mlStatus !== "active" ? (
-                      <span className="text-[11px] text-[var(--muted-foreground)]">pausado</span>
-                    ) : (
-                      <MarginHint listing={listing} />
-                    )}
-                  </div>
+                  {listing.mlStatus && listing.mlStatus !== "active" ? (
+                    <span className="shrink-0 text-[11px] text-[var(--muted-foreground)]">
+                      pausado
+                    </span>
+                  ) : null}
                 </li>
               );
             })}

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useId, useState } from "react";
-import { ExternalLink, Layers2, TrendingUp } from "lucide-react";
+import { Calculator, ExternalLink, Layers2, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   SegmentedTabs,
@@ -18,6 +18,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { ListingStatusBadge } from "@/components/shared/ListingStatusBadge";
+import { CALCULATOR_PARAM } from "@/lib/calculadora/calculator-listings";
 import type { FinancialEvaluationRow } from "@/lib/lucratividade/financial-evaluation-data";
 import type { LucratividadeTaxContext } from "@/lib/lucratividade/row-issues";
 import {
@@ -108,15 +109,25 @@ export function FinancialDetailSheet({
                 {contextLine}
               </p>
             </div>
-            <Link
-              href={row.permalink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-sm text-[var(--primary)] hover:underline"
-            >
-              Ver no ML
-              <ExternalLink className="size-3.5" aria-hidden />
-            </Link>
+            <div className="flex flex-col items-end gap-1.5">
+              <Link
+                href={row.permalink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-sm text-[var(--primary)] hover:underline"
+              >
+                Ver no ML
+                <ExternalLink className="size-3.5" aria-hidden />
+              </Link>
+              <Link
+                href={`/dashboard/calculadora?${CALCULATOR_PARAM}=${encodeURIComponent(row.mlItemId)}`}
+                className="inline-flex items-center gap-1 text-sm text-[var(--primary)] hover:underline"
+                title="Testar outros preços deste anúncio, com taxa e frete cotados agora"
+              >
+                Abrir na Calculadora
+                <Calculator className="size-3.5" aria-hidden />
+              </Link>
+            </div>
           </div>
           <SegmentedTabs
             className="mt-3 w-full"

@@ -1,14 +1,12 @@
+import type { CalculatorApi } from "@/lib/calculadora/calculator-api";
+import type { CalculatorData, CalculatorListing } from "@/lib/calculadora/calculator-listings";
+import type { CalculatorAds, CalculatorReading } from "@/lib/calculadora/reading";
 import { listingTypeLabelFromId, roundMoney } from "@/lib/pricing/financial-margin";
 import type { MlCostsAtPrice } from "@/lib/pricing/refine-min-sale-price";
-import type { CalculatorData, CalculatorListing } from "@/lib/rotina/calculator-listings";
 import { buildFloorView, type RotinaFloorView } from "@/lib/rotina/floor-view";
 import type { RotinaSimulation, RotinaTypeFloor } from "@/lib/rotina/simulate";
 import { simulateMarginAtPrice } from "@/lib/rotina/simulate-margin";
 import type { SimulatorApi } from "@/lib/rotina/simulator-api";
-import {
-  PROMO_DISCOUNT_SHORTCUTS,
-  buildSimulatorSuggestions,
-} from "@/lib/rotina/simulator-suggestions";
 import type { CatalogLiveStatus, RotinaFloorBand, RotinaPricingInputs } from "@/lib/rotina/types";
 
 /**
@@ -46,8 +44,10 @@ export type DemoListing = {
   freeShippingCost: number;
   productCost: number;
   taxRatePercent: number;
-  /** TACOS do Product Ads; 0 = fora do ADS. */
+  /** TACOS de 7 dias do Product Ads; 0 = fora do ADS. */
   tacosPercent: number;
+  /** TACOS de hoje (o padrão da Calculadora). */
+  tacosTodayPercent: number;
   /** Meta: a própria (`ownTarget`) ou a padrão do segmento. */
   targetPercent: number;
   ownTarget: boolean;
@@ -74,6 +74,7 @@ export const DEMO_LISTINGS: DemoListing[] = [
     productCost: 78,
     taxRatePercent: 9,
     tacosPercent: 0,
+    tacosTodayPercent: 0,
     targetPercent: CATALOG_TARGET,
     ownTarget: false,
     catalogStatus: "losing",
@@ -93,6 +94,7 @@ export const DEMO_LISTINGS: DemoListing[] = [
     productCost: 27,
     taxRatePercent: 9,
     tacosPercent: 7,
+    tacosTodayPercent: 9.5,
     targetPercent: OWN_TARGET,
     ownTarget: false,
     catalogStatus: null,
@@ -112,6 +114,7 @@ export const DEMO_LISTINGS: DemoListing[] = [
     productCost: 31,
     taxRatePercent: 9,
     tacosPercent: 9,
+    tacosTodayPercent: 7.5,
     targetPercent: 10,
     ownTarget: true,
     catalogStatus: null,
@@ -131,6 +134,7 @@ export const DEMO_LISTINGS: DemoListing[] = [
     productCost: 78,
     taxRatePercent: 9,
     tacosPercent: 6,
+    tacosTodayPercent: 6.5,
     targetPercent: OWN_TARGET,
     ownTarget: false,
     catalogStatus: null,
@@ -150,6 +154,7 @@ export const DEMO_LISTINGS: DemoListing[] = [
     productCost: 33,
     taxRatePercent: 9,
     tacosPercent: 0,
+    tacosTodayPercent: 0,
     targetPercent: CATALOG_TARGET,
     ownTarget: false,
     catalogStatus: "shared",
@@ -169,6 +174,7 @@ export const DEMO_LISTINGS: DemoListing[] = [
     productCost: 9.8,
     taxRatePercent: 9,
     tacosPercent: 8,
+    tacosTodayPercent: 11,
     targetPercent: OWN_TARGET,
     ownTarget: false,
     catalogStatus: null,
@@ -198,7 +204,11 @@ export function demoCostsAt(
   };
 }
 
-function inputsOf(listing: DemoListing, type: DemoListingType): RotinaPricingInputs {
+function inputsOf(
+  listing: DemoListing,
+  type: DemoListingType,
+  tacosPercent: number = listing.tacosPercent,
+): RotinaPricingInputs {
   return {
     productCost: listing.productCost,
     extraCosts: 0,
@@ -207,7 +217,7 @@ function inputsOf(listing: DemoListing, type: DemoListingType): RotinaPricingInp
     listingTypeId: type,
     listingTypeLabel: listingTypeLabelFromId(type),
     adsMetricsAvailable: true,
-    tacosPercent: listing.tacosPercent,
+    tacosPercent,
     adsCost: null,
     adsUnitsSold: null,
   };
@@ -218,8 +228,14 @@ function marginAt(
   type: DemoListingType,
   price: number,
   basis: "contribution" | "afterAds",
+  tacosPercent: number,
 ): number | null {
-  const result = simulateMarginAtPrice(price, demoCostsAt(listing, price, type), inputsOf(listing, type), 0);
+  const result = simulateMarginAtPrice(
+    price,
+    demoCostsAt(listing, price, type),
+    inputsOf(listing, type, tacosPercent),
+    0,
+  );
   return basis === "afterAds" ? result.marginAfterAdsPercent : result.marginPercent;
 }
 
@@ -233,9 +249,11 @@ export function demoMinPrice(
   type: DemoListingType,
   targetPercent: number,
   basis: "contribution" | "afterAds",
+  tacosPercent: number = listing.tacosPercent,
 ): { price: number | null; bands: RotinaFloorBand[] } {
   const ceiling = roundMoney(Math.max(listing.salePrice * 4, 500));
-  const ok = (price: number) => (marginAt(listing, type, price, basis) ?? -Infinity) >= targetPercent - 1e-9;
+  const ok = (price: number) =>
+    (marginAt(listing, type, price, basis, tacosPercent) ?? -Infinity) >= targetPercent - 1e-9;
   const segments = SEGMENT_STARTS.map((from, index) => ({
     from,
     to: index + 1 < SEGMENT_STARTS.length ? roundMoney(SEGMENT_STARTS[index + 1] - 0.01) : ceiling,
@@ -274,9 +292,10 @@ export function demoFloorView(
   listing: DemoListing,
   type: DemoListingType,
   targetPercent: number,
+  tacosPercent: number = listing.tacosPercent,
 ): RotinaFloorView {
-  const mc = demoMinPrice(listing, type, targetPercent, "contribution");
-  const afterAds = demoMinPrice(listing, type, targetPercent, "afterAds");
+  const mc = demoMinPrice(listing, type, targetPercent, "contribution", tacosPercent);
+  const afterAds = demoMinPrice(listing, type, targetPercent, "afterAds", tacosPercent);
   return buildFloorView(
     {
       salePrice: listing.salePrice,
@@ -289,7 +308,7 @@ export function demoFloorView(
       floorBands: afterAds.bands,
       pmaPrice: listing.pmaPrice,
       adsAvailable: true,
-      tacosPercent: listing.tacosPercent,
+      tacosPercent,
       adsCost: null,
     },
     targetPercent,
@@ -297,14 +316,6 @@ export function demoFloorView(
 }
 
 function toCalculatorListing(listing: DemoListing): CalculatorListing {
-  const today = simulateMarginAtPrice(
-    listing.salePrice,
-    demoCostsAt(listing, listing.salePrice, listing.listingTypeId),
-    inputsOf(listing, listing.listingTypeId),
-    listing.targetPercent,
-  );
-  const floor = demoFloorView(listing, listing.listingTypeId, listing.targetPercent);
-  const contested = listing.catalogStatus === "losing" || listing.catalogStatus === "shared";
   return {
     mlItemId: listing.mlItemId,
     title: listing.title,
@@ -312,63 +323,65 @@ function toCalculatorListing(listing: DemoListing): CalculatorListing {
     imageUrl: listing.imageUrl,
     permalink: "",
     catalogListing: listing.catalogListing,
-    listingTypeId: listing.listingTypeId,
     mlStatus: "active",
-    targetPercent: listing.targetPercent,
-    ownTarget: listing.ownTarget,
-    today: {
-      price: listing.salePrice,
-      hasPromotion: listing.regularPrice !== null,
-      marginPercent: today.marginPercent,
-      marginAfterAdsPercent: today.marginAfterAdsPercent,
-      decidingBasis: today.decidingBasis,
-      decidingMarginPercent:
-        today.decidingBasis === "afterAds" ? today.marginAfterAdsPercent : today.marginPercent,
-      targetPercent: listing.targetPercent,
-      meetsTarget: today.meetsTarget,
-      ownTarget: listing.ownTarget,
-      floorPrice: floor.effectivePrice,
-      floorBoundByPma: floor.boundBy === "pma",
-      floorStale: false,
-      maxDiscountPercent: floor.maxDiscountPercent,
-      exclusionLabel: null,
-      catalogStatus: listing.catalogStatus,
-      priceToWin: listing.priceToWin,
-    },
-    suggestions: buildSimulatorSuggestions({
-      priceToWin: contested ? listing.priceToWin : null,
-      suggestedPrice: null,
-      floor,
-      salePrice: listing.salePrice,
-      discounts: listing.catalogListing ? undefined : PROMO_DISCOUNT_SHORTCUTS,
-      raise: null,
-    }),
-    defaultPrice: listing.salePrice,
   };
 }
 
 export function buildDemoCalculatorData(listings: readonly DemoListing[] = DEMO_LISTINGS): CalculatorData {
   return {
     timeZone: DEMO_TIME_ZONE,
-    lastCompleteRunLabel: null,
-    dataIsFromToday: true,
     listings: listings.map(toCalculatorListing),
   };
 }
 
-/** As chamadas do simulador respondidas no navegador, pela tabela de exemplo. */
-export function createDemoSimulatorApi(listings: readonly DemoListing[] = DEMO_LISTINGS): SimulatorApi {
-  const byId = new Map(listings.map((listing) => [listing.mlItemId, listing]));
-  const find = (mlItemId: string): DemoListing => {
-    const listing = byId.get(mlItemId);
-    if (!listing) throw new Error("Anúncio de exemplo não encontrado.");
-    return listing;
+/** "Hoje" e "7 dias" na demonstração: as datas não importam, só o TACOS. */
+function demoAds(listing: DemoListing, basis: CalculatorAds["basis"], now: Date): CalculatorAds {
+  const day = now.toISOString().slice(0, 10);
+  const from = basis === "today" ? day : new Date(now.getTime() - 6 * 86_400_000).toISOString().slice(0, 10);
+  const tacosPercent = basis === "today" ? listing.tacosTodayPercent : listing.tacosPercent;
+  return {
+    basis,
+    from,
+    to: day,
+    available: true,
+    tacosPercent,
+    adsCost: null,
+    adsUnitsSold: null,
+    status: tacosPercent > 0 ? "active" : null,
   };
+}
+
+/** A "leitura ao vivo" de um anúncio de exemplo: a tabela no lugar do ML. */
+export function demoReading(listing: DemoListing, now: Date = new Date()): CalculatorReading {
+  return {
+    mlItemId: listing.mlItemId,
+    readAt: now.toISOString(),
+    listingTypeId: listing.listingTypeId,
+    price: listing.salePrice,
+    regularPrice: listing.regularPrice,
+    hasPromotion: listing.regularPrice !== null,
+    promotionKnown: true,
+    pmaPrice: listing.pmaPrice,
+    costsNow: demoCostsAt(listing, listing.salePrice, listing.listingTypeId),
+    inputs: inputsOf(listing, listing.listingTypeId),
+    taxSource: { regime: "simples" },
+    blocked: null,
+    catalog: listing.catalogStatus
+      ? { status: listing.catalogStatus, priceToWin: listing.priceToWin }
+      : null,
+    targetPercent: listing.targetPercent,
+    ownTarget: listing.ownTarget,
+    ads: demoAds(listing, "today", now),
+  };
+}
+
+/** As chamadas do simulador respondidas no navegador, com o TACOS da base escolhida. */
+function demoSimulatorApi(listing: DemoListing, ads: CalculatorAds): SimulatorApi {
+  const tacos = ads.tacosPercent ?? 0;
   return {
     async simulate({ mlItemId, prices, listingTypeId }): Promise<RotinaSimulation> {
-      const listing = find(mlItemId);
       const type = listingTypeId ?? listing.listingTypeId;
-      const inputs = inputsOf(listing, type);
+      const inputs = inputsOf(listing, type, tacos);
       const wanted = prices && prices.length > 0 ? prices : [listing.salePrice];
       return {
         mlItemId,
@@ -386,7 +399,6 @@ export function createDemoSimulatorApi(listings: readonly DemoListing[] = DEMO_L
       };
     },
     async floor({ mlItemId, listingTypeId, targetPercent }): Promise<RotinaTypeFloor> {
-      const listing = find(mlItemId);
       const type = listingTypeId ?? listing.listingTypeId;
       const target = targetPercent ?? listing.targetPercent;
       return {
@@ -394,8 +406,31 @@ export function createDemoSimulatorApi(listings: readonly DemoListing[] = DEMO_L
         listingTypeId: type,
         targetPercent: target,
         blocked: null,
-        floor: demoFloorView(listing, type, target),
+        floor: demoFloorView(listing, type, target, tacos),
       };
+    },
+  };
+}
+
+/** A Calculadora inteira respondida no navegador, pela tabela de exemplo. */
+export function createDemoCalculatorApi(
+  listings: readonly DemoListing[] = DEMO_LISTINGS,
+): CalculatorApi {
+  const byId = new Map(listings.map((listing) => [listing.mlItemId, listing]));
+  const find = (mlItemId: string): DemoListing => {
+    const listing = byId.get(mlItemId);
+    if (!listing) throw new Error("Anúncio de exemplo não encontrado.");
+    return listing;
+  };
+  return {
+    async read(mlItemId) {
+      return demoReading(find(mlItemId));
+    },
+    async ads7d(mlItemId) {
+      return demoAds(find(mlItemId), "7d", new Date());
+    },
+    simulatorFor(reading, ads) {
+      return demoSimulatorApi(find(reading.mlItemId), ads);
     },
   };
 }

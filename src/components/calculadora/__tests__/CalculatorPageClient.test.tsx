@@ -5,102 +5,157 @@ import { CalculatorPageClient } from "@/components/calculadora/CalculatorPageCli
 import {
   toCalculatorListings,
   type CalculatorData,
-} from "@/lib/rotina/calculator-listings";
+} from "@/lib/calculadora/calculator-listings";
+import type { CalculatorAds, CalculatorReading } from "@/lib/calculadora/reading";
 import type { RotinaSimulation } from "@/lib/rotina/simulate";
-import { buildRotinaView } from "@/lib/rotina/view";
-import { NOW, TZ, listing, settings } from "@/lib/rotina/__tests__/fixtures";
+import { simulateMarginAtPrice } from "@/lib/rotina/simulate-margin";
+import type { RotinaPricingInputs } from "@/lib/rotina/types";
+
+const TZ = "America/Sao_Paulo";
 
 function data(): CalculatorData {
-  const rows = buildRotinaView({
-    now: NOW,
-    timeZone: TZ,
-    settings: settings(),
-    health: [
-      listing({ mlItemId: "MLB1", title: "Kit Escova Dental", sku: "ESC-KIT", unitsPerDay: 5 }),
-      listing({ mlItemId: "MLB2", title: "Mouse Sem Fio", sku: "MOUSE-W", unitsPerDay: 1 }),
-    ],
-    catalogLive: [],
-    targets: new Map(),
-    states: [],
-    lastRun: null,
-    lastCompleteRunAt: "2026-11-10T09:00:00.000Z",
-  }).listings;
   return {
     timeZone: TZ,
-    lastCompleteRunLabel: "hoje às 06:00",
-    dataIsFromToday: true,
-    listings: toCalculatorListings(rows, [
+    listings: toCalculatorListings([
+      {
+        mlItemId: "MLB1",
+        titleSnapshot: "Kit Escova Dental",
+        skuSnapshot: "ESC-KIT",
+        imageUrlSnapshot: null,
+        catalogListing: false,
+        mlStatus: "active",
+      },
+      {
+        mlItemId: "MLB2",
+        titleSnapshot: "Mouse Sem Fio",
+        skuSnapshot: "MOUSE-W",
+        imageUrlSnapshot: null,
+        catalogListing: false,
+        mlStatus: "active",
+      },
       {
         mlItemId: "MLB3",
         titleSnapshot: "Lanterna Nova",
         skuSnapshot: "LANT-1",
         imageUrlSnapshot: null,
         catalogListing: false,
-        mlStatus: "active",
+        mlStatus: "paused",
       },
-    ], () => 2),
+    ]),
   };
 }
 
-function simulation(price: number): RotinaSimulation {
+function ads(basis: CalculatorAds["basis"], overrides: Partial<CalculatorAds> = {}): CalculatorAds {
   return {
-    mlItemId: "MLB3",
-    targetPercent: 2,
-    inputsFrom: "live",
-    inputsAt: null,
-    feeRebate: null,
-    currentListingTypeId: "gold_special",
+    basis,
+    from: basis === "today" ? "2026-11-18" : "2026-11-12",
+    to: "2026-11-18",
+    available: true,
+    tacosPercent: basis === "today" ? 4 : 8,
+    adsCost: 8,
+    adsUnitsSold: 2,
+    status: "active",
+    ...overrides,
+  };
+}
+
+/** Preço 100, taxa 12, frete 0, custo 50, imposto 10% → MC 28%; TACOS hoje 4%, 7 dias 8%. */
+function reading(mlItemId: string, overrides: Partial<CalculatorReading> = {}): CalculatorReading {
+  return {
+    mlItemId,
+    readAt: "2026-11-18T17:32:00.000Z",
     listingTypeId: "gold_special",
-    salePrice: price,
+    price: 100,
+    regularPrice: null,
+    hasPromotion: false,
+    promotionKnown: true,
+    pmaPrice: null,
+    costsNow: { mlFeeAmount: 12, shippingCost: 0 },
+    inputs: {
+      productCost: 50,
+      extraCosts: 0,
+      taxRatePercent: 10,
+      mlFeeRebate: null,
+      listingTypeId: "gold_special",
+      listingTypeLabel: "Clássico",
+      adsMetricsAvailable: true,
+      tacosPercent: 4,
+      adsCost: 8,
+      adsUnitsSold: 2,
+    },
+    taxSource: { regime: "report", window: { from: "2026-10-19", to: "2026-11-17" } },
     blocked: null,
-    results: [
-      {
-        price,
-        listingTypeId: "gold_special",
-        quoted: true,
-        marginPercent: 10,
-        marginValue: 10,
-        marginAfterAdsPercent: 8,
-        marginAfterAdsValue: 8,
-        decidingBasis: "afterAds",
-        meetsTarget: true,
-        lines: [],
-      } as unknown as RotinaSimulation["results"][number],
-    ],
+    catalog: null,
+    targetPercent: 2,
+    ownTarget: false,
+    ads: ads("today"),
+    ...overrides,
   };
 }
 
 const originalFetch = globalThis.fetch;
-let requests: Array<Record<string, unknown>> = [];
-let urls: string[] = [];
+let requests: Array<{ url: string; body: Record<string, unknown> }> = [];
+let readingOverrides: Partial<CalculatorReading> = {};
 let cleanup: (() => void) | null = null;
+
+function json(payload: unknown) {
+  return new Response(JSON.stringify(payload), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
 
 beforeEach(() => {
   requests = [];
-  urls = [];
+  readingOverrides = {};
   window.history.replaceState(null, "", "/dashboard/calculadora");
   window.localStorage.clear();
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
     const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
-    requests.push(body);
-    urls.push(String(input));
-    if (String(input).endsWith("/floor")) {
-      return new Response(
-        JSON.stringify({
-          mlItemId: body.mlItemId,
-          listingTypeId: "gold_special",
-          targetPercent: body.targetPercent,
-          blocked: null,
-          floor: { effectivePrice: 120, reason: "ok", bands: [] },
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      );
+    requests.push({ url, body });
+    const mlItemId = String(body.mlItemId);
+    if (url.endsWith("/read")) return json(reading(mlItemId, readingOverrides));
+    if (url.endsWith("/ads")) return json(ads("7d"));
+    if (url.endsWith("/floor")) {
+      return json({
+        mlItemId,
+        listingTypeId: "gold_special",
+        targetPercent: body.targetPercent,
+        blocked: null,
+        floor: {
+          effectivePrice: 120,
+          reason: "ok",
+          bands: [],
+          boundBy: "margin",
+          maxDiscountPercent: null,
+          discountBase: null,
+        },
+      });
     }
-    const prices = body.prices as number[] | undefined;
-    return new Response(JSON.stringify(simulation(prices?.[0] ?? 59.9)), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
+    // Simulação: a mesma conta do servidor, com os insumos que o navegador mandou.
+    const prices = body.prices as number[];
+    const inputs = body.inputs as RotinaPricingInputs;
+    const simulation: RotinaSimulation = {
+      mlItemId,
+      targetPercent: Number(body.targetPercent),
+      inputsFrom: "live",
+      inputsAt: String(body.readAt),
+      feeRebate: null,
+      currentListingTypeId: "gold_special",
+      listingTypeId: "gold_special",
+      salePrice: Number(body.salePrice),
+      blocked: null,
+      results: prices.map((price) =>
+        simulateMarginAtPrice(
+          price,
+          { mlFeeAmount: Math.round(price * 12) / 100, shippingCost: 0 },
+          inputs,
+          Number(body.targetPercent),
+        ),
+      ),
+    };
+    return json(simulation);
   }) as typeof fetch;
 });
 
@@ -153,10 +208,34 @@ function visiblePanel(container: HTMLElement) {
   );
 }
 
+/** A faixa "Agora" do painel, depois da leitura. */
+async function nowStrip(panel: HTMLElement) {
+  await waitFor(() => assert.ok(panel.querySelector('section[aria-label="Agora"]')));
+  return panel.querySelector('section[aria-label="Agora"]') as HTMLElement;
+}
+
+function buttonByText(root: HTMLElement, text: string) {
+  return [...root.querySelectorAll("button")].find(
+    (candidate) => candidate.textContent?.trim() === text,
+  );
+}
+
+async function submit(panel: HTMLElement) {
+  const form = panel.querySelector("form") as HTMLFormElement;
+  await act(async () => {
+    form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
+  });
+}
+
+const count = (suffix: string) => requests.filter((request) => request.url.endsWith(suffix)).length;
+
 describe("CalculatorPageClient", () => {
-  it("lists every listing, read or not, and searches by title words, SKU or MLB", async () => {
+  it("lists every listing by title and searches by title words, SKU or MLB", async () => {
     const container = render();
-    assert.equal(options(container).length, 3);
+    assert.deepEqual(
+      options(container).map((option) => option.match(/Kit Escova|Lanterna|Mouse/)?.[0]),
+      ["Kit Escova", "Lanterna", "Mouse"],
+    );
 
     type(searchInput(container), "dental kit");
     await waitFor(() => assert.equal(options(container).length, 1));
@@ -168,72 +247,97 @@ describe("CalculatorPageClient", () => {
 
     type(searchInput(container), "mlb-3");
     await waitFor(() => assert.match(options(container)[0] ?? "", /Lanterna Nova/));
-    assert.match(options(container)[0], /sem leitura/);
+    assert.match(options(container)[0], /pausado/);
+    // A lista é só banco: nenhuma leitura enquanto busca.
+    assert.equal(requests.length, 0);
   });
 
-  it("opens the calculator with the keyboard without calling the ML, and simulates on Enter", async () => {
+  it("reads the listing once when it opens (not on ↑/↓), and simulates with the reading's inputs", async () => {
     const container = render();
     const search = searchInput(container);
     key(search, "ArrowDown");
+    assert.equal(requests.length, 0, "navegar na lista não pode ler o anúncio");
     key(search, "Enter");
 
-    await waitFor(() => assert.match(window.location.search, /anuncio=MLB2/));
+    await waitFor(() => assert.match(window.location.search, /anuncio=MLB3/));
     const panel = visiblePanel(container);
     assert.ok(panel, "a calculadora não abriu");
-    assert.match(panel.textContent ?? "", /Mouse Sem Fio/);
-    // A faixa "Hoje" vem do retrato: nenhuma cotação ao escolher.
-    assert.match(panel.textContent ?? "", /Hoje/);
-    assert.equal(requests.length, 0);
+    const strip = await nowStrip(panel);
+    assert.equal(count("/read"), 1);
+    assert.deepEqual(requests[0].body, { mlItemId: "MLB3" });
+    // MC 28%, após ADS com o TACOS de hoje (4%) = 24%; imposto com a janela.
+    assert.match(strip.textContent ?? "", /28%/);
+    assert.match(strip.textContent ?? "", /24%/);
+    assert.match(strip.textContent ?? "", /hoje até/);
+    assert.match(strip.textContent ?? "", /30 dias · até 17\/11/);
 
-    const form = panel.querySelector("form");
-    assert.ok(form);
-    const price = form.querySelector("input") as HTMLInputElement;
+    const price = panel.querySelector("form input") as HTMLInputElement;
     assert.equal(price.value, "100,00");
     type(price, "89,90");
-    await act(async () => {
-      form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
-    });
-    await waitFor(() => assert.equal(requests.length, 1));
-    assert.deepEqual(requests[0], { mlItemId: "MLB2", prices: [89.9] });
+    await submit(panel);
+    await waitFor(() => assert.equal(count("/simulate"), 1));
+    const sent = requests.find((request) => request.url.endsWith("/simulate"))!;
+    assert.equal(sent.url, "/api/calculadora/simulate");
+    assert.deepEqual(sent.body.prices, [89.9]);
+    assert.equal((sent.body.inputs as RotinaPricingInputs).tacosPercent, 4);
+    assert.equal(sent.body.salePrice, 100);
   });
 
-  it("asks the server for today's price on a listing the Central never read", async () => {
-    const container = render("MLB3");
+  it("switches the TACOS to 7 days with one read, and redoes the margins without quoting", async () => {
+    const container = render("MLB1");
     const panel = visiblePanel(container);
     assert.ok(panel);
-    assert.match(panel.textContent ?? "", /ainda não passou pelo Atualizar/);
-    assert.equal(requests.length, 0);
+    const strip = await nowStrip(panel);
+    await submit(panel);
+    await waitFor(() => assert.equal(count("/simulate"), 1));
+    // A R$ 100: MC 28%, após ADS 24% (hoje).
+    await waitFor(() => assert.match(panel.textContent ?? "", /A R\$\s?100,00/));
 
-    const button = [...panel.querySelectorAll("button")].find(
-      (candidate) => candidate.textContent === "Calcular no preço de hoje",
-    );
-    assert.ok(button);
-    await act(async () => {
-      button.click();
-    });
-    await waitFor(() => assert.equal(requests.length, 1));
-    assert.deepEqual(requests[0], { mlItemId: "MLB3" });
-    await waitFor(() =>
-      assert.equal((panel.querySelector("form input") as HTMLInputElement).value, "59,90"),
-    );
+    const week = buttonByText(strip, "7 dias");
+    assert.ok(week, "falta a opção de TACOS de 7 dias");
+    await act(async () => week.click());
+    await waitFor(() => assert.match(strip.textContent ?? "", /7 dias · 12\/11–18\/11/));
+    assert.equal(count("/ads"), 1);
+    // Após ADS = 28% − 8% na faixa e no preço já simulado, sem nova cotação.
+    assert.match(strip.textContent ?? "", /20%/);
+    assert.doesNotMatch(strip.textContent ?? "", /24%/);
+    assert.equal(count("/simulate"), 1, "trocar a base não pode cotar no ML");
+
+    const today = buttonByText(strip, "Hoje");
+    assert.ok(today);
+    act(() => today.click());
+    await waitFor(() => assert.match(strip.textContent ?? "", /24%/));
+    assert.equal(count("/ads"), 1, "voltar para hoje não lê nada");
   });
 
-  it("keeps a recent calculator alive: coming back does not quote again", async () => {
+  it("says when today's ADS spent without selling, and decides by MC", async () => {
+    readingOverrides = { ads: ads("today", { tacosPercent: null, adsCost: 4.2, adsUnitsSold: 0 }) };
+    const container = render("MLB2");
+    const panel = visiblePanel(container);
+    assert.ok(panel);
+    const strip = await nowStrip(panel);
+    assert.match(strip.textContent ?? "", /R\$\s?4,20 de ADS e nenhuma venda ainda/);
+    const useWeek = buttonByText(strip, "Usar o TACOS de 7 dias");
+    assert.ok(useWeek);
+    await act(async () => useWeek.click());
+    await waitFor(() => assert.equal(count("/ads"), 1));
+  });
+
+  it("keeps a recent calculator alive: coming back does not read or quote again", async () => {
     const container = render("MLB1");
     let panel = visiblePanel(container);
     assert.ok(panel);
-    const form = panel.querySelector("form") as HTMLFormElement;
-    await act(async () => {
-      form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
-    });
-    await waitFor(() => assert.equal(requests.length, 1));
+    await nowStrip(panel);
+    await submit(panel);
+    await waitFor(() => assert.equal(count("/simulate"), 1));
 
     // Troca para outro anúncio e volta pelo recente.
     const other = [...container.querySelectorAll('[role="option"]')].find((option) =>
       option.textContent?.includes("Mouse Sem Fio"),
     ) as HTMLElement;
-    act(() => other.click());
+    await act(async () => other.click());
     await waitFor(() => assert.match(window.location.search, /anuncio=MLB2/));
+    await waitFor(() => assert.equal(count("/read"), 2));
     const back = [...container.querySelectorAll('[role="option"]')].find((option) =>
       option.textContent?.includes("Kit Escova Dental"),
     ) as HTMLElement;
@@ -243,53 +347,46 @@ describe("CalculatorPageClient", () => {
     panel = visiblePanel(container);
     assert.ok(panel);
     assert.match(panel.textContent ?? "", /Kit Escova Dental/);
-    // O resultado de antes continua na tela, sem nova consulta.
+    // O resultado de antes continua na tela, sem nova leitura nem cotação.
     assert.match(panel.textContent ?? "", /A R\$\s?100,00/);
-    assert.equal(requests.length, 1);
+    assert.equal(count("/read"), 2);
+    assert.equal(count("/simulate"), 1);
   });
 
-  it("lets the user play with the accepted margin: the verdict changes without quoting", async () => {
+  it("lets the user play with the accepted margin, and computes the minimum on demand", async () => {
     const container = render("MLB2");
     const panel = visiblePanel(container);
     assert.ok(panel);
-    const form = panel.querySelector("form") as HTMLFormElement;
-    await act(async () => {
-      form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
-    });
+    await nowStrip(panel);
+    await submit(panel);
     await waitFor(() => assert.match(panel.textContent ?? "", /dentro do mínimo de 2%/));
-    assert.equal(requests.length, 1);
+    assert.equal(count("/simulate"), 1);
 
-    // A margem abre na meta da Central (2%); subir para 10% muda o veredito na hora.
+    // A margem abre na meta que vale (2%); subir para 30% muda o veredito na hora.
     const target = panel.querySelector(
       'input[inputmode="decimal"]:not(form input)',
     ) as HTMLInputElement;
     assert.equal(target.value, "2");
-    type(target, "10");
-    await waitFor(() => assert.match(panel.textContent ?? "", /abaixo do mínimo de 10%/));
-    assert.equal(requests.length, 1, "mudar a margem não pode cotar no ML");
-    assert.match(panel.textContent ?? "", /Meta da Central: 2%/);
+    type(target, "30");
+    await waitFor(() => assert.match(panel.textContent ?? "", /abaixo do mínimo de 30%/));
+    assert.equal(count("/simulate"), 1, "mudar a margem não pode cotar no ML");
 
-    // O mínimo da rodada vale para 2%: para 10% ele sai só quando o usuário pede.
-    assert.doesNotMatch(panel.textContent ?? "", /Mínimo R\$/);
-    const compute = [...panel.querySelectorAll("button")].find(
-      (button) => button.textContent === "Calcular mínimo p/ 10%",
-    );
+    // Sem mínimo pronto: ele sai só quando o usuário pede.
+    assert.doesNotMatch(panel.textContent ?? "", /Mínimo p\/ 30%\s*R\$/);
+    const compute = buttonByText(panel, "Calcular mínimo p/ 30%");
     assert.ok(compute, "falta o botão de calcular o mínimo para a margem escolhida");
-    await act(async () => {
-      compute.click();
-    });
-    await waitFor(() => assert.match(panel.textContent ?? "", /Mínimo p\/ 10%\s*R\$\s?120,00/));
-    assert.equal(urls[1], "/api/rotina/simulate/floor");
-    assert.deepEqual(requests[1], { mlItemId: "MLB2", targetPercent: 10 });
+    await act(async () => compute.click());
+    await waitFor(() => assert.match(panel.textContent ?? "", /Mínimo p\/ 30%\s*R\$\s?120,00/));
+    const floor = requests.find((request) => request.url.endsWith("/floor"))!;
+    assert.equal(floor.url, "/api/calculadora/floor");
+    assert.equal(floor.body.targetPercent, 30);
+    assert.equal((floor.body.inputs as RotinaPricingInputs).tacosPercent, 4);
 
-    // "voltar" devolve a meta da Central e o mínimo da rodada.
-    const reset = [...panel.querySelectorAll("button")].find(
-      (button) => button.textContent === "voltar",
-    );
+    // Na meta que vale também há "Calcular mínimo" (não há mínimo de rodada).
+    const reset = buttonByText(panel, "voltar");
     assert.ok(reset);
     act(() => reset.click());
     await waitFor(() => assert.match(panel.textContent ?? "", /dentro do mínimo de 2%/));
-    assert.equal(target.value, "2");
-    assert.equal(requests.length, 2);
+    assert.ok(buttonByText(panel, "Calcular mínimo"));
   });
 });

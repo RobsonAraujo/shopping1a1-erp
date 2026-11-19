@@ -40,6 +40,9 @@ describe("DemoCalculator (landing)", () => {
     // Sem link para um anúncio que não existe.
     assert.doesNotMatch(panel.textContent ?? "", /Ver no ML/);
 
+    // A "leitura" do exemplo é local, mas chega depois da montagem, como a de verdade.
+    await waitFor(() => assert.ok(panel.querySelector("form"), "a leitura do exemplo não chegou"));
+    assert.match(panel.textContent ?? "", /Agora/);
     const form = panel.querySelector("form") as HTMLFormElement;
     await act(async () => {
       form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
@@ -51,7 +54,7 @@ describe("DemoCalculator (landing)", () => {
     const other = [...rendered.container.querySelectorAll('[role="option"]')].find((option) =>
       option.textContent?.includes("Capa MagSafe iPhone 14"),
     ) as HTMLElement;
-    act(() => other.click());
+    await act(async () => other.click());
     await waitFor(() =>
       assert.match(visiblePanel(rendered.container)?.textContent ?? "", /Capa MagSafe iPhone 14/),
     );

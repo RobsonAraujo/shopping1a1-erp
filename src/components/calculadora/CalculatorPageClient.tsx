@@ -14,16 +14,17 @@ import { ArrowLeft, Calculator } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CalculatorListingPicker } from "@/components/calculadora/CalculatorListingPicker";
 import { CalculatorPanel } from "@/components/calculadora/CalculatorPanel";
+import type { CalculatorApi } from "@/lib/calculadora/calculator-api";
 import {
   CALCULATOR_PARAM,
   normalizeListingParam,
   type CalculatorData,
-} from "@/lib/rotina/calculator-listings";
-import type { SimulatorApi } from "@/lib/rotina/simulator-api";
+} from "@/lib/calculadora/calculator-listings";
+import type { TacosBasis } from "@/lib/calculadora/reading";
 import { cn } from "@/lib/utils";
 
 const RECENTS_KEY = "calculadora:recentes";
-/** Recentes nos chips e calculadoras mantidas vivas (estado e cotações preservados). */
+/** Recentes nos chips e calculadoras mantidas vivas (leitura e cotações preservadas). */
 const RECENTS_MAX = 5;
 /** Avisa quem lê a URL depois de um push/replace nosso (o `popstate` só vem do navegador). */
 const URL_EVENT = "calculadora:url";
@@ -101,9 +102,10 @@ function isTypingTarget(target: EventTarget | null): boolean {
 /**
  * Calculadora (Financeiro): mestre-detalhe com todos os anúncios à esquerda e
  * a calculadora à direita; no celular, duas telas. A URL guarda o anúncio
- * aberto. Abrir a página ou escolher um anúncio não chama o Mercado Livre —
- * só simular. As últimas calculadoras abertas ficam montadas (`<Activity>`):
- * voltar a uma delas não recota nada.
+ * aberto. Abrir a página não chama o Mercado Livre; abrir um anúncio o lê
+ * agora (clique ou Enter — ↑/↓ na lista não). As últimas calculadoras abertas
+ * ficam montadas (`<Activity>`): voltar a uma delas não lê nem cota de novo.
+ * A base do TACOS (hoje ou 7 dias) vale para todos os anúncios da visita.
  */
 export function CalculatorPageClient({
   data,
@@ -120,8 +122,8 @@ export function CalculatorPageClient({
    * gravado, sem atalhos globais e altura fixa.
    */
   variant?: "page" | "demo";
-  /** Simulações locais (demonstração); padrão: as rotas do painel. */
-  api?: SimulatorApi;
+  /** Leitura e simulações locais (demonstração); padrão: as rotas. */
+  api?: CalculatorApi;
 }) {
   const isPage = variant === "page";
   const urlSelectedId = useSyncExternalStore(
@@ -147,6 +149,8 @@ export function CalculatorPageClient({
   const [aliveIds, setAliveIds] = useState<string[]>(() =>
     initialSelectedId ? [initialSelectedId] : [],
   );
+  /** Cada visita começa no TACOS de hoje; a escolha vale para os próximos anúncios. */
+  const [tacosBasis, setTacosBasis] = useState<TacosBasis>("today");
   // Voltar/avançar do navegador também abre um anúncio: entra nas vivas na hora.
   const renderIds =
     selected && !aliveIds.includes(selected.mlItemId)
@@ -251,14 +255,15 @@ export function CalculatorPageClient({
   if (data.listings.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card)]/50 px-4 py-12 text-center text-sm text-[var(--muted-foreground)]">
-        Ainda não há anúncios lidos.{" "}
+        Nenhum anúncio ativo na loja ainda. Os anúncios aparecem aqui depois da
+        sincronização com o Mercado Livre, em{" "}
         <Link
-          href="/dashboard/central-anuncios"
+          href="/dashboard/produtos"
           className="font-medium text-[var(--primary)] underline-offset-4 hover:underline"
         >
-          Clique em Atualizar na Central de anúncios
-        </Link>{" "}
-        para a primeira leitura.
+          Meus produtos
+        </Link>
+        .
       </div>
     );
   }
@@ -314,7 +319,8 @@ export function CalculatorPageClient({
               <CalculatorPanel
                 listing={listing}
                 timeZone={data.timeZone}
-                lastCompleteRunLabel={data.lastCompleteRunLabel}
+                basis={tacosBasis}
+                onBasisChange={setTacosBasis}
                 priceInputRef={priceRefFor(id)}
                 api={api}
                 demo={!isPage}
