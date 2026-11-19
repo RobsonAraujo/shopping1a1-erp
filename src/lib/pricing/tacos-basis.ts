@@ -95,22 +95,23 @@ export function adsSpendWithoutSales(ads: TacosAds): boolean {
 }
 
 /**
- * Um preço já simulado refeito com o ADS de outra base: a taxa e o frete
- * cotados não mudam, só o TACOS (e o veredito). Não chama o ML.
- * `baseInputs` são os insumos no tipo de hoje.
+ * Um preço já simulado refeito com outros insumos: o ADS de outra base e/ou
+ * outro custo (o orçamento da Calculadora). A taxa e o frete cotados não
+ * mudam, só a margem e o veredito. Não chama o ML. `baseInputs` são os
+ * insumos no tipo de hoje; `ads: null` = o ADS que já está neles.
  */
 export function rescoreWithInputs(
   result: SimulatedPrice,
   baseInputs: RotinaPricingInputs,
   currentListingTypeId: string | null,
-  ads: TacosAds,
+  ads: TacosAds | null,
   targetPercent: number,
 ): SimulatedPrice {
   if (!result.quoted || result.mlFeeAmount === null || result.shippingCost === null) {
     return result;
   }
   const inputs = inputsForType(
-    inputsWithAds(baseInputs, ads),
+    ads ? inputsWithAds(baseInputs, ads) : baseInputs,
     currentListingTypeId,
     result.listingTypeId,
   );

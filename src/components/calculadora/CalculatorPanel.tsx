@@ -9,18 +9,22 @@ import {
   CalculatorNowStripSkeleton,
   taxSourceLabel,
 } from "@/components/calculadora/CalculatorNowStrip";
+import { CalculatorPurchaseControl } from "@/components/calculadora/CalculatorPurchaseControl";
+import { CalculatorPurchaseLine } from "@/components/calculadora/CalculatorPurchaseLine";
 import { CalculatorTargetControl } from "@/components/calculadora/CalculatorTargetControl";
 import { RotinaPriceSimulator } from "@/components/rotina/RotinaPriceSimulator";
 import { RotinaThumb } from "@/components/rotina/RotinaThumb";
 import { SegmentTag } from "@/components/rotina/SegmentTag";
 import { fetchCalculatorApi, type CalculatorApi } from "@/lib/calculadora/calculator-api";
 import type { CalculatorListing } from "@/lib/calculadora/calculator-listings";
+import { effectiveCostFromNf } from "@/lib/calculadora/purchase-cost";
 import {
+  inputsWithAds,
   type CalculatorAds,
   type CalculatorReading,
   type TacosBasis,
 } from "@/lib/calculadora/reading";
-import { formatWhen } from "@/lib/rotina/format";
+import { formatMoney, formatWhen } from "@/lib/rotina/format";
 import {
   PROMO_DISCOUNT_SHORTCUTS,
   buildSimulatorSuggestions,
@@ -68,6 +72,10 @@ function suggestionsFor(reading: CalculatorReading, catalogListing: boolean) {
  * abrir, lê o anúncio no ML (preço, taxa e frete, custo, imposto e TACOS de
  * hoje) — uma vez: o `<Activity>` guarda a leitura enquanto o anúncio fica
  * entre os recentes. O TACOS de 7 dias só é lido quando o usuário pede.
+ *
+ * "Custo do orçamento" troca o custo do cadastro na conta (margem e mínimo) e
+ * cada preço simulado diz até quanto dá para pagar na compra — sem cotar de
+ * novo: a taxa e o frete não dependem do custo.
  */
 export function CalculatorPanel({
   listing,
@@ -94,6 +102,8 @@ export function CalculatorPanel({
   const [ads7d, setAds7d] = useState<Ads7dState | null>(null);
   /** Margem mínima escolhida na tela; `null` = a meta que vale. */
   const [chosenTarget, setChosenTarget] = useState<number | null>(null);
+  /** O orçamento digitado (NF por unidade, ou custo da conta); `null` = o cadastro. */
+  const [quote, setQuote] = useState<number | null>(null);
   // O <Activity> refaz os efeitos ao reaparecer: as leituras só rodam uma vez.
   const readStarted = useRef(false);
   const ads7dStarted = useRef(false);
@@ -175,10 +185,30 @@ export function CalculatorPanel({
   const loading7d = basis === "7d" && (ads7d === null || ads7d.status === "loading");
   const error7d = basis === "7d" && ads7d?.status === "error" ? ads7d.message : null;
   const targetPercent = chosenTarget ?? reading?.targetPercent ?? 0;
+  const purchaseBasis = reading?.purchaseBasis ?? null;
+  /** O orçamento como custo da conta (com IPI/ST e unidades do cadastro). */
+  const quoteCost =
+    quote === null || !purchaseBasis
+      ? null
+      : purchaseBasis.kind === "nf"
+        ? effectiveCostFromNf(quote, purchaseBasis)
+        : quote;
+  // As simulações e o mínimo vão com o custo do orçamento no lugar do cadastro.
+  const effectiveReading = useMemo(
+    () =>
+      reading && quoteCost !== null
+        ? { ...reading, inputs: { ...reading.inputs, productCost: quoteCost } }
+        : reading,
+    [reading, quoteCost],
+  );
 
   const simulatorApi = useMemo(
-    () => (reading && ads ? api.simulatorFor(reading, ads) : null),
-    [api, reading, ads],
+    () => (effectiveReading && ads ? api.simulatorFor(effectiveReading, ads) : null),
+    [api, effectiveReading, ads],
+  );
+  const purchaseInputs = useMemo(
+    () => (reading && ads ? inputsWithAds(reading.inputs, ads) : null),
+    [reading, ads],
   );
   const suggestions = useMemo(
     () => (reading ? suggestionsFor(reading, listing.catalogListing) : []),
@@ -251,7 +281,7 @@ export function CalculatorPanel({
         />
       ) : null}
 
-      {reading && ads && simulatorApi && !reading.blocked ? (
+      {reading && ads && simulatorApi && purchaseInputs && !reading.blocked ? (
         <div className="px-4 pb-4 sm:px-5 sm:pb-5">
           <RotinaPriceSimulator
             mlItemId={mlItemId}
@@ -264,23 +294,47 @@ export function CalculatorPanel({
             api={simulatorApi}
             target={{ percent: targetPercent, saved: reading.targetPercent }}
             adsOverride={ads}
-            floorScope={`${ads.basis}|${reading.readAt}`}
+            costOverride={quoteCost ?? reading.inputs.productCost}
+            floorScope={`${ads.basis}|${reading.readAt}|${quoteCost ?? "cadastro"}`}
             refreshFloor={false}
             inputsNote={
               <>
-                Custo, imposto{taxLabel ? ` (${taxLabel})` : ""} e ADS (TACOS{" "}
+                {quoteCost !== null
+                  ? `Custo do orçamento (${formatMoney(quoteCost)} na conta); imposto`
+                  : "Custo, imposto"}
+                {taxLabel ? ` (${taxLabel})` : ""} e ADS (TACOS{" "}
                 {ads.basis === "today" ? "de hoje" : "de 7 dias"}) lidos{" "}
                 {formatWhen(reading.readAt, new Date(), timeZone)}.
               </>
             }
             controls={
-              <CalculatorTargetControl
-                value={targetPercent}
-                saved={reading.targetPercent}
-                ownTarget={reading.ownTarget}
-                onChange={setChosenTarget}
-              />
+              <div className="grid gap-2 lg:grid-cols-2">
+                <CalculatorTargetControl
+                  value={targetPercent}
+                  saved={reading.targetPercent}
+                  ownTarget={reading.ownTarget}
+                  onChange={setChosenTarget}
+                />
+                <CalculatorPurchaseControl
+                  basis={reading.purchaseBasis}
+                  cadastroCost={reading.inputs.productCost}
+                  onChange={setQuote}
+                />
+              </div>
             }
+            resultExtra={(result, place) => (
+              <CalculatorPurchaseLine
+                result={result}
+                place={place}
+                inputs={purchaseInputs}
+                targetPercent={targetPercent}
+                basis={reading.purchaseBasis}
+                cadastroCost={reading.inputs.productCost}
+                quote={quote}
+                adsBasis={ads.basis}
+                onUse7d={() => onBasisChange("7d")}
+              />
+            )}
           />
         </div>
       ) : null}

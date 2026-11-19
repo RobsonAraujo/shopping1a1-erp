@@ -1,3 +1,4 @@
+import type { CalculatorPurchaseBasis } from "@/lib/calculadora/purchase-cost";
 import type { FinancialTaxSource } from "@/lib/lucratividade/financial-evaluation-data";
 import type { MlCostsAtPrice } from "@/lib/pricing/refine-min-sale-price";
 import { inputsWithAds, type TacosAds } from "@/lib/pricing/tacos-basis";
@@ -55,6 +56,8 @@ export type CalculatorReading = {
   ownTarget: boolean;
   /** ADS de hoje, lido junto. */
   ads: CalculatorAds;
+  /** Como o orçamento (preço na NF) vira custo da conta: IPI, ST e unidades do cadastro. */
+  purchaseBasis: CalculatorPurchaseBasis;
 };
 
 /** A margem no preço de agora, com o ADS da base escolhida (sem cotar de novo). */

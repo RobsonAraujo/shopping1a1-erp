@@ -50,6 +50,7 @@ function reading(overrides: Partial<CalculatorReading> = {}): CalculatorReading 
     targetPercent: 8,
     ownTarget: false,
     ads: ads(),
+    purchaseBasis: { kind: "nf", unitCostNf: 50, ipiPercent: 0, stFactor: null, units: 1 },
     ...overrides,
   };
 }

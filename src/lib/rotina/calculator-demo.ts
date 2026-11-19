@@ -372,6 +372,14 @@ export function demoReading(listing: DemoListing, now: Date = new Date()): Calcu
     targetPercent: listing.targetPercent,
     ownTarget: listing.ownTarget,
     ads: demoAds(listing, "today", now),
+    // Exemplo sem IPI nem ST: o preço na NF é o próprio custo da conta.
+    purchaseBasis: {
+      kind: "nf",
+      unitCostNf: listing.productCost,
+      ipiPercent: 0,
+      stFactor: null,
+      units: 1,
+    },
   };
 }
 
@@ -431,7 +439,10 @@ export function createDemoCalculatorApi(
       return demoAds(find(mlItemId), "7d", new Date());
     },
     simulatorFor(reading, ads) {
-      return demoSimulatorApi(find(reading.mlItemId), ads);
+      const listing = find(reading.mlItemId);
+      // O custo do orçamento digitado na Calculadora entra no lugar do de exemplo.
+      const productCost = reading.inputs.productCost ?? listing.productCost;
+      return demoSimulatorApi({ ...listing, productCost }, ads);
     },
   };
 }
