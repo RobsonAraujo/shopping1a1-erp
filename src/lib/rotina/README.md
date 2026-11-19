@@ -155,6 +155,19 @@ Página `/dashboard/calculadora` (menu Financeiro, depois de Lucratividade): tod
   - Os insumos só calculam um número que volta para o mesmo usuário; nada é gravado.
 - **Mínimo**: não há mínimo pronto (`refreshFloor={false}`). Ele sai sempre no botão "Calcular mínimo" (~20–40 cotações), com o PMA e o desconto máximo de promoção.
 - **Margem mínima que eu aceito**: abre na meta que vale (a própria ou a do segmento) e o usuário mexe à vontade, sem gravar nada. O veredito muda no navegador (`withTarget`), sem cotação.
+- **Na compra** (`purchase-cost.ts`): cada preço simulado diz **até quanto dá para pagar** no produto para fechar a margem mínima, e o **custo do orçamento** troca o custo do cadastro na conta.
+  - Não cota nada. Num preço já cotado, taxa e frete não dependem do custo; imposto (% da venda) e ADS (TACOS × preço) também não. A margem é linear no custo.
+  - `maxProductCostAtPrice` faz uma bisseção no centavo com o próprio veredito do simulador (`simulateMarginAtPrice`). Pagar o limite fecha a meta, um centavo a mais não. "Empate (0%)" é a mesma conta com meta 0.
+  - **Orçamento ≠ custo da conta.** O custo da conta é `(custo c/ ST ou custo NF) × (1 + IPI)` (`computeEffectivePricingCost`). O fornecedor cota o preço unitário na NF, então o "pague até" e o campo do orçamento ficam em **NF por unidade**, com o custo na conta ao lado.
+    - A leitura traz a `purchaseBasis` (IPI, ST e unidades do produto do cadastro, com a mesma precedência do custo: `mlItemId`, depois SKU). Ela só vale se refizer o custo que a leitura usou; senão, tudo fica no custo da conta.
+    - A ST de outro preço é estimada na proporção do cadastro (custo c/ ST ÷ custo NF).
+    - Kit de um produto só × N: por unidade (÷ N). Kit de vários produtos: só o custo do kit, na conta.
+  - O orçamento entra nas simulações e no "Calcular mínimo" (os insumos que o navegador manda já levam o custo do orçamento). No simulador, `costOverride` refaz os preços já cotados e `resultExtra` põe a linha "Na compra" em cada preço, inclusive no "Comparar".
+  - A linha segue a base do TACOS da tela. Com "Hoje", sugere o de 7 dias, mais estável para uma compra.
+  - O rebate da última venda em promoção entra no limite; a linha avisa que sem ele o limite cai.
+  - Anúncio bloqueado (sem custo, sem alíquota, kit incompleto) segue sem simulador: o cadastro vem antes (decisão do usuário, 2026-11-19).
+  - Aproximação: o imposto é a média efetiva de 30 dias do Tributário. Num regime com crédito na compra, comprar mais barato pode subir um pouco o imposto, e a conta não pega isso.
+  - A Central não usa (não passa `costOverride` nem `resultExtra`).
 - **Custo no ML**:
   - abrir um anúncio custa ~6–7 chamadas e 1–3 s (+1 no catálogo);
   - "7 dias" custa +1–2;

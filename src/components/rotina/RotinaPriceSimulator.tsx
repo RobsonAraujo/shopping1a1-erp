@@ -307,7 +307,8 @@ function floorNoteFor(
  * Na Calculadora os insumos são da leitura ao vivo, não da rodada: sem "Mínimo"
  * pronto (`refreshFloor={false}`). Na Calculadora e no "Simular" da Central,
  * `adsOverride` refaz os preços já cotados com o TACOS da base escolhida (hoje
- * ↔ 7 dias), sem nova cotação.
+ * ↔ 7 dias), sem nova cotação. Na Calculadora, `costOverride` faz o mesmo com o
+ * custo do orçamento e `resultExtra` põe o "pague até" em cada preço.
  */
 export function RotinaPriceSimulator({
   mlItemId,
@@ -325,6 +326,8 @@ export function RotinaPriceSimulator({
   floorScope,
   refreshFloor = true,
   inputsNote,
+  costOverride = null,
+  resultExtra,
 }: {
   mlItemId: string;
   /** Tipo de hoje pelo retrato; a resposta do simulador (item ao vivo) prevalece. */
@@ -364,6 +367,14 @@ export function RotinaPriceSimulator({
   refreshFloor?: boolean;
   /** Nota sobre de onde vêm custo, imposto e ADS (substitui a da rodada). */
   inputsNote?: ReactNode;
+  /**
+   * O custo do produto na conta (Calculadora: o do orçamento, ou o do
+   * cadastro). Os preços já cotados são refeitos com ele, sem ir ao ML.
+   * `null` = o custo de cada resposta.
+   */
+  costOverride?: number | null;
+  /** Conteúdo extra de cada preço simulado (Calculadora: "pague até" na compra). */
+  resultExtra?: (result: SimulatedPrice, place: "latest" | "compare") => ReactNode;
 }) {
   const baseId = useId();
   const [input, setInput] = useState(defaultPrice !== null ? inputValue(defaultPrice) : "");
@@ -486,9 +497,13 @@ export function RotinaPriceSimulator({
     void simulate(price, runType);
   }
 
-  const scoreInputs = meta?.inputs ?? null;
+  const responseInputs = meta?.inputs ?? null;
+  const scoreInputs =
+    responseInputs && costOverride !== null
+      ? { ...responseInputs, productCost: costOverride }
+      : responseInputs;
   const scoredResults =
-    adsOverride && scoreInputs
+    scoreInputs && (adsOverride || costOverride !== null)
       ? results.map((result) =>
           rescoreWithInputs(
             result,
@@ -757,6 +772,7 @@ export function RotinaPriceSimulator({
               </button>
             ) : null}
             {openBreakdown === resultKey(latest) ? <Breakdown result={latest} /> : null}
+            {resultExtra ? resultExtra(latest, "latest") : null}
           </div>
         ) : null}
 
@@ -794,6 +810,7 @@ export function RotinaPriceSimulator({
                       targetPercent={effectiveTarget}
                       emphasis={false}
                     />
+                    {resultExtra ? resultExtra(result, "compare") : null}
                   </button>
                 </li>
               ))}

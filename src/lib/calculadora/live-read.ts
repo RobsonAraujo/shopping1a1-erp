@@ -1,8 +1,13 @@
 import { prisma } from "@/lib/db/db";
 import {
+  decimalToNumber,
   deriveStatusFromPriceToWin,
   extractPriceToWin,
 } from "@/lib/catalog-report/catalog-competition";
+import {
+  nfBasisFromProduct,
+  type CalculatorPurchaseBasis,
+} from "@/lib/calculadora/purchase-cost";
 import type {
   CalculatorAds,
   CalculatorCatalog,
@@ -22,6 +27,7 @@ import {
 import { fetchItemPriceToWin, fetchItemsByIdsBatched } from "@/lib/mercadolibre/api";
 import { siteIdFromItemId } from "@/lib/mercadolibre/listing-fees";
 import { getProductAdsDateRange } from "@/lib/mercadolibre/product-ads-metrics";
+import { normalizeProductSku } from "@/lib/pricing/product-pricing";
 import { adsFromLoad } from "@/lib/pricing/tacos-basis";
 import { loadListingAds } from "@/lib/pricing/tacos-basis-data";
 import { pricingInputsFromRow } from "@/lib/rotina/health-row";
@@ -107,6 +113,63 @@ async function readCatalog(token: string, mlItemId: string): Promise<CalculatorC
   }
 }
 
+/**
+ * Como o orçamento (preço unitário na NF) vira o custo da conta: o IPI e a ST
+ * do produto do cadastro, e as unidades num kit de um produto só. Mesma
+ * precedência do custo da leitura (`pricingFor`: o vínculo por `mlItemId`,
+ * depois o SKU), e só vale se refizer o custo que a leitura usou.
+ */
+async function loadPurchaseBasis(
+  organizationId: string,
+  mlItemId: string,
+  row: Pick<FinancialEvaluationRow, "productCost" | "sku" | "isKitComposition" | "kitComponents">,
+): Promise<CalculatorPurchaseBasis> {
+  const unknown: CalculatorPurchaseBasis = { kind: "effective", reason: "unknown" };
+  if (row.productCost === null) return unknown;
+  const components = row.isKitComposition ? (row.kitComponents ?? []) : null;
+  if (components && components.length !== 1) return { kind: "effective", reason: "kit" };
+  const component = components?.[0] ?? null;
+  const sku = component ? component.sku : row.sku;
+  const units = component ? component.quantity : 1;
+  const normalizedSku = sku ? normalizeProductSku(sku) : null;
+  const or = [
+    ...(component ? [] : [{ mlItemId }]),
+    ...(normalizedSku ? [{ sku: normalizedSku }] : []),
+  ];
+  if (or.length === 0) return unknown;
+
+  const products = await prisma.product.findMany({
+    where: { organizationId, needsCostReview: false, OR: or },
+    select: {
+      mlItemId: true,
+      unitCostNf: true,
+      purchaseIcmsPercent: true,
+      hasIcmsSt: true,
+      purchaseCostWithSt: true,
+      ipiPercent: true,
+    },
+  });
+  const ordered = [
+    ...products.filter((product) => !component && product.mlItemId === mlItemId),
+    ...products.filter((product) => component || product.mlItemId !== mlItemId),
+  ];
+  for (const product of ordered) {
+    const basis = nfBasisFromProduct(
+      {
+        unitCostNf: decimalToNumber(product.unitCostNf) ?? 0,
+        purchaseIcmsPercent: decimalToNumber(product.purchaseIcmsPercent) ?? 0,
+        hasIcmsSt: product.hasIcmsSt,
+        purchaseCostWithSt: decimalToNumber(product.purchaseCostWithSt),
+        ipiPercent: decimalToNumber(product.ipiPercent) ?? 0,
+      },
+      units,
+      row.productCost,
+    );
+    if (basis) return basis;
+  }
+  return unknown;
+}
+
 /** Abre um anúncio: o preço, a margem e os insumos de agora, com o TACOS de hoje. */
 export async function readCalculatorListingNow(
   organizationId: string,
@@ -140,6 +203,7 @@ export async function readCalculatorListingNow(
   const row = rows[0];
   if (!row) throw new CalculatorListingInactiveError();
 
+  const purchaseBasis = await loadPurchaseBasis(organizationId, mlItemId, row);
   const target = targets.get(mlItemId) ?? null;
   return {
     mlItemId,
@@ -161,6 +225,7 @@ export async function readCalculatorListingNow(
     targetPercent: effectiveMinMarginPercent(catalogListing, settings, target),
     ownTarget: target?.minMarginPercent !== null && target?.minMarginPercent !== undefined,
     ads: adsFromLoad(adsLoad, mlItemId, "today", todayRange),
+    purchaseBasis,
   };
 }
 

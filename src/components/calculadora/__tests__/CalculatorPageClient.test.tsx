@@ -59,7 +59,10 @@ function ads(basis: CalculatorAds["basis"], overrides: Partial<CalculatorAds> = 
   };
 }
 
-/** Preço 100, taxa 12, frete 0, custo 50, imposto 10% → MC 28%; TACOS hoje 4%, 7 dias 8%. */
+/**
+ * Preço 100, taxa 12, frete 0, custo 50, imposto 10% → MC 28%; TACOS hoje 4%,
+ * 7 dias 8%. O custo 50 é R$ 40,00 na NF + IPI de 25%.
+ */
 function reading(mlItemId: string, overrides: Partial<CalculatorReading> = {}): CalculatorReading {
   return {
     mlItemId,
@@ -89,6 +92,7 @@ function reading(mlItemId: string, overrides: Partial<CalculatorReading> = {}): 
     targetPercent: 2,
     ownTarget: false,
     ads: ads("today"),
+    purchaseBasis: { kind: "nf", unitCostNf: 40, ipiPercent: 25, stFactor: null, units: 1 },
     ...overrides,
   };
 }
@@ -146,6 +150,8 @@ beforeEach(() => {
       listingTypeId: "gold_special",
       salePrice: Number(body.salePrice),
       blocked: null,
+      // Como o servidor: os insumos voltam, para o navegador refazer a conta.
+      inputs,
       results: prices.map((price) =>
         simulateMarginAtPrice(
           price,
@@ -388,5 +394,61 @@ describe("CalculatorPageClient", () => {
     act(() => reset.click());
     await waitFor(() => assert.match(panel.textContent ?? "", /dentro do mínimo de 2%/));
     assert.ok(buttonByText(panel, "Calcular mínimo"));
+  });
+
+  it("says how much to pay at each price, and redoes the margin with a supplier quote without quoting", async () => {
+    const container = render("MLB1");
+    const panel = visiblePanel(container);
+    assert.ok(panel);
+    await nowStrip(panel);
+    await submit(panel);
+    await waitFor(() => assert.match(panel.textContent ?? "", /A R\$\s?100,00/));
+
+    // A R$ 100 com meta de 2%: 100 − 12 − 10 − 4 (ADS) − 2 = 72 na conta = R$ 57,60 na NF (IPI 25%).
+    const text = () => (panel.textContent ?? "").replace(/\u00a0/g, " ");
+    assert.match(text(), /pague até\s*R\$ 57,60\s*\/un na NF/);
+    assert.match(text(), /custo na conta R\$ 72,00 \(IPI 25%\)/);
+    assert.match(text(), /empate \(0%\) até R\$ 59,20/);
+    assert.match(text(), /cadastro hoje R\$ 40,00/);
+
+    const label = [...panel.querySelectorAll("label")].find(
+      (candidate) => candidate.textContent === "Custo do orçamento",
+    );
+    assert.ok(label, "falta o campo do custo do orçamento");
+    const quote = document.getElementById(label.htmlFor) as HTMLInputElement;
+
+    // O limite exato fecha a meta: após ADS = 2%.
+    type(quote, "57,60");
+    await waitFor(() => assert.match(text(), /dentro do mínimo de 2%/));
+    assert.match(text(), /Na conta: R\$ 72,00 \(IPI 25%\)/);
+    assert.match(text(), /é exatamente o limite/);
+
+    // Acima do limite: R$ 60 na NF = 75 na conta → após ADS −1%.
+    type(quote, "60");
+    await waitFor(() => assert.match(text(), /abaixo do mínimo de 2%/));
+    assert.match(text(), /passa R\$ 2,40 do limite: negocie até R\$ 57,60/);
+    assert.match(text(), /Custo do orçamento \(R\$ 75,00 na conta\)/);
+    assert.equal(count("/simulate"), 1, "o orçamento não pode cotar no ML");
+
+    // O mínimo sai com o custo do orçamento.
+    const compute = buttonByText(panel, "Calcular mínimo");
+    assert.ok(compute);
+    await act(async () => compute.click());
+    await waitFor(() => assert.equal(count("/floor"), 1));
+    const floor = requests.find((request) => request.url.endsWith("/floor"))!;
+    assert.equal((floor.body.inputs as RotinaPricingInputs).productCost, 75);
+
+    // Limpar volta ao custo do cadastro.
+    const clear = buttonByText(panel, "limpar");
+    assert.ok(clear);
+    act(() => clear.click());
+    await waitFor(() => assert.match(text(), /dentro do mínimo de 2%/));
+    assert.doesNotMatch(text(), /negocie até/);
+
+    // Para compra, o TACOS de hoje sugere o de 7 dias.
+    const week = buttonByText(panel, "usar 7 dias");
+    assert.ok(week, "falta a sugestão do TACOS de 7 dias para compra");
+    await act(async () => week.click());
+    await waitFor(() => assert.equal(count("/ads"), 1));
   });
 });
