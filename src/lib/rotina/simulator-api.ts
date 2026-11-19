@@ -33,7 +33,8 @@ export type SimulatorApi = {
   floor(request: FloorRequest): Promise<RotinaTypeFloor>;
 };
 
-async function postJson<T>(url: string, body: unknown, fallbackCode: string): Promise<T> {
+/** POST com JSON; erro da rota vira `Error` com a mensagem para o usuário. */
+export async function postJson<T>(url: string, body: unknown, fallbackCode: string): Promise<T> {
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

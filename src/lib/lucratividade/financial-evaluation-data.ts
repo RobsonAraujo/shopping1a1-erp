@@ -1048,10 +1048,15 @@ async function loadRowContext(
     itemIds,
   );
   const kitContext: KitContext = { pricingBySku, kitsByMlItemId };
+  const taxSource: FinancialTaxSource =
+    companySettings.taxRegime === "SIMPLES"
+      ? { regime: "simples" }
+      : { regime: "report", window: taxFromReport.window };
 
   return {
     taxBySku,
     taxByMlItemId,
+    taxSource,
     kitContext,
     pmaLookup: indexPmaLookup(productsForPma),
     skuFor: (itemId: string) => effectiveSkuByItemId.get(itemId) ?? null,
@@ -1069,6 +1074,14 @@ function sortRowsByProduct(rows: FinancialEvaluationRow[]) {
   });
 }
 
+/**
+ * De onde sai a alíquota das linhas: a única da empresa (Simples) ou o % do
+ * Tributário na janela de 30 dias (`window` nulo = ainda sem totais diários).
+ */
+export type FinancialTaxSource =
+  | { regime: "simples" }
+  | { regime: "report"; window: { from: string; to: string } | null };
+
 /** Fatos da página inteira, emitidos antes das linhas no streaming. */
 export type FinancialEvaluationMeta = {
   /** Anúncios que vão chegar (linhas). */
@@ -1082,6 +1095,8 @@ export type FinancialEvaluationMeta = {
    * corte (`until`) pra composição bater com a linha — em "Hoje" chegam
    * pedidos novos depois do carregamento. */
   ordersFetchedAt?: string;
+  /** De onde veio a alíquota (a Calculadora mostra a janela). */
+  taxSource?: FinancialTaxSource;
 };
 
 export type FinancialEvaluationProgress = {
@@ -1201,6 +1216,7 @@ async function buildRowsForLoadedItems(
     listingCount: operationalItems.length,
     adsAvailable: adsLoad.available,
     adsUnavailableReason: adsLoad.unavailableReason,
+    taxSource: ctx.taxSource,
   });
 
   // Modo streaming: emite uma pré-visualização de TODAS as linhas na hora

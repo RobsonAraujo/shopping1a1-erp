@@ -7,14 +7,14 @@ import { OAuthCta } from "@/components/marketing/OauthCta";
 import {
   DEMO_LISTINGS,
   buildDemoCalculatorData,
-  createDemoSimulatorApi,
+  createDemoCalculatorApi,
 } from "@/lib/rotina/calculator-demo";
 
 /**
  * A Calculadora do painel na landing, com anúncios de exemplo. É a mesma tela
- * (`CalculatorPageClient` no modo `demo`) e a mesma conta de margem; só a taxa
- * e o frete saem de uma tabela simples em vez da cotação no Mercado Livre.
- * Tudo roda no navegador: nenhuma chamada a servidor.
+ * (`CalculatorPageClient` no modo `demo`) e a mesma conta de margem; a
+ * "leitura" do anúncio e a taxa e o frete saem de uma tabela simples em vez do
+ * Mercado Livre. Tudo roda no navegador: nenhuma chamada a servidor.
  */
 export function DemoCalculator({
   isLoggedIn,
@@ -26,7 +26,7 @@ export function DemoCalculator({
   // Montado uma vez: a demonstração não muda enquanto a página está aberta.
   const [demo] = useState(() => ({
     data: buildDemoCalculatorData(),
-    api: createDemoSimulatorApi(),
+    api: createDemoCalculatorApi(),
   }));
 
   return (

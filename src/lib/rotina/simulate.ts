@@ -46,7 +46,7 @@ export class RotinaSimulationNotFoundError extends Error {
   }
 }
 
-type SimulationBlock = "missing_cost" | "missing_tax" | "kit_incomplete" | "incomplete" | null;
+export type SimulationBlock = "missing_cost" | "missing_tax" | "kit_incomplete" | "incomplete" | null;
 
 export type RotinaSimulation = {
   mlItemId: string;
@@ -80,7 +80,13 @@ export type RotinaTypeFloor = {
   floor: RotinaFloorView | null;
 };
 
-type SimulationContext = {
+/**
+ * Tudo o que a conta precisa de um anúncio: o item ao vivo (para cotar taxa e
+ * frete), os insumos (custo, imposto, rebate, ADS) e o preço de hoje. A Central
+ * monta pelo retrato (`loadSimulationContext`); a Calculadora, pela leitura ao
+ * vivo que ela já fez.
+ */
+export type SimulationContext = {
   mlItemId: string;
   item: ItemBody;
   targetPercent: number;
@@ -224,9 +230,23 @@ export async function simulateListingPrices(
     listingTypeId?: SimulatableListingType;
   },
 ): Promise<RotinaSimulation> {
-  const { token, userId } = params;
-
   const ctx = await loadSimulationContext(organizationId, params);
+  return simulateWithContext(ctx, params);
+}
+
+/** A simulação com o contexto já montado (retrato da Central ou leitura da Calculadora). */
+export async function simulateWithContext(
+  ctx: SimulationContext,
+  params: {
+    token: string;
+    userId: number;
+    /** Omitido ou vazio = o preço de hoje. */
+    prices?: number[];
+    /** Outro tipo (Clássico ↔ Premium). Omitido = o tipo de hoje. */
+    listingTypeId?: SimulatableListingType;
+  },
+): Promise<RotinaSimulation> {
+  const { token, userId } = params;
   const salePrice = ctx.listing.salePrice > 0 ? ctx.listing.salePrice : null;
   const prices = resolveSimulationPrices(params.prices, salePrice);
   const currentListingTypeId = ctx.item.listing_type_id ?? null;
@@ -281,8 +301,23 @@ export async function computeSimulationFloor(
     targetPercent?: number;
   },
 ): Promise<RotinaTypeFloor> {
-  const { token, userId } = params;
   const ctx = await loadSimulationContext(organizationId, params);
+  return floorWithContext(ctx, params);
+}
+
+/** O mínimo com o contexto já montado (retrato da Central ou leitura da Calculadora). */
+export async function floorWithContext(
+  ctx: SimulationContext,
+  params: {
+    token: string;
+    userId: number;
+    /** Omitido = o tipo de hoje. */
+    listingTypeId?: SimulatableListingType;
+    /** Omitida = a meta do contexto. */
+    targetPercent?: number;
+  },
+): Promise<RotinaTypeFloor> {
+  const { token, userId } = params;
   const currentListingTypeId = ctx.item.listing_type_id ?? null;
   const listingTypeId = params.listingTypeId ?? currentListingTypeId;
   const targetPercent = params.targetPercent ?? ctx.targetPercent;

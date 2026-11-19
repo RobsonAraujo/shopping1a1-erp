@@ -4,7 +4,7 @@ import {
   DEMO_FREE_SHIPPING_FROM,
   DEMO_LISTINGS,
   buildDemoCalculatorData,
-  createDemoSimulatorApi,
+  createDemoCalculatorApi,
   demoCostsAt,
   demoFixedFee,
   demoFloorView,
@@ -57,29 +57,48 @@ describe("demo calculator", () => {
     assert.ok(classic8 < premium8);
   });
 
-  it("answers the simulator locally, with the panel's margin math", async () => {
-    const api = createDemoSimulatorApi();
-    const simulation = await api.simulate({ mlItemId: kit.mlItemId, prices: [78.9, 80] });
+  it("reads and simulates locally, with the panel's margin math", async () => {
+    const api = createDemoCalculatorApi();
+    const reading = await api.read(kit.mlItemId);
+    assert.equal(reading.price, kit.salePrice);
+    assert.equal(reading.ads.basis, "today");
+    assert.equal(reading.ads.tacosPercent, kit.tacosTodayPercent);
+
+    const simulator = api.simulatorFor(reading, reading.ads);
+    const simulation = await simulator.simulate({ mlItemId: kit.mlItemId, prices: [78.9, 80] });
     assert.equal(simulation.inputsFrom, "demo");
     const [below, above] = simulation.results;
     // O degrau dos R$ 79: acima dele o frete grátis come a margem.
     assert.ok((below.marginAfterAdsPercent ?? 0) > (above.marginAfterAdsPercent ?? 0) + 10);
 
-    const today = await api.simulate({ mlItemId: kit.mlItemId });
-    assert.equal(today.results[0].price, kit.salePrice);
-
-    const floor = await api.floor({ mlItemId: kit.mlItemId, targetPercent: 15 });
+    const floor = await simulator.floor({ mlItemId: kit.mlItemId, targetPercent: 15 });
     assert.equal(floor.targetPercent, 15);
-    assert.equal(floor.floor?.effectivePrice, demoFloorView(kit, "gold_pro", 15).effectivePrice);
+    assert.equal(
+      floor.floor?.effectivePrice,
+      demoFloorView(kit, "gold_pro", 15, kit.tacosTodayPercent).effectivePrice,
+    );
   });
 
-  it("builds calculator rows whose today's numbers and shortcuts match the engine", () => {
+  it("switches to the 7-day TACOS: the after-ADS margin follows it", async () => {
+    const api = createDemoCalculatorApi();
+    const reading = await api.read(kit.mlItemId);
+    const week = await api.ads7d(kit.mlItemId);
+    assert.equal(week.basis, "7d");
+    assert.equal(week.tacosPercent, kit.tacosPercent);
+    const [today] = (await api.simulatorFor(reading, reading.ads).simulate({ mlItemId: kit.mlItemId, prices: [84.9] })).results;
+    const [sevenDays] = (await api.simulatorFor(reading, week).simulate({ mlItemId: kit.mlItemId, prices: [84.9] })).results;
+    assert.equal(today.marginPercent, sevenDays.marginPercent);
+    assert.equal(
+      Math.round(((today.marginAfterAdsPercent ?? 0) - (sevenDays.marginAfterAdsPercent ?? 0)) * 100) / 100,
+      Math.round((kit.tacosPercent - kit.tacosTodayPercent) * 100) / 100,
+    );
+  });
+
+  it("builds the listing directory without numbers: they come from the reading", () => {
     const data = buildDemoCalculatorData();
     assert.equal(data.listings.length, DEMO_LISTINGS.length);
     const row = data.listings.find((listing) => listing.mlItemId === kit.mlItemId)!;
-    assert.equal(row.today?.floorPrice, demoFloorView(kit, "gold_pro", kit.targetPercent).effectivePrice);
-    assert.ok(row.suggestions.some((suggestion) => suggestion.kind === "floor"));
-    const catalog = data.listings.find((listing) => listing.today?.catalogStatus === "losing")!;
-    assert.ok(catalog.suggestions.some((suggestion) => suggestion.label === "Preço p/ ganhar"));
+    assert.equal(row.title, kit.title);
+    assert.equal("today" in row, false);
   });
 });

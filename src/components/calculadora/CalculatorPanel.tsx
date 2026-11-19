@@ -1,206 +1,201 @@
 "use client";
 
-import Link from "next/link";
-import { useState, type Ref } from "react";
-import { ExternalLink, Info } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Ref } from "react";
+import { ExternalLink } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { ListingTypeTag } from "@/components/rotina/ListingTypeTag";
+import {
+  CalculatorNowStrip,
+  CalculatorNowStripSkeleton,
+  taxSourceLabel,
+} from "@/components/calculadora/CalculatorNowStrip";
 import { CalculatorTargetControl } from "@/components/calculadora/CalculatorTargetControl";
 import { RotinaPriceSimulator } from "@/components/rotina/RotinaPriceSimulator";
 import { RotinaThumb } from "@/components/rotina/RotinaThumb";
 import { SegmentTag } from "@/components/rotina/SegmentTag";
-import type { CalculatorListing, CalculatorToday } from "@/lib/rotina/calculator-listings";
-import { formatMoney, formatPercent } from "@/lib/rotina/format";
-import type { SimulatorApi } from "@/lib/rotina/simulator-api";
-import { STATUS_PILL_CLASS } from "@/lib/ui/tone";
-import { cn } from "@/lib/utils";
+import { fetchCalculatorApi, type CalculatorApi } from "@/lib/calculadora/calculator-api";
+import type { CalculatorListing } from "@/lib/calculadora/calculator-listings";
+import {
+  rescoreSimulated,
+  type CalculatorAds,
+  type CalculatorReading,
+  type TacosBasis,
+} from "@/lib/calculadora/reading";
+import { formatWhen } from "@/lib/rotina/format";
+import type { SimulatedPrice } from "@/lib/rotina/simulate-margin";
+import {
+  PROMO_DISCOUNT_SHORTCUTS,
+  buildSimulatorSuggestions,
+} from "@/lib/rotina/simulator-suggestions";
 
-const LINK_CLASS =
-  "font-medium text-[var(--primary)] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] rounded";
+type ReadState =
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | {
+      status: "done";
+      reading: CalculatorReading;
+      /** "Ler de novo" em andamento: a leitura anterior fica na tela. */
+      refreshing: boolean;
+      refreshError: string | null;
+    };
 
-function Stat({
-  label,
-  value,
-  hint,
-  valueClassName,
-}: {
-  label: string;
-  value: string;
-  hint?: string | null;
-  valueClassName?: string;
-}) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
-        {label}
-      </dt>
-      <dd
-        className={cn(
-          "mt-0.5 text-base font-semibold tabular-nums text-[var(--foreground)]",
-          valueClassName,
-        )}
-      >
-        {value}
-      </dd>
-      {hint ? (
-        <dd className="text-[11px] leading-snug text-[var(--muted-foreground)]">{hint}</dd>
-      ) : null}
-    </div>
+type Ads7dState =
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | { status: "done"; ads: CalculatorAds };
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+/** Atalhos de preço de um anúncio lido: ganhar o catálogo, o preço de agora e descontos. */
+function suggestionsFor(reading: CalculatorReading, catalogListing: boolean) {
+  const contested =
+    reading.catalog?.status === "losing" || reading.catalog?.status === "shared";
+  return buildSimulatorSuggestions({
+    priceToWin: contested ? (reading.catalog?.priceToWin ?? null) : null,
+    suggestedPrice: null,
+    // Sem mínimo pronto: ele sai sob demanda. A base do desconto é o preço sem promoção.
+    floor: { effectivePrice: null, discountBase: reading.regularPrice ?? reading.price },
+    salePrice: reading.price,
+    discounts: catalogListing ? undefined : PROMO_DISCOUNT_SHORTCUTS,
+    raise: null,
+  }).map((suggestion) =>
+    suggestion.label === "Preço de hoje" ? { ...suggestion, label: "Preço de agora" } : suggestion,
   );
 }
 
 /**
- * Margem colorida como no simulador: a que decide pela margem escolhida
- * (dentro/abaixo), a outra só fica vermelha se negativa.
- */
-function marginClass(
-  today: CalculatorToday,
-  basis: CalculatorToday["decidingBasis"],
-  value: number | null,
-  targetPercent: number,
-) {
-  if (value === null) return "text-[var(--muted-foreground)]";
-  if (basis === today.decidingBasis) {
-    return value >= targetPercent - 1e-9 ? "text-emerald-800" : "text-rose-700";
-  }
-  return value < 0 ? "text-rose-800" : undefined;
-}
-
-/** O mínimo da rodada vale para a meta da Central; com outra margem, diz isso. */
-function floorHint(today: CalculatorToday, targetPercent: number): string | null {
-  if (today.floorPrice === null) return null;
-  const differs = Math.abs(targetPercent - today.targetPercent) > 1e-9;
-  const parts = [
-    `p/ ${formatPercent(today.targetPercent)}${differs ? ` (${today.ownTarget ? "meta própria" : "meta da Central"})` : ""}`,
-  ];
-  if (!differs && today.ownTarget) parts.push("meta própria");
-  if (today.floorBoundByPma) parts.push("PMA");
-  if (today.floorStale) parts.push("calculado com outra meta");
-  return parts.join(" · ");
-}
-
-const CATALOG_STATUS_TEXT = {
-  losing: { tone: "danger", label: "Perdendo o catálogo" },
-  shared: { tone: "warning", label: "Dividindo o 1º lugar" },
-  winning: { tone: "ok", label: "Ganhando o catálogo" },
-} as const;
-
-/** Faixa "Hoje": o retrato da última atualização — aparece sem chamar o ML. */
-function TodayStrip({
-  today,
-  lastCompleteRunLabel,
-  targetPercent,
-}: {
-  today: CalculatorToday;
-  lastCompleteRunLabel: string | null;
-  /** A margem mínima escolhida na tela (colore a margem que decide). */
-  targetPercent: number;
-}) {
-  const catalog =
-    today.catalogStatus && today.catalogStatus !== "unknown"
-      ? CATALOG_STATUS_TEXT[today.catalogStatus]
-      : null;
-  return (
-    <section
-      aria-label="Hoje"
-      className="border-b border-[var(--border)] bg-[var(--muted)]/30 px-4 py-3 sm:px-5"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-        <p className="text-xs font-semibold text-[var(--foreground)]">
-          Hoje
-          {lastCompleteRunLabel ? (
-            <span className="font-normal text-[var(--muted-foreground)]">
-              {" "}
-              · atualização de {lastCompleteRunLabel}
-            </span>
-          ) : null}
-        </p>
-        {catalog ? (
-          <span
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold",
-              STATUS_PILL_CLASS[catalog.tone].wrap,
-            )}
-          >
-            <span
-              className={cn("size-1.5 rounded-full", STATUS_PILL_CLASS[catalog.tone].dot)}
-              aria-hidden
-            />
-            {catalog.label}
-            {today.priceToWin !== null && today.catalogStatus !== "winning"
-              ? ` · p/ ganhar ${formatMoney(today.priceToWin)}`
-              : ""}
-          </span>
-        ) : null}
-      </div>
-      <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-5">
-        <Stat
-          label="Preço"
-          value={formatMoney(today.price)}
-          hint={today.hasPromotion ? "em promoção" : null}
-        />
-        <Stat
-          label="MC"
-          value={formatPercent(today.marginPercent)}
-          valueClassName={marginClass(today, "contribution", today.marginPercent, targetPercent)}
-        />
-        <Stat
-          label="Após ADS"
-          value={formatPercent(today.marginAfterAdsPercent)}
-          hint={today.marginAfterAdsPercent === null ? "sem ADS" : null}
-          valueClassName={marginClass(
-            today,
-            "afterAds",
-            today.marginAfterAdsPercent,
-            targetPercent,
-          )}
-        />
-        <Stat
-          label="Mínimo"
-          value={today.floorPrice !== null ? formatMoney(today.floorPrice) : "—"}
-          hint={floorHint(today, targetPercent)}
-        />
-        <Stat
-          label="Desc. máx."
-          value={today.maxDiscountPercent !== null ? `${today.maxDiscountPercent}%` : "—"}
-        />
-      </dl>
-      {today.exclusionLabel ? (
-        <p className="mt-2 text-xs text-[var(--muted-foreground)]">
-          {today.exclusionLabel}: a margem não sai.{" "}
-          <Link href="/dashboard/produtos" className={LINK_CLASS}>
-            Completar em Meus produtos
-          </Link>
-        </p>
-      ) : null}
-    </section>
-  );
-}
-
-/**
- * A calculadora de um anúncio: cabeçalho, faixa "Hoje" e o simulador da
- * Central. Nada aqui chama o ML ao abrir — só quando o usuário simula.
+ * A calculadora de um anúncio: cabeçalho, faixa "Agora" e o simulador. Ao
+ * abrir, lê o anúncio no ML (preço, taxa e frete, custo, imposto e TACOS de
+ * hoje) — uma vez: o `<Activity>` guarda a leitura enquanto o anúncio fica
+ * entre os recentes. O TACOS de 7 dias só é lido quando o usuário pede.
  */
 export function CalculatorPanel({
   listing,
   timeZone,
-  lastCompleteRunLabel,
+  basis,
+  onBasisChange,
   priceInputRef,
-  api,
+  api = fetchCalculatorApi,
   demo = false,
 }: {
   listing: CalculatorListing;
   timeZone: string;
-  lastCompleteRunLabel: string | null;
+  /** Base do TACOS escolhida na página (vale para todos os anúncios abertos). */
+  basis: TacosBasis;
+  onBasisChange: (basis: TacosBasis) => void;
   priceInputRef?: Ref<HTMLInputElement>;
-  /** Simulações locais (demonstração da landing); padrão: as rotas do painel. */
-  api?: SimulatorApi;
+  /** Leitura e simulações locais (demonstração da landing); padrão: as rotas. */
+  api?: CalculatorApi;
   /** Demonstração: sem link para o anúncio no ML e título como h3 (a seção já tem h2). */
   demo?: boolean;
 }) {
+  const { mlItemId } = listing;
+  const [state, setState] = useState<ReadState>({ status: "loading" });
+  const [ads7d, setAds7d] = useState<Ads7dState | null>(null);
+  /** Margem mínima escolhida na tela; `null` = a meta que vale. */
+  const [chosenTarget, setChosenTarget] = useState<number | null>(null);
+  // O <Activity> refaz os efeitos ao reaparecer: as leituras só rodam uma vez.
+  const readStarted = useRef(false);
+  const ads7dStarted = useRef(false);
+
+  // O estado só muda na resposta (`.then`), nunca na hora: dá para disparar de um efeito.
+  const read = useCallback(() => {
+    api.read(mlItemId).then(
+      (reading) => setState({ status: "done", reading, refreshing: false, refreshError: null }),
+      (e: unknown) => {
+        const message = errorMessage(e, "Não foi possível ler o anúncio agora.");
+        setState((current) =>
+          current.status === "done"
+            ? { ...current, refreshing: false, refreshError: message }
+            : { status: "error", message },
+        );
+      },
+    );
+  }, [api, mlItemId]);
+
+  const readAds7d = useCallback(() => {
+    api.ads7d(mlItemId).then(
+      (ads) => setAds7d({ status: "done", ads }),
+      (e: unknown) =>
+        setAds7d({
+          status: "error",
+          message: errorMessage(e, "Não foi possível ler o TACOS de 7 dias agora."),
+        }),
+    );
+  }, [api, mlItemId]);
+
+  useEffect(() => {
+    if (readStarted.current) return;
+    readStarted.current = true;
+    read();
+  }, [read]);
+
+  // "7 dias" escolhido (aqui ou em outro anúncio aberto): lê uma vez.
+  useEffect(() => {
+    if (basis !== "7d" || ads7dStarted.current) return;
+    ads7dStarted.current = true;
+    readAds7d();
+  }, [basis, readAds7d]);
+
+  function retryRead() {
+    setState({ status: "loading" });
+    read();
+  }
+
+  function refresh() {
+    setState((current) =>
+      current.status === "done"
+        ? { ...current, refreshing: true, refreshError: null }
+        : { status: "loading" },
+    );
+    read();
+    if (basis === "7d") {
+      setAds7d({ status: "loading" });
+      readAds7d();
+    } else {
+      // A próxima troca para 7 dias lê de novo, casando com a leitura nova.
+      setAds7d(null);
+      ads7dStarted.current = false;
+    }
+  }
+
+  function retryAds7d() {
+    setAds7d({ status: "loading" });
+    readAds7d();
+  }
+
+  const reading = state.status === "done" ? state.reading : null;
+  const ready7d = ads7d?.status === "done" ? ads7d.ads : null;
+  // A conta só troca para 7 dias quando ele chega: o rótulo sempre casa com o número.
+  const ads: CalculatorAds | null = reading
+    ? basis === "7d" && ready7d
+      ? ready7d
+      : reading.ads
+    : null;
+  const loading7d = basis === "7d" && (ads7d === null || ads7d.status === "loading");
+  const error7d = basis === "7d" && ads7d?.status === "error" ? ads7d.message : null;
+  const targetPercent = chosenTarget ?? reading?.targetPercent ?? 0;
+
+  const simulatorApi = useMemo(
+    () => (reading && ads ? api.simulatorFor(reading, ads) : null),
+    [api, reading, ads],
+  );
+  const rescore = useCallback(
+    (result: SimulatedPrice) =>
+      reading && ads ? rescoreSimulated(result, reading, ads, targetPercent) : result,
+    [reading, ads, targetPercent],
+  );
+  const suggestions = useMemo(
+    () => (reading ? suggestionsFor(reading, listing.catalogListing) : []),
+    [reading, listing.catalogListing],
+  );
+
   const paused = listing.mlStatus !== null && listing.mlStatus !== "active";
-  // Cada calculadora guarda a sua margem enquanto fica viva (recentes).
-  const [targetPercent, setTargetPercent] = useState(listing.targetPercent);
   const Heading = demo ? "h3" : "h2";
+  const taxLabel = reading ? taxSourceLabel(reading) : null;
+
   return (
     <article
       aria-label={`Calculadora: ${listing.title}`}
@@ -214,10 +209,10 @@ export function CalculatorPanel({
           </Heading>
           <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
             <SegmentTag segment={listing.catalogListing ? "catalog" : "own"} />
-            <ListingTypeTag listingTypeId={listing.listingTypeId} />
+            <ListingTypeTag listingTypeId={reading?.listingTypeId ?? null} />
             <span className="tabular-nums">
               {listing.sku ? `${listing.sku} · ` : ""}
-              {listing.mlItemId}
+              {mlItemId}
               {paused ? " · pausado" : ""}
             </span>
           </p>
@@ -235,47 +230,67 @@ export function CalculatorPanel({
         )}
       </header>
 
-      {listing.today ? (
-        <TodayStrip
-          today={listing.today}
-          lastCompleteRunLabel={lastCompleteRunLabel}
-          targetPercent={targetPercent}
-        />
-      ) : (
-        <p className="flex gap-2 border-b border-[var(--border)] bg-[var(--muted)]/30 px-4 py-3 text-xs leading-relaxed text-[var(--muted-foreground)] sm:px-5">
-          <Info className="mt-0.5 size-3.5 shrink-0 opacity-70" aria-hidden />
-          <span>
-            Este anúncio ainda não passou pelo Atualizar da{" "}
-            <Link href="/dashboard/central-anuncios" className={LINK_CLASS}>
-              Central de anúncios
-            </Link>
-            : sem atalhos de preço, e a conta lê custo, imposto e ADS na hora (leva alguns
-            segundos).
-          </span>
-        </p>
-      )}
+      {state.status === "loading" ? <CalculatorNowStripSkeleton /> : null}
 
-      <div className="px-4 pb-4 sm:px-5 sm:pb-5">
-        <RotinaPriceSimulator
-          mlItemId={listing.mlItemId}
-          listingTypeId={listing.listingTypeId}
-          suggestions={listing.suggestions}
-          defaultPrice={listing.defaultPrice}
+      {state.status === "error" ? (
+        <div className="flex flex-wrap items-center gap-3 border-b border-[var(--border)] bg-[var(--muted)]/30 px-4 py-3 text-xs sm:px-5">
+          <span className="text-rose-700">{state.message}</span>
+          <Button type="button" size="sm" variant="outline" onClick={retryRead}>
+            Tentar de novo
+          </Button>
+        </div>
+      ) : null}
+
+      {state.status === "done" && reading && ads ? (
+        <CalculatorNowStrip
+          reading={reading}
+          ads={ads}
+          basis={basis}
+          loading7d={loading7d}
+          error7d={error7d}
+          onBasisChange={onBasisChange}
+          onRetry7d={retryAds7d}
+          targetPercent={targetPercent}
           timeZone={timeZone}
-          autoRun={false}
-          priceInputRef={priceInputRef}
-          api={api}
-          target={{ percent: targetPercent, saved: listing.targetPercent }}
-          controls={
-            <CalculatorTargetControl
-              value={targetPercent}
-              saved={listing.targetPercent}
-              ownTarget={listing.ownTarget}
-              onChange={setTargetPercent}
-            />
-          }
+          refreshing={state.refreshing}
+          refreshError={state.refreshError}
+          onRefresh={refresh}
         />
-      </div>
+      ) : null}
+
+      {reading && ads && simulatorApi && !reading.blocked ? (
+        <div className="px-4 pb-4 sm:px-5 sm:pb-5">
+          <RotinaPriceSimulator
+            mlItemId={mlItemId}
+            listingTypeId={reading.listingTypeId}
+            suggestions={suggestions}
+            defaultPrice={reading.price > 0 ? reading.price : null}
+            timeZone={timeZone}
+            autoRun={false}
+            priceInputRef={priceInputRef}
+            api={simulatorApi}
+            target={{ percent: targetPercent, saved: reading.targetPercent }}
+            rescore={rescore}
+            floorScope={`${ads.basis}|${reading.readAt}`}
+            refreshFloor={false}
+            inputsNote={
+              <>
+                Custo, imposto{taxLabel ? ` (${taxLabel})` : ""} e ADS (TACOS{" "}
+                {ads.basis === "today" ? "de hoje" : "de 7 dias"}) lidos{" "}
+                {formatWhen(reading.readAt, new Date(), timeZone)}.
+              </>
+            }
+            controls={
+              <CalculatorTargetControl
+                value={targetPercent}
+                saved={reading.targetPercent}
+                ownTarget={reading.ownTarget}
+                onChange={setChosenTarget}
+              />
+            }
+          />
+        </div>
+      ) : null}
     </article>
   );
 }

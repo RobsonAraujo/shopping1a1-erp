@@ -119,15 +119,43 @@ Invariante herdado da Home: **consulta que falha não vira problema**.
 
 ## Calculadora (Financeiro)
 
-Página `/dashboard/calculadora` (menu Financeiro, depois de Lucratividade): todos os anúncios à mão, para testar qualquer preço fora de uma tarefa. É o mesmo simulador, em tela cheia.
+Página `/dashboard/calculadora` (menu Financeiro, depois de Lucratividade): todos os anúncios à mão, para testar qualquer preço fora de uma tarefa. Usa o mesmo simulador da Central, mas **não depende do retrato da Central**: cada anúncio é lido agora no ML quando o usuário o abre. O código fica em `src/lib/calculadora/`.
 
-- **Fonte**: `loadCalculatorListings` (`calculator-listings-data.ts`) reaproveita `loadRotinaView` (os mesmos números da aba Anúncios) e soma os `Listing` ativos ainda sem leitura da Central. O navegador recebe uma linha **compacta** (`toCalculatorListings`, puro), não o `RotinaListingRow` inteiro.
-- **Sem leitura** (anúncio novo desde o último Atualizar): sem atalhos nem faixa "Hoje"; o botão "Calcular no preço de hoje" chama a rota sem `prices`, que monta a linha da Lucratividade na hora (mais lento).
-- **Custo baixo**: abrir a página e escolher anúncio não chamam o ML. O simulador roda com `autoRun={false}` e a faixa "Hoje" sai do retrato. As últimas 5 calculadoras ficam montadas com `<Activity>`: voltar a uma delas não recota.
-- **Margem mínima que eu aceito**: abre na meta que vale (a própria ou a do segmento) e o usuário mexe à vontade. Não grava nada. O veredito muda no navegador (`withTarget`), sem cotação. O "Mínimo" da rodada só vale para a meta salva: com outra margem, o mínimo sai sob demanda ("Calcular mínimo p/ X%", rota `floor` com `targetPercent`).
+- **Lista** (`calculator-listings-data.ts`): só banco, nenhuma chamada ao ML. É um diretório (título, SKU, imagem, segmento), ordenado por título.
+  - Junta os `Listing` ativos com os anúncios que a Central já leu (`ListingHealth`, só os campos de exibição), porque o `Listing` é preenchido por fluxos avulsos e pode não ter todos.
+  - Nenhum número sai do retrato.
+- **Leitura ao vivo** (`live-read.ts`, rota `POST /api/calculadora/read`): roda ao abrir o anúncio (clique ou Enter; ↑/↓ na lista não lê).
+  - É a mesma linha da Lucratividade em "Simulação · preço de hoje" (`loadFinancialEvaluationRowsForItems`): preço com promoção, taxa e frete cotados, rebate, custo do cadastro, imposto de 30 dias.
+  - Acrescenta o `price_to_win` no catálogo e a meta (configuração da Central, não retrato).
+  - A faixa **"Agora · lido às HH:MM · Ler de novo"** mostra preço, MC, após ADS, TACOS e imposto, cada um com a sua janela.
+  - O imposto mostra "30 dias · até dd/mm" (`taxSource` no `onMeta` da linha) ou "alíquota do Simples".
+- **TACOS: hoje ou 7 dias**. O padrão é o de **hoje** (`getProductAdsDateRange(1)`), lido junto com o anúncio.
+  - "7 dias" (`POST /api/calculadora/ads`) é lido só quando o usuário escolhe. É a mesma janela da Lucratividade e da Central, contando hoje.
+  - A escolha vale para os próximos anúncios da visita; cada visita começa em "Hoje".
+  - Enquanto o de 7 dias não chega, a conta continua no de hoje, para o rótulo sempre casar com o número.
+  - Gasto de hoje sem venda: o TACOS não sai, a conta decide pela MC e a faixa oferece "Usar o TACOS de 7 dias".
+- **Trocar a base não cota nada**. Cada preço simulado traz a taxa e o frete cotados, e `rescoreSimulated` (`reading.ts`) refaz `simulateMarginAtPrice` no navegador com o outro TACOS.
+  - No simulador isso entra pela prop `rescore`. O mínimo calculado é guardado por base e por leitura (`floorScope`).
+- **Simular** (`POST /api/calculadora/simulate`, `/floor`): o navegador devolve os insumos da leitura, então cada preço só cota taxa e frete (item + 2 chamadas).
+  - O servidor confere que o anúncio é da loja e monta o contexto para `simulateWithContext` / `floorWithContext`, a mesma conta da Central.
+  - Os insumos só calculam um número que volta para o mesmo usuário; nada é gravado.
+- **Mínimo**: não há mínimo pronto (`refreshFloor={false}`). Ele sai sempre no botão "Calcular mínimo" (~20–40 cotações), com o PMA e o desconto máximo de promoção.
+- **Margem mínima que eu aceito**: abre na meta que vale (a própria ou a do segmento) e o usuário mexe à vontade, sem gravar nada. O veredito muda no navegador (`withTarget`), sem cotação.
+- **Custo no ML**:
+  - abrir um anúncio custa ~6–7 chamadas e 1–3 s (+1 no catálogo);
+  - "7 dias" custa +1–2;
+  - cada preço custa 3.
+  - As últimas 5 calculadoras ficam montadas com `<Activity>`: voltar a uma delas não lê nem cota de novo.
 - **Busca** (`calculator-search.ts`): por palavras em qualquer ordem, sem acento, MLB de qualquer jeito (`MLB123`, `mlb-123`, `123`), SKU/MLB exato no topo. ↑/↓ e Enter na lista; `/` volta à busca.
-- **URL**: `?anuncio=MLB…` guarda o anúncio aberto, via `pushState`/`replaceState` (sem refazer o servidor). Entrar na calculadora empilha (o voltar do celular volta à lista); trocar de anúncio substitui. Recentes no `localStorage` do navegador.
-- **Landing** (`#calculadora`): `DemoCalculator` usa a mesma tela no modo `demo` (seleção local, nada gravado, sem atalhos globais) com `calculator-demo.ts`: anúncios de exemplo, a mesma conta de margem (`simulateMarginAtPrice`) e uma tabela simples de taxa e frete (12%/17%, custo fixo abaixo de R$ 79, frete grátis a partir de R$ 79), com o mínimo achado por faixa. Nada sai do navegador. A página `/margem-de-contribuicao-mercado-livre` segue com a calculadora de números digitados (`MarginCalculator`).
+- **URL**: `?anuncio=MLB…` guarda o anúncio aberto, via `pushState`/`replaceState` (sem refazer o servidor).
+  - Entrar na calculadora empilha (o voltar do celular volta à lista); trocar de anúncio substitui.
+  - Os recentes ficam no `localStorage` do navegador.
+  - O detalhe do anúncio na Lucratividade tem "Abrir na Calculadora".
+- **Landing** (`#calculadora`): `DemoCalculator` usa a mesma tela no modo `demo` com `createDemoCalculatorApi` (`calculator-demo.ts`). Tudo roda no navegador:
+  - a leitura é local, com TACOS de hoje e de 7 dias de exemplo;
+  - a conta de margem é a mesma (`simulateMarginAtPrice`);
+  - a taxa e o frete saem de uma tabela simples (12%/17%, custo fixo abaixo de R$ 79, frete grátis a partir de R$ 79).
+  - A página `/margem-de-contribuicao-mercado-livre` segue com a calculadora de números digitados (`MarginCalculator`).
 
 ## Rodada (`refresh.ts`)
 

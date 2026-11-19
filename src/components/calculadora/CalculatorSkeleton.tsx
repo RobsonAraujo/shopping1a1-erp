@@ -21,7 +21,6 @@ export function CalculatorSkeleton() {
                 <Skeleton className="h-3.5 w-4/5" />
                 <Skeleton className="h-3 w-2/5" />
               </div>
-              <Skeleton className="h-4 w-14" />
             </div>
           ))}
         </div>

@@ -28,6 +28,14 @@ const API_ERROR_MESSAGES: Record<string, string> = {
     "Não foi possível consultar taxa e frete no Mercado Livre agora. Tente de novo.",
   rotina_simulate_floor_failed:
     "Não foi possível calcular o mínimo no outro tipo agora. Tente de novo.",
+  calculator_listing_not_found: "Este anúncio não está mais na sua loja. Atualize a página.",
+  calculator_listing_inactive:
+    "Este anúncio não está ativo nem pausado no Mercado Livre: não há preço de agora para calcular.",
+  calculator_read_failed: "Não foi possível ler o anúncio no Mercado Livre agora. Tente de novo.",
+  calculator_ads_failed: "Não foi possível ler o TACOS de 7 dias agora. Tente de novo.",
+  calculator_simulate_failed:
+    "Não foi possível consultar taxa e frete no Mercado Livre agora. Tente de novo.",
+  calculator_floor_failed: "Não foi possível calcular o mínimo agora. Tente de novo.",
   dre_load_failed: "Não foi possível carregar o DRE. Tente novamente.",
   dre_sync_failed: "Não foi possível sincronizar o mês com o Mercado Livre.",
   dre_cost_value_failed: "Não foi possível salvar o valor do custo fixo.",
