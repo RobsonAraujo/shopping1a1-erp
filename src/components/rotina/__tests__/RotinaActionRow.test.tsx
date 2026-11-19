@@ -6,6 +6,8 @@ import {
   RotinaActionRow,
   type RotinaActionHandlers,
 } from "@/components/rotina/RotinaActionRow";
+import { formatPercent } from "@/lib/rotina/format";
+import { simulateMarginAtPrice } from "@/lib/rotina/simulate-margin";
 import { buildRotinaView } from "@/lib/rotina/view";
 import {
   NOW,
@@ -55,6 +57,21 @@ function render(action: ReturnType<typeof viewWith>["actions"][number], h = hand
 /** `Intl` usa espaço não separável depois do "R$". */
 function text(container: HTMLElement): string {
   return (container.textContent ?? "").replace(/ /g, " ");
+}
+
+/** O ADS de hoje que a rota `/api/rotina/simulate/ads` devolve. */
+function todayAds(overrides: Record<string, unknown> = {}) {
+  return {
+    basis: "today",
+    from: "2026-11-10",
+    to: "2026-11-10",
+    available: true,
+    tacosPercent: 9,
+    adsCost: 18,
+    adsUnitsSold: 2,
+    status: "active",
+    ...overrides,
+  };
 }
 
 let cleanup: (() => void) | null = null;
@@ -219,7 +236,8 @@ describe("RotinaActionRow", () => {
       [catalogLive({ mlItemId: "CAT1", priceToWin: 94.9 })],
     );
     const action = view.actions.find((candidate) => candidate.rule === "catalog_losing")!;
-    const fetchMock = mock.method(globalThis, "fetch", async (_input: unknown, init?: RequestInit) => {
+    const fetchMock = mock.method(globalThis, "fetch", async (input: unknown, init?: RequestInit) => {
+      if (String(input).endsWith("/simulate/ads")) return Response.json(todayAds());
       const body = JSON.parse(String(init?.body)) as { prices: number[] };
       return Response.json({
         mlItemId: "CAT1",
@@ -264,9 +282,55 @@ describe("RotinaActionRow", () => {
       assert.match(text(rendered.container), /A R\$ 94,90:\s*Após ADS\s*3,2%/);
     });
     assert.match(text(rendered.container), /dentro do mínimo de 2%/);
-    assert.equal(fetchMock.mock.callCount(), 1);
-    const sent = JSON.parse(String(fetchMock.mock.calls[0].arguments[1]?.body));
-    assert.deepEqual(sent, { mlItemId: "CAT1", prices: [94.9] });
+    const calls = fetchMock.mock.calls.map((call) => ({
+      url: String(call.arguments[0]),
+      body: JSON.parse(String(call.arguments[1]?.body)),
+    }));
+    // Fora de "Ajustar margem"/"Revisar ADS", o simular abre no TACOS de hoje.
+    assert.deepEqual(
+      calls.filter((call) => call.url.endsWith("/simulate/ads")).map((call) => call.body),
+      [{ mlItemId: "CAT1", basis: "today" }],
+    );
+    assert.deepEqual(
+      calls.filter((call) => call.url.endsWith("/api/rotina/simulate")).map((call) => call.body),
+      [{ mlItemId: "CAT1", prices: [94.9] }],
+    );
+  });
+});
+
+describe("RotinaActionRow: TACOS no card de Ajustar margem", () => {
+  function marginCard(overrides: Parameters<typeof listing>[0]) {
+    const view = viewWith([
+      { mlItemId: "OWN5", imageUrl: null, marginPercent: 4, marginAfterAdsPercent: 1, ...overrides },
+    ]);
+    const action = view.actions.find((candidate) => candidate.rule === "margin_below_min");
+    assert.ok(action, "falta a tarefa de margem");
+    const rendered = render(action);
+    cleanup = rendered.unmount;
+    const facts = rendered.container.querySelector('[aria-label="Contexto do anúncio"]');
+    return text((facts as HTMLElement | null) ?? rendered.container);
+  }
+
+  it("shows the 7-day TACOS and its target when the listing runs ADS", () => {
+    assert.match(marginCard({ tacosPercent: 3, adsStatus: "active" }), /TACOS 7d\s*3%\s*· meta 10%/);
+  });
+
+  it("says when the listing has no ADS, so the margin has no ADS deduction", () => {
+    assert.match(marginCard({ tacosPercent: 0, adsCost: 0, adsStatus: "idle" }), /TACOS 7d\s*sem ADS/);
+  });
+
+  it("says when the ADS spent without selling in the 7 days", () => {
+    assert.match(
+      marginCard({ tacosPercent: null, adsCost: 21, adsStatus: "active", marginAfterAdsPercent: null, marginPercent: 1 }),
+      /TACOS 7d\s*—\s*· R\$ 21,00 gastos sem venda/,
+    );
+  });
+
+  it("says when Product Ads did not answer in the refresh", () => {
+    assert.match(
+      marginCard({ adsAvailable: false, tacosPercent: null, adsStatus: null, marginAfterAdsPercent: null, marginPercent: 1 }),
+      /TACOS 7d\s*indisponível/,
+    );
   });
 });
 
@@ -288,6 +352,7 @@ describe("RotinaActionRow: Clássico ↔ Premium", () => {
     const action = view.actions.find((candidate) => candidate.rule === "catalog_losing")!;
     const fetchMock = mock.method(globalThis, "fetch", async (input: unknown, init?: RequestInit) => {
       const url = String(input);
+      if (url.endsWith("/simulate/ads")) return Response.json(todayAds());
       const body = JSON.parse(String(init?.body)) as {
         prices?: number[];
         listingTypeId?: string;
@@ -358,8 +423,14 @@ describe("RotinaActionRow: Clássico ↔ Premium", () => {
     await waitFor(() => {
       assert.match(text(rendered.container), /A R\$ 94,90:\s*Após ADS\s*3,2%/);
     });
-    // No tipo de hoje vale o mínimo da rodada.
-    assert.match(text(rendered.container), /Mínimo\s*R\$ 91,20/);
+    // No TACOS de 7 dias (o da rodada) e no tipo de hoje vale o mínimo da rodada.
+    const sevenDays = [...rendered.container.querySelectorAll("button")].find(
+      (button) => button.textContent === "7 dias",
+    )!;
+    await act(async () => {
+      sevenDays.click();
+    });
+    await waitFor(() => assert.match(text(rendered.container), /Mínimo\s*R\$ 91,20/));
 
     const premiumTab = [...rendered.container.querySelectorAll('[role="tab"]')].find((tab) =>
       tab.textContent?.includes("Premium"),
@@ -407,5 +478,136 @@ describe("RotinaActionRow: Clássico ↔ Premium", () => {
     cleanup = rendered.unmount;
     const content = text(rendered.container);
     assert.doesNotMatch(content, /Clássico|Premium/);
+  });
+});
+
+describe("RotinaActionRow: TACOS de hoje ou 7 dias no Simular", () => {
+  const inputs = {
+    productCost: 60,
+    extraCosts: 0,
+    taxRatePercent: 10,
+    mlFeeRebate: null,
+    listingTypeId: "gold_special",
+    listingTypeLabel: "Clássico",
+    adsMetricsAvailable: true,
+    tacosPercent: 3,
+    adsCost: 21,
+    adsUnitsSold: 7,
+  };
+  const costsAt = (price: number) => ({ mlFeeAmount: Math.round(price * 12) / 100, shippingCost: 0 });
+
+  it("opens Ajustar margem on the 7-day TACOS, switches to today without quoting and finds the minimum with it", async () => {
+    const view = viewWith([
+      {
+        mlItemId: "OWN9",
+        imageUrl: null,
+        marginPercent: 4,
+        marginAfterAdsPercent: 1,
+        floorAfterAdsPrice: 110,
+        floorMcPrice: 105,
+      },
+    ]);
+    const action = view.actions.find((candidate) => candidate.rule === "margin_below_min")!;
+    assert.ok(action, "falta a tarefa de margem");
+    const fetchMock = mock.method(globalThis, "fetch", async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      const body = JSON.parse(String(init?.body)) as { prices?: number[] };
+      if (url.endsWith("/simulate/ads")) return Response.json(todayAds({ tacosPercent: 9 }));
+      if (url.endsWith("/simulate/floor")) {
+        return Response.json({
+          mlItemId: "OWN9",
+          listingTypeId: "gold_special",
+          targetPercent: 2,
+          blocked: null,
+          floor: {
+            targetPercent: 2,
+            stale: false,
+            mcPrice: 105,
+            afterAdsPrice: 125,
+            afterAdsMissing: null,
+            marginFloor: 125,
+            pmaPrice: null,
+            effectivePrice: 125,
+            boundBy: "margin",
+            discountBase: 120,
+            maxDiscountPercent: null,
+            bands: [],
+            reason: "ok",
+            refined: true,
+          },
+        });
+      }
+      return Response.json({
+        mlItemId: "OWN9",
+        targetPercent: 2,
+        inputsFrom: "refresh",
+        inputsAt: "2026-11-10T09:00:00.000Z",
+        feeRebate: null,
+        currentListingTypeId: "gold_special",
+        listingTypeId: "gold_special",
+        salePrice: 100,
+        blocked: null,
+        inputs,
+        results: body.prices!.map((price) => simulateMarginAtPrice(price, costsAt(price), inputs, 2)),
+      });
+    });
+    const callsTo = (suffix: string) =>
+      fetchMock.mock.calls
+        .filter((call) => String(call.arguments[0]).endsWith(suffix))
+        .map((call) => JSON.parse(String(call.arguments[1]?.body)));
+
+    const rendered = render(action);
+    cleanup = rendered.unmount;
+    const simulateButton = [...rendered.container.querySelectorAll("button")].find((button) =>
+      button.textContent?.startsWith("Simular"),
+    )!;
+    await act(async () => {
+      simulateButton.click();
+    });
+    await waitFor(() => assert.match(text(rendered.container), /A R\$ 110,00:/));
+    const week = simulateMarginAtPrice(110, costsAt(110), inputs, 2);
+    const today = simulateMarginAtPrice(110, costsAt(110), { ...inputs, tacosPercent: 9, adsCost: 18, adsUnitsSold: 2 }, 2);
+    // Abre no TACOS de 7 dias: o da tarefa, sem chamada a mais, e vale o Mínimo da rodada.
+    assert.match(text(rendered.container), new RegExp(`Após ADS\\s*${formatPercent(week.marginAfterAdsPercent).replace(".", "\\.")}`));
+    assert.match(text(rendered.container), /Mínimo\s*R\$ 110,00/);
+    assert.match(text(rendered.container), /últimos 7 dias, da atualização/);
+    assert.deepEqual(callsTo("/simulate/ads"), []);
+
+    const todayButton = [...rendered.container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Hoje",
+    )!;
+    await act(async () => {
+      todayButton.click();
+    });
+    await waitFor(() =>
+      assert.match(
+        text(rendered.container),
+        new RegExp(`Após ADS\\s*${formatPercent(today.marginAfterAdsPercent).replace(".", "\\.")}`),
+      ),
+    );
+    assert.deepEqual(callsTo("/simulate/ads"), [{ mlItemId: "OWN9", basis: "today" }]);
+    assert.equal(callsTo("/api/rotina/simulate").length, 1, "trocar a base não pode cotar no ML");
+    assert.match(text(rendered.container), /TACOS de hoje lido às/);
+    // O Mínimo da rodada é de 7 dias: no de hoje ele sai sob demanda.
+    assert.doesNotMatch(text(rendered.container), /Mínimo\s*R\$ 110,00/);
+    const compute = [...rendered.container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Calcular mínimo",
+    )!;
+    assert.ok(compute, "falta o Calcular mínimo no TACOS de hoje");
+    await act(async () => {
+      compute.click();
+    });
+    await waitFor(() => assert.match(text(rendered.container), /Mínimo\s*R\$ 125,00/));
+    assert.deepEqual(callsTo("/simulate/floor"), [{ mlItemId: "OWN9", tacosBasis: "today" }]);
+
+    const weekButton = [...rendered.container.querySelectorAll("button")].find(
+      (button) => button.textContent === "7 dias",
+    )!;
+    await act(async () => {
+      weekButton.click();
+    });
+    await waitFor(() => assert.match(text(rendered.container), /Mínimo\s*R\$ 110,00/));
+    assert.equal(callsTo("/simulate/ads").length, 1, "voltar para 7 dias não lê nada");
+    assert.equal(callsTo("/api/rotina/simulate").length, 1);
   });
 });

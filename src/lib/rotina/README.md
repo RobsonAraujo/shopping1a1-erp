@@ -47,7 +47,7 @@ A página **só lê o banco**: abrir não chama o ML. As regras são avaliadas *
 | `catalog_takeover` | Próp. | evento | catálogo **novo** ligado a um próprio |
 | `margin_below_min` | Ambos | condição | margem **após ADS** < mínimo (MC se o ADS não serve) |
 | `below_pma` | Ambos | condição | preço < PMA |
-| `tacos_above` | Próp. | condição | ADS ativo e TACOS 7d > meta, ou gasto sem venda |
+| `tacos_above` | Próp. | condição | ADS ativo e TACOS 7d > meta, ou gasto sem venda (sempre os 7 dias da rodada; o de hoje só no Simular) |
 | `catalog_shared` | Cat. | condição | `catalogStatus = shared` |
 | `catalog_raise_price` | Cat. | condição | `catalogStatus = winning`, concorrentes lidos há ≤ 3h e teto estimado ≥ preço de hoje + alta mínima (ou nenhum outro vendedor no produto) |
 | `ads_missing` | Próp. | condição | `adsStatus` ≠ `active` (usa `adsStatus`, não `hasActiveAds`, que conta pausado como ativo) |
@@ -103,6 +103,20 @@ Invariante herdado da Home: **consulta que falha não vira problema**.
 - Atalhos (`buildSimulatorSuggestions`, `simulatorSetupForListing`) ficam em `simulator-suggestions.ts`, puro: a Central monta no navegador, a Calculadora no servidor.
 - As chamadas passam por `SimulatorApi` (`simulator-api.ts`): o padrão são as rotas; a demonstração da landing injeta uma versão local.
 
+### TACOS de hoje ou 7 dias
+
+As **tarefas, os números do card e o Mínimo da rodada usam sempre o TACOS dos últimos 7 dias**, lido no Atualizar. Os grupos que dependem dele ("Ajustar margem" e "Revisar ADS", `TACOS_RULES` em `rule-registry.ts`) avisam isso, em cinza, quando abertos. Na aba Anúncios, a coluna diz "TACOS 7d".
+
+O TACOS de hoje entra só no **Simular**, para calcular preço (`RotinaTacosSimulator`), com o seletor "TACOS de Hoje | 7 dias":
+- **Base inicial**: "Ajustar margem" e "Revisar ADS" abrem em 7 dias, batendo com a tarefa e o Mínimo do card. As outras seções e a aba Anúncios abrem em Hoje, como a Calculadora. A escolha vale para aquele simulador.
+- **7 dias**: o retrato do Atualizar, sem chamada a mais; vale o "Mínimo" da rodada.
+- **Hoje**: lê o ADS de hoje uma vez (`POST /api/rotina/simulate/ads`, +1–2 chamadas).
+  - Enquanto lê, a conta continua nos 7 dias, para o rótulo casar com o número.
+  - Gasto de hoje sem venda: o TACOS não sai, a conta decide pela MC e o card oferece "Usar o TACOS de 7 dias".
+- **Trocar não cota nada**. A resposta do simulador traz os insumos (`RotinaSimulation.inputs`). A prop `adsOverride` refaz os preços já cotados com `rescoreWithInputs` (`src/lib/pricing/tacos-basis.ts`), mantendo a taxa e o frete.
+- **Mínimo no TACOS de hoje**: o da rodada (7 dias) some e entra "Calcular mínimo". A rota `floor` recebe `tacosBasis: "today"`, lê o ADS de hoje e faz a mesma busca (`contextWithAds` + `floorWithContext`).
+- A Calculadora usa o mesmo seletor (`TacosBasisToggle`), a mesma conta e a mesma `adsOverride`.
+
 ### Clássico ↔ Premium
 
 - Seletor **Tipo do anúncio** na calculadora, só para `gold_special`/`gold_pro`. O tipo de hoje vem do item ao vivo e leva o selo "atual".
@@ -134,8 +148,8 @@ Página `/dashboard/calculadora` (menu Financeiro, depois de Lucratividade): tod
   - A escolha vale para os próximos anúncios da visita; cada visita começa em "Hoje".
   - Enquanto o de 7 dias não chega, a conta continua no de hoje, para o rótulo sempre casar com o número.
   - Gasto de hoje sem venda: o TACOS não sai, a conta decide pela MC e a faixa oferece "Usar o TACOS de 7 dias".
-- **Trocar a base não cota nada**. Cada preço simulado traz a taxa e o frete cotados, e `rescoreSimulated` (`reading.ts`) refaz `simulateMarginAtPrice` no navegador com o outro TACOS.
-  - No simulador isso entra pela prop `rescore`. O mínimo calculado é guardado por base e por leitura (`floorScope`).
+- **Trocar a base não cota nada**. Cada preço simulado traz a taxa e o frete cotados. O simulador refaz a conta no navegador com o outro TACOS (`adsOverride` + `rescoreWithInputs`, em `src/lib/pricing/tacos-basis.ts`, a mesma base do Simular da Central).
+  - O mínimo calculado é guardado por base e por leitura (`floorScope`).
 - **Simular** (`POST /api/calculadora/simulate`, `/floor`): o navegador devolve os insumos da leitura, então cada preço só cota taxa e frete (item + 2 chamadas).
   - O servidor confere que o anúncio é da loja e monta o contexto para `simulateWithContext` / `floorWithContext`, a mesma conta da Central.
   - Os insumos só calculam um número que volta para o mesmo usuário; nada é gravado.

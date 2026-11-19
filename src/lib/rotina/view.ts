@@ -123,6 +123,14 @@ export type RotinaActionListing = {
    */
   tacosPercent: number | null;
   adsPeriodDays: number | null;
+  /**
+   * Por que não há TACOS para mostrar (`tacosPercent` nulo): sem ADS ativo,
+   * gasto sem venda na janela, ou o Product Ads não respondeu na rodada.
+   * `null` = há TACOS (ou não há retrato).
+   */
+  tacosMissing: "no_ads" | "spend_without_sales" | "unavailable" | null;
+  /** Gasto de ADS na janela (para "R$ X sem venda"). */
+  adsCost: number | null;
   catalogProductId: string | null;
   /** Tem retrato da rodada (dá para "recalcular este anúncio"). */
   hasHealth: boolean;
@@ -413,9 +421,21 @@ function identity(
         ? health.tacosPercent
         : null,
     adsPeriodDays: health?.adsPeriodDays ?? null,
+    tacosMissing: tacosMissingOf(health),
+    adsCost: health?.adsCost ?? null,
     catalogProductId: health?.catalogProductId ?? catalog?.catalogProductId ?? null,
     hasHealth: health !== null,
   };
+}
+
+function tacosMissingOf(
+  health: Pick<RotinaListingSnapshot, "adsAvailable" | "adsStatus" | "tacosPercent" | "adsCost"> | null,
+): RotinaActionListing["tacosMissing"] {
+  if (!health) return null;
+  if (!health.adsAvailable) return "unavailable";
+  if (health.adsStatus !== "active" && health.adsStatus !== "paused") return "no_ads";
+  if (health.tacosPercent === null && (health.adsCost ?? 0) > 0) return "spend_without_sales";
+  return null;
 }
 
 function related(entity: Entity | undefined, fallbackId: string): RotinaRelatedListing {

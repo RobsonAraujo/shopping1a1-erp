@@ -1,4 +1,5 @@
 import { readApiError } from "@/lib/api/api-client-error";
+import type { TacosAds, TacosBasis } from "@/lib/pricing/tacos-basis";
 import type {
   RotinaSimulation,
   RotinaTypeFloor,
@@ -26,6 +27,11 @@ export type FloorRequest = {
   listingTypeId?: SimulatableListingType;
   /** Margem mínima que o usuário aceita (Calculadora). Omitida = a meta efetiva. */
   targetPercent?: number;
+  /**
+   * Central: `today` = o mínimo com o TACOS de hoje (o retrato é de 7 dias).
+   * A Calculadora ignora: os insumos dela já levam o ADS da base escolhida.
+   */
+  tacosBasis?: TacosBasis;
 };
 
 export type SimulatorApi = {
@@ -42,6 +48,15 @@ export async function postJson<T>(url: string, body: unknown, fallbackCode: stri
   });
   if (!response.ok) throw new Error(await readApiError(response, fallbackCode));
   return (await response.json()) as T;
+}
+
+/** O ADS de um anúncio da Central agora, numa base (o "TACOS de hoje" do simular). */
+export function fetchSimulationAds(mlItemId: string, basis: TacosBasis): Promise<TacosAds> {
+  return postJson<TacosAds>(
+    "/api/rotina/simulate/ads",
+    { mlItemId, basis },
+    "rotina_simulate_ads_failed",
+  );
 }
 
 export const fetchSimulatorApi: SimulatorApi = {

@@ -393,6 +393,7 @@ function demoSimulatorApi(listing: DemoListing, ads: CalculatorAds): SimulatorAp
         listingTypeId: type,
         salePrice: listing.salePrice,
         blocked: null,
+        inputs: inputsOf(listing, listing.listingTypeId, tacos),
         results: [...new Set(wanted.map((price) => roundMoney(price)))].map((price) =>
           simulateMarginAtPrice(price, demoCostsAt(listing, price, type), inputs, listing.targetPercent),
         ),
