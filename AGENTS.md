@@ -23,3 +23,7 @@ Preferir componentes de `src/components/ui/` (wrappers Radix): `Button`, `FormSe
 ## Checagem após mudanças
 
 Depois de alterar código: `npm run lint` e `npx tsc --noEmit`. Corrigir erros antes de encerrar.
+
+## Commits
+
+Mensagens de commit em **inglês**, mesmo com a conversa em português, mantendo o prefixo do histórico (`feat:`, `fix:`, `docs:`…). Ex.: `feat: show max purchase cost and quote margin in the Calculadora`.
