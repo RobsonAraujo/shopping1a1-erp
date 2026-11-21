@@ -1,3 +1,5 @@
+import { isFulfillmentListing } from "@/lib/mercadolibre/fulfillment-stock";
+import { automaticWarehouseQtyByListing } from "@/lib/stock/stock-bridge";
 import type {
   OperationCycleKind,
   ReplenishmentStatus,
@@ -134,7 +136,13 @@ export async function loadItemDetailContext(input: {
       })()
     : null;
 
-  const warehouseStock = warehouseRow?.quantity ?? 0;
+  // Estoque automático: galpão do livro de estoque (sem somar o depósito duas vezes).
+  const autoWarehouse = await automaticWarehouseQtyByListing(organizationId, [
+    { mlItemId: itemId, isFulfillment: isFulfillmentListing(item) },
+  ]);
+  const warehouseStock = autoWarehouse
+    ? (autoWarehouse.get(itemId) ?? 0)
+    : (warehouseRow?.quantity ?? 0);
   const leadTimeDays = warehouseRow?.purchaseLeadTimeDays ?? 0;
   const unitsSoldInWindow = salesByItem[itemId] ?? 0;
   const plan = computeStockPlanningDisplay(

@@ -39,6 +39,8 @@ export async function upsertListingFromItem(
   const activeOnMl = item.status === "active" || item.status === "paused";
   const sku = getItemSku(item);
   const imageUrl = bestItemImageUrl(item);
+  const userProductId = itemUserProductId(item);
+  const listingTypeId = item.listing_type_id?.trim() || null;
 
   return client.listing.upsert({
     where: { mlItemId: item.id },
@@ -51,6 +53,8 @@ export async function upsertListingFromItem(
       catalogListing: item.catalog_listing ?? null,
       activeOnMl,
       mlStatus: item.status,
+      userProductId,
+      listingTypeId,
       lastSyncedAt: new Date(),
     },
     update: {
@@ -62,14 +66,29 @@ export async function upsertListingFromItem(
       catalogListing: item.catalog_listing ?? null,
       activeOnMl,
       mlStatus: item.status,
+      userProductId: userProductId ?? undefined,
+      listingTypeId: listingTypeId ?? undefined,
       lastSyncedAt: new Date(),
     },
   });
 }
 
+/** `user_product_id` do anúncio (o produto físico no ML), ou `null` se não veio. */
+export function itemUserProductId(item: Pick<ItemBody, "user_product_id">): string | null {
+  const raw = item.user_product_id;
+  return typeof raw === "string" && raw.trim() ? raw.trim() : null;
+}
+
 type ListingSnapshot = Pick<
   Listing,
-  "titleSnapshot" | "skuSnapshot" | "imageUrlSnapshot" | "catalogListing" | "activeOnMl" | "mlStatus"
+  | "titleSnapshot"
+  | "skuSnapshot"
+  | "imageUrlSnapshot"
+  | "catalogListing"
+  | "activeOnMl"
+  | "mlStatus"
+  | "userProductId"
+  | "listingTypeId"
 >;
 
 /**
@@ -82,9 +101,13 @@ function listingSnapshotChanged(existing: ListingSnapshot | undefined, item: Ite
   const activeOnMl = item.status === "active" || item.status === "paused";
   const sku = getItemSku(item);
   const imageUrl = bestItemImageUrl(item) ?? null;
+  const userProductId = itemUserProductId(item);
+  const listingTypeId = item.listing_type_id?.trim() || null;
 
   return (
     existing.titleSnapshot !== item.title ||
+    (userProductId !== null && existing.userProductId !== userProductId) ||
+    (listingTypeId !== null && existing.listingTypeId !== listingTypeId) ||
     // sku/imageUrl nulos não sobrescrevem o valor gravado (mesma regra do
     // upsert em si) — não conta como mudança.
     (sku !== null && existing.skuSnapshot !== sku) ||
@@ -119,6 +142,8 @@ export async function upsertListingsFromItems(
       catalogListing: true,
       activeOnMl: true,
       mlStatus: true,
+      userProductId: true,
+      listingTypeId: true,
     },
   });
   const existingByItemId = new Map(

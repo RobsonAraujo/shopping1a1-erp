@@ -40,6 +40,10 @@ Não tem `vercel.json`/Vercel Cron neste projeto — agendamento é 100% externo
 - **Fila**: `InventoryMonthSnapshotRun` com `status` (`pending`/`in_progress`/`done`/`failed`) + `attempts` (máx. 5, `MAX_ATTEMPTS`) — só reprocessa o que não está `done`.
 - `InventoryMonthSnapshotRun` fica **fora** de `TENANT_SCOPED_MODELS` de propósito (`db-tenant-guard.ts`): é a própria tabela de fan-out cross-tenant do cron, precisa varrer todas as organizações sem filtro pra decidir o próximo lote (mesmo caso de `OrganizationMlSeller`).
 
+## Estoque automático
+
+Organização com o estoque automático ativado (`src/lib/stock/README.md`) não usa mais o galpão digitado: o `warehouseStock` do snapshot sai do livro de estoque pela ponte `automaticWarehouseQtyByListing` (`src/lib/stock/stock-bridge.ts`). Anúncio Full recebe o Em casa inteiro; anúncio fora do Full recebe Em casa − depósito; só o anúncio principal do item recebe. Isso acaba com a contagem em dobro do galpão antigo, que já incluía o depósito e era somado com o estoque do anúncio.
+
 ## O que entra no snapshot
 
 - Todos os anúncios operacionais dos seller(s) ML da organização (uma org pode ter mais de 1 seller — `OrganizationMlSeller` é 1:N).

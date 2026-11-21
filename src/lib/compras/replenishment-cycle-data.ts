@@ -54,6 +54,8 @@ import {
   upsertListingsFromItems,
 } from "@/lib/mercadolibre/listing-sync";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
+import { isFulfillmentListing } from "@/lib/mercadolibre/fulfillment-stock";
+import { automaticWarehouseQtyByListing, overlayAutomaticWarehouse } from "@/lib/stock/stock-bridge";
 import {
   KANBAN_POSITION_GAP,
   renormalizedPositions,
@@ -712,6 +714,40 @@ export async function syncPurchaseCycleFromWarehouse(
   });
 }
 
+/**
+ * Entrada de mercadoria registrada no Estoque automático: a compra que
+ * estiver na última coluna do Kanban de Compras (`ordered`) é concluída.
+ * Substitui, para organizações com o estoque ativado, a heurística antiga de
+ * "o galpão digitado aumentou" (`syncPurchaseCycleFromWarehouse`).
+ */
+export async function completePurchaseCyclesOnStockEntry(
+  organizationId: string,
+  mlItemIds: string[],
+  ownQty: number,
+): Promise<number> {
+  if (mlItemIds.length === 0) return 0;
+  const cycles = await prisma.replenishmentCycle.findMany({
+    where: {
+      organizationId,
+      mlItemId: { in: mlItemIds },
+      kind: "purchase",
+      status: "ordered",
+    },
+  });
+  for (const cycle of cycles) {
+    const snapshot: ReplenishmentSnapshot = {
+      mlQty: cycle.triggerMlQty,
+      warehouseQty: ownQty,
+      leadTimeDays: cycle.triggerLeadTimeDays ?? 0,
+    };
+    await prisma.replenishmentCycle.update({
+      where: { id: cycle.id, organizationId },
+      data: buildStatusTransition(toCycleRecord(cycle), "completed", snapshot),
+    });
+  }
+  return cycles.length;
+}
+
 type CycleForCard = {
   id: string;
   mlItemId: string;
@@ -925,14 +961,24 @@ export async function loadOperationsBoards(
     (item) => !isKitItem(item) && !inactiveIds.has(item.id),
   );
 
-  const warehouseById = Object.fromEntries(
-    warehouseStocks.map((row) => [
-      row.mlItemId,
-      {
-        quantity: row.quantity,
-        purchaseLeadTimeDays: row.purchaseLeadTimeDays,
-      },
-    ]),
+  const warehouseById: Record<string, { quantity: number; purchaseLeadTimeDays: number | null }> =
+    Object.fromEntries(
+      warehouseStocks.map((row) => [
+        row.mlItemId,
+        {
+          quantity: row.quantity,
+          purchaseLeadTimeDays: row.purchaseLeadTimeDays,
+        },
+      ]),
+    );
+  // Estoque automático: galpão sai do livro de estoque (sem somar o depósito duas vezes).
+  overlayAutomaticWarehouse(
+    warehouseById,
+    await automaticWarehouseQtyByListing(
+      organizationId,
+      items.map((item) => ({ mlItemId: item.id, isFulfillment: isFulfillmentListing(item) })),
+    ),
+    () => ({ quantity: 0, purchaseLeadTimeDays: null }),
   );
 
   await syncOperationCyclesForItems(
@@ -1054,11 +1100,21 @@ export async function loadOperationsBoardsFast(
     (item) => !isKitItem(item) && !inactiveIds.has(item.id),
   );
 
-  const warehouseById = Object.fromEntries(
-    warehouseStocks.map((row) => [
-      row.mlItemId,
-      { quantity: row.quantity, purchaseLeadTimeDays: row.purchaseLeadTimeDays },
-    ]),
+  const warehouseById: Record<string, { quantity: number; purchaseLeadTimeDays: number | null }> =
+    Object.fromEntries(
+      warehouseStocks.map((row) => [
+        row.mlItemId,
+        { quantity: row.quantity, purchaseLeadTimeDays: row.purchaseLeadTimeDays },
+      ]),
+    );
+  // Estoque automático: galpão sai do livro de estoque (sem somar o depósito duas vezes).
+  overlayAutomaticWarehouse(
+    warehouseById,
+    await automaticWarehouseQtyByListing(
+      organizationId,
+      items.map((item) => ({ mlItemId: item.id, isFulfillment: isFulfillmentListing(item) })),
+    ),
+    () => ({ quantity: 0, purchaseLeadTimeDays: null }),
   );
 
   const salesPendingIds = new Set(mlItemIds.filter((id) => !(id in cachedSales)));
@@ -1145,11 +1201,21 @@ export async function streamOperationsBoardResync(
   );
   const itemById = new Map(items.map((item) => [item.id, item]));
 
-  const warehouseById = Object.fromEntries(
-    warehouseStocks.map((row) => [
-      row.mlItemId,
-      { quantity: row.quantity, purchaseLeadTimeDays: row.purchaseLeadTimeDays },
-    ]),
+  const warehouseById: Record<string, { quantity: number; purchaseLeadTimeDays: number | null }> =
+    Object.fromEntries(
+      warehouseStocks.map((row) => [
+        row.mlItemId,
+        { quantity: row.quantity, purchaseLeadTimeDays: row.purchaseLeadTimeDays },
+      ]),
+    );
+  // Estoque automático: galpão sai do livro de estoque (sem somar o depósito duas vezes).
+  overlayAutomaticWarehouse(
+    warehouseById,
+    await automaticWarehouseQtyByListing(
+      organizationId,
+      items.map((item) => ({ mlItemId: item.id, isFulfillment: isFulfillmentListing(item) })),
+    ),
+    () => ({ quantity: 0, purchaseLeadTimeDays: null }),
   );
 
   // Snapshot leve do status atual (pré-sync) só para a badge "Urgente" do
@@ -1327,7 +1393,22 @@ async function writeCycleMoves(
         )
       : Promise.resolve([] as ItemBody[]),
   ]);
-  const warehouseByItem = new Map(warehouseRows.map((w) => [w.mlItemId, w]));
+  const warehouseByItem = new Map(
+    warehouseRows.map((w) => [w.mlItemId, { quantity: w.quantity, purchaseLeadTimeDays: w.purchaseLeadTimeDays }]),
+  );
+  // Estoque automático: o retrato do card guarda o galpão do livro de estoque.
+  const autoWarehouse = await automaticWarehouseQtyByListing(
+    organizationId,
+    changingItemIds.map((mlItemId) => ({ mlItemId, isFulfillment: null })),
+  );
+  if (autoWarehouse) {
+    for (const [mlItemId, quantity] of autoWarehouse) {
+      warehouseByItem.set(mlItemId, {
+        quantity,
+        purchaseLeadTimeDays: warehouseByItem.get(mlItemId)?.purchaseLeadTimeDays ?? null,
+      });
+    }
+  }
   const liveMlQtyByItem = new Map(liveItems.map((item) => [item.id, mlAvailableStockUnits(item)]));
 
   const touchedIds = await prisma.$transaction(async (tx) => {

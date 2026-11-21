@@ -13,6 +13,8 @@ import { resolveSellerAccessToken } from "@/lib/mercadolibre/persist-seller-toke
 import { fromDbSellerId } from "@/lib/mercadolibre/seller-id";
 import { isKitItem, getItemSku } from "@/lib/mercadolibre/item-sku";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
+import { automaticWarehouseQtyByListing, isStockAutomatic } from "@/lib/stock/stock-bridge";
+import { StockSyncBusyError, runStockSyncForSeller } from "@/lib/stock/stock-sync";
 import { loadStockReportProductsByMlItemId } from "@/lib/products/product-data";
 import {
   defaultStockReportSnapshotDate,
@@ -194,10 +196,37 @@ async function collectOrgOperationalListings(
  * Estoque, então um produto que ainda estava listado no ML naquele mês não
  * deve perder o custo só porque foi desativado depois.
  */
+/**
+ * Estoque automático sem cron: antes de congelar o mês, lê as vendas
+ * pendentes e o depósito/Full de todos os itens, para o fechamento não sair
+ * atrasado se ninguém usou o ERP nos últimos dias. Falhou ou estava ocupado:
+ * segue com o que tem (fica no log).
+ */
+async function syncStockBeforeSnapshot(organizationId: string): Promise<void> {
+  if (!(await isStockAutomatic(organizationId))) return;
+  const sellers = await prisma.organizationMlSeller.findMany({
+    where: { organizationId },
+    select: { mlUserId: true },
+  });
+  for (const seller of sellers) {
+    const mlUserId = fromDbSellerId(seller.mlUserId);
+    const token = await resolveSellerAccessToken(mlUserId);
+    if (!token) continue;
+    try {
+      await runStockSyncForSeller({ organizationId, mlUserId, accessToken: token, positions: "all" });
+    } catch (e) {
+      if (!(e instanceof StockSyncBusyError)) {
+        logServerError(`inventory-month-snapshot stock sync seller=${mlUserId}`, e);
+      }
+    }
+  }
+}
+
 export async function buildAndPersistOrgSnapshot(
   organizationId: string,
   target: InventorySnapshotTargetMonth,
 ): Promise<{ itemsSnapshotted: number }> {
+  await syncStockBeforeSnapshot(organizationId);
   const listings = await collectOrgOperationalListings(organizationId);
   if (listings.length === 0) return { itemsSnapshotted: 0 };
 
@@ -212,6 +241,18 @@ export async function buildAndPersistOrgSnapshot(
   const warehouseByItemId = new Map(
     warehouseRows.map((row) => [row.mlItemId, row.quantity]),
   );
+  // Estoque automático: o galpão do fechamento sai do livro de estoque. O
+  // galpão digitado já incluía o depósito, e o relatório somava os dois.
+  const autoWarehouse = await automaticWarehouseQtyByListing(
+    organizationId,
+    listings.map((listing) => ({
+      mlItemId: listing.mlItemId,
+      isFulfillment: listing.inventoryIds.length > 0,
+    })),
+  );
+  if (autoWarehouse) {
+    for (const [mlItemId, quantity] of autoWarehouse) warehouseByItemId.set(mlItemId, quantity);
+  }
 
   const rows = listings.map((listing) => {
     const product = productsByMlItemId.get(listing.mlItemId);

@@ -18,6 +18,7 @@ Módulos com README co-localizado (padrão do projeto):
 - [Relatório tributário](../src/lib/tax-report/README.md)
 - [Simples Nacional](../src/lib/simples-nacional/README.md)
 - [DRE](../src/lib/dre/README.md)
+- [Estoque automático — livro de estoque, baixa por venda, Full, custo por lote, inventário](../src/lib/stock/README.md)
 - [Estoque — fechamento mensal (Histórico)](../src/lib/inventory/README.md)
 - [Central de anúncios — ações do dia (módulo `rotina`)](../src/lib/rotina/README.md)
 

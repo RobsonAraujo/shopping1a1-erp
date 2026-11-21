@@ -1,0 +1,102 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import { computeStockPosition, type MlPositionInput } from "../stock-position";
+import { combineStockItemReads, parseUserProductStock } from "../stock-ml-read";
+import { stockChannelLabel, storedChannelFromShipment } from "../stock-channel";
+
+const read = (partial: Partial<MlPositionInput>): MlPositionInput => ({
+  depositQty: 20,
+  fullAvailableQty: 400,
+  fullTransferQty: 17,
+  fullOtherQty: 0,
+  fullTotalQty: 417,
+  fetchedAt: new Date("2026-11-21T10:00:00Z"),
+  error: null,
+  ...partial,
+});
+
+describe("computeStockPosition", () => {
+  it("galpão is Em casa minus depósito; total is Em casa plus everything at ML", () => {
+    const pos = computeStockPosition({ ownQty: 120, ml: read({}), hasFull: true });
+    assert.equal(pos.warehouse, 100);
+    assert.equal(pos.deposit, 20);
+    assert.equal(pos.fullUnavailable, 17);
+    assert.equal(pos.total, 537);
+    assert.deepEqual(pos.alerts, []);
+  });
+
+  it("flags when ML lists more in the depósito than exists at home", () => {
+    const pos = computeStockPosition({ ownQty: 10, ml: read({ depositQty: 25 }), hasFull: true });
+    assert.equal(pos.warehouse, -15);
+    assert.deepEqual(pos.alerts, ["deposit_exceeds_own"]);
+  });
+
+  it("never turns a failed ML read into zero", () => {
+    const pos = computeStockPosition({ ownQty: 10, ml: read({ error: "429" }), hasFull: true });
+    assert.equal(pos.deposit, null);
+    assert.equal(pos.fullTotal, null);
+    assert.equal(pos.total, null);
+    assert.ok(pos.alerts.includes("ml_unread"));
+  });
+
+  it("item without Full has Full total zero even before the first read", () => {
+    const pos = computeStockPosition({ ownQty: 5, ml: null, hasFull: false });
+    assert.equal(pos.fullTotal, 0);
+    assert.equal(pos.total, 5);
+  });
+
+  it("negative Em casa is an alert", () => {
+    const pos = computeStockPosition({ ownQty: -2, ml: read({ depositQty: 0 }), hasFull: false });
+    assert.ok(pos.alerts.includes("negative_own"));
+  });
+});
+
+describe("stock ML reads", () => {
+  it("parses seller_warehouse as depósito and meli_facility as Full", () => {
+    const parsed = parseUserProductStock({
+      id: "MLBU800377231",
+      locations: [
+        { type: "seller_warehouse", store_id: "81328267", quantity: 197, network_node_id: "BRP17013423321" },
+        { type: "meli_facility", availability_type: "in_stock", quantity: 409 },
+      ],
+    });
+    assert.deepEqual(parsed, {
+      depositQty: 197,
+      fullAvailableQty: 409,
+      sellerNodeIds: ["BRP17013423321"],
+    });
+  });
+
+  it("combines UP and fulfillment reads; Full total includes transfer", () => {
+    const combined = combineStockItemReads({
+      userProducts: [{ depositQty: 197, fullAvailableQty: 409, sellerNodeIds: ["N1"] }],
+      fulfillment: [{ available: 409, inTransfer: 17, withdrawal: 0, lost: 0, other: 0, custody: 426 }],
+      hasFull: true,
+    });
+    assert.equal(combined.depositQty, 197);
+    assert.equal(combined.fullTotalQty, 426);
+    assert.equal(combined.fullTransferQty, 17);
+  });
+
+  it("item without Full inventory: Full is zero", () => {
+    const combined = combineStockItemReads({
+      userProducts: [{ depositQty: 16, fullAvailableQty: null, sellerNodeIds: [] }],
+      fulfillment: [],
+      hasFull: false,
+    });
+    assert.equal(combined.fullTotalQty, 0);
+    assert.equal(combined.depositQty, 16);
+  });
+});
+
+describe("stock channel", () => {
+  it("labels channels from the stored logistic type", () => {
+    assert.equal(stockChannelLabel("fulfillment"), "Full");
+    assert.equal(stockChannelLabel("self_service"), "Flex");
+    assert.equal(stockChannelLabel("xd_drop_off"), "Agência");
+    assert.equal(stockChannelLabel(storedChannelFromShipment("cross_docking", ["proximity"])), "Envios Agora");
+    assert.equal(stockChannelLabel("cross_docking"), "Coleta");
+    assert.equal(stockChannelLabel("custom"), "Envio próprio");
+    assert.equal(stockChannelLabel(null), null);
+  });
+});

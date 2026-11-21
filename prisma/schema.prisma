@@ -189,10 +189,23 @@ model Listing {
   createdAt            DateTime                  @default(now()) @map("created_at")
   updatedAt            DateTime                  @updatedAt @map("updated_at")
 
+  /// `user_product_id` do ML (o "MLBU…"): o produto físico onde o ML guarda o
+  /// estoque. Várias "opções de venda" (MLBs Clássico, Premium, B2B…) apontam
+  /// para o mesmo UP e dividem o mesmo estoque. Gravado em toda leitura de
+  /// anúncio (`upsertListingsFromItems`).
+  userProductId String? @map("user_product_id")
+  /// `listing_type_id` atual do anúncio (`gold_special` = Clássico, `gold_pro` = Premium).
+  listingTypeId String? @map("listing_type_id")
+  /// Item de estoque (produto físico) deste anúncio — ver `StockItem`.
+  stockItemId   String? @map("stock_item_id")
+
   competitionSnapshots CatalogCompetitionSnapshot[]
+  stockItem            StockItem?                   @relation(fields: [stockItemId], references: [id], onDelete: SetNull)
 
   @@index([activeOnMl])
   @@index([organizationId])
+  @@index([organizationId, userProductId])
+  @@index([stockItemId])
   @@map("listings")
 }
 
@@ -655,18 +668,18 @@ model InventoryStockMonthSnapshot {
 /// Compras e Operações Full quando essas telas são abertas na mesma sessão
 /// — a maior fonte de chamadas externas do app.
 model SalesWindowSnapshot {
-  id             String   @id @default(cuid())
-  organizationId String   @map("organization_id")
-  mlItemId       String   @map("ml_item_id")
-  windowDays     Int      @map("window_days")
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  mlItemId       String    @map("ml_item_id")
+  windowDays     Int       @map("window_days")
   /// "date_closed" | "date_created" (SalesWindowDateField).
-  dateField      String   @map("date_field")
-  unitsSold      Int      @map("units_sold")
+  dateField      String    @map("date_field")
+  unitsSold      Int       @map("units_sold")
   /// Venda mais recente na janela. `null` com `unitsSold = 0` é válido;
   /// `null` com `unitsSold > 0` é linha antiga (pré-coluna) — o cache trata
   /// como miss pra forçar uma nova varredura.
   lastSaleAt     DateTime? @map("last_sale_at")
-  computedAt     DateTime @map("computed_at")
+  computedAt     DateTime  @map("computed_at")
 
   @@unique([organizationId, mlItemId, windowDays, dateField])
   @@index([organizationId])
@@ -749,7 +762,8 @@ model Supplier {
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
-  products Product[]
+  products     Product[]
+  stockEntries StockEntry[]
 
   @@unique([organizationId, name])
   @@index([organizationId])
@@ -1227,4 +1241,396 @@ model DreReconciliationEntry {
   @@index([organizationId, importId])
   @@index([importId, mappedLineKey])
   @@map("dre_reconciliation_entries")
+}
+
+// ─── Estoque automático ────────────────────────────────────────────────────
+//
+// Livro de estoque: o saldo "Em casa" (galpão + depósito) é a soma de
+// movimentações imutáveis (`StockMovement`); corrigir é lançar um ajuste,
+// nunca sobrescrever. O depósito e o Full são lidos do Mercado Livre
+// (`StockItemMlPosition`); o Galpão é a conta Em casa − Depósito. Ver
+// `src/lib/stock/README.md`.
+
+enum StockMovementType {
+  /// Saldo inicial na ativação do estoque automático.
+  opening
+  /// Mercadoria que chegou ao galpão.
+  entry
+  /// Estorno de uma entrada lançada por engano.
+  entry_reversal
+  /// Venda paga no Mercado Livre (local `own` = saiu de casa; `full` = saiu do Full).
+  sale
+  /// Venda cancelada antes do envio (volta o que a venda tirou).
+  sale_reversal
+  /// Devolução conferida que voltou boa para casa.
+  return_in
+  /// Mercadoria enviada ao Full (saída registrada por vocês).
+  full_transfer
+  /// Mercadoria que voltou do Full para casa (registrada por vocês).
+  full_return
+  /// Ajuste manual (+/−) com motivo.
+  adjustment
+  /// Saída manual: perda, avaria, brinde, uso interno.
+  manual_out
+  /// Ajuste aprovado num inventário.
+  inventory_count
+}
+
+enum StockLocation {
+  /// Em casa: galpão + depósito (o livro do ERP).
+  own
+  /// Full: o ML é dono do saldo; a movimentação só existe para auditoria e custo.
+  full
+}
+
+enum StockMovementSource {
+  activation
+  ml_order
+  entry
+  manual
+  review
+  inventory
+}
+
+enum StockEntryStatus {
+  active
+  reversed
+}
+
+enum StockLotStatus {
+  /// Aguardando o lote anterior acabar (custo ainda não vigente).
+  queued
+  /// Lote cujo custo está valendo agora.
+  active
+  /// Lote esgotado.
+  depleted
+}
+
+enum StockReviewKind {
+  /// Venda de um anúncio que não foi possível ligar a um item de estoque.
+  unmapped_sale
+  /// Venda de casa cancelada depois do envio ou devolvida: conferir o que voltou.
+  return_to_check
+}
+
+enum StockReviewStatus {
+  open
+  resolved
+  dismissed
+}
+
+/// Ativação do estoque automático — 1 linha por organização. Antes dela, a
+/// organização segue no galpão digitado à mão (`WarehouseStock.quantity`).
+model StockSettings {
+  organizationId            String   @id @map("organization_id")
+  activatedAt               DateTime @map("activated_at")
+  activatedByMlUserId       BigInt?  @map("activated_by_ml_user_id")
+  /// Resposta do assistente: o galpão antigo já incluía o que estava
+  /// anunciado no depósito do ML (define o saldo inicial).
+  legacyWarehouseIncludesMl Boolean  @map("legacy_warehouse_includes_ml")
+  createdAt                 DateTime @default(now()) @map("created_at")
+  updatedAt                 DateTime @updatedAt @map("updated_at")
+
+  @@map("stock_settings")
+}
+
+/// Cursor da sincronização de vendas e leituras do ML por organização +
+/// seller. Sem cron: a sincronização roda quando alguém usa o ERP
+/// (`StockBackgroundSync`) e antes do fechamento mensal.
+model StockSyncState {
+  organizationId      String    @map("organization_id")
+  mlUserId            BigInt    @map("ml_user_id")
+  /// Até onde os pedidos já foram lidos (`order.date_last_updated`), sem a sobreposição.
+  ordersCursor        DateTime  @map("orders_cursor")
+  /// Nós de estoque do vendedor (`network_node_id` das locations
+  /// `seller_warehouse`) — uma venda cujo `order_items[].stock.node_id` é um
+  /// deles saiu de casa.
+  sellerNodeIds       Json      @default("[]") @map("seller_node_ids")
+  lastOrdersSyncAt    DateTime? @map("last_orders_sync_at")
+  lastPositionsSyncAt DateTime? @map("last_positions_sync_at")
+  lastRunStartedAt    DateTime? @map("last_run_started_at")
+  lastError           String?   @map("last_error") @db.Text
+  lastErrorAt         DateTime? @map("last_error_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  @@id([organizationId, mlUserId])
+  @@index([lastOrdersSyncAt])
+  @@map("stock_sync_state")
+}
+
+/// Item de estoque = produto físico. Criado a partir do `user_product_id` do
+/// ML: todas as opções de venda (MLBs) do mesmo UP formam um item só, com um
+/// saldo, um conjunto de lotes e um extrato. Nunca é chaveado por SKU (texto
+/// editável e repetível).
+model StockItem {
+  id              String   @id @default(cuid())
+  organizationId  String   @map("organization_id")
+  /// UP principal. Nulo só se o ML não devolveu UP (o item fica ligado ao MLB).
+  userProductId   String?  @map("user_product_id")
+  title           String
+  sku             String?
+  imageUrl        String?  @map("image_url")
+  /// MLB de referência (links, fornecedor e custo de exibição).
+  primaryMlItemId String?  @map("primary_ml_item_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  listings   Listing[]
+  movements  StockMovement[]
+  balance    StockBalance?
+  lots       StockLot[]
+  mlPosition StockItemMlPosition?
+
+  @@unique([organizationId, userProductId])
+  @@index([organizationId])
+  @@map("stock_items")
+}
+
+/// Movimentação de estoque (imutável). A chave única é a idempotência: um
+/// pedido nunca baixa duas vezes, mesmo lido de novo.
+model StockMovement {
+  id                String              @id @default(cuid())
+  organizationId    String              @map("organization_id")
+  stockItemId       String              @map("stock_item_id")
+  type              StockMovementType
+  location          StockLocation
+  /// Unidades com sinal: + entra, − sai.
+  quantity          Int
+  occurredAt        DateTime            @map("occurred_at")
+  sourceType        StockMovementSource @map("source_type")
+  /// Id da origem: pedido do ML, entrada, pendência, inventário…
+  sourceId          String              @map("source_id")
+  /// Linha dentro da origem (ex.: MLB da linha do pedido, componente do kit).
+  sourceLineKey     String              @default("") @map("source_line_key")
+  /// Anúncio que vendeu (opção de venda ou kit) — exibição e auditoria.
+  listingMlItemId   String?             @map("listing_ml_item_id")
+  /// `logistic.type` do envio: fulfillment, self_service, xd_drop_off, cross_docking…
+  channel           String?
+  shipmentId        String?             @map("shipment_id")
+  /// `order_items[].stock.node_id`: de onde a unidade saiu.
+  nodeId            String?             @map("node_id")
+  reason            String?
+  note              String?             @db.Text
+  createdByMlUserId BigInt?             @map("created_by_ml_user_id")
+  createdAt         DateTime            @default(now()) @map("created_at")
+
+  stockItem StockItem @relation(fields: [stockItemId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, sourceType, sourceId, sourceLineKey, stockItemId, type])
+  @@index([organizationId, stockItemId, occurredAt])
+  @@index([organizationId, occurredAt])
+  @@index([organizationId, location, occurredAt])
+  @@map("stock_movements")
+}
+
+/// Saldo Em casa materializado (soma das movimentações `own`), gravado na
+/// mesma transação de cada movimentação.
+model StockBalance {
+  stockItemId    String   @id @map("stock_item_id")
+  organizationId String   @map("organization_id")
+  ownQty         Int      @default(0) @map("own_qty")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  stockItem StockItem @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("stock_balances")
+}
+
+/// Última leitura do Mercado Livre por item de estoque. A tela lê daqui; a
+/// sincronização reescreve. Nulo = nunca lido ou leitura falhou (a tela
+/// mostra "—", nunca 0).
+model StockItemMlPosition {
+  stockItemId       String    @id @map("stock_item_id")
+  organizationId    String    @map("organization_id")
+  /// Estoque no depósito do vendedor (`seller_warehouse`/`selling_address`).
+  depositQty        Int?      @map("deposit_qty")
+  /// Full disponível para venda.
+  fullAvailableQty  Int?      @map("full_available_qty")
+  /// Full em transferência entre centros do ML (já está com o ML).
+  fullTransferQty   Int?      @map("full_transfer_qty")
+  /// Full não disponível por outro motivo (retirada, avaria, sem cobertura fiscal…).
+  fullOtherQty      Int?      @map("full_other_qty")
+  /// Parte do `fullOtherQty` reservada para retirada (voltando para o vendedor).
+  fullWithdrawalQty Int?      @map("full_withdrawal_qty")
+  /// Perdido pelo ML (fora do total: o ML reembolsa, não é estoque).
+  fullLostQty       Int?      @map("full_lost_qty")
+  /// Tudo que está com o ML, menos o perdido (disponível + não disponível).
+  fullTotalQty      Int?      @map("full_total_qty")
+  fetchedAt         DateTime? @map("fetched_at")
+  error             String?
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  stockItem StockItem @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("stock_item_ml_positions")
+}
+
+/// Entrada de mercadoria no galpão (pode ter vários produtos — um lote por linha).
+model StockEntry {
+  id                String           @id @default(cuid())
+  organizationId    String           @map("organization_id")
+  arrivedAt         DateTime         @map("arrived_at")
+  supplierId        String?          @map("supplier_id")
+  invoiceNumber     String?          @map("invoice_number")
+  notes             String?          @db.Text
+  status            StockEntryStatus @default(active)
+  reversedAt        DateTime?        @map("reversed_at")
+  createdByMlUserId BigInt?          @map("created_by_ml_user_id")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+
+  supplier Supplier?  @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  lots     StockLot[]
+
+  @@index([organizationId, arrivedAt])
+  @@map("stock_entries")
+}
+
+/// Lote de custo (PEPS): cada entrada cria um, e a ativação cria o de
+/// abertura. Guarda todos os campos fiscais de custo do cadastro, porque o
+/// Tributário usa todos.
+model StockLot {
+  id                  String         @id @default(cuid())
+  organizationId      String         @map("organization_id")
+  stockItemId         String         @map("stock_item_id")
+  /// Entrada de origem; nulo no lote de abertura.
+  entryId             String?        @map("entry_id")
+  receivedAt          DateTime       @map("received_at")
+  quantity            Int
+  consumedQty         Int            @default(0) @map("consumed_qty")
+  status              StockLotStatus @default(queued)
+  activatedAt         DateTime?      @map("activated_at")
+  depletedAt          DateTime?      @map("depleted_at")
+  /// `false` quando o lote nasceu sem custo conhecido (item sem cadastro).
+  costKnown           Boolean        @default(true) @map("cost_known")
+  unitCostNf          Decimal        @map("unit_cost_nf") @db.Decimal(18, 2)
+  purchaseIcmsPercent Decimal        @map("purchase_icms_percent") @db.Decimal(8, 4)
+  hasIcmsSt           Boolean        @default(false) @map("has_icms_st")
+  purchaseCostWithSt  Decimal?       @map("purchase_cost_with_st") @db.Decimal(18, 2)
+  ipiPercent          Decimal        @default(0) @map("ipi_percent") @db.Decimal(8, 4)
+  extraCosts          Decimal        @default(0) @map("extra_costs") @db.Decimal(18, 2)
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+
+  stockItem    StockItem             @relation(fields: [stockItemId], references: [id], onDelete: Restrict)
+  entry        StockEntry?           @relation(fields: [entryId], references: [id], onDelete: Restrict)
+  consumptions StockLotConsumption[]
+
+  @@index([organizationId, stockItemId, receivedAt])
+  @@index([entryId])
+  @@map("stock_lots")
+}
+
+/// Quanto de cada lote uma movimentação consumiu (+) ou devolveu (−).
+model StockLotConsumption {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  lotId          String   @map("lot_id")
+  movementId     String   @map("movement_id")
+  quantity       Int
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  lot StockLot @relation(fields: [lotId], references: [id], onDelete: Cascade)
+
+  @@unique([lotId, movementId])
+  @@index([organizationId])
+  @@index([movementId])
+  @@map("stock_lot_consumptions")
+}
+
+/// Pendência para o usuário decidir: venda sem item de estoque, devolução a
+/// conferir, entrada detectada no Full. `sourceKey` é a idempotência dentro
+/// de (organização, tipo).
+model StockReviewItem {
+  id                 String            @id @default(cuid())
+  organizationId     String            @map("organization_id")
+  kind               StockReviewKind
+  status             StockReviewStatus @default(open)
+  sourceKey          String            @map("source_key")
+  stockItemId        String?           @map("stock_item_id")
+  listingMlItemId    String?           @map("listing_ml_item_id")
+  orderId            String?           @map("order_id")
+  /// Unidades envolvidas (detectadas/vendidas).
+  quantity           Int
+  detectedAt         DateTime          @map("detected_at")
+  payload            Json?
+  /// confirmed | returned_good | damaged | stayed_full | linked | dismissed
+  resolution         String?
+  resolvedQuantity   Int?              @map("resolved_quantity")
+  resolvedAt         DateTime?         @map("resolved_at")
+  resolvedByMlUserId BigInt?           @map("resolved_by_ml_user_id")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+
+  @@unique([organizationId, kind, sourceKey])
+  @@index([organizationId, status])
+  @@index([organizationId, stockItemId])
+  @@map("stock_review_items")
+}
+
+enum StockCountStatus {
+  /// Folha impressa / contagem em andamento.
+  counting
+  /// Aprovado: os ajustes viraram movimentações.
+  approved
+  cancelled
+}
+
+/// Inventário (conferência física). A hora de referência é a da criação: o
+/// ajuste de cada produto é contado − (Em casa + a enviar naquela hora),
+/// aplicado sobre o saldo de agora, então as vendas depois da contagem não se
+/// perdem.
+model StockCount {
+  id                 String           @id @default(cuid())
+  organizationId     String           @map("organization_id")
+  status             StockCountStatus @default(counting)
+  referenceAt        DateTime         @map("reference_at")
+  /// Folha sem a coluna "Sistema" (contagem cega).
+  blind              Boolean          @default(false)
+  supplierName       String?          @map("supplier_name")
+  onlyWithStock      Boolean          @default(true) @map("only_with_stock")
+  notes              String?          @db.Text
+  createdByMlUserId  BigInt?          @map("created_by_ml_user_id")
+  approvedAt         DateTime?        @map("approved_at")
+  approvedByMlUserId BigInt?          @map("approved_by_ml_user_id")
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+
+  lines StockCountLine[]
+
+  @@index([organizationId, createdAt])
+  @@map("stock_counts")
+}
+
+model StockCountLine {
+  id                 String   @id @default(cuid())
+  countId            String   @map("count_id")
+  organizationId     String   @map("organization_id")
+  stockItemId        String   @map("stock_item_id")
+  /// Ordem na folha (fornecedor → nome).
+  position           Int
+  title              String
+  sku                String?
+  supplierName       String   @map("supplier_name")
+  /// Em casa na hora de referência.
+  expectedOwnQty     Int      @map("expected_own_qty")
+  /// Vendido de casa e ainda não despachado: continua na prateleira.
+  pendingShipmentQty Int      @default(0) @map("pending_shipment_qty")
+  /// Nulo = não contado (diferente de 0).
+  countedQty         Int?     @map("counted_qty")
+  note               String?
+  /// Custo unitário do lote vigente na criação (valor da divergência).
+  unitCost           Decimal? @map("unit_cost") @db.Decimal(18, 4)
+  /// Gravado na aprovação.
+  adjustmentQty      Int?     @map("adjustment_qty")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  count StockCount @relation(fields: [countId], references: [id], onDelete: Cascade)
+
+  @@unique([countId, stockItemId])
+  @@index([organizationId])
+  @@map("stock_count_lines")
 }
