@@ -3,7 +3,7 @@ import type { StockMovementType, StockReviewKind } from "@/generated/prisma";
 import { getSkuSupplier } from "@/lib/mercadolibre/item-sku";
 import { computeEffectivePricingCost } from "@/lib/pricing/product-pricing";
 import { stockChannelLabel } from "@/lib/stock/stock-channel";
-import { computeStockPosition, type StockAlert } from "@/lib/stock/stock-position";
+import { computeStockPosition, type FullBreakdownPart, type StockAlert } from "@/lib/stock/stock-position";
 import { loadStockSyncStatus } from "@/lib/stock/stock-sync";
 
 /**
@@ -33,7 +33,10 @@ export type StockPositionRow = {
   warehouse: number | null;
   deposit: number | null;
   fullAvailable: number | null;
+  /** No Full e fora da venda (em transferência, retirada, sem cobertura fiscal…). */
   fullUnavailable: number | null;
+  /** O `fullUnavailable` por status do ML, mais o perdido (fora do total). */
+  fullBreakdown: FullBreakdownPart[];
   fullTotal: number | null;
   total: number | null;
   alerts: StockAlert[];
@@ -188,7 +191,10 @@ export async function loadStockOverview(organizationId: string): Promise<StockOv
             fullAvailableQty: item.mlPosition.fullAvailableQty,
             fullTransferQty: item.mlPosition.fullTransferQty,
             fullOtherQty: item.mlPosition.fullOtherQty,
+            fullWithdrawalQty: item.mlPosition.fullWithdrawalQty,
+            fullLostQty: item.mlPosition.fullLostQty,
             fullTotalQty: item.mlPosition.fullTotalQty,
+            fullUnavailableDetail: item.mlPosition.fullUnavailableDetail,
             fetchedAt: item.mlPosition.fetchedAt,
             error: item.mlPosition.error,
           }
@@ -224,6 +230,7 @@ export async function loadStockOverview(organizationId: string): Promise<StockOv
       deposit: position.deposit,
       fullAvailable: position.fullAvailable,
       fullUnavailable: position.fullUnavailable,
+      fullBreakdown: position.fullBreakdown,
       fullTotal: position.fullTotal,
       total: position.total,
       alerts: position.alerts,

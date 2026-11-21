@@ -85,19 +85,34 @@ export async function fetchUserProductStock(
  * `internal_process`, `withdrawal` (retirada: voltando para o vendedor),
  * `lost` (perdido pelo ML), `noFiscalCoverage`, `damaged`…
  */
+/** Unidades fora da venda no Full, por status do ML (inclui `lost`). */
+export type FullStatusQty = { status: string; quantity: number };
+
 export type FulfillmentRead = {
   available: number;
-  /** `transfer` + `internal_process`. */
+  /** `transfer`: andando entre os centros do ML (o "em transferência" do ML). */
   inTransfer: number;
   /** `withdrawal`: reservado para voltar ao vendedor. */
   withdrawal: number;
   /** `lost`: o ML perdeu (reembolsa). Fica fora do total. */
   lost: number;
-  /** Demais não disponíveis (avaria, sem cobertura fiscal…). */
+  /** Demais não disponíveis (sem cobertura fiscal, processo interno, avaria…). */
   other: number;
   /** Tudo que está com o ML, menos o perdido. */
   custody: number;
+  /** A quebra do ML por status, para a tela nomear cada parte. */
+  detail: FullStatusQty[];
 };
+
+/** Soma por status, na ordem em que cada status apareceu. */
+function addDetail(into: Map<string, number>, status: string, quantity: number) {
+  if (quantity <= 0) return;
+  into.set(status, (into.get(status) ?? 0) + quantity);
+}
+
+function detailList(map: Map<string, number>): FullStatusQty[] {
+  return [...map].map(([status, quantity]) => ({ status, quantity }));
+}
 
 export function parseFulfillmentRead(body: unknown): FulfillmentRead {
   const record = asRecord(body) ?? {};
@@ -106,13 +121,15 @@ export function parseFulfillmentRead(body: unknown): FulfillmentRead {
   let withdrawal = 0;
   let lost = 0;
   let other = 0;
+  const byStatus = new Map<string, number>();
   const details = Array.isArray(record.not_available_detail) ? record.not_available_detail : [];
   for (const raw of details) {
     const entry = asRecord(raw);
     if (!entry) continue;
     const qty = quantityOf(entry.quantity);
-    const status = typeof entry.status === "string" ? entry.status : "";
-    if (status === "transfer" || status === "internal_process") inTransfer += qty;
+    const status = typeof entry.status === "string" && entry.status ? entry.status : "unknown";
+    addDetail(byStatus, status, qty);
+    if (status === "transfer") inTransfer += qty;
     else if (status === "withdrawal") withdrawal += qty;
     else if (status === "lost") lost += qty;
     else other += qty;
@@ -124,6 +141,7 @@ export function parseFulfillmentRead(body: unknown): FulfillmentRead {
     lost,
     other,
     custody: available + inTransfer + withdrawal + other,
+    detail: detailList(byStatus),
   };
 }
 
@@ -152,13 +170,14 @@ export type StockItemMlRead = {
   fullLostQty: number | null;
   /** Com o ML, menos o perdido. */
   fullTotalQty: number | null;
+  /** Fora da venda no Full, por status (inclui o perdido). */
+  fullUnavailableDetail: FullStatusQty[] | null;
   sellerNodeIds: string[];
 };
 
 /**
  * Junta as leituras de um item. Uma UP ou um inventário que falhou faz o item
- * inteiro falhar: número parcial é pior que nenhum, porque a detecção de
- * entrada no Full veria uma queda falsa.
+ * inteiro falhar: número parcial é pior que nenhum.
  */
 export function combineStockItemReads(input: {
   userProducts: UserProductStockRead[];
@@ -187,11 +206,14 @@ export function combineStockItemReads(input: {
       fullWithdrawalQty: zero,
       fullLostQty: zero,
       fullTotalQty: fullAvailable,
+      fullUnavailableDetail: fullAvailable == null ? null : [],
       sellerNodeIds: [...nodes],
     };
   }
 
   const sum = (pick: (r: FulfillmentRead) => number) => fulfillment.reduce((acc, r) => acc + pick(r), 0);
+  const byStatus = new Map<string, number>();
+  for (const read of fulfillment) for (const d of read.detail) addDetail(byStatus, d.status, d.quantity);
   return {
     depositQty: deposit ?? 0,
     fullAvailableQty: sum((r) => r.available),
@@ -200,6 +222,7 @@ export function combineStockItemReads(input: {
     fullWithdrawalQty: sum((r) => r.withdrawal),
     fullLostQty: sum((r) => r.lost),
     fullTotalQty: sum((r) => r.custody),
+    fullUnavailableDetail: detailList(byStatus),
     sellerNodeIds: [...nodes],
   };
 }

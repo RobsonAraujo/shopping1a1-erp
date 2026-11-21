@@ -158,7 +158,7 @@ const NUMBERS = [
   { name: "Em casa", body: "Tudo que está com vocês: galpão + depósito. É o livro do ERP, que só muda com entradas, vendas, saídas e ajustes." },
   { name: "Depósito", body: "O \"estoque no depósito\" que o Mercado Livre mostra: o que está separado para vender fora do Full. Vem do ML." },
   { name: "Galpão", body: "O que ainda não foi separado: Em casa − Depósito. Ninguém digita, é conta." },
-  { name: "Full", body: "Tudo que está com o Mercado Livre nos centros dele, inclusive \"em transferência\". Vem do ML." },
+  { name: "Full", body: "Tudo que está com o Mercado Livre nos centros dele: o que está à venda e o que ainda não está (em transferência, retirada, sem cobertura fiscal…). Perdidas pelo ML ficam fora. Vem do ML." },
   { name: "Total", body: "Em casa + Full." },
 ] as const;
 

@@ -1448,9 +1448,9 @@ model StockItemMlPosition {
   depositQty        Int?      @map("deposit_qty")
   /// Full disponível para venda.
   fullAvailableQty  Int?      @map("full_available_qty")
-  /// Full em transferência entre centros do ML (já está com o ML).
+  /// Full em transferência entre centros do ML (status `transfer`; já está com o ML).
   fullTransferQty   Int?      @map("full_transfer_qty")
-  /// Full não disponível por outro motivo (retirada, avaria, sem cobertura fiscal…).
+  /// Full não disponível por outro motivo (retirada, sem cobertura fiscal, processo interno, avaria…).
   fullOtherQty      Int?      @map("full_other_qty")
   /// Parte do `fullOtherQty` reservada para retirada (voltando para o vendedor).
   fullWithdrawalQty Int?      @map("full_withdrawal_qty")
@@ -1458,6 +1458,8 @@ model StockItemMlPosition {
   fullLostQty       Int?      @map("full_lost_qty")
   /// Tudo que está com o ML, menos o perdido (disponível + não disponível).
   fullTotalQty      Int?      @map("full_total_qty")
+  /// Fora da venda no Full, por status do ML (`[{status, quantity}]`, inclui `lost`), para a tela nomear cada parte.
+  fullUnavailableDetail Json? @map("full_unavailable_detail")
   fetchedAt         DateTime? @map("fetched_at")
   error             String?
   updatedAt         DateTime  @updatedAt @map("updated_at")

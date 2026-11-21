@@ -17,6 +17,8 @@ O ícone ao lado do título "Estoque" abre o guia "Como funciona o estoque" (`St
 | **Total** | Em casa + Full | conta |
 
 - Leitura do ML que falhou vira `null`, e a tela mostra "—", nunca 0 (`stock-position.ts`).
+- **Full fora da venda:** a tela nomeia cada parte pelo status do ML (`not_available_detail`, guardado em `StockItemMlPosition.fullUnavailableDetail`): em transferência (`transfer`), retirada (`withdrawal`), sem cobertura fiscal (`noFiscalCoverage`), processo interno… O perdido (`lost`) aparece à parte e fica fora do total.
+  - Só `transfer` é "em transferência". Antes a tela chamava tudo que estava fora da venda de "em transferência" (um anúncio mostrou 44 quando o ML tinha 19).
 - Separar mercadoria para venda continua sendo feito no ML: o Galpão cai sozinho.
 
 ## Identidade: item de estoque = `user_product_id`

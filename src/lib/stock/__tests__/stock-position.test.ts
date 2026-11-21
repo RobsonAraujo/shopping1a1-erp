@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { computeStockPosition, type MlPositionInput } from "../stock-position";
+import { computeStockPosition, fullBreakdownOf, type MlPositionInput } from "../stock-position";
 import { combineStockItemReads, parseUserProductStock } from "../stock-ml-read";
 import { stockChannelLabel, storedChannelFromShipment } from "../stock-channel";
 
@@ -9,7 +9,10 @@ const read = (partial: Partial<MlPositionInput>): MlPositionInput => ({
   fullAvailableQty: 400,
   fullTransferQty: 17,
   fullOtherQty: 0,
+  fullWithdrawalQty: 0,
+  fullLostQty: 0,
   fullTotalQty: 417,
+  fullUnavailableDetail: null,
   fetchedAt: new Date("2026-11-21T10:00:00Z"),
   error: null,
   ...partial,
@@ -70,12 +73,31 @@ describe("stock ML reads", () => {
   it("combines UP and fulfillment reads; Full total includes transfer", () => {
     const combined = combineStockItemReads({
       userProducts: [{ depositQty: 197, fullAvailableQty: 409, sellerNodeIds: ["N1"] }],
-      fulfillment: [{ available: 409, inTransfer: 17, withdrawal: 0, lost: 0, other: 0, custody: 426 }],
+      fulfillment: [
+        { available: 409, inTransfer: 17, withdrawal: 0, lost: 0, other: 0, custody: 426, detail: [{ status: "transfer", quantity: 17 }] },
+      ],
       hasFull: true,
     });
     assert.equal(combined.depositQty, 197);
     assert.equal(combined.fullTotalQty, 426);
     assert.equal(combined.fullTransferQty, 17);
+    assert.deepEqual(combined.fullUnavailableDetail, [{ status: "transfer", quantity: 17 }]);
+  });
+
+  it("sums the status breakdown across Full inventories", () => {
+    const combined = combineStockItemReads({
+      userProducts: [{ depositQty: 0, fullAvailableQty: 10, sellerNodeIds: [] }],
+      fulfillment: [
+        { available: 5, inTransfer: 2, withdrawal: 0, lost: 0, other: 1, custody: 8, detail: [{ status: "transfer", quantity: 2 }, { status: "noFiscalCoverage", quantity: 1 }] },
+        { available: 5, inTransfer: 3, withdrawal: 0, lost: 1, other: 0, custody: 8, detail: [{ status: "transfer", quantity: 3 }, { status: "lost", quantity: 1 }] },
+      ],
+      hasFull: true,
+    });
+    assert.deepEqual(combined.fullUnavailableDetail, [
+      { status: "transfer", quantity: 5 },
+      { status: "noFiscalCoverage", quantity: 1 },
+      { status: "lost", quantity: 1 },
+    ]);
   });
 
   it("item without Full inventory: Full is zero", () => {
@@ -86,6 +108,33 @@ describe("stock ML reads", () => {
     });
     assert.equal(combined.fullTotalQty, 0);
     assert.equal(combined.depositQty, 16);
+  });
+});
+
+describe("fullBreakdownOf", () => {
+  it("uses the exact ML statuses when the reading has them", () => {
+    const detail = [
+      { status: "transfer", quantity: 19 },
+      { status: "noFiscalCoverage", quantity: 9 },
+    ];
+    assert.deepEqual(fullBreakdownOf(read({ fullUnavailableDetail: detail })), detail);
+    assert.deepEqual(
+      computeStockPosition({ ownQty: 0, ml: read({ fullUnavailableDetail: detail }), hasFull: true }).fullBreakdown,
+      detail,
+    );
+  });
+
+  it("older readings fall back to the grouped columns (other = other minus withdrawal)", () => {
+    // MLB4931680655 antes da coluna nova: transfer 19, other 25 (= retirada 16 + 9), perdidas 6.
+    const parts = fullBreakdownOf(
+      read({ fullTransferQty: 19, fullOtherQty: 25, fullWithdrawalQty: 16, fullLostQty: 6, fullUnavailableDetail: null }),
+    );
+    assert.deepEqual(parts, [
+      { status: "transfer", quantity: 19 },
+      { status: "withdrawal", quantity: 16 },
+      { status: "other", quantity: 9 },
+      { status: "lost", quantity: 6 },
+    ]);
   });
 });
 

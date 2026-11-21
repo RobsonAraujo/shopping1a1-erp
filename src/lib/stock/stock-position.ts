@@ -8,8 +8,9 @@
  *   (`seller_warehouse`). O ML desconta sozinho a cada venda de casa.
  * - **Galpão** = Em casa − Depósito: o que ainda não foi separado para venda.
  *   Ninguém lança; sai da conta.
- * - **Full**: disponível + em transferência entre centros do ML + outros não
- *   disponíveis. Tudo isso já está com o ML.
+ * - **Full**: à venda + o que ainda não está à venda (em transferência entre
+ *   centros do ML, retirada, sem cobertura fiscal…). Tudo isso já está com o
+ *   ML. O perdido fica fora.
  * - **Total** = Em casa + Full.
  *
  * Leitura do ML que falhou ou nunca aconteceu vira `null` (a tela mostra
@@ -21,10 +22,17 @@ export type MlPositionInput = {
   fullAvailableQty: number | null;
   fullTransferQty: number | null;
   fullOtherQty: number | null;
+  fullWithdrawalQty: number | null;
+  fullLostQty: number | null;
   fullTotalQty: number | null;
+  /** `StockItemMlPosition.fullUnavailableDetail` (JSON); `null` em leitura antiga. */
+  fullUnavailableDetail: unknown;
   fetchedAt: Date | null;
   error: string | null;
 };
+
+/** Uma parte do Full fora da venda, com o status do ML (`lost` fica fora do total). */
+export type FullBreakdownPart = { status: string; quantity: number };
 
 export type StockAlert =
   /** O ML anuncia no depósito mais do que existe em casa: risco de vender sem ter. */
@@ -40,8 +48,10 @@ export type StockPosition = {
   /** Em casa − Depósito. Negativo quando o depósito do ML passa do Em casa. */
   warehouse: number | null;
   fullAvailable: number | null;
-  /** Em transferência entre centros do ML + outros não disponíveis. */
+  /** Tudo que está no Full e não está à venda (em transferência, retirada, sem cobertura fiscal…). */
   fullUnavailable: number | null;
+  /** O `fullUnavailable` por status do ML, mais o perdido (fora do total). */
+  fullBreakdown: FullBreakdownPart[];
   fullTotal: number | null;
   total: number | null;
   alerts: StockAlert[];
@@ -61,6 +71,7 @@ export function computeStockPosition(input: {
     mlRead && (ml.fullTransferQty != null || ml.fullOtherQty != null)
       ? (ml.fullTransferQty ?? 0) + (ml.fullOtherQty ?? 0)
       : null;
+  const fullBreakdown = mlRead ? fullBreakdownOf(ml) : [];
   const fullTotal = mlRead
     ? (ml.fullTotalQty ?? (hasFull ? null : 0))
     : hasFull
@@ -78,8 +89,44 @@ export function computeStockPosition(input: {
     warehouse: deposit == null ? null : ownQty - deposit,
     fullAvailable,
     fullUnavailable,
+    fullBreakdown,
     fullTotal,
     total: fullTotal == null ? null : ownQty + fullTotal,
     alerts,
   };
+}
+
+function parseDetail(raw: unknown): FullBreakdownPart[] | null {
+  if (!Array.isArray(raw)) return null;
+  const parts: FullBreakdownPart[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const { status, quantity } = entry as { status?: unknown; quantity?: unknown };
+    if (typeof status !== "string" || typeof quantity !== "number" || quantity <= 0) continue;
+    parts.push({ status, quantity });
+  }
+  return parts;
+}
+
+/**
+ * Quebra do Full fora da venda. Leitura nova traz o status exato do ML;
+ * leitura antiga (antes da coluna) cai nos números agrupados: transferência,
+ * retirada, perdido e "outro" (o resto).
+ */
+export function fullBreakdownOf(
+  ml: Pick<
+    MlPositionInput,
+    "fullUnavailableDetail" | "fullTransferQty" | "fullOtherQty" | "fullWithdrawalQty" | "fullLostQty"
+  >,
+): FullBreakdownPart[] {
+  const detail = parseDetail(ml.fullUnavailableDetail);
+  if (detail) return detail;
+  const withdrawal = ml.fullWithdrawalQty ?? 0;
+  const parts: FullBreakdownPart[] = [
+    { status: "transfer", quantity: ml.fullTransferQty ?? 0 },
+    { status: "withdrawal", quantity: withdrawal },
+    { status: "other", quantity: Math.max(0, (ml.fullOtherQty ?? 0) - withdrawal) },
+    { status: "lost", quantity: ml.fullLostQty ?? 0 },
+  ];
+  return parts.filter((p) => p.quantity > 0);
 }
