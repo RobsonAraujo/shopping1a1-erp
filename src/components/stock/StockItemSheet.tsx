@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Clock, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormInput } from "@/components/ui/form-input";
@@ -207,36 +207,70 @@ export function StockItemSheet({
               </section>
 
               {mode === "view" ? (
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" size="sm" onClick={() => openMode("adjust")}>
-                    Ajustar saldo
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => openMode("out")}>
-                    Registrar saída
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => openMode("return")}>
-                    Voltou do Full
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => openMode("lead")}>
-                    Prazo de compra: {row.leadTimeDays != null ? `${row.leadTimeDays} dias` : "não definido"}
-                  </Button>
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" size="sm" onClick={() => openMode("adjust")}>
+                      Ajustar saldo
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => openMode("out")}>
+                      Registrar saída
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => openMode("return")}>
+                      Voltou do Full
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-3 rounded-lg border border-[var(--border)] px-3 py-2.5">
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--primary)]/10 text-[var(--primary)]">
+                      <Clock className="size-4" aria-hidden />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-[var(--foreground)]">
+                        Prazo de compra:{" "}
+                        {row.leadTimeDays != null
+                          ? `${row.leadTimeDays} ${row.leadTimeDays === 1 ? "dia" : "dias"}`
+                          : "não definido"}
+                      </p>
+                      <p className="text-xs text-[var(--muted-foreground)]">
+                        {row.leadTimeDays != null
+                          ? "Do pedido ao fornecedor até a mercadoria chegar no galpão."
+                          : "Sem prazo, o Compras conta 0 dias e avisa a hora de comprar em cima da hora."}
+                      </p>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => openMode("lead")}>
+                      {row.leadTimeDays != null ? "Alterar" : "Definir"}
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <section className="space-y-3 rounded-lg border border-[var(--border)] p-4">
                   {mode === "lead" ? (
                     <>
-                      <p className="text-sm font-medium">Prazo da compra até chegar no galpão</p>
+                      <div>
+                        <p className="text-sm font-medium">Prazo de compra</p>
+                        <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                          Quantos dias, em média, entre fazer o pedido ao fornecedor e a mercadoria chegar no galpão:
+                          o tempo do fornecedor separar ou produzir, mais o frete.
+                        </p>
+                      </div>
                       <FormInput
                         label="Dias"
                         type="number"
                         min={0}
                         max={365}
+                        placeholder="Ex.: 8"
                         value={leadDays}
                         onChange={(e) => setLeadDays(e.target.value)}
                       />
-                      <p className="text-xs text-[var(--muted-foreground)]">
-                        Usado pelo Compras e pelo Kanban para avisar a hora de comprar.
-                      </p>
+                      <div className="space-y-1.5 rounded-lg bg-[var(--muted)]/30 p-3 text-xs leading-relaxed text-[var(--muted-foreground)]">
+                        <p>
+                          <span className="font-medium text-[var(--foreground)]">Para que serve:</span> o Compras e o
+                          Kanban usam este prazo para dizer até quando comprar. A conta é a data em que o estoque deve
+                          acabar, menos este prazo e o tempo de envio ao Full. Também entra no alerta de ruptura dos
+                          Insights.
+                        </p>
+                        <p>Exemplo: o fornecedor despacha em 5 dias e o frete leva 3, então são 8 dias.</p>
+                        <p>Vale para todas as opções de venda deste produto. Em branco, o Compras conta 0 dias.</p>
+                      </div>
                     </>
                   ) : (
                     <>
