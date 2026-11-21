@@ -37,6 +37,18 @@ const TENANT_SCOPED_MODELS = new Set([
   "ListingHealth",
   "ListingActionState",
   "ListingHealthRun",
+  "StockSettings",
+  "StockItem",
+  "StockMovement",
+  "StockBalance",
+  "StockItemMlPosition",
+  "StockEntry",
+  "StockLot",
+  "StockLotConsumption",
+  "StockReviewItem",
+  "StockCount",
+  "StockCountLine",
+  "StockSyncState",
 ]);
 
 /**

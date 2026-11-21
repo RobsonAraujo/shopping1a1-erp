@@ -151,7 +151,8 @@ export function Combobox({
           >
             <span
               className={cn(
-                "truncate text-left",
+                // `min-w-0`: filho de flex só corta com "…" se puder encolher.
+                "min-w-0 truncate text-left",
                 !selected && "text-[var(--muted-foreground)]",
               )}
             >

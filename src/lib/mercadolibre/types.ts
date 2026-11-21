@@ -62,6 +62,14 @@ export type ItemBody = {
   listing_type_id?: string;
   /** Inventário Full no ML (quando `shipping.logistic_type` é fulfillment). */
   inventory_id?: string;
+  /**
+   * Produto físico (`MLBU…`) onde o ML guarda o estoque. As "opções de venda"
+   * (Clássico, Premium, B2B…) são MLBs diferentes com o mesmo UP e o mesmo
+   * estoque. Conferido em todos os anúncios da conta em nov/2026.
+   */
+  user_product_id?: string | null;
+  /** Família de UPs (agrupa as variações). */
+  family_id?: string | number | null;
   permalink: string;
   /** Dimensões para frete: "HxWxL,peso_g" quando exposto pela API. */
   dimensions?: string;
@@ -143,9 +151,17 @@ export type OrderSearchOrderItem = {
   listing_type_id?: string;
   item?: {
     id?: string;
+    title?: string;
     seller_sku?: string;
     seller_custom_field?: string;
+    variation_id?: number | string | null;
   };
+  /**
+   * De onde a unidade saiu: `node_id` é um centro do ML (ex.: `BRSP19`) no
+   * Full, ou o nó do depósito do vendedor (ex.: `BRP17013423321`) na venda
+   * multi-origem despachada de casa. Conferido em nov/2026.
+   */
+  stock?: { node_id?: string | null; store_id?: string | number | null } | null;
   seller_custom_field?: string;
   /** Em algumas respostas o id do anúncio vem no nível da linha */
   item_id?: string;
@@ -162,6 +178,9 @@ export type OrderSearchOrder = {
   status?: string;
   date_closed?: string;
   date_created?: string;
+  /** Última alteração do pedido — base do filtro `order.date_last_updated`. */
+  date_last_updated?: string;
+  last_updated?: string;
   pack_id?: number | string | null;
   /** Ex.: `delivered`, `not_delivered`, `paid`. Devolução pós-entrega costuma ficar `paid` + `delivered`. Venda para empresa traz `b2b` (e `price_per_quantity` quando saiu pelo preço por quantidade). */
   tags?: string[];

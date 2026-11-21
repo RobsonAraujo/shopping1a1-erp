@@ -28,6 +28,25 @@ const API_ERROR_MESSAGES: Record<string, string> = {
     "Não foi possível consultar taxa e frete no Mercado Livre agora. Tente de novo.",
   rotina_simulate_floor_failed: "Não foi possível calcular o mínimo agora. Tente de novo.",
   rotina_simulate_ads_failed: "Não foi possível ler o TACOS de hoje agora. Tente de novo.",
+  stock_not_activated: "O estoque automático ainda não foi ativado nesta conta.",
+  stock_already_activated: "O estoque automático já está ativado. Atualize a página.",
+  stock_activation_failed:
+    "Não foi possível preparar o estoque agora. Nada foi gravado; tente de novo em instantes.",
+  stock_sync_busy: "Já tem uma sincronização do estoque rodando. Espere ela terminar.",
+  stock_sync_failed:
+    "Não foi possível terminar a sincronização. O que já foi lido ficou salvo; tente de novo.",
+  stock_invalid_input: "Confira os dados preenchidos e tente de novo.",
+  stock_item_not_found: "Este produto não está mais no estoque. Atualize a página.",
+  stock_entry_not_found: "Esta entrada não existe mais. Atualize a página.",
+  stock_entry_consumed:
+    "Parte desta entrada já foi vendida, então ela não pode ser estornada. Use um ajuste.",
+  stock_entry_reversed: "Esta entrada já foi estornada.",
+  stock_review_not_found: "Esta pendência não existe mais. Atualize a página.",
+  stock_review_closed: "Esta pendência já foi resolvida.",
+  stock_action_failed: "Não foi possível salvar no estoque agora. Tente de novo.",
+  stock_count_not_found: "Este inventário não existe mais. Atualize a página.",
+  stock_count_closed: "Este inventário já foi aprovado ou cancelado.",
+  stock_count_empty: "Nenhum produto com esse filtro para contar.",
   calculator_listing_not_found: "Este anúncio não está mais na sua loja. Atualize a página.",
   calculator_listing_inactive:
     "Este anúncio não está ativo nem pausado no Mercado Livre: não há preço de agora para calcular.",

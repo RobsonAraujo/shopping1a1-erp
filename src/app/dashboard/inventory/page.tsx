@@ -1,351 +1,115 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
-import { cookies } from "next/headers";
 import Link from "next/link";
-import { AlertTriangle, Boxes, Info } from "lucide-react";
-import { InventoryStockTable, type InventoryRow } from "@/components/inventory/InventoryStockTable";
-import { InventoryStockTableSkeleton } from "@/components/inventory/InventoryStockTableSkeleton";
+import { Suspense } from "react";
+import { Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { UserFeedback } from "@/components/ui/user-feedback";
-import { fetchAllUserItemIds, fetchItemsByIdsBatched } from "@/lib/mercadolibre/api";
-import { fetchUnitsSoldForItemsInWindowCached } from "@/lib/mercadolibre/sales-window-cache";
-import { isFulfillmentListing } from "@/lib/mercadolibre/fulfillment-stock";
-import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
-import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
-import { getItemSku, isKitItem } from "@/lib/mercadolibre/item-sku";
-import { countListingsByStatus } from "@/lib/mercadolibre/listing-status";
-import { computeStockPlanningDisplay } from "@/lib/compras/stock-planning";
-import {
-  loadOperationalSettings,
-  toStockPlanningValues,
-} from "@/lib/configuracoes/operational-settings";
-import { prisma } from "@/lib/db/db";
-import { readSession } from "@/lib/mercadolibre/session";
-import { getOrganizationContext } from "@/lib/organizations/context";
+import { StockAutoActivation } from "@/components/stock/StockAutoActivation";
+import { StockExitButton } from "@/components/stock/StockExitForm";
+import { StockPageHeader } from "@/components/stock/StockPageHeader";
+import { StockPositionView } from "@/components/stock/StockPositionView";
+import { StockSyncBar } from "@/components/stock/StockSyncBar";
+import { StockTabsNav } from "@/components/stock/StockTabsNav";
 import { publicPageLoadMessage } from "@/lib/infra/server-public-error";
+import { getOrganizationContext } from "@/lib/organizations/context";
+import {
+  loadOpenStockReviews,
+  loadStockOverview,
+  loadStockSettings,
+} from "@/lib/stock/stock-page-data";
 
-async function InventoryDataSection({
-  token,
-  userId,
-  organizationId,
-}: {
-  token: string;
-  userId: number;
-  organizationId: string;
-}) {
-  let total = 0;
-  let statusCounts = { active: 0, paused: 0, other: 0 };
-  let warehouseLoadFailed = false;
-  let supplierNames: Record<string, string> = {};
-  let rows: InventoryRow[] = [];
-  let unregisteredCount = 0;
-  let missingOnMlCount = 0;
+export const metadata: Metadata = {
+  title: "Estoque",
+};
 
+function PositionSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Card key={i} className="rounded-2xl p-4">
+            <Skeleton className="h-3 w-20" />
+            <Skeleton className="mt-2 h-7 w-28" />
+            <Skeleton className="mt-2 h-3 w-36" />
+          </Card>
+        ))}
+      </div>
+      <Card className="rounded-2xl p-4">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <Skeleton key={i} className="my-3 h-9 w-full" />
+        ))}
+      </Card>
+    </div>
+  );
+}
+
+async function PositionSection({ organizationId }: { organizationId: string }) {
+  let data: [Awaited<ReturnType<typeof loadStockOverview>>, Awaited<ReturnType<typeof loadOpenStockReviews>>];
   try {
-    const operationalSettings = await loadOperationalSettings(organizationId);
-    const stockPlanning = toStockPlanningValues(operationalSettings);
-
-    // Fonte de verdade do Estoque: o cadastro em Meus Produtos (`Product`),
-    // não a busca ao vivo de anúncios do ML — evita duplicar linha quando o
-    // vendedor tem 2 `mlItemId` ativos pro mesmo produto (ex.: anúncio
-    // "espelho" de Catálogo), já que `Product` é 1 linha por produto de
-    // verdade (SKU único, checado em `PATCH /api/products/[mlItemId]`).
-    // Anúncio ativo/pausado nunca cadastrado em Meus Produtos não aparece
-    // aqui — o aviso de "não cadastrado" abaixo cobre esse caso.
-    const products = await prisma.product.findMany({
-      where: { organizationId, active: true },
-      select: { mlItemId: true, supplier: { select: { name: true } } },
-    });
-    const productMlItemIds = products.map((p) => p.mlItemId);
-    supplierNames = Object.fromEntries(
-      products
-        .filter((p): p is typeof p & { supplier: { name: string } } => p.supplier != null)
-        .map((p) => [p.mlItemId, p.supplier.name]),
-    );
-
-    // A varredura de anúncios do ML alimenta só o aviso de "não cadastrado".
-    // Ela tem `catch` próprio de propósito: é informativa, então uma falha
-    // dela (rate limit, timeout) esconde o aviso em vez de derrubar a página
-    // inteira com os dados de estoque já carregados.
-    const [rawItems, liveMlItemIds] = await Promise.all([
-      productMlItemIds.length > 0
-        ? fetchItemsByIdsBatched(token, productMlItemIds)
-        : Promise.resolve([]),
-      Promise.all([
-        fetchAllUserItemIds(token, userId, { status: "active" }),
-        fetchAllUserItemIds(token, userId, { status: "paused" }),
-      ])
-        .then(([activeIds, pausedIds]) => [...activeIds, ...pausedIds])
-        .catch(() => null),
-    ]);
-
-    const registeredIds = new Set(productMlItemIds);
-    if (liveMlItemIds) {
-      for (const id of new Set(liveMlItemIds)) {
-        if (!registeredIds.has(id)) unregisteredCount++;
-      }
-    }
-
-    // Espelho do aviso acima: produto cadastrado e ativo cujo anúncio o ML
-    // não devolve mais (encerrado de vez, apagado) sumiria da tela sem
-    // explicação nenhuma — `fetchItemsByIds` descarta esses ids calado.
-    const returnedMlItemIds = new Set(rawItems.map((item) => item.id));
-    missingOnMlCount = productMlItemIds.filter(
-      (id) => !returnedMlItemIds.has(id),
-    ).length;
-
-    const items = rawItems.filter((item) => !isKitItem(item));
-
-    const allIds = items.map((item) => item.id);
-
-    // As 2 buscas abaixo são independentes entre si — paralelizadas em vez
-    // de sequenciais. O estoque Full em processamento
-    // (`enrichItemsWithFulfillmentStock`, 1 chamada ML por item Full) NÃO
-    // entra aqui de propósito: é a parte mais lenta do carregamento, então
-    // fica pra depois — o client busca isso via streaming
-    // (`/api/inventory/fulfillment-stream`) assim que a tabela já estiver
-    // na tela, preenchendo "A caminho"/"Total"/"Comprar" aos poucos.
-    const [salesByItem, warehouseStocks] = await Promise.all([
-      fetchUnitsSoldForItemsInWindowCached(
-        organizationId,
-        token,
-        userId,
-        allIds,
-        stockPlanning.salesAverageWindowDays,
-        stockPlanning.salesWindowDateField,
-      ),
-      prisma.warehouseStock
-        .findMany({
-          where: { organizationId, mlItemId: { in: allIds } },
-          select: {
-            mlItemId: true,
-            quantity: true,
-            purchaseLeadTimeDays: true,
-          },
-        })
-        .catch(() => null),
-    ]);
-
-    let warehouseById: Record<string, number> = {};
-    let leadTimeById: Record<string, number | null> = {};
-    if (warehouseStocks) {
-      warehouseById = Object.fromEntries(
-        warehouseStocks.map((s) => [s.mlItemId, s.quantity]),
-      );
-      leadTimeById = Object.fromEntries(
-        warehouseStocks.map((s) => [s.mlItemId, s.purchaseLeadTimeDays]),
-      );
-    } else {
-      warehouseLoadFailed = true;
-    }
-
-    rows = items.map((item) => ({
-      ...(() => {
-        const mlStock = mlAvailableStockUnits(item);
-        const warehouseStock = warehouseById[item.id] ?? 0;
-        const isFulfillment = isFulfillmentListing(item);
-        const purchaseLeadTimeDays = leadTimeById[item.id] ?? 0;
-        const sold = salesByItem[item.id] ?? 0;
-
-        // Itens Full: "a caminho"/"total"/"comprar" dependem do estoque Full
-        // em processamento, que ainda não foi buscado (ver comentário acima)
-        // — ficam com valor provisório até o streaming client-side resolver.
-        // Itens sem Full: não têm esse dado pra esperar, resolvem na hora.
-        if (isFulfillment) {
-          return {
-            mlStock,
-            warehouseStock,
-            isFulfillment,
-            mlStockOnTheWay: 0,
-            mlProcessTransfer: 0,
-            mlProcessInternal: 0,
-            leadTimeDays: leadTimeById[item.id] ?? null,
-            needsPurchaseAttention: false,
-            fulfillmentPending: true,
-          };
-        }
-
-        const plan = computeStockPlanningDisplay(
-          mlStock + warehouseStock,
-          sold,
-          stockPlanning.salesAverageWindowDays,
-          stockPlanning,
-          purchaseLeadTimeDays,
-        );
-        return {
-          mlStock,
-          warehouseStock,
-          isFulfillment,
-          mlStockOnTheWay: 0,
-          mlProcessTransfer: 0,
-          mlProcessInternal: 0,
-          leadTimeDays: leadTimeById[item.id] ?? null,
-          needsPurchaseAttention: plan.needsPurchaseAttention,
-          fulfillmentPending: false,
-        };
-      })(),
-      mlItemId: item.id,
-      sku: getItemSku(item),
-      title: item.title,
-      imageUrl: bestItemImageUrl(item),
-      mlStatus: item.status,
-      catalogListing: item.catalog_listing === true,
-    }));
-
-    // Anúncios encerrados (`closed`) só aparecem se ainda houver estoque
-    // registrado. Com o Full pendente, `mlStockOnTheWay` ainda é 0
-    // provisório — não dá pra decidir com certeza ainda, então mantém
-    // visível (evita a linha sumir e depois reaparecer quando o streaming
-    // resolver o valor real).
-    rows = rows.filter((row) => {
-      if (row.mlStatus !== "closed") return true;
-      if (row.fulfillmentPending) return true;
-      return row.mlStock + row.warehouseStock + row.mlStockOnTheWay > 0;
-    });
-
-    total = items.length;
-    statusCounts = countListingsByStatus(items);
+    data = await Promise.all([loadStockOverview(organizationId), loadOpenStockReviews(organizationId)]);
   } catch (e) {
     const msg = publicPageLoadMessage(
       "dashboard/inventory",
       e,
       "Não foi possível carregar o estoque agora. Tente de novo em instantes.",
     );
-    return (
-      <UserFeedback title="Não foi possível carregar o estoque">{msg}</UserFeedback>
-    );
+    return <UserFeedback title="Não foi possível carregar o estoque">{msg}</UserFeedback>;
   }
-
-  // Quebra por status só com o que existe de fato. Inclui a fatia "outro
-  // status" (`countListingsByStatus.other`: encerrado, em revisão, etc.), que
-  // antes ficava de fora e fazia a soma das parcelas não bater com o total.
-  const statusBreakdown = [
-    statusCounts.active > 0 ? `${statusCounts.active} ativo${statusCounts.active !== 1 ? "s" : ""}` : null,
-    statusCounts.paused > 0 ? `${statusCounts.paused} pausado${statusCounts.paused !== 1 ? "s" : ""}` : null,
-    statusCounts.other > 0 ? `${statusCounts.other} em outro status` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-
+  const [overview, reviews] = data;
+  if (!overview) return null;
+  const exitItems = overview.rows.map((r) => ({
+    stockItemId: r.stockItemId,
+    title: r.title,
+    sku: r.sku,
+    ownQty: r.own,
+  }));
   return (
-    <>
-      <Card className="flex items-center gap-3 rounded-2xl p-4">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--primary)]/10 text-[var(--primary)]">
-          <Boxes className="size-4" aria-hidden />
-        </span>
-        <p className="text-sm text-[var(--muted-foreground)]">
-          <span className="font-semibold tabular-nums text-[var(--foreground)]">
-            {total}
-          </span>{" "}
-          produto{total !== 1 ? "s" : ""} cadastrado{total !== 1 ? "s" : ""}
-          {statusBreakdown ? ` · ${statusBreakdown}` : null}
-        </p>
-      </Card>
-
-      {unregisteredCount > 0 ? (
-        <Card className="flex items-start gap-3 rounded-2xl border-[var(--primary)]/20 bg-[var(--primary)]/5 p-4 text-sm">
-          <Info className="mt-0.5 size-4 shrink-0 text-[var(--primary)]" aria-hidden />
-          <p className="text-[var(--foreground)]">
-            <strong>
-              {unregisteredCount} anúncio{unregisteredCount !== 1 ? "s" : ""}
-            </strong>{" "}
-            ativo{unregisteredCount !== 1 ? "s" : ""}/pausado
-            {unregisteredCount !== 1 ? "s" : ""} no Mercado Livre ainda não{" "}
-            {unregisteredCount !== 1 ? "foram cadastrados" : "foi cadastrado"} em{" "}
-            <Link href="/dashboard/produtos" className="font-medium underline underline-offset-2">
-              Meus Produtos
-            </Link>{" "}
-            — não {unregisteredCount !== 1 ? "aparecem" : "aparece"} aqui até serem
-            cadastrados.
-          </p>
-        </Card>
-      ) : null}
-
-      {missingOnMlCount > 0 ? (
-        <Card className="flex items-start gap-3 rounded-2xl border-amber-500/20 bg-amber-500/5 p-4 text-sm">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
-          <p className="text-amber-900 dark:text-amber-200">
-            <strong>
-              {missingOnMlCount} produto{missingOnMlCount !== 1 ? "s" : ""}
-            </strong>{" "}
-            cadastrado{missingOnMlCount !== 1 ? "s" : ""} em{" "}
-            <Link href="/dashboard/produtos" className="font-medium underline underline-offset-2">
-              Meus Produtos
-            </Link>{" "}
-            não {missingOnMlCount !== 1 ? "têm" : "tem"} mais anúncio no Mercado
-            Livre (encerrado ou apagado de vez) — por isso não{" "}
-            {missingOnMlCount !== 1 ? "aparecem" : "aparece"} na tabela. Inative
-            ou remova o cadastro para parar de {missingOnMlCount !== 1 ? "vê-los" : "vê-lo"} aqui.
-          </p>
-        </Card>
-      ) : null}
-
-      {warehouseLoadFailed ? (
-        <Card className="flex items-start gap-3 rounded-2xl border-amber-500/20 bg-amber-500/5 p-4 text-sm">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
-          <p className="text-amber-900 dark:text-amber-200">
-            Não foi possível ler o estoque do galpão (PostgreSQL). As colunas do
-            galpão aparecem como zero; confira o banco e o{" "}
-            <code className="rounded bg-amber-500/10 px-1 font-mono text-xs">
-              DATABASE_URL
-            </code>
-            .
-          </p>
-        </Card>
-      ) : null}
-
-      <InventoryStockTable rows={rows} supplierNames={supplierNames} />
-    </>
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <StockSyncBar {...overview.sync} />
+        <div className="flex flex-wrap gap-2">
+          <StockExitButton items={exitItems} />
+          <Button asChild>
+            <Link href="/dashboard/inventory/entradas?nova=1">
+              <Plus aria-hidden />
+              Registrar entrada
+            </Link>
+          </Button>
+        </div>
+      </div>
+      <StockPositionView rows={overview.rows} reviews={reviews} />
+    </div>
   );
 }
 
-export const metadata: Metadata = {
-  title: "Estoque",
-};
-
 export default async function InventoryPage() {
-  const cookieStore = await cookies();
-  const { accessToken: token, userId } = readSession(cookieStore);
-
-  if (!token || userId === undefined) {
-    return null;
-  }
-
   const orgContext = await getOrganizationContext();
-  if (orgContext.status !== "active") {
-    return null;
+  if (orgContext.status !== "active") return null;
+  const organizationId = orgContext.organization.id;
+
+  const settings = await loadStockSettings(organizationId);
+  if (!settings) {
+    // Primeira visita: ativa sozinho (tela de bloqueio com progresso) e recarrega.
+    return (
+      <div className="space-y-6">
+        <StockPageHeader subtitle="Galpão, depósito e Full de cada produto, atualizados sozinhos a partir das vendas do Mercado Livre." />
+        <StockAutoActivation>
+          <PositionSkeleton />
+        </StockAutoActivation>
+      </div>
+    );
   }
+
+  const reviews = await loadOpenStockReviews(organizationId);
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-center gap-3">
-        <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[var(--primary)]/10 text-[var(--primary)]">
-          <Boxes className="size-5" aria-hidden />
-        </span>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-[var(--foreground)] sm:text-3xl">
-            Estoque
-          </h1>
-          <p className="mt-1 max-w-3xl text-sm leading-relaxed text-[var(--muted-foreground)] sm:text-[15px]">
-            Produtos cadastrados em <strong>Meus Produtos</strong>, com os números
-            buscados ao vivo no Mercado Livre (pausados aparecem com aviso).
-            Estoque no <strong>galpão</strong>, no{" "}
-            <strong>Full</strong> (já liberado para venda), <strong>a caminho</strong>{" "}
-            (transferência e processamento interno via API) e total geral. O
-            &quot;a caminho&quot; pode ser menor que no painel do Meli quando há{" "}
-            <strong>entrada pendente</strong> não exposta pela API.{" "}
-            <strong>Editar</strong> ajusta só o galpão;{" "}
-            <strong>Configurações</strong> define o prazo compra → galpão.
-          </p>
-        </div>
-      </div>
-
-      <Suspense fallback={<InventoryStockTableSkeleton />}>
-        <InventoryDataSection
-          token={token}
-          userId={userId}
-          organizationId={orgContext.organization.id}
-        />
+    <div className="space-y-6">
+      <StockPageHeader subtitle="Galpão, depósito e Full de cada produto. As vendas baixam sozinhas; você registra entradas e envios ao Full." />
+      <StockTabsNav active="posicao" pendingCount={reviews.length} />
+      <Suspense fallback={<PositionSkeleton />}>
+        <PositionSection organizationId={organizationId} />
       </Suspense>
     </div>
   );

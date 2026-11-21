@@ -8,6 +8,7 @@ import { MobileDashboardMenu } from "@/components/shared/MobileDashboardMenu";
 import { Button } from "@/components/ui/button";
 import { AccountBlockedNotice } from "@/components/shared/AccountBlockedNotice";
 import { getOrganizationContext } from "@/lib/organizations/context";
+import { StockBackgroundSync } from "@/components/stock/StockBackgroundSync";
 
 export default async function DashboardLayout({
   children,
@@ -72,7 +73,11 @@ export default async function DashboardLayout({
         className="mx-auto w-full max-w-7xl flex-1 px-4 pt-4 pb-[calc(5rem+env(safe-area-inset-bottom,0px))] sm:px-6 sm:py-10 sm:pb-10"
       >
         {orgContext.status === "active" ? (
-          children
+          <>
+            {children}
+            {/* Estoque sem cron: lê as vendas novas em segundo plano enquanto alguém usa o ERP. */}
+            <StockBackgroundSync />
+          </>
         ) : orgContext.status === "blocked" ? (
           <AccountBlockedNotice organization={orgContext.organization} />
         ) : (

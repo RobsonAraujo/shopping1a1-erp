@@ -22,6 +22,7 @@ import { InventoryAutoCloseInfoTooltip } from "@/components/inventory/InventoryA
 import { InventoryHistoryMonthPicker } from "@/components/inventory/InventoryHistoryMonthPicker";
 import { InventoryHistoryReportEditor } from "@/components/inventory/InventoryHistoryReportEditor";
 import { InventoryManualSnapshotButton } from "@/components/inventory/InventoryManualSnapshotButton";
+import { StockTabsNav } from "@/components/stock/StockTabsNav";
 
 export const metadata: Metadata = {
   title: "Histórico de Estoque",
@@ -161,6 +162,8 @@ export default async function InventoryHistoryPage({
           <InventoryManualSnapshotButton size="sm" />
         </div>
       </div>
+
+      <StockTabsNav active="historico" />
 
       {selected === null ? (
         <Card className="flex flex-col items-center px-6 py-16 text-center">

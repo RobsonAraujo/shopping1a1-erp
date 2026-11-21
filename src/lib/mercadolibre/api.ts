@@ -1,4 +1,5 @@
 import { reportsConfig } from "@/config/reports";
+import { listingIdsWithOwnStock } from "@/lib/stock/stock-bridge";
 import { stockPlanningConfig } from "@/config/stock-planning";
 import { prisma } from "@/lib/db/db";
 import { roundMoney } from "@/lib/pricing/financial-margin";
@@ -1038,16 +1039,18 @@ export async function fetchOperationalListingIds(
   userId: number,
   organizationId: string,
 ): Promise<string[]> {
-  const [activeIds, pausedIds, warehouseRows] = await Promise.all([
+  const [activeIds, pausedIds, warehouseRows, ownStockIds] = await Promise.all([
     fetchAllUserItemIds(accessToken, userId, { status: "active" }),
     fetchAllUserItemIds(accessToken, userId, { status: "paused" }),
     prisma.warehouseStock.findMany({
       where: { organizationId },
       select: { mlItemId: true },
     }),
+    // Estoque automático: anúncio encerrado com saldo Em casa continua operacional.
+    listingIdsWithOwnStock(organizationId),
   ]);
   const warehouseIds = warehouseRows.map((row) => row.mlItemId);
-  return [...new Set([...activeIds, ...pausedIds, ...warehouseIds])];
+  return [...new Set([...activeIds, ...pausedIds, ...warehouseIds, ...ownStockIds])];
 }
 
 export async function fetchOperationalListings(

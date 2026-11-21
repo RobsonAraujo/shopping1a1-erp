@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isStockAutomatic } from "@/lib/stock/stock-bridge";
+import { syncActiveLotCostFromProduct } from "@/lib/stock/stock-lots";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/db";
@@ -123,6 +125,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       before,
       parsed,
     );
+    // Estoque automático: custo corrigido no cadastro vale para o lote vigente.
+    try {
+      await syncActiveLotCostFromProduct(organizationId, mlItemId, changedFields);
+    } catch (e) {
+      logServerError("api/products/[mlItemId] PATCH lot cost sync", e);
+    }
 
     const imageUrl = await listingImageUrlForMlItemId(
       organizationId,
@@ -189,8 +197,11 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
       }),
     ]);
 
+    // Com o estoque automático, o saldo é do item de estoque (produto físico),
+    // não do cadastro: apagar o cadastro não perde estoque nenhum.
+    const stockAutomatic = await isStockAutomatic(organizationId);
     const blockedMessage = productDeleteBlockedMessage({
-      warehouseQuantity: warehouseStock?.quantity ?? 0,
+      warehouseQuantity: stockAutomatic ? 0 : (warehouseStock?.quantity ?? 0),
       levelingCount,
       kitCount,
     });

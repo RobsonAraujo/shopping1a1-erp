@@ -7,6 +7,8 @@ import {
 import { fetchUnitsSoldForItemsInWindowCached } from "@/lib/mercadolibre/sales-window-cache";
 import { formatCategoryPath } from "@/lib/mercadolibre/category-labels";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
+import { isFulfillmentListing } from "@/lib/mercadolibre/fulfillment-stock";
+import { automaticWarehouseQtyByListing, overlayAutomaticWarehouse } from "@/lib/stock/stock-bridge";
 import { getItemSku, getSkuSupplier, isKitItem } from "@/lib/mercadolibre/item-sku";
 import { loadSupplierNamesByMlItemId } from "@/lib/products/product-resolver";
 import {
@@ -255,6 +257,15 @@ export async function loadDashboardPurchaseData(
         targetCoverageDays: s.targetCoverageDays,
       } satisfies WarehouseStockRow,
     ]),
+  );
+  // Estoque automático: galpão sai do livro de estoque (sem somar o depósito duas vezes).
+  overlayAutomaticWarehouse(
+    warehouseById,
+    await automaticWarehouseQtyByListing(
+      organizationId,
+      items.map((item) => ({ mlItemId: item.id, isFulfillment: isFulfillmentListing(item) })),
+    ),
+    () => ({ quantity: 0, purchaseLeadTimeDays: null, targetCoverageDays: null }),
   );
   const catalogStatusById = Object.fromEntries(
     Object.entries(latestSnapshotById).map(([mlItemId, s]) => [mlItemId, s.status]),
