@@ -58,3 +58,38 @@ export function listingTypeLabel(listingTypeId: string | null | undefined): stri
 export function todayYmd(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date());
 }
+
+/** Nome de cada status do Full fora da venda (o `not_available_detail` do ML). */
+const FULL_STATUS_LABEL: Record<string, string> = {
+  transfer: "em transferência",
+  withdrawal: "em retirada (voltando para vocês)",
+  noFiscalCoverage: "sem cobertura fiscal",
+  internal_process: "em processo interno do ML",
+  damaged: "avariadas",
+  not_supported: "não aceitas pelo Full",
+  notSupported: "não aceitas pelo Full",
+  other: "em outro status do ML",
+};
+/** Ordem na tela: o que mais aparece primeiro; o perdido por último (fica fora do total). */
+const FULL_STATUS_ORDER = ["transfer", "withdrawal", "noFiscalCoverage", "internal_process", "damaged"];
+
+export function fullStatusLabel(status: string): string {
+  return FULL_STATUS_LABEL[status] ?? status;
+}
+
+/** Quebra do Full para a tela: as partes fora da venda (na ordem) e o perdido à parte. */
+export function splitFullBreakdown(parts: Array<{ status: string; quantity: number }>): {
+  unavailable: Array<{ status: string; quantity: number; label: string }>;
+  lost: number;
+} {
+  const rank = (status: string) => {
+    const i = FULL_STATUS_ORDER.indexOf(status);
+    return i === -1 ? FULL_STATUS_ORDER.length : i;
+  };
+  const unavailable = parts
+    .filter((p) => p.status !== "lost" && p.quantity > 0)
+    .sort((a, b) => rank(a.status) - rank(b.status))
+    .map((p) => ({ ...p, label: fullStatusLabel(p.status) }));
+  const lost = parts.filter((p) => p.status === "lost").reduce((sum, p) => sum + p.quantity, 0);
+  return { unavailable, lost };
+}

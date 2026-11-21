@@ -210,8 +210,8 @@ export function StockPositionView({
             value={`${formatUnits(totals.full)} un`}
             hint={
               totals.fullUnavailable > 0
-                ? `${formatUnits(totals.fullUnavailable)} em transferência no ML`
-                : "tudo disponível para venda"
+                ? `${formatUnits(totals.fullUnavailable)} ainda não à venda no ML`
+                : "tudo à venda"
             }
           />
           <Kpi
@@ -310,7 +310,7 @@ export function StockPositionView({
                     sortKey="full"
                     sort={sort}
                     onSortChange={onSortChange}
-                    hint={<HeaderHint text="Tudo que está com o Mercado Livre: disponível + em transferência entre os centros dele." />}
+                    hint={<HeaderHint text="Tudo que está com o Mercado Livre: à venda + o que ainda não está à venda (em transferência, retirada, sem cobertura fiscal…). Perdidas pelo ML ficam fora. Embaixo, o que está à venda." />}
                   />
                   <SortableTh label="Total" sortKey="total" sort={sort} onSortChange={onSortChange} />
                   <th className="pb-2 pr-3 text-right font-medium">Custo</th>
@@ -371,7 +371,7 @@ export function StockPositionView({
                           {formatUnits(row.fullTotal)}
                           {row.fullUnavailable ? (
                             <span className="block text-[11px] text-[var(--muted-foreground)]">
-                              {formatUnits(row.fullUnavailable)} em transf.
+                              {formatUnits(row.fullAvailable)} à venda
                             </span>
                           ) : null}
                         </td>

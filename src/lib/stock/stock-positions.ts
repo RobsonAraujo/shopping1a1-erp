@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/db";
+import { Prisma } from "@/generated/prisma";
 import { fetchAllUserItemIds, fetchItemsByIdsBatched } from "@/lib/mercadolibre/api";
 import { mapWithConcurrency } from "@/lib/mercadolibre/concurrency";
 import {
@@ -164,6 +165,7 @@ export async function refreshStockPositions(input: {
         fullWithdrawalQty: read.fullWithdrawalQty,
         fullLostQty: read.fullLostQty,
         fullTotalQty: read.fullTotalQty,
+        fullUnavailableDetail: read.fullUnavailableDetail ?? Prisma.DbNull,
         fetchedAt: readAt,
         error: null,
       };

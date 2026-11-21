@@ -28,6 +28,7 @@ import {
   formatSignedUnits,
   formatUnits,
   listingTypeLabel,
+  splitFullBreakdown,
   todayYmd,
 } from "@/components/stock/stock-format";
 
@@ -164,6 +165,8 @@ export function StockItemSheet({
     }
   }
 
+  const fullParts = splitFullBreakdown(row?.fullBreakdown ?? []);
+
   return (
     <Sheet open={row != null} onOpenChange={onOpenChange}>
       <SheetContent className="sm:max-w-2xl">
@@ -194,13 +197,22 @@ export function StockItemSheet({
                   <Stat
                     label="Full"
                     value={formatUnits(row.fullTotal)}
-                    hint={
-                      row.fullUnavailable
-                        ? `${formatUnits(row.fullAvailable)} disponível · ${formatUnits(row.fullUnavailable)} em transferência`
-                        : "disponível"
-                    }
+                    hint={row.fullUnavailable ? `${formatUnits(row.fullAvailable)} à venda` : "à venda"}
                   />
                 </div>
+                {fullParts.unavailable.length > 0 || fullParts.lost > 0 ? (
+                  <div className="mt-2 rounded-lg bg-[var(--muted)]/30 px-3 py-2 text-xs leading-relaxed text-[var(--muted-foreground)]">
+                    {fullParts.unavailable.length > 0 ? (
+                      <p>
+                        <span className="font-medium text-[var(--foreground)]">Fora da venda no Full:</span>{" "}
+                        {fullParts.unavailable.map((p) => `${formatUnits(p.quantity)} ${p.label}`).join(" · ")}.
+                      </p>
+                    ) : null}
+                    {fullParts.lost > 0 ? (
+                      <p>{formatUnits(fullParts.lost)} perdidas pelo ML (fora do total).</p>
+                    ) : null}
+                  </div>
+                ) : null}
                 <p className="mt-2 text-xs text-[var(--muted-foreground)]">
                   Depósito e Full lidos do Mercado Livre {formatAgo(row.mlReadAt)}.
                 </p>
