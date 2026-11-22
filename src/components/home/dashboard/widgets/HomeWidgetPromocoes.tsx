@@ -142,7 +142,7 @@ export function HomeWidgetPromocoes() {
         error={entry.status === "error" ? entry.error : null}
         count={expiringSoon.length + withoutTotal}
         actions={
-          // Onde a promoção é criada ou renovada, como na Central de anúncios.
+          // Onde a promoção é criada ou renovada, como nas Ações do dia.
           // O link é da lista do painel, não de um anúncio: as linhas seguem
           // abrindo o anúncio.
           <Button asChild variant="ghost" size="sm" className="gap-1.5 px-2">

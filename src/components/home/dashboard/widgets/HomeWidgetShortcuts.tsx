@@ -13,6 +13,17 @@ import { getAllDashboardNavItems } from "@/lib/dashboard-nav";
 import { cn } from "@/lib/utils";
 
 const SETTINGS_PREFIX = "pin:";
+/**
+ * Telas que mudaram de endereço: o atalho salvo no endereço antigo continua
+ * valendo no novo.
+ */
+const RENAMED_SHORTCUTS: Record<string, string> = {
+  "/dashboard/central-anuncios": "/dashboard/acoes",
+};
+
+function currentShortcutHref(href: string): string {
+  return RENAMED_SHORTCUTS[href] ?? href;
+}
 const DEFAULT_SHORTCUTS = [
   "/dashboard/produtos",
   "/dashboard/compras",
@@ -40,7 +51,7 @@ export function HomeWidgetShortcuts() {
   const pinned = useMemo(() => {
     const explicit = Object.entries(settings ?? {})
       .filter(([key, value]) => key.startsWith(SETTINGS_PREFIX) && value === true)
-      .map(([key]) => key.slice(SETTINGS_PREFIX.length));
+      .map(([key]) => currentShortcutHref(key.slice(SETTINGS_PREFIX.length)));
     // Sem escolha do usuário o widget já vem útil, com as telas mais usadas.
     const hasChoice = Object.keys(settings ?? {}).some((key) =>
       key.startsWith(SETTINGS_PREFIX),
@@ -50,10 +61,15 @@ export function HomeWidgetShortcuts() {
 
 
   const toggle = (href: string, next: boolean) => {
+    // Chave de endereço antigo é regravada no novo, senão o "desmarcar"
+    // gravaria o novo e o antigo continuaria marcando o atalho.
     const current = Object.fromEntries(
-      Object.entries(settings ?? {}).filter(([key]) =>
-        key.startsWith(SETTINGS_PREFIX),
-      ),
+      Object.entries(settings ?? {})
+        .filter(([key]) => key.startsWith(SETTINGS_PREFIX))
+        .map(([key, value]) => [
+          `${SETTINGS_PREFIX}${currentShortcutHref(key.slice(SETTINGS_PREFIX.length))}`,
+          value,
+        ]),
     );
     // Primeira edição materializa os defaults, pra desmarcar um atalho padrão
     // não trazer os outros de volta na próxima leitura.
@@ -93,12 +109,12 @@ export function HomeWidgetShortcuts() {
                   className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-[var(--muted)]/50"
                 >
                   <span className="min-w-0 flex-1 truncate text-sm">
-                    {item.label}
+                    {item.contextLabel ?? item.label}
                   </span>
                   <Switch
                     checked={pinned.has(item.href)}
                     onCheckedChange={(next) => toggle(item.href, next)}
-                    aria-label={`Atalho para ${item.label}`}
+                    aria-label={`Atalho para ${item.contextLabel ?? item.label}`}
                   />
                 </li>
               ))}
@@ -129,7 +145,9 @@ export function HomeWidgetShortcuts() {
                     className="size-4 shrink-0 text-[var(--muted-foreground)]"
                     aria-hidden
                   />
-                  <span className="min-w-0 truncate">{item.label}</span>
+                  <span className="min-w-0 truncate">
+                    {item.contextLabel ?? item.label}
+                  </span>
                 </Link>
               </li>
             );

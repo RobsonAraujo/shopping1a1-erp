@@ -2,7 +2,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export function RotinaSkeleton() {
   return (
-    <div className="space-y-5" aria-busy="true" aria-label="Carregando a Central de anúncios">
+    <div className="space-y-5" aria-busy="true" aria-label="Carregando as Ações do dia">
       <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]">
         <div className="px-5 pb-5 pt-5 sm:px-8 sm:pt-6">
           <div className="flex items-start gap-3">

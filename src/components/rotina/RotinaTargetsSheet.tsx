@@ -172,7 +172,7 @@ export function RotinaTargetsSheet({
           <SheetDescription>
             {settings.configured
               ? "O que conta como problema na sua lista do dia."
-              : "Confira as sugestões e salve: é a partir delas que a Central de anúncios monta a lista do dia."}
+              : "Confira as sugestões e salve: a lista do dia é montada a partir delas."}
           </SheetDescription>
         </SheetHeader>
         <SheetBody className="space-y-6">

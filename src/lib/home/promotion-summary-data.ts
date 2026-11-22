@@ -183,7 +183,7 @@ async function scanItemPromotion(
     }
 
     // Vence quando o anúncio fica de fato sem promoção: a ativa mais as
-    // programadas que emendam nela (mesma regra da Central de anúncios).
+    // programadas que emendam nela (mesma regra das Ações do dia).
     const coverage = promotionCoverage(toPromotionWindows(promotions), timeZone);
     const endsAt = coverage.coveredUntil
       ? new Date(coverage.coveredUntil)

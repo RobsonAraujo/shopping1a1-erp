@@ -1,11 +1,9 @@
 import Link from "next/link";
-import { LogOut } from "lucide-react";
 import { Toaster } from "sonner";
 import { BrandLogo } from "@/components/shared/BrandLogo";
-import { DashboardNav } from "@/components/shared/DashboardNav";
+import { DashboardAccountMenu, DashboardNav } from "@/components/shared/DashboardNav";
 import { DashboardMobileTabBar } from "@/components/shared/DashboardMobileTabBar";
 import { MobileDashboardMenu } from "@/components/shared/MobileDashboardMenu";
-import { Button } from "@/components/ui/button";
 import { AccountBlockedNotice } from "@/components/shared/AccountBlockedNotice";
 import { getOrganizationContext } from "@/lib/organizations/context";
 import { StockBackgroundSync } from "@/components/stock/StockBackgroundSync";
@@ -43,28 +41,8 @@ export default async function DashboardLayout({
           </Link>
           <DashboardNav />
           <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
-            <span
-              className="hidden max-w-[10rem] truncate text-sm text-[var(--muted-foreground)] lg:inline xl:max-w-[12rem]"
-              title={nickname}
-            >
-              {nickname}
-            </span>
+            <DashboardAccountMenu accountName={nickname} />
             <MobileDashboardMenu accountName={nickname} />
-            <form
-              action="/api/auth/mercadolibre/signout"
-              method="post"
-              className="hidden sm:block"
-            >
-              <Button
-                type="submit"
-                variant="ghost"
-                size="sm"
-                className="gap-2"
-              >
-                <LogOut className="size-4" aria-hidden />
-                <span className="hidden lg:inline">Sair</span>
-              </Button>
-            </form>
           </div>
         </div>
       </header>

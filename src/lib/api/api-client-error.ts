@@ -23,7 +23,7 @@ const API_ERROR_MESSAGES: Record<string, string> = {
   rotina_action_failed: "Não foi possível salvar esta ação. Tente de novo.",
   rotina_target_failed: "Não foi possível salvar a meta deste anúncio.",
   rotina_settings_failed: "Não foi possível salvar as metas.",
-  rotina_listing_not_found: "Este anúncio não está mais na Central de anúncios. Atualize a página.",
+  rotina_listing_not_found: "Este anúncio não está mais nas Ações do dia. Atualize a página.",
   rotina_simulate_failed:
     "Não foi possível consultar taxa e frete no Mercado Livre agora. Tente de novo.",
   rotina_simulate_floor_failed: "Não foi possível calcular o mínimo agora. Tente de novo.",

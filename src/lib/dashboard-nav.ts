@@ -5,6 +5,7 @@ import {
   Building2,
   Calculator,
   ChartNoAxesColumn,
+  Factory,
   Kanban,
   LayoutGrid,
   Lightbulb,
@@ -44,13 +45,33 @@ export type DashboardNavItem = {
    * empresa) e a URL final no navegador não é mais `href`.
    */
   matchHrefs?: string[];
+  /**
+   * Subtítulo dentro do grupo (ex.: "Full" em Operação). Itens seguidos com a
+   * mesma seção ficam juntos sob o subtítulo, no dropdown e no menu mobile.
+   */
+  section?: string;
+  /**
+   * Nome fora do menu (atalhos da Início), onde a seção não aparece:
+   * "Agendamentos" sozinho não diz que é do Full.
+   */
+  contextLabel?: string;
 };
 
 export type DashboardNavGroup = {
   id: string;
   /** Rótulo do dropdown desktop / cabeçalho mobile. Vazio para topo fixo. */
   label: string;
-  kind: "top" | "dropdown";
+  /**
+   * `top`: links soltos no começo da barra. `dropdown`: menus da barra.
+   * `account`: no menu da conta (nome da loja, à direita), junto do Sair.
+   */
+  kind: "top" | "dropdown" | "account";
+  items: DashboardNavItem[];
+};
+
+export type DashboardNavSection = {
+  /** `null` = itens sem seção (o grupo inteiro, na maioria). */
+  label: string | null;
   items: DashboardNavItem[];
 };
 
@@ -67,9 +88,8 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
         icon: LayoutGrid,
       },
       {
-        href: "/dashboard/central-anuncios",
-        label: "Central de anúncios",
-        shortLabel: "Central",
+        href: "/dashboard/acoes",
+        label: "Ações do dia",
         description: "O que fazer hoje nos anúncios próprios e no catálogo",
         icon: ListChecks,
       },
@@ -81,47 +101,48 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
     kind: "dropdown",
     items: [
       {
-        href: "/dashboard/fornecedores",
-        label: "Meus Fornecedores",
-        description: "Cadastro de fornecedores",
-        icon: Truck,
-      },
-      {
         href: "/dashboard/produtos",
-        label: "Meus produtos",
+        label: "Produtos",
         description: "Cadastro fiscal e custo por SKU",
         icon: Boxes,
+        section: "Cadastros",
+      },
+      {
+        href: "/dashboard/fornecedores",
+        label: "Fornecedores",
+        description: "Quem fornece cada produto",
+        icon: Factory,
+        section: "Cadastros",
       },
       {
         href: "/dashboard/inventory",
         label: "Estoque",
-        description: "Acompanhe o estoque dos produtos",
+        description: "Saldo, movimentações e inventário",
         icon: Warehouse,
+        section: "Estoque e compras",
       },
       {
         href: "/dashboard/compras",
         label: "Compras",
         description: "Análise por fornecedor e kanban de reposição",
         icon: ShoppingCart,
+        section: "Estoque e compras",
       },
-    ],
-  },
-  {
-    id: "full",
-    label: "Full",
-    kind: "dropdown",
-    items: [
       {
         href: "/dashboard/operacoes-full",
-        label: "Operações Full",
-        description: "Kanban de agendamento e coleta Full",
+        label: "Agendamentos",
+        contextLabel: "Agendamentos Full",
+        description: "Kanban de agendamento e coleta",
         icon: Kanban,
+        section: "Full",
       },
       {
         href: "/dashboard/envios-full",
-        label: "Relatório de Envios",
-        description: "Custo de coleta ao Full por unidade enviada",
+        label: "Custo de coleta",
+        contextLabel: "Custo de coleta Full",
+        description: "Quanto custa cada unidade enviada",
         icon: Truck,
+        section: "Full",
       },
     ],
   },
@@ -132,8 +153,8 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
     items: [
       {
         href: "/dashboard/catalog-report",
-        label: "Relatório de Catálogo",
-        description: "Veja mudanças de competição no catálogo",
+        label: "Catálogo",
+        description: "Mudanças de competição no catálogo",
         icon: ChartNoAxesColumn,
       },
       {
@@ -188,7 +209,7 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
   {
     id: "configuracoes",
     label: "Configurações",
-    kind: "dropdown",
+    kind: "account",
     items: [
       {
         href: "/dashboard/configuracoes/empresa",
@@ -204,7 +225,7 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
       },
       {
         href: "/dashboard/configuracoes/tributario",
-        label: "Config. tributária",
+        label: "Alíquotas",
         description: "PIS/COFINS, ICMS interno e CBS/IBS",
         icon: Settings,
       },
@@ -241,6 +262,25 @@ export const DASHBOARD_TOP_NAV_ITEMS = DASHBOARD_NAV_GROUPS.find(
 export const DASHBOARD_DROPDOWN_NAV_GROUPS = DASHBOARD_NAV_GROUPS.filter(
   (g) => g.kind === "dropdown",
 );
+
+/** Configurações: no menu da conta, à direita da barra. */
+export const DASHBOARD_ACCOUNT_NAV_GROUP = DASHBOARD_NAV_GROUPS.find(
+  (g) => g.kind === "account",
+)!;
+
+/** Os itens do grupo em blocos de seção, na ordem do grupo. */
+export function getDashboardNavSections(
+  group: DashboardNavGroup,
+): DashboardNavSection[] {
+  const sections: DashboardNavSection[] = [];
+  for (const item of group.items) {
+    const label = item.section ?? null;
+    const last = sections.at(-1);
+    if (last && last.label === label) last.items.push(item);
+    else sections.push({ label, items: [item] });
+  }
+  return sections;
+}
 
 /** Atalhos do polegar no mobile — Início, Compras e Full. */
 export const DASHBOARD_MOBILE_TAB_ITEMS: Pick<

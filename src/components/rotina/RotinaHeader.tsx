@@ -76,7 +76,7 @@ export function RotinaHeader({
             </span>
             <div className="min-w-0">
               <h1 className="text-2xl font-bold tracking-tight text-[var(--foreground)] sm:text-3xl">
-                Central de anúncios
+                Ações do dia
               </h1>
               <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">{label}</p>
             </div>

@@ -38,7 +38,7 @@ export function CalculatorTargetControl({
   onChange,
 }: {
   value: number;
-  /** A meta que já vale na Central. */
+  /** A meta que já vale nas Ações do dia. */
   saved: number;
   ownTarget: boolean;
   onChange: (next: number) => void;
@@ -46,7 +46,7 @@ export function CalculatorTargetControl({
   const inputId = useId();
   const [draft, setDraft] = useState(() => draftOf(value));
   const differs = Math.abs(value - saved) > 1e-9;
-  const savedLabel = ownTarget ? "Meta própria" : "Meta da Central";
+  const savedLabel = ownTarget ? "Meta própria" : "Meta padrão";
 
   function commit(next: number) {
     const clamped = clampTarget(Math.round(next * 10) / 10);
@@ -127,12 +127,12 @@ export function CalculatorTargetControl({
           ) : ownTarget ? (
             "a meta própria deste anúncio"
           ) : (
-            "a meta da Central"
+            "a meta padrão das Ações do dia"
           )}
         </span>
       </div>
       <p className="mt-1 text-[11px] leading-snug text-[var(--muted-foreground)]">
-        Só para testar aqui: não muda a meta da Central. Vale para a margem após ADS (MC
+        Só para testar aqui: não muda a meta salva nas Ações do dia. Vale para a margem após ADS (MC
         quando o anúncio não tem ADS).
       </p>
     </div>

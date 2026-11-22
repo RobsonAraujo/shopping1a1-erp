@@ -295,7 +295,7 @@ function StockGuideContent() {
             </>,
             <>
               <Strong>Custo novo só vale quando o estoque no custo atual acaba.</Strong> Na venda que zera o lote
-              antigo, o ERP passa o custo novo para o cadastro do produto (Lucratividade, Central e Calculadora usam
+              antigo, o ERP passa o custo novo para o cadastro do produto (Lucratividade, Ações do dia e Calculadora usam
               sozinhas) e registra no DRE um nivelamento com o custo antigo, para o período em que ele valeu.
             </>,
             <>

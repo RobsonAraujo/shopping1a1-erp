@@ -10,7 +10,7 @@ import { getOrganizationContext } from "@/lib/organizations/context";
 import { loadRotinaView } from "@/lib/rotina/rotina-view-data";
 
 const LOAD_ERROR_MESSAGE =
-  "Não foi possível carregar a Central de anúncios agora. Tente de novo em instantes.";
+  "Não foi possível carregar as Ações do dia agora. Tente de novo em instantes.";
 
 /** Só banco: o cálculo pesado (ML) acontece no botão Atualizar. */
 async function RotinaSection({ organizationId }: { organizationId: string }) {
@@ -19,8 +19,8 @@ async function RotinaSection({ organizationId }: { organizationId: string }) {
     view = await loadRotinaView(organizationId);
   } catch (e) {
     return (
-      <UserFeedback title="Não foi possível carregar a Central de anúncios">
-        {publicPageLoadMessage("dashboard/central-anuncios", e, LOAD_ERROR_MESSAGE)}
+      <UserFeedback title="Não foi possível carregar as Ações do dia">
+        {publicPageLoadMessage("dashboard/acoes", e, LOAD_ERROR_MESSAGE)}
       </UserFeedback>
     );
   }
@@ -28,7 +28,7 @@ async function RotinaSection({ organizationId }: { organizationId: string }) {
 }
 
 export const metadata: Metadata = {
-  title: "Central de anúncios",
+  title: "Ações do dia",
 };
 
 export default async function RotinaPage() {

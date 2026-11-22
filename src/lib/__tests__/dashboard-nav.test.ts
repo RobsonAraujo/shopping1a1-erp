@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  DASHBOARD_ACCOUNT_NAV_GROUP,
+  DASHBOARD_DROPDOWN_NAV_GROUPS,
   DASHBOARD_MOBILE_TAB_ITEMS,
   DASHBOARD_NAV_GROUPS,
+  DASHBOARD_TOP_NAV_ITEMS,
   getAllDashboardNavItems,
+  getDashboardNavSections,
   isDashboardNavActive,
   isDashboardNavGroupActive,
   isDashboardNavItemActive,
@@ -94,6 +98,56 @@ describe("isDashboardNavGroupActive / getAllDashboardNavItems", () => {
     assert.equal(hrefs[0], "/dashboard");
     assert.ok(hrefs.includes("/dashboard/produtos"));
     assert.equal(new Set(hrefs).size, hrefs.length);
+  });
+});
+
+describe("bar layout", () => {
+  it("keeps Início and Ações do dia as the loose links, in that order", () => {
+    assert.deepEqual(
+      DASHBOARD_TOP_NAV_ITEMS.map((item) => item.href),
+      ["/dashboard", "/dashboard/acoes"],
+    );
+    assert.equal(DASHBOARD_TOP_NAV_ITEMS[1].label, "Ações do dia");
+  });
+
+  it("has three menus in the bar; Configurações goes to the account menu", () => {
+    assert.deepEqual(
+      DASHBOARD_DROPDOWN_NAV_GROUPS.map((group) => group.id),
+      ["operacao", "analises", "financeiro"],
+    );
+    assert.equal(DASHBOARD_ACCOUNT_NAV_GROUP.id, "configuracoes");
+    assert.ok(
+      getAllDashboardNavItems().some(
+        (item) => item.href === "/dashboard/configuracoes/empresa",
+      ),
+      "Configurações continua nos atalhos e no menu mobile",
+    );
+  });
+
+  it("puts Full inside Operação, as its last section", () => {
+    const operacao = DASHBOARD_NAV_GROUPS.find((g) => g.id === "operacao");
+    assert.ok(operacao);
+    const sections = getDashboardNavSections(operacao);
+    assert.deepEqual(
+      sections.map((section) => section.label),
+      ["Cadastros", "Estoque e compras", "Full"],
+    );
+    assert.deepEqual(
+      sections.at(-1)?.items.map((item) => item.href),
+      ["/dashboard/operacoes-full", "/dashboard/envios-full"],
+    );
+    for (const item of sections.at(-1)?.items ?? []) {
+      assert.match(item.contextLabel ?? "", /Full$/, "fora do menu o nome diz que é do Full");
+    }
+  });
+
+  it("groups without sections come back as a single unlabeled block", () => {
+    const financeiro = DASHBOARD_NAV_GROUPS.find((g) => g.id === "financeiro");
+    assert.ok(financeiro);
+    const sections = getDashboardNavSections(financeiro);
+    assert.equal(sections.length, 1);
+    assert.equal(sections[0].label, null);
+    assert.equal(sections[0].items.length, financeiro.items.length);
   });
 });
 

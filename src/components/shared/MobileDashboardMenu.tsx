@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DASHBOARD_NAV_GROUPS,
+  getDashboardNavSections,
   isDashboardNavItemActive,
   type DashboardNavItem,
 } from "@/lib/dashboard-nav";
@@ -111,23 +112,34 @@ export function MobileDashboardMenu({
             className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-3"
             aria-label="Principal mobile"
           >
-            {DASHBOARD_NAV_GROUPS.map((group) => (
-              <div key={group.id} className="marketing-nav-item flex flex-col gap-0.5">
-                {group.kind === "dropdown" && group.label ? (
-                  <p className="px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                    {group.label}
-                  </p>
-                ) : null}
-                {group.items.map((item) => (
-                  <MobileNavLink
-                    key={item.href}
-                    item={item}
-                    active={isDashboardNavItemActive(pathname, item)}
-                    onNavigate={() => setOpen(false)}
-                  />
-                ))}
-              </div>
-            ))}
+            {/* Grupo com seções (Operação) mostra as seções como cabeçalho:
+                "Cadastros", "Estoque e compras", "Full". */}
+            {DASHBOARD_NAV_GROUPS.flatMap((group) =>
+              getDashboardNavSections(group).map((section, index) => {
+                const heading =
+                  section.label ?? (group.kind === "top" ? null : group.label);
+                return (
+                  <div
+                    key={`${group.id}-${section.label ?? index}`}
+                    className="marketing-nav-item flex flex-col gap-0.5"
+                  >
+                    {heading ? (
+                      <p className="px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                        {heading}
+                      </p>
+                    ) : null}
+                    {section.items.map((item) => (
+                      <MobileNavLink
+                        key={item.href}
+                        item={item}
+                        active={isDashboardNavItemActive(pathname, item)}
+                        onNavigate={() => setOpen(false)}
+                      />
+                    ))}
+                  </div>
+                );
+              }),
+            )}
           </nav>
 
           <form

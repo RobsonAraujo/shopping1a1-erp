@@ -1,8 +1,8 @@
-# Central de anúncios (módulo `rotina`)
+# Ações do dia (módulo `rotina`)
 
-Na tela e no menu o nome é **Central de anúncios**, e a página é `/dashboard/central-anuncios` (`/dashboard/rotina` redireciona para ela). As APIs (`/api/rotina/*`) e o código mantêm o nome interno `rotina`.
+Na tela e no menu o nome é **Ações do dia**, e a página é `/dashboard/acoes`. Os nomes antigos redirecionam para ela: `/dashboard/rotina` ("Rotina") e `/dashboard/central-anuncios` ("Central de anúncios", nome que ainda aparece nos comentários do código como "a Central"). As APIs (`/api/rotina/*`) e o código mantêm o nome interno `rotina`.
 
-Página `/dashboard/central-anuncios`: a lista de trabalho diária de quem cuida dos **anúncios próprios** e do **catálogo**. Não é relatório. Cada linha é uma tarefa ("colocar promoção", "brigar no catálogo") com o **preço mínimo** que mantém a margem que o usuário definiu.
+Página `/dashboard/acoes`: a lista de trabalho diária de quem cuida dos **anúncios próprios** e do **catálogo**. Não é relatório. Cada linha é uma tarefa ("colocar promoção", "brigar no catálogo") com o **preço mínimo** que mantém a margem que o usuário definiu.
 
 ## Estrutura
 
