@@ -52,6 +52,7 @@ export function CtaBand({
   lead,
   connectHref,
   ctaLabel,
+  children,
 }: {
   isLoggedIn: boolean;
   dashboardHref: string;
@@ -59,6 +60,8 @@ export function CtaBand({
   lead: string;
   connectHref?: string;
   ctaLabel?: string;
+  /** Abaixo do lead (a `/beta` põe o contador da oferta). */
+  children?: React.ReactNode;
 }) {
   return (
     <section className="relative overflow-hidden bg-[#0f1a45] px-4 py-20 text-center text-white sm:px-6 sm:py-24">
@@ -77,6 +80,7 @@ export function CtaBand({
         <p className="mx-auto mt-4 max-w-lg text-pretty leading-relaxed text-white/75">
           {lead}
         </p>
+        {children}
         <div className="mt-9 flex flex-col items-center gap-5">
           <OAuthCta
             isLoggedIn={isLoggedIn}

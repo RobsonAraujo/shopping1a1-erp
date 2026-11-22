@@ -6,6 +6,7 @@ import {
   daysLeftLabel,
   isOfferActive,
   offerDeadlineLabel,
+  offerTimeLeft,
   offerTrialEndsAt,
 } from "../campaign-offer";
 
@@ -38,6 +39,41 @@ describe("campaign offer (/beta)", () => {
       ends.getTime() - createdAt.getTime(),
       BETA_OFFER.trialDays * 86_400_000,
     );
+  });
+
+  it("counts down the real time left to the deadline", () => {
+    assert.deepEqual(offerTimeLeft(new Date("2026-11-22T09:37:50-03:00")), {
+      days: 8,
+      hours: 14,
+      minutes: 22,
+      seconds: 9,
+      ended: false,
+    });
+    assert.deepEqual(offerTimeLeft(new Date("2026-11-30T23:59:58-03:00")), {
+      days: 0,
+      hours: 0,
+      minutes: 0,
+      seconds: 1,
+      ended: false,
+    });
+    // O último segundo ainda vale; o seguinte já é depois do prazo.
+    assert.equal(offerTimeLeft(new Date("2026-11-30T23:59:59-03:00")).ended, false);
+    assert.equal(offerTimeLeft(new Date("2026-12-01T00:00:00-03:00")).ended, true);
+    // 01:00 UTC do dia 01/12 ainda é 30/11 em Brasília: faltam 1h59.
+    const lastHours = offerTimeLeft(new Date("2026-12-01T01:00:00.000Z"));
+    assert.equal(lastHours.ended, false);
+    assert.equal(lastHours.hours, 1);
+    assert.equal(lastHours.minutes, 59);
+  });
+
+  it("returns zeros after the deadline", () => {
+    assert.deepEqual(offerTimeLeft(new Date("2026-12-05T12:00:00-03:00")), {
+      days: 0,
+      hours: 0,
+      minutes: 0,
+      seconds: 0,
+      ended: true,
+    });
   });
 
   it("labels the deadline as dd/mm in Brasília", () => {

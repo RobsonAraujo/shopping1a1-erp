@@ -3,7 +3,9 @@ import { CtaReassurance } from "@/components/marketing/CtaBand";
 import { MarketingSection } from "@/components/marketing/MarketingSection";
 import { OAuthCta } from "@/components/marketing/OauthCta";
 
-const STEPS = [
+export type HowItStartsStep = { n: string; title: string; body: string };
+
+const STEPS: readonly HowItStartsStep[] = [
   {
     n: "01",
     title: "Conecte a conta do Mercado Livre",
@@ -19,32 +21,49 @@ const STEPS = [
     title: "Acompanhe o mês",
     body: "Catálogo, fatura, Full e vendas entram sozinhos. Você lê margem, apuração por SKU, DRE e o kanban de compras no mesmo painel.",
   },
-] as const;
+];
 
 export function MarketingHowItStarts({
   isLoggedIn,
   dashboardHref,
+  id = "como-comeca",
+  eyebrow = "Começar",
+  title = "Três passos. Sem onboarding de planilha.",
+  lead = "Autoriza a loja, informa custo e regime. O resto o painel calcula.",
+  steps = STEPS,
+  connectHref,
+  ctaLabel,
+  location = "how_it_starts",
 }: {
   isLoggedIn: boolean;
   dashboardHref: string;
+  /** A `/beta` troca textos, passos e destino do botão. */
+  id?: string;
+  eyebrow?: string;
+  title?: string;
+  lead?: string;
+  steps?: readonly HowItStartsStep[];
+  connectHref?: string;
+  ctaLabel?: string;
+  location?: string;
 }) {
   return (
     <MarketingSection
-      id="como-comeca"
+      id={id}
       surface="base"
       width="narrow"
       align="center"
-      eyebrow="Começar"
-      title="Três passos. Sem onboarding de planilha."
-      lead="Autoriza a loja, informa custo e regime. O resto o painel calcula."
+      eyebrow={eyebrow}
+      title={title}
+      lead={lead}
     >
       <ol className="overflow-hidden rounded-2xl border border-[var(--border)] bg-white shadow-sm">
-        {STEPS.map((step, i) => (
+        {steps.map((step, i) => (
           <li
             key={step.n}
             className={cn(
               "grid gap-4 px-5 py-7 sm:grid-cols-[4.5rem_1fr] sm:gap-6 sm:px-8",
-              i < STEPS.length - 1 && "border-b border-[var(--border)]",
+              i < steps.length - 1 && "border-b border-[var(--border)]",
             )}
           >
             <p
@@ -69,7 +88,9 @@ export function MarketingHowItStarts({
         <OAuthCta
           isLoggedIn={isLoggedIn}
           dashboardHref={dashboardHref}
-          location="how_it_starts"
+          connectHref={connectHref}
+          label={ctaLabel}
+          location={location}
         />
         {!isLoggedIn ? <CtaReassurance /> : null}
       </div>

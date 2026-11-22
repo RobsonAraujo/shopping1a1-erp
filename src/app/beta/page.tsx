@@ -4,7 +4,6 @@ import { BetaLanding } from "@/components/marketing/BetaLanding";
 import { getMarketingCtaState } from "@/lib/mercadolibre/session";
 import {
   BETA_OFFER,
-  daysLeftInOffer,
   isOfferActive,
   offerDeadlineLabel,
 } from "@/lib/marketing/campaign-offer";
@@ -14,13 +13,13 @@ import {
  * anúncio, não conteúdo de busca (e repetiria a landing para o Google).
  */
 export const metadata: Metadata = {
-  title: `${BETA_OFFER.trialDays} dias grátis no beta`,
+  title: `Quais anúncios dão lucro? ${BETA_OFFER.trialDays} dias grátis`,
   description:
-    "Margem por anúncio depois da tarifa, do frete, do imposto e do Product Ads, para quem vende no Mercado Livre. Conecte até o fim de novembro e use por 30 dias grátis, garantido.",
+    "Descubra quanto sobra de cada venda no Mercado Livre depois da tarifa, do frete, do imposto e do Product Ads. Conecte até 30/11 e use a Maipo por 30 dias grátis, garantido.",
   robots: { index: false, follow: false },
 };
 
-/** Renderiza por visita (lê cookies): o prazo e o "faltam N dias" ficam sempre certos. */
+/** Renderiza por visita (lê cookies): o prazo e o contador ficam sempre certos. */
 export default async function BetaPage() {
   const { isLoggedIn, dashboardHref } = getMarketingCtaState(await cookies());
   const now = new Date();
@@ -30,7 +29,7 @@ export default async function BetaPage() {
       isLoggedIn={isLoggedIn}
       dashboardHref={dashboardHref}
       offerActive={isOfferActive(now)}
-      daysLeft={daysLeftInOffer(now)}
+      serverNowMs={now.getTime()}
       deadlineLabel={offerDeadlineLabel()}
     />
   );

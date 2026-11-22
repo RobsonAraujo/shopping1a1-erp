@@ -45,6 +45,33 @@ export function daysLeftLabel(daysLeft: number): string {
   return daysLeft <= 1 ? "último dia" : `faltam ${daysLeft} dias`;
 }
 
+export type OfferTimeLeft = {
+  days: number;
+  hours: number;
+  minutes: number;
+  seconds: number;
+  ended: boolean;
+};
+
+/**
+ * Quanto falta até o fim do prazo, para o contador da `/beta`. Conta o tempo
+ * real até `deadline` (não reinicia); depois do prazo, tudo zero e `ended`.
+ */
+export function offerTimeLeft(now: Date = new Date()): OfferTimeLeft {
+  const ms = BETA_OFFER.deadline.getTime() - now.getTime();
+  if (ms < 0) {
+    return { days: 0, hours: 0, minutes: 0, seconds: 0, ended: true };
+  }
+  const totalSeconds = Math.floor(ms / 1000);
+  return {
+    days: Math.floor(totalSeconds / 86_400),
+    hours: Math.floor((totalSeconds % 86_400) / 3_600),
+    minutes: Math.floor((totalSeconds % 3_600) / 60),
+    seconds: totalSeconds % 60,
+    ended: false,
+  };
+}
+
 /** Data de fim do teste para uma conta criada em `createdAt` com a oferta. */
 export function offerTrialEndsAt(createdAt: Date): Date {
   return new Date(createdAt.getTime() + BETA_OFFER.trialDays * 86_400_000);

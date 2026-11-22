@@ -19,7 +19,7 @@ export function MarketingStickyCta({
   dashboardHref: string;
   /** Texto para quem não está logado (a `/beta` troca pela oferta). */
   title?: string;
-  subtitle?: string;
+  subtitle?: React.ReactNode;
   connectHref?: string;
   ctaLabel?: string;
 }) {
