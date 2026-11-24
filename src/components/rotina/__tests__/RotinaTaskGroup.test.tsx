@@ -72,4 +72,102 @@ describe("RotinaTaskGroup", () => {
   it("does not show the TACOS note where the task does not depend on it", () => {
     assert.doesNotMatch(render("promo_missing"), /TACOS dos últimos 7 dias/);
   });
+
+  describe("opções de venda", () => {
+    const saleOptions = new Map([
+      ["CLASSICO", { principalMlItemId: "CLASSICO", optionsLabel: "Clássico + Premium" }],
+      ["PREMIUM", { principalMlItemId: "CLASSICO", optionsLabel: "Clássico + Premium" }],
+    ]);
+    // As duas sem promoção; a Premium também com a margem abaixo do mínimo.
+    const view = buildRotinaView({
+      now: NOW,
+      timeZone: TZ,
+      settings: settings(),
+      health: [
+        listing({ mlItemId: "CLASSICO", title: "Cabo Ninja 3m", hasPromotion: false, regularPrice: null, unitsPerDay: 3 }),
+        listing({
+          mlItemId: "PREMIUM",
+          title: "Cabo Ninja 3m",
+          listingTypeId: "gold_pro",
+          hasPromotion: false,
+          regularPrice: null,
+          marginPercent: 4,
+          marginAfterAdsPercent: 1,
+        }),
+      ],
+      catalogLive: [],
+      targets: new Map(),
+      states: [],
+      lastRun: null,
+      lastCompleteRunAt: "2026-11-10T09:00:00.000Z",
+      saleOptions,
+    });
+    const promo = view.actions.filter((action) => action.rule === "promo_missing");
+    const otherTasksOf = (productKey: string, rule: RotinaRuleKey) =>
+      view.actions
+        .filter(
+          (action) =>
+            action.rule !== rule &&
+            (action.listing.saleOption?.principalMlItemId ?? action.listing.mlItemId) === productKey,
+        )
+        .map((action) => ({
+          rule: action.rule,
+          mlItemId: action.listing.mlItemId,
+          listingTypeId: action.listing.listingTypeId,
+        }));
+
+    function renderGroup(open: boolean, onOpenTask?: (rule: RotinaRuleKey) => void) {
+      const rendered = renderIntoDocument(
+        <TooltipProvider>
+          <RotinaTaskGroup
+            rule="promo_missing"
+            actions={promo}
+            handlers={handlers}
+            timeZone={TZ}
+            open={open}
+            onToggle={() => {}}
+            otherTasksOf={otherTasksOf}
+            onOpenTask={onOpenTask}
+          />
+        </TooltipProvider>,
+      );
+      cleanup = rendered.unmount;
+      return rendered.container;
+    }
+
+    it("shows the product once, with each option tagged and its own Feito", () => {
+      const container = renderGroup(true);
+      const text = container.textContent ?? "";
+      assert.equal(text.split("Cabo Ninja 3m").length - 1, 1, "o título aparece uma vez");
+      assert.match(text, /2 opções de venda/);
+      assert.match(text, /Clássico/);
+      assert.match(text, /Premium/);
+      const done = [...container.querySelectorAll("button")].filter(
+        (button) => button.textContent?.trim() === "Feito",
+      );
+      assert.equal(done.length, 2);
+      // A faixa de cada opção diz o tipo: Clássico azul, Premium magenta.
+      assert.ok(container.querySelector("li.border-l-sky-500"), "faixa da Clássico");
+      assert.ok(container.querySelector("li.border-l-fuchsia-500"), "faixa da Premium");
+      assert.equal(container.querySelector("li.border-l-rose-500"), null);
+    });
+
+    it("does not repeat the product in the closed preview", () => {
+      const text = renderGroup(false).textContent ?? "";
+      assert.doesNotMatch(text, /Cabo Ninja 3m, Cabo Ninja 3m/);
+      assert.match(text, /Cabo Ninja 3m/);
+    });
+
+    it("points to the other option's task in another group", () => {
+      const opened: RotinaRuleKey[] = [];
+      const container = renderGroup(true, (rule) => opened.push(rule));
+      assert.match(container.textContent ?? "", /também em:/);
+      const link = [...container.querySelectorAll("button")].find((button) =>
+        button.textContent?.includes("→"),
+      ) as HTMLButtonElement;
+      assert.ok(link);
+      link.click();
+      assert.deepEqual(opened, ["margin_below_min"]);
+    });
+  });
 });

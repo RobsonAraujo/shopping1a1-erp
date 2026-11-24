@@ -39,6 +39,13 @@ import {
   buildSimulatorSuggestions,
 } from "@/lib/rotina/simulator-suggestions";
 import type { RotinaActionView } from "@/lib/rotina/view";
+import type { RotinaRuleKey } from "@/lib/rotina/rule-registry";
+import { listingTypeName } from "@/lib/products/listing-option-label";
+import {
+  OPTION_TYPE_STRIPE_CLASS,
+  OptionTypeBadge,
+  optionTypeTone,
+} from "@/components/products/OptionTypeBadge";
 import { cn } from "@/lib/utils";
 
 export type RotinaActionHandlers = {
@@ -54,6 +61,67 @@ export type RotinaActionHandlers = {
 };
 
 const SHOW_DISCOUNT = new Set(["promo_expiring", "promo_missing"]);
+
+/**
+ * Tarefa de uma opção de venda do mesmo produto em outro grupo (ex.: a
+ * Premium em "Ajustar margem"), para o atalho "também em".
+ */
+export type RotinaOtherTask = {
+  rule: RotinaRuleKey;
+  mlItemId: string;
+  listingTypeId: string | null;
+};
+
+/** "Premium também em: Ajustar margem → · Colocar promoção →" */
+export function RotinaOtherTasks({
+  tasks,
+  onOpenTask,
+  className,
+}: {
+  tasks: readonly RotinaOtherTask[];
+  onOpenTask?: (rule: RotinaRuleKey) => void;
+  className?: string;
+}) {
+  if (tasks.length === 0) return null;
+  const byOption = new Map<string, RotinaOtherTask[]>();
+  for (const task of tasks) {
+    const list = byOption.get(task.mlItemId) ?? [];
+    list.push(task);
+    byOption.set(task.mlItemId, list);
+  }
+  return (
+    <div className={cn("flex flex-col gap-1 text-xs text-[var(--muted-foreground)]", className)}>
+      {[...byOption.values()].map((optionTasks) => (
+        <p key={optionTasks[0].mlItemId} className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+          <OptionTypeBadge
+            label={listingTypeName(optionTasks[0].listingTypeId)}
+            listingTypeId={optionTasks[0].listingTypeId}
+            className="px-1.5 text-[11px]"
+          />
+          <span>também em:</span>
+          {optionTasks.map((task, index) => (
+            <span key={task.rule} className="inline-flex items-center">
+              {onOpenTask ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenTask(task.rule)}
+                  className="cursor-pointer font-medium text-[var(--primary)] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+                >
+                  {ROTINA_RULES[task.rule].taskLabel} →
+                </button>
+              ) : (
+                <span className="font-medium text-[var(--foreground)]">
+                  {ROTINA_RULES[task.rule].taskLabel}
+                </span>
+              )}
+              {index < optionTasks.length - 1 ? <span aria-hidden>·</span> : null}
+            </span>
+          ))}
+        </p>
+      ))}
+    </div>
+  );
+}
 
 export const SNOOZE_OPTIONS = [
   { days: 1, label: "Até amanhã" },
@@ -178,10 +246,22 @@ export function RotinaActionRow({
   action,
   handlers,
   timeZone,
+  nested = false,
+  otherTasks = [],
+  onOpenTask,
 }: {
   action: RotinaActionView;
   handlers: RotinaActionHandlers;
   timeZone: string;
+  /**
+   * Opção de venda dentro do bloco do produto (`RotinaProductBlock`): a foto
+   * e o título já estão no cabeçalho do bloco; o card abre com o tipo em
+   * destaque e o MLB.
+   */
+  nested?: boolean;
+  /** Tarefas da outra opção do produto em outros grupos ("também em"). */
+  otherTasks?: readonly RotinaOtherTask[];
+  onOpenTask?: (rule: RotinaRuleKey) => void;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [editingTarget, setEditingTarget] = useState(false);
@@ -228,9 +308,10 @@ export function RotinaActionRow({
           },
     );
   }
+  const optionLabel = listing.saleOption ? listingTypeName(listing.listingTypeId) : null;
   const meta = [
-    listing.sku,
-    listing.mlItemId,
+    nested ? null : listing.sku,
+    nested ? null : listing.mlItemId,
     listing.unitsPerDay !== null ? formatUnitsPerDay(listing.unitsPerDay) : null,
     !action.isNew ? action.ageLabel : null,
   ].filter(Boolean);
@@ -239,32 +320,56 @@ export function RotinaActionRow({
     <li
       className={cn(
         "overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-[0_1px_2px_rgba(15,18,31,0.04)]",
-        RULE_ACCENT_CLASS[visual.tone],
+        // Opção dentro do bloco do produto: a faixa diz o tipo (Clássico,
+        // Premium), para as opções não ficarem iguais; o estado (Perdendo…)
+        // continua na pílula.
+        nested
+          ? OPTION_TYPE_STRIPE_CLASS[optionTypeTone(listing.listingTypeId)]
+          : RULE_ACCENT_CLASS[visual.tone],
       )}
     >
       <div className="flex gap-3 p-3 sm:gap-4 sm:p-4">
-        <a
-          href={listing.permalink}
-          target="_blank"
-          rel="noopener noreferrer"
-          tabIndex={-1}
-          aria-hidden
-          className="shrink-0"
-        >
-          <RotinaThumb src={listing.imageUrl} size={56} className="size-12 sm:size-14" />
-        </a>
+        {nested ? null : (
+          <a
+            href={listing.permalink}
+            target="_blank"
+            rel="noopener noreferrer"
+            tabIndex={-1}
+            aria-hidden
+            className="shrink-0"
+          >
+            <RotinaThumb src={listing.imageUrl} size={56} className="size-12 sm:size-14" />
+          </a>
+        )}
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-2">
-            <a
-              href={listing.permalink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="min-w-0 truncate rounded text-sm font-semibold text-[var(--foreground)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] sm:flex-1"
-              title={listing.title}
-            >
-              {listing.title}
-            </a>
+            {nested ? (
+              <a
+                href={listing.permalink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex min-w-0 items-center gap-2 rounded hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] sm:flex-1"
+                title={`${listing.title} · ${listing.mlItemId}`}
+              >
+                {optionLabel ? (
+                  <OptionTypeBadge label={optionLabel} listingTypeId={listing.listingTypeId} />
+                ) : null}
+                <span className="truncate font-mono text-xs font-semibold text-[var(--foreground)]">
+                  {listing.mlItemId}
+                </span>
+              </a>
+            ) : (
+              <a
+                href={listing.permalink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="min-w-0 truncate rounded text-sm font-semibold text-[var(--foreground)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] sm:flex-1"
+                title={listing.title}
+              >
+                {listing.title}
+              </a>
+            )}
             {hasPills ? (
               <div className="flex flex-wrap items-center gap-1.5 sm:shrink-0 sm:justify-end">
                 {statusPill ? (
@@ -296,19 +401,21 @@ export function RotinaActionRow({
           </div>
           <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-[var(--muted-foreground)]">
             <SegmentTag segment={action.segment} />
-            <ListingTypeTag listingTypeId={listing.listingTypeId} />
-            {listing.saleOption ? (
+            {optionLabel && !nested ? (
               <span
-                className="shrink-0 text-[11px] text-[var(--muted-foreground)]"
-                title="Opções de venda do mesmo produto: preço, promoção e ADS são de cada anúncio; a prioridade usa a venda do produto."
+                className="inline-flex shrink-0 items-center gap-1"
+                title={`Opção de venda do produto (${listing.saleOption?.optionsLabel}): preço, promoção e ADS são deste anúncio; a prioridade usa a venda do produto.`}
               >
-                {listing.saleOption.isPrincipal
-                  ? `principal · ${listing.saleOption.optionsLabel}`
-                  : `opção de ${listing.saleOption.principalMlItemId}`}
+                <OptionTypeBadge label={optionLabel} listingTypeId={listing.listingTypeId} />
               </span>
-            ) : null}
+            ) : optionLabel ? null : (
+              <ListingTypeTag listingTypeId={listing.listingTypeId} />
+            )}
             <span className="min-w-0 truncate tabular-nums">{meta.join(" · ")}</span>
           </div>
+          {otherTasks.length > 0 ? (
+            <RotinaOtherTasks tasks={otherTasks} onOpenTask={onOpenTask} className="mt-1.5" />
+          ) : null}
 
           <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-5">
             <div className="min-w-0 flex-1">

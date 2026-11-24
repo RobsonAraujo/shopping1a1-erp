@@ -41,6 +41,7 @@ import { ROTINA_RULES, type RotinaRuleKey } from "@/lib/rotina/rule-registry";
 import { isRuleEnabled } from "@/lib/rotina/settings-shared";
 import type { RotinaActionView, RotinaView } from "@/lib/rotina/view";
 import {
+  actionProductKey,
   applyActionOverrides,
   groupActiveByRule,
   inSegment,
@@ -49,6 +50,7 @@ import {
   type ActionGroup,
   type SegmentFilter,
 } from "@/lib/rotina/view-summary";
+import type { RotinaOtherTask } from "@/components/rotina/RotinaActionRow";
 import { cn } from "@/lib/utils";
 
 const STALE_SALES_DAYS_DEFAULT = NO_RECENT_SALES_DEFAULT_DAYS;
@@ -252,6 +254,41 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
       if (next.has(rule)) next.delete(rule);
       else next.add(rule);
       return next;
+    });
+  }, []);
+
+  // Opções de venda: as tarefas de cada produto (das opções dele), para o
+  // atalho "Premium também em: …" levar à tarefa da outra opção.
+  const tasksByProduct = useMemo(() => {
+    const map = new Map<string, RotinaActionView[]>();
+    for (const action of actions) {
+      if (action.bucket !== "active" || !inSegment(action, segment)) continue;
+      if (!action.listing.saleOption || action.rule === "no_recent_sales") continue;
+      const key = actionProductKey(action);
+      const list = map.get(key) ?? [];
+      list.push(action);
+      map.set(key, list);
+    }
+    return map;
+  }, [actions, segment]);
+  const otherTasksOf = useCallback(
+    (productKey: string, rule: RotinaRuleKey): RotinaOtherTask[] =>
+      (tasksByProduct.get(productKey) ?? [])
+        .filter((action) => action.rule !== rule)
+        .map((action) => ({
+          rule: action.rule,
+          mlItemId: action.listing.mlItemId,
+          listingTypeId: action.listing.listingTypeId,
+        })),
+    [tasksByProduct],
+  );
+  /** Abre a tarefa (se estava fechada) e rola até ela. */
+  const openTask = useCallback((rule: RotinaRuleKey) => {
+    setOpenGroups((current) => (current.has(rule) ? current : new Set(current).add(rule)));
+    window.requestAnimationFrame(() => {
+      document
+        .getElementById(`rotina-group-${rule}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   }, []);
 
@@ -591,6 +628,8 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
                           open={openGroups.has(group.rule)}
                           onToggle={() => toggleGroup(group.rule)}
                           lastRunLabel={freshness.lastRunLabel}
+                          otherTasksOf={otherTasksOf}
+                          onOpenTask={openTask}
                         />
                       ))}
                     </section>

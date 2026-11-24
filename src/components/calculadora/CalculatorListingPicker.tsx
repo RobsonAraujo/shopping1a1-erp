@@ -23,6 +23,11 @@ import {
 } from "@/lib/calculadora/calculator-listings";
 import { listingOptionsSummary } from "@/lib/products/listing-option-label";
 import {
+  OPTION_TYPE_STRIPE_CLASS,
+  OptionTypeBadge,
+  optionTypeTone,
+} from "@/components/products/OptionTypeBadge";
+import {
   buildCalculatorSearchIndex,
   searchCalculatorIndex,
 } from "@/lib/rotina/calculator-search";
@@ -57,13 +62,9 @@ function optionChip(listing: CalculatorListing) {
 }
 
 /** O tipo da opção, em destaque ("Clássico", "Premium"). */
-function OptionTypeBadge({ listing }: { listing: CalculatorListing }) {
+function ListingOptionBadge({ listing }: { listing: CalculatorListing }) {
   if (!listing.saleOption) return null;
-  return (
-    <span className="shrink-0 rounded-md bg-[var(--primary)]/10 px-2 py-0.5 text-xs font-semibold leading-tight text-[var(--primary)] ring-1 ring-inset ring-[var(--primary)]/20">
-      {listing.saleOption.label}
-    </span>
-  );
+  return <OptionTypeBadge label={listing.saleOption.label} />;
 }
 
 function inSegment(listing: CalculatorListing, segment: SegmentFilter): boolean {
@@ -408,7 +409,8 @@ export function CalculatorListingPicker({
                     "relative flex cursor-pointer items-center gap-3 px-3 py-2.5 transition-colors",
                     // Opção dentro do produto aberto: recuada, com a faixa e a
                     // miniatura à esquerda para destacar sem pesar.
-                    nested && "border-l-2 border-l-[var(--primary)]/35 bg-[var(--muted)]/20 py-2 pl-8",
+                    nested && "bg-[var(--muted)]/20 py-2 pl-8",
+                    nested && OPTION_TYPE_STRIPE_CLASS[optionTypeTone(listing.saleOption?.label)],
                     active && "bg-[var(--accent)]/50",
                     selected && "bg-[var(--primary)]/[0.07]",
                   )}
@@ -427,7 +429,7 @@ export function CalculatorListingPicker({
                   <div className="min-w-0 flex-1">
                     {nested ? (
                       <p className="flex min-w-0 items-center gap-2 text-sm">
-                        <OptionTypeBadge listing={listing} />
+                        <ListingOptionBadge listing={listing} />
                         <span
                           className={cn(
                             "truncate font-mono text-xs text-[var(--foreground)]",
@@ -449,7 +451,7 @@ export function CalculatorListingPicker({
                     )}
                     <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
                       <SegmentTag segment={listing.catalogListing ? "catalog" : "own"} />
-                      {nested ? null : <OptionTypeBadge listing={listing} />}
+                      {nested ? null : <ListingOptionBadge listing={listing} />}
                       <span className="truncate">
                         {nested ? (listing.sku ?? "") : (listing.sku ?? listing.mlItemId)}
                       </span>

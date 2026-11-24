@@ -4,8 +4,11 @@ import { ChevronRight, Info } from "lucide-react";
 import {
   RotinaActionRow,
   type RotinaActionHandlers,
+  type RotinaOtherTask,
 } from "@/components/rotina/RotinaActionRow";
+import { RotinaProductBlock } from "@/components/rotina/RotinaProductBlock";
 import { RotinaThumb } from "@/components/rotina/RotinaThumb";
+import { groupActionsByProduct } from "@/lib/rotina/view-summary";
 import { RULE_VISUALS, ruleIconClass } from "@/components/rotina/rule-visuals";
 import { ROTINA_RULES, TACOS_RULES, type RotinaRuleKey } from "@/lib/rotina/rule-registry";
 import type { RotinaActionView } from "@/lib/rotina/view";
@@ -14,10 +17,13 @@ import { cn } from "@/lib/utils";
 const PREVIEW_THUMBS = 4;
 const PREVIEW_NAMES = 2;
 
-/** "Kit Facas, Panela Inox e mais 3" — a tarefa e em quem ela cai. */
-function previewNames(actions: RotinaActionView[]): string {
-  const names = actions.slice(0, PREVIEW_NAMES).map((action) => action.listing.title);
-  const rest = actions.length - names.length;
+/**
+ * "Kit Facas, Panela Inox e mais 3" — a tarefa e em quem ela cai. As opções
+ * de venda do mesmo produto contam uma vez (não "Cabo, Cabo e mais 2").
+ */
+function previewNames(products: RotinaActionView[]): string {
+  const names = products.slice(0, PREVIEW_NAMES).map((action) => action.listing.title);
+  const rest = products.length - names.length;
   return rest > 0 ? `${names.join(", ")} e mais ${rest}` : names.join(", ");
 }
 
@@ -54,6 +60,8 @@ export function RotinaTaskGroup({
   open,
   onToggle,
   lastRunLabel = null,
+  otherTasksOf,
+  onOpenTask,
 }: {
   rule: RotinaRuleKey;
   actions: RotinaActionView[];
@@ -63,6 +71,13 @@ export function RotinaTaskGroup({
   onToggle: () => void;
   /** "hoje às 09:12" — de quando são os números das tarefas (aviso do TACOS). */
   lastRunLabel?: string | null;
+  /**
+   * Opções de venda: tarefas das opções de um produto em **outros** grupos
+   * (o atalho "Premium também em: …"). Ausente = sem atalho.
+   */
+  otherTasksOf?: (productKey: string, rule: RotinaRuleKey) => RotinaOtherTask[];
+  /** Abre outro grupo e rola até ele. */
+  onOpenTask?: (rule: RotinaRuleKey) => void;
 }) {
   const definition = ROTINA_RULES[rule];
   const visual = RULE_VISUALS[rule];
@@ -70,8 +85,10 @@ export function RotinaTaskGroup({
   const fresh = actions.filter((action) => action.isNew).length;
   const sectionId = rotinaGroupId(rule);
   const panelId = `${sectionId}-panel`;
-  const thumbs = actions.slice(0, PREVIEW_THUMBS);
-  const extraThumbs = actions.length - thumbs.length;
+  const blocks = groupActionsByProduct(actions);
+  const products = blocks.map((block) => block.lead);
+  const thumbs = products.slice(0, PREVIEW_THUMBS);
+  const extraThumbs = products.length - thumbs.length;
 
   return (
     <section
@@ -128,7 +145,7 @@ export function RotinaTaskGroup({
             </span>
             {!open ? (
               <span className="mt-0.5 block truncate text-xs font-normal text-[var(--muted-foreground)]">
-                {previewNames(actions)}
+                {previewNames(products)}
               </span>
             ) : null}
           </span>
@@ -161,14 +178,29 @@ export function RotinaTaskGroup({
         >
           {TACOS_RULES.has(rule) ? <TacosBasisNote lastRunLabel={lastRunLabel} /> : null}
           <ul className="space-y-2.5">
-            {actions.map((action) => (
-              <RotinaActionRow
-                key={action.id}
-                action={action}
-                handlers={handlers}
-                timeZone={timeZone}
-              />
-            ))}
+            {blocks.map((block) =>
+              block.actions.length > 1 ? (
+                <RotinaProductBlock
+                  key={`product:${block.key}`}
+                  block={block}
+                  handlers={handlers}
+                  timeZone={timeZone}
+                  otherTasks={otherTasksOf?.(block.key, rule) ?? []}
+                  onOpenTask={onOpenTask}
+                />
+              ) : (
+                <RotinaActionRow
+                  key={block.lead.id}
+                  action={block.lead}
+                  handlers={handlers}
+                  timeZone={timeZone}
+                  otherTasks={
+                    block.lead.listing.saleOption ? (otherTasksOf?.(block.key, rule) ?? []) : []
+                  }
+                  onOpenTask={onOpenTask}
+                />
+              ),
+            )}
           </ul>
         </div>
       ) : null}

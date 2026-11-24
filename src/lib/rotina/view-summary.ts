@@ -106,3 +106,53 @@ export function groupActiveByRule(
     actions: byRule.get(rule)!,
   }));
 }
+
+/** Chave do produto físico de uma ação: o principal das opções de venda, ou o próprio MLB. */
+export function actionProductKey(action: RotinaActionView): string {
+  return action.listing.saleOption?.principalMlItemId ?? action.listing.mlItemId;
+}
+
+/** As ações de uma tarefa que são do mesmo produto (opções de venda juntas). */
+export type ActionProductBlock = {
+  key: string;
+  /** O que representa o produto (foto, título): o principal, se tem esta tarefa. */
+  lead: RotinaActionView;
+  /** Principal primeiro, depois Clássico e Premium. */
+  actions: RotinaActionView[];
+};
+
+const LISTING_TYPE_ORDER: Record<string, number> = { gold_special: 0, gold_pro: 1 };
+
+/**
+ * Junta, dentro de uma tarefa, as opções de venda (Clássico, Premium…) do
+ * mesmo produto num bloco. O bloco entra onde aparece a opção de maior
+ * prioridade (a ordem que a tarefa já trouxe); produto sem opções vira um
+ * bloco de uma ação só.
+ */
+export function groupActionsByProduct(actions: readonly RotinaActionView[]): ActionProductBlock[] {
+  const blocks: ActionProductBlock[] = [];
+  const byKey = new Map<string, ActionProductBlock>();
+  for (const action of actions) {
+    const key = actionProductKey(action);
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.actions.push(action);
+      continue;
+    }
+    const block = { key, lead: action, actions: [action] };
+    byKey.set(key, block);
+    blocks.push(block);
+  }
+  for (const block of blocks) {
+    if (block.actions.length < 2) continue;
+    block.actions.sort(
+      (a, b) =>
+        Number(b.listing.mlItemId === block.key) - Number(a.listing.mlItemId === block.key) ||
+        (LISTING_TYPE_ORDER[a.listing.listingTypeId ?? ""] ?? 9) -
+          (LISTING_TYPE_ORDER[b.listing.listingTypeId ?? ""] ?? 9) ||
+        a.listing.mlItemId.localeCompare(b.listing.mlItemId),
+    );
+    block.lead = block.actions[0];
+  }
+  return blocks;
+}
