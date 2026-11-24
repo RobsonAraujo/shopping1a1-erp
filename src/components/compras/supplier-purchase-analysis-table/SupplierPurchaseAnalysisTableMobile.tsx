@@ -28,6 +28,7 @@ import {
   statusVariants,
   type SupplierPurchaseAnalysisTableProps,
 } from "@/components/compras/supplier-purchase-analysis-table/types";
+import { listingOptionsSummary } from "@/lib/products/listing-option-label";
 
 export function SupplierPurchaseAnalysisTableMobile({
   rows,
@@ -103,6 +104,11 @@ export function SupplierPurchaseAnalysisTableMobile({
                     <p className="mt-0.5 line-clamp-2 text-xs text-[var(--muted-foreground)]">
                       {row.item.title}
                     </p>
+                    {row.options ? (
+                      <p className="mt-0.5 truncate text-[11px] text-[var(--muted-foreground)]">
+                        Opções: {listingOptionsSummary(row.options)}
+                      </p>
+                    ) : null}
                     <div className="mt-1 flex flex-wrap items-center gap-1">
                       <ListingStatusBadge
                         status={row.item.status}

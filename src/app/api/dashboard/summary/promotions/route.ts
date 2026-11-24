@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
         own: operationalSettings.promotionMonitorOwnListings,
         catalog: operationalSettings.promotionMonitorCatalogListings,
       },
+      organizationId,
     });
     return NextResponse.json(payload);
   } catch (e) {

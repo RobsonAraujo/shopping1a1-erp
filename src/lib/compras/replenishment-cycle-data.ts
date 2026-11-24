@@ -54,7 +54,6 @@ import {
   upsertListingsFromItems,
 } from "@/lib/mercadolibre/listing-sync";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
-import { isFulfillmentListing } from "@/lib/mercadolibre/fulfillment-stock";
 import { automaticWarehouseQtyByListing, overlayAutomaticWarehouse } from "@/lib/stock/stock-bridge";
 import {
   KANBAN_POSITION_GAP,
@@ -63,6 +62,14 @@ import {
 import { computeStockPlanningDisplay } from "@/lib/compras/stock-planning";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import type { StockPlanningDisplay } from "@/lib/compras/stock-planning";
+import { loadListingGroups, type ListingOption } from "@/lib/products/listing-groups";
+import {
+  foldSaleOptions,
+  foldSalesByKey,
+  foldWarehouseByKey,
+  pooledMlStock,
+  type SaleOptionsFold,
+} from "@/lib/compras/sale-options-fold";
 
 /** Cada item do board sincroniza de forma independente (auto-completar ou
  * criar ciclo) — rodar em paralelo, com um teto, em vez de um `for await`
@@ -151,6 +158,12 @@ export type OperationsBoardCard = {
    * streaming trazer o valor de verdade e destravar a UI (`BlurredValue`).
    */
   salesPending: boolean;
+  /**
+   * Opções de venda do produto (Clássico, Premium…): o card é do produto
+   * físico, com a venda somada e o estoque contado uma vez. Só quando há
+   * mais de uma.
+   */
+  options?: ListingOption[];
 };
 
 export type SingleBoardData = {
@@ -640,11 +653,24 @@ export async function syncOperationCyclesForItems(
    * tipo evita o loop de sync do outro board quando a página que chamou só
    * usa um dos dois (Compras só lê `purchase`, Operações Full só lê `full`). */
   kind?: OperationCycleKind,
+  /**
+   * Opções de venda: `items` já vem um por produto (`foldSaleOptions`).
+   * `listingItems` são os anúncios lidos de verdade (gravados em `Listing`);
+   * `fold` leva para a chave do produto o ciclo aberto numa opção.
+   */
+  saleOptions?: { fold: SaleOptionsFold; listingItems: ItemBody[] },
 ): Promise<void> {
   const lockKey = `${organizationId}:${kind ?? "purchase+full"}`;
   return withReplenishmentSyncLock(lockKey, async () => {
     if (items.length === 0) return;
-    await ensureListingsForItems(organizationId, items);
+    await ensureListingsForItems(organizationId, saleOptions?.listingItems ?? items);
+    if (saleOptions) {
+      await foldOptionCycles(
+        organizationId,
+        saleOptions.fold,
+        kind ? [kind] : ["purchase", "full"],
+      );
+    }
     if (kind === undefined || kind === "purchase") {
       await syncPurchaseCyclesForItems(
         organizationId,
@@ -664,6 +690,67 @@ export async function syncOperationCyclesForItems(
       );
     }
   });
+}
+
+/**
+ * Ciclo aberto numa opção de venda (de antes do agrupamento, ou de quando a
+ * opção era a chave): passa para a chave do produto se ela ainda não tem
+ * ciclo aberto do mesmo tipo; senão é concluído (o card do produto já
+ * existe). Idempotente: sem ciclo em opção, é uma leitura só.
+ */
+export async function foldOptionCycles(
+  organizationId: string,
+  fold: SaleOptionsFold,
+  kinds: OperationCycleKind[],
+): Promise<number> {
+  const optionIds = fold.items.flatMap((item) =>
+    fold.membersOf(item.id).filter((id) => id !== item.id),
+  );
+  if (optionIds.length === 0) return 0;
+  const cycles = await prisma.replenishmentCycle.findMany({
+    where: {
+      organizationId,
+      mlItemId: { in: optionIds },
+      kind: { in: kinds },
+      status: { not: "completed" },
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+  if (cycles.length === 0) return 0;
+
+  const keys = [...new Set(cycles.map((cycle) => fold.keyOf(cycle.mlItemId)))];
+  const keyCycles = await prisma.replenishmentCycle.findMany({
+    where: {
+      organizationId,
+      mlItemId: { in: keys },
+      kind: { in: kinds },
+      status: { not: "completed" },
+    },
+    select: { mlItemId: true, kind: true },
+  });
+  const taken = new Set(keyCycles.map((cycle) => `${cycle.mlItemId}|${cycle.kind}`));
+
+  for (const cycle of cycles) {
+    const key = fold.keyOf(cycle.mlItemId);
+    const slot = `${key}|${cycle.kind}`;
+    if (!taken.has(slot)) {
+      taken.add(slot);
+      await prisma.replenishmentCycle.update({
+        where: { id: cycle.id, organizationId },
+        data: { mlItemId: key },
+      });
+      continue;
+    }
+    await prisma.replenishmentCycle.update({
+      where: { id: cycle.id, organizationId },
+      data: buildStatusTransition(toCycleRecord(cycle), "completed", {
+        mlQty: cycle.triggerMlQty,
+        warehouseQty: cycle.triggerWarehouseQty,
+        leadTimeDays: cycle.triggerLeadTimeDays ?? 0,
+      }),
+    });
+  }
+  return cycles.length;
 }
 
 export async function syncPurchaseCycleFromWarehouse(
@@ -806,12 +893,14 @@ function buildCardFromCycle(
   supplierNames: Map<string, string>,
   salesPending: boolean,
   columnsByKind: Map<OperationCycleKind, KanbanColumnRow[]>,
+  options?: ListingOption[],
 ): OperationsBoardCard {
   const sku = getItemSku(item);
   const column = resolveCardColumn(cycle, columnsByKind);
   return {
     cycleId: cycle.id,
-    mlItemId: cycle.mlItemId,
+    // A chave do produto (o patch de venda do streaming casa por ela).
+    mlItemId: item.id,
     kind: cycle.kind,
     status: cycle.status,
     columnId: column.id,
@@ -841,6 +930,7 @@ function buildCardFromCycle(
     mlQtyAtCollection: cycle.mlQtyAtCollection,
     updatedAt: cycle.updatedAt.toISOString(),
     salesPending,
+    options,
   };
 }
 
@@ -861,18 +951,22 @@ function buildBoardCardsFromCycles(
   purchaseAnalysisValues: PurchaseAnalysisValues,
   columnsByKind: Map<OperationCycleKind, KanbanColumnRow[]>,
   salesPendingIds?: Set<string>,
+  fold?: SaleOptionsFold,
 ): { purchaseCards: OperationsBoardCard[]; fullCards: OperationsBoardCard[] } {
   const purchaseCards: OperationsBoardCard[] = [];
   const fullCards: OperationsBoardCard[] = [];
 
   for (const cycle of cycles) {
-    const item = itemById.get(cycle.mlItemId);
+    // Opções de venda: o ciclo (mesmo de uma opção ainda não movida) vira o
+    // card do produto, na chave.
+    const key = fold ? fold.keyOf(cycle.mlItemId) : cycle.mlItemId;
+    const item = itemById.get(key);
     if (!item) continue;
 
-    const warehouse = warehouseById[cycle.mlItemId];
+    const warehouse = warehouseById[key];
     const warehouseStock = warehouse?.quantity ?? 0;
     const purchaseLead = warehouse?.purchaseLeadTimeDays ?? 0;
-    const sold = salesByItem[cycle.mlItemId] ?? 0;
+    const sold = salesByItem[key] ?? 0;
     const ctx = buildItemPlanningContext(
       item,
       warehouseStock,
@@ -886,8 +980,9 @@ function buildBoardCardsFromCycles(
       ctx,
       item,
       supplierNames,
-      salesPendingIds?.has(cycle.mlItemId) ?? false,
+      salesPendingIds?.has(key) ?? false,
       columnsByKind,
+      fold?.optionsOf(key),
     );
 
     if (cycle.kind === "purchase") {
@@ -916,6 +1011,40 @@ async function loadColumnsByKind(
   return new Map(entries);
 }
 
+type WarehouseInfo = { quantity: number; purchaseLeadTimeDays: number | null };
+
+/**
+ * Opções de venda: um card por produto físico (`foldSaleOptions`) e o galpão
+ * por chave — o digitado somado entre as opções, ou, com o estoque
+ * automático, o do livro de estoque só na chave (sem somar o depósito duas
+ * vezes; produto com opção fora do Full desconta o depósito, que já está no
+ * estoque do ML do produto).
+ */
+async function foldOperationalInputs(
+  organizationId: string,
+  items: ItemBody[],
+  warehouseRows: Array<{ mlItemId: string; quantity: number; purchaseLeadTimeDays: number | null }>,
+  groups: Awaited<ReturnType<typeof loadListingGroups>>,
+): Promise<{ fold: SaleOptionsFold; warehouseById: Record<string, WarehouseInfo> }> {
+  const fold = foldSaleOptions(items, groups);
+  const raw: Record<string, WarehouseInfo> = Object.fromEntries(
+    warehouseRows.map((row) => [
+      row.mlItemId,
+      { quantity: row.quantity, purchaseLeadTimeDays: row.purchaseLeadTimeDays },
+    ]),
+  );
+  const warehouseById = foldWarehouseByKey(raw, fold);
+  overlayAutomaticWarehouse(
+    warehouseById,
+    await automaticWarehouseQtyByListing(
+      organizationId,
+      fold.items.map((item) => ({ mlItemId: item.id, isFulfillment: fold.allFulfillment(item.id) })),
+    ),
+    () => ({ quantity: 0, purchaseLeadTimeDays: null }),
+  );
+  return { fold, warehouseById };
+}
+
 export async function loadOperationsBoards(
   token: string,
   userId: number,
@@ -932,69 +1061,60 @@ export async function loadOperationsBoards(
   const dateField = stockPlanning.salesWindowDateField;
   const listingIds = await fetchOperationalListingIds(token, userId, organizationId);
 
-  const [rawItems, salesByItem, warehouseStocks, supplierNames, inactiveIds] =
-    await Promise.all([
-      fetchItemsByIdsBatched(token, listingIds),
-      fetchUnitsSoldForItemsInWindowCached(
-        organizationId,
-        token,
-        userId,
-        listingIds,
-        windowDays,
-        dateField,
-      ),
-      prisma.warehouseStock.findMany({
-        where: { organizationId, mlItemId: { in: listingIds } },
-        select: {
-          mlItemId: true,
-          quantity: true,
-          purchaseLeadTimeDays: true,
-        },
-      }),
-      loadSupplierNamesByMlItemId(organizationId, listingIds),
-      loadInactiveProductMlItemIds(organizationId, listingIds),
-    ]);
+  const [rawItems, salesByItem, warehouseStocks] = await Promise.all([
+    fetchItemsByIdsBatched(token, listingIds),
+    fetchUnitsSoldForItemsInWindowCached(
+      organizationId,
+      token,
+      userId,
+      listingIds,
+      windowDays,
+      dateField,
+    ),
+    prisma.warehouseStock.findMany({
+      where: { organizationId, mlItemId: { in: listingIds } },
+      select: {
+        mlItemId: true,
+        quantity: true,
+        purchaseLeadTimeDays: true,
+      },
+    }),
+  ]);
+  // O UP vem no corpo do anúncio: a opção recém-criada já entra no produto.
+  const groups = await loadListingGroups(organizationId, { extraItems: rawItems });
+  const [supplierNames, inactiveIds] = await Promise.all([
+    loadSupplierNamesByMlItemId(organizationId, listingIds, { groups }),
+    loadInactiveProductMlItemIds(organizationId, listingIds, { groups }),
+  ]);
   // Produto inativado pelo usuário some do board (sem tocar o
   // ReplenishmentCycle já existente — reativar o produto traz o card de
   // volta sozinho no próximo load).
   const items = rawItems.filter(
     (item) => !isKitItem(item) && !inactiveIds.has(item.id),
   );
-
-  const warehouseById: Record<string, { quantity: number; purchaseLeadTimeDays: number | null }> =
-    Object.fromEntries(
-      warehouseStocks.map((row) => [
-        row.mlItemId,
-        {
-          quantity: row.quantity,
-          purchaseLeadTimeDays: row.purchaseLeadTimeDays,
-        },
-      ]),
-    );
-  // Estoque automático: galpão sai do livro de estoque (sem somar o depósito duas vezes).
-  overlayAutomaticWarehouse(
-    warehouseById,
-    await automaticWarehouseQtyByListing(
-      organizationId,
-      items.map((item) => ({ mlItemId: item.id, isFulfillment: isFulfillmentListing(item) })),
-    ),
-    () => ({ quantity: 0, purchaseLeadTimeDays: null }),
+  const { fold, warehouseById } = await foldOperationalInputs(
+    organizationId,
+    items,
+    warehouseStocks,
+    groups,
   );
+  const salesByKey = foldSalesByKey(salesByItem, fold);
 
   await syncOperationCyclesForItems(
     organizationId,
-    items,
-    salesByItem,
+    fold.items,
+    salesByKey,
     warehouseById,
     { stockPlanning, purchaseAnalysis: purchaseAnalysisValues },
     kind,
+    { fold, listingItems: items },
   );
 
   const [activeCycles, columnsByKind] = await Promise.all([
     prisma.replenishmentCycle.findMany({
       where: {
         organizationId,
-        mlItemId: { in: listingIds },
+        mlItemId: { in: fold.items.map((item) => item.id) },
         status: { not: "completed" },
         ...(kind ? { kind } : {}),
       },
@@ -1004,16 +1124,18 @@ export async function loadOperationsBoards(
     loadColumnsByKind(organizationId, kind),
   ]);
 
-  const itemById = new Map(items.map((item) => [item.id, item]));
+  const itemById = new Map(fold.items.map((item) => [item.id, item]));
   const { purchaseCards, fullCards } = buildBoardCardsFromCycles(
     activeCycles,
     itemById,
     warehouseById,
-    salesByItem,
+    salesByKey,
     supplierNames,
     stockPlanning,
     purchaseAnalysisValues,
     columnsByKind,
+    undefined,
+    fold,
   );
 
   const summary = summarizeOperationsCounts(
@@ -1074,7 +1196,25 @@ export async function loadOperationsBoardsFast(
 
   if (activeCycles.length === 0) return emptyOperationsBoardsData();
 
-  const mlItemIds = [...new Set(activeCycles.map((c) => c.mlItemId))];
+  // Opções de venda: além do anúncio de cada ciclo, as outras opções ativas
+  // ou pausadas do mesmo produto (venda somada, estoque do produto).
+  const groups = await loadListingGroups(organizationId);
+  const cycleItemIds = [...new Set(activeCycles.map((c) => c.mlItemId))];
+  const mlItemIds = [
+    ...new Set(
+      cycleItemIds.flatMap((id) =>
+        groups
+          .optionsOf(id)
+          .filter(
+            (option) =>
+              option.mlItemId === id ||
+              option.mlStatus === "active" ||
+              option.mlStatus === "paused",
+          )
+          .map((option) => option.mlItemId),
+      ),
+    ),
+  ];
 
   const operationalSettings = await loadOperationalSettings(organizationId);
   const stockPlanning = toStockPlanningValues(operationalSettings);
@@ -1089,9 +1229,9 @@ export async function loadOperationsBoardsFast(
         where: { organizationId, mlItemId: { in: mlItemIds } },
         select: { mlItemId: true, quantity: true, purchaseLeadTimeDays: true },
       }),
-      loadSupplierNamesByMlItemId(organizationId, mlItemIds),
+      loadSupplierNamesByMlItemId(organizationId, mlItemIds, { groups }),
       readCachedUnitsSoldForItemsInWindow(organizationId, mlItemIds, windowDays, dateField),
-      loadInactiveProductMlItemIds(organizationId, mlItemIds),
+      loadInactiveProductMlItemIds(organizationId, mlItemIds, { groups }),
       columnsPromise
         ? columnsPromise.then((columns) => new Map([[kind, columns]]))
         : loadColumnsByKind(organizationId, kind),
@@ -1099,41 +1239,49 @@ export async function loadOperationsBoardsFast(
   const items = rawItems.filter(
     (item) => !isKitItem(item) && !inactiveIds.has(item.id),
   );
-
-  const warehouseById: Record<string, { quantity: number; purchaseLeadTimeDays: number | null }> =
-    Object.fromEntries(
-      warehouseStocks.map((row) => [
-        row.mlItemId,
-        { quantity: row.quantity, purchaseLeadTimeDays: row.purchaseLeadTimeDays },
-      ]),
-    );
-  // Estoque automático: galpão sai do livro de estoque (sem somar o depósito duas vezes).
-  overlayAutomaticWarehouse(
-    warehouseById,
-    await automaticWarehouseQtyByListing(
-      organizationId,
-      items.map((item) => ({ mlItemId: item.id, isFulfillment: isFulfillmentListing(item) })),
-    ),
-    () => ({ quantity: 0, purchaseLeadTimeDays: null }),
+  const { fold, warehouseById } = await foldOperationalInputs(
+    organizationId,
+    items,
+    warehouseStocks,
+    groups,
+  );
+  const salesByKey = foldSalesByKey(cachedSales, fold);
+  const salesPendingIds = new Set(
+    fold.items
+      .map((item) => item.id)
+      .filter((key) => fold.membersOf(key).some((id) => !(id in cachedSales))),
   );
 
-  const salesPendingIds = new Set(mlItemIds.filter((id) => !(id in cachedSales)));
+  // Um card por produto: se uma opção ainda tem ciclo próprio (o resync em
+  // seguida leva para a chave), mostra o da chave, ou o primeiro.
+  const chosenByKey = new Map<string, CycleForCard>();
+  for (const cycle of activeCycles) {
+    const key = fold.keyOf(cycle.mlItemId);
+    const current = chosenByKey.get(key);
+    if (!current || (current.mlItemId !== key && cycle.mlItemId === key)) {
+      chosenByKey.set(key, cycle);
+    }
+  }
+  const shownCycles = activeCycles.filter(
+    (cycle) => chosenByKey.get(fold.keyOf(cycle.mlItemId)) === cycle,
+  );
 
-  const itemById = new Map(items.map((item) => [item.id, item]));
+  const itemById = new Map(fold.items.map((item) => [item.id, item]));
   const { purchaseCards, fullCards } = buildBoardCardsFromCycles(
-    activeCycles,
+    shownCycles,
     itemById,
     warehouseById,
-    cachedSales,
+    salesByKey,
     supplierNames,
     stockPlanning,
     purchaseAnalysisValues,
     columnsByKind,
     salesPendingIds,
+    fold,
   );
 
   const summary = summarizeOperationsCounts(
-    activeCycles.map((cycle) => ({ kind: cycle.kind, status: cycle.status })),
+    shownCycles.map((cycle) => ({ kind: cycle.kind, status: cycle.status })),
   );
 
   return {
@@ -1187,55 +1335,54 @@ export async function streamOperationsBoardResync(
   const dateField = stockPlanning.salesWindowDateField;
   const listingIds = await fetchOperationalListingIds(token, userId, organizationId);
 
-  const [rawItems, warehouseStocks, supplierNames, inactiveIds] = await Promise.all([
+  const [rawItems, warehouseStocks] = await Promise.all([
     fetchItemsByIdsBatched(token, listingIds),
     prisma.warehouseStock.findMany({
       where: { organizationId, mlItemId: { in: listingIds } },
       select: { mlItemId: true, quantity: true, purchaseLeadTimeDays: true },
     }),
-    loadSupplierNamesByMlItemId(organizationId, listingIds),
-    loadInactiveProductMlItemIds(organizationId, listingIds),
+  ]);
+  // O UP vem no corpo do anúncio: a opção recém-criada já entra no produto.
+  const groups = await loadListingGroups(organizationId, { extraItems: rawItems });
+  const [supplierNames, inactiveIds] = await Promise.all([
+    loadSupplierNamesByMlItemId(organizationId, listingIds, { groups }),
+    loadInactiveProductMlItemIds(organizationId, listingIds, { groups }),
   ]);
   const items = rawItems.filter(
     (item) => !isKitItem(item) && !inactiveIds.has(item.id),
   );
-  const itemById = new Map(items.map((item) => [item.id, item]));
-
-  const warehouseById: Record<string, { quantity: number; purchaseLeadTimeDays: number | null }> =
-    Object.fromEntries(
-      warehouseStocks.map((row) => [
-        row.mlItemId,
-        { quantity: row.quantity, purchaseLeadTimeDays: row.purchaseLeadTimeDays },
-      ]),
-    );
-  // Estoque automático: galpão sai do livro de estoque (sem somar o depósito duas vezes).
-  overlayAutomaticWarehouse(
-    warehouseById,
-    await automaticWarehouseQtyByListing(
-      organizationId,
-      items.map((item) => ({ mlItemId: item.id, isFulfillment: isFulfillmentListing(item) })),
-    ),
-    () => ({ quantity: 0, purchaseLeadTimeDays: null }),
+  const { fold, warehouseById } = await foldOperationalInputs(
+    organizationId,
+    items,
+    warehouseStocks,
+    groups,
   );
+  const itemById = new Map(fold.items.map((item) => [item.id, item]));
 
   // Snapshot leve do status atual (pré-sync) só para a badge "Urgente" do
   // patch em streaming não reaparecer num card já além da etapa de ação
   // (ex.: "Coletado"/"Comprado") — o card final, montado depois do sync em
-  // `buildCardFromCycle`, já recalcula isso com o status mais fresco.
-  const cycleStatusById = new Map(
-    (
-      await prisma.replenishmentCycle.findMany({
-        where: {
-          organizationId,
-          mlItemId: { in: listingIds },
-          kind,
-          status: { not: "completed" },
-        },
-        select: { mlItemId: true, status: true },
-      })
-    ).map((c) => [c.mlItemId, c.status]),
-  );
+  // `buildCardFromCycle`, já recalcula isso com o status mais fresco. Por
+  // chave do produto: o ciclo de uma opção conta para o card do produto.
+  const cycleStatusByKey = new Map<string, ReplenishmentStatus>();
+  for (const cycle of await prisma.replenishmentCycle.findMany({
+    where: {
+      organizationId,
+      mlItemId: { in: listingIds },
+      kind,
+      status: { not: "completed" },
+    },
+    select: { mlItemId: true, status: true },
+  })) {
+    const key = fold.keyOf(cycle.mlItemId);
+    if (!cycleStatusByKey.has(key) || cycle.mlItemId === key) {
+      cycleStatusByKey.set(key, cycle.status);
+    }
+  }
 
+  // A venda chega anúncio por anúncio; o card do produto só recebe o patch
+  // quando todas as opções lidas chegaram (senão mostraria uma venda parcial).
+  const resolvedUnits = new Map<string, number>();
   const salesByItem = await fetchUnitsSoldForItemsInWindowCached(
     organizationId,
     token,
@@ -1244,25 +1391,30 @@ export async function streamOperationsBoardResync(
     windowDays,
     dateField,
     (mlItemId, unitsSold) => {
+      resolvedUnits.set(mlItemId, unitsSold);
       // Só itens que já são card neste board: a varredura cobre o catálogo
       // inteiro, e um evento por anúncio sem card era só tráfego e
       // re-render à toa no client. Ciclo criado pelo sync abaixo chega
       // completo no evento `done`.
-      const status = cycleStatusById.get(mlItemId);
+      const key = fold.keyOf(mlItemId);
+      const status = cycleStatusByKey.get(key);
       if (!status) return;
-      const item = itemById.get(mlItemId);
+      const item = itemById.get(key);
       if (!item) return;
-      const warehouse = warehouseById[mlItemId];
+      const members = fold.membersOf(key);
+      if (!members.every((id) => resolvedUnits.has(id))) return;
+      const unitsForProduct = members.reduce((sum, id) => sum + (resolvedUnits.get(id) ?? 0), 0);
+      const warehouse = warehouseById[key];
       const ctx = buildItemPlanningContext(
         item,
         warehouse?.quantity ?? 0,
         warehouse?.purchaseLeadTimeDays ?? 0,
-        unitsSold,
+        unitsForProduct,
         stockPlanning,
         purchaseAnalysisValues,
       );
       const suppressOverdue = isOverdueBadgeSuppressed(kind, status);
-      onCardPatch(mlItemId, {
+      onCardPatch(key, {
         purchaseIsOverdue: suppressOverdue ? false : ctx.purchasePlan.purchaseIsOverdue,
         searchIsOverdue: suppressOverdue ? false : ctx.fullPlan.searchIsOverdue,
         purchaseStartsOn: ctx.purchasePlan.purchaseStartsOn,
@@ -1276,20 +1428,22 @@ export async function streamOperationsBoardResync(
 
   if (signal?.aborted) return null;
 
+  const salesByKey = foldSalesByKey(salesByItem, fold);
   await syncOperationCyclesForItems(
     organizationId,
-    items,
-    salesByItem,
+    fold.items,
+    salesByKey,
     warehouseById,
     { stockPlanning, purchaseAnalysis: purchaseAnalysisValues },
     kind,
+    { fold, listingItems: items },
   );
 
   const [activeCycles, columnsByKind] = await Promise.all([
     prisma.replenishmentCycle.findMany({
       where: {
         organizationId,
-        mlItemId: { in: listingIds },
+        mlItemId: { in: fold.items.map((item) => item.id) },
         status: { not: "completed" },
         kind,
       },
@@ -1303,11 +1457,13 @@ export async function streamOperationsBoardResync(
     activeCycles,
     itemById,
     warehouseById,
-    salesByItem,
+    salesByKey,
     supplierNames,
     stockPlanning,
     purchaseAnalysisValues,
     columnsByKind,
+    undefined,
+    fold,
   );
 
   const cards = kind === "purchase" ? purchaseCards : fullCards;
@@ -1379,22 +1535,49 @@ async function writeCycleMoves(
   const needsLiveMlQty =
     kind === "full" && isFinal && Boolean(accessToken) &&
     changing.some((c) => c.mlQtyAtCollection === null);
+
+  // Opções de venda: o retrato do card é do produto, como o board — galpão
+  // digitado somado entre as opções e estoque do ML do produto. Um retrato
+  // só da chave faria a conclusão automática comparar coisas diferentes.
+  const groups = changingItemIds.length > 0 ? await loadListingGroups(organizationId) : null;
+  const membersByItem = new Map(
+    changingItemIds.map((id) => [
+      id,
+      groups ? groups.optionsOf(id).map((option) => option.mlItemId) : [id],
+    ]),
+  );
+  const memberIds = [...new Set([...membersByItem.values()].flat())];
+  const liveIds = changing
+    .filter((c) => c.mlQtyAtCollection === null)
+    .flatMap((c) => membersByItem.get(c.mlItemId) ?? [c.mlItemId]);
   const [warehouseRows, liveItems] = await Promise.all([
-    changingItemIds.length > 0
+    memberIds.length > 0
       ? prisma.warehouseStock.findMany({
-          where: { organizationId, mlItemId: { in: changingItemIds } },
+          where: { organizationId, mlItemId: { in: memberIds } },
           select: { mlItemId: true, quantity: true, purchaseLeadTimeDays: true },
         })
       : Promise.resolve([]),
     needsLiveMlQty && accessToken
-      ? fetchItemsByIdsBatched(
-          accessToken,
-          changing.filter((c) => c.mlQtyAtCollection === null).map((c) => c.mlItemId),
-        )
+      ? fetchItemsByIdsBatched(accessToken, [...new Set(liveIds)])
       : Promise.resolve([] as ItemBody[]),
   ]);
+  const warehouseRowById = new Map(warehouseRows.map((w) => [w.mlItemId, w]));
   const warehouseByItem = new Map(
-    warehouseRows.map((w) => [w.mlItemId, { quantity: w.quantity, purchaseLeadTimeDays: w.purchaseLeadTimeDays }]),
+    changingItemIds.map((id) => {
+      const rows = (membersByItem.get(id) ?? [id])
+        .map((memberId) => warehouseRowById.get(memberId))
+        .filter((row): row is NonNullable<typeof row> => Boolean(row));
+      return [
+        id,
+        {
+          quantity: rows.reduce((sum, row) => sum + row.quantity, 0),
+          purchaseLeadTimeDays:
+            warehouseRowById.get(id)?.purchaseLeadTimeDays ??
+            rows.find((row) => row.purchaseLeadTimeDays != null)?.purchaseLeadTimeDays ??
+            null,
+        },
+      ] as const;
+    }),
   );
   // Estoque automático: o retrato do card guarda o galpão do livro de estoque.
   const autoWarehouse = await automaticWarehouseQtyByListing(
@@ -1409,7 +1592,19 @@ async function writeCycleMoves(
       });
     }
   }
-  const liveMlQtyByItem = new Map(liveItems.map((item) => [item.id, mlAvailableStockUnits(item)]));
+  const liveById = new Map(liveItems.map((item) => [item.id, item]));
+  const liveMlQtyByItem = new Map(
+    changingItemIds
+      .map((id) => {
+        const members = (membersByItem.get(id) ?? [id])
+          .map((memberId) => liveById.get(memberId))
+          .filter((item): item is ItemBody => Boolean(item) && ["active", "paused"].includes(item!.status ?? ""));
+        const own = liveById.get(id);
+        if (!own) return null;
+        return [id, pooledMlStock(members.length > 0 ? members : [own])] as const;
+      })
+      .filter((entry): entry is readonly [string, number] => entry !== null),
+  );
 
   const touchedIds = await prisma.$transaction(async (tx) => {
     await Promise.all(

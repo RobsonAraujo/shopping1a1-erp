@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/db";
 import { loadListingImageUrlsByMlItemId } from "@/lib/products/product-data";
+import { loadListingGroups } from "@/lib/products/listing-groups";
 
 export type SupplierRow = {
   id: string;
@@ -17,21 +18,30 @@ export async function loadSuppliers(
   organizationId: string,
   options?: { onlyActive?: boolean },
 ): Promise<SupplierRow[]> {
-  const suppliers = await prisma.supplier.findMany({
-    where: { organizationId, ...(options?.onlyActive ? { active: true } : {}) },
-    orderBy: { name: "asc" },
-    select: {
-      id: true,
-      name: true,
-      active: true,
-      _count: { select: { products: true } },
-    },
-  });
+  const [suppliers, products, groups] = await Promise.all([
+    prisma.supplier.findMany({
+      where: { organizationId, ...(options?.onlyActive ? { active: true } : {}) },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, active: true },
+    }),
+    prisma.product.findMany({
+      where: { organizationId, supplierId: { not: null } },
+      select: { mlItemId: true, supplierId: true },
+    }),
+    loadListingGroups(organizationId),
+  ]);
+  // Opções de venda: conta produto físico — o cadastro duplicado de uma
+  // opção não é outro produto do fornecedor.
+  const countBySupplier = new Map<string, number>();
+  for (const product of products) {
+    if (!product.supplierId || groups.isOption(product.mlItemId)) continue;
+    countBySupplier.set(product.supplierId, (countBySupplier.get(product.supplierId) ?? 0) + 1);
+  }
   return suppliers.map((s) => ({
     id: s.id,
     name: s.name,
     active: s.active,
-    productCount: s._count.products,
+    productCount: countBySupplier.get(s.id) ?? 0,
   }));
 }
 
@@ -41,11 +51,17 @@ export async function loadSuppliers(
 export async function loadUnassignedProducts(
   organizationId: string,
 ): Promise<UnassignedProduct[]> {
-  const rows = await prisma.product.findMany({
-    where: { organizationId, supplierId: null, active: true },
-    orderBy: { sku: "asc" },
-    select: { mlItemId: true, sku: true },
-  });
+  const [allRows, groups] = await Promise.all([
+    prisma.product.findMany({
+      where: { organizationId, supplierId: null, active: true },
+      orderBy: { sku: "asc" },
+      select: { mlItemId: true, sku: true },
+    }),
+    loadListingGroups(organizationId),
+  ]);
+  // O fornecedor é do produto: o cadastro duplicado de uma opção de venda
+  // não aparece para arrastar (vale o do principal).
+  const rows = allRows.filter((p) => !groups.isOption(p.mlItemId));
   const imageUrlsByMlItemId = await loadListingImageUrlsByMlItemId(
     organizationId,
     rows.map((p) => p.mlItemId),
@@ -63,11 +79,15 @@ export async function loadUnassignedProducts(
 export async function loadAssignedProducts(
   organizationId: string,
 ): Promise<AssignedProduct[]> {
-  const rows = await prisma.product.findMany({
-    where: { organizationId, supplierId: { not: null }, active: true },
-    orderBy: { sku: "asc" },
-    select: { mlItemId: true, sku: true, supplierId: true },
-  });
+  const [allRows, groups] = await Promise.all([
+    prisma.product.findMany({
+      where: { organizationId, supplierId: { not: null }, active: true },
+      orderBy: { sku: "asc" },
+      select: { mlItemId: true, sku: true, supplierId: true },
+    }),
+    loadListingGroups(organizationId),
+  ]);
+  const rows = allRows.filter((p) => !groups.isOption(p.mlItemId));
   return rows.map((p) => ({
     mlItemId: p.mlItemId,
     sku: p.sku,

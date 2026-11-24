@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db/db";
 import { getCatalogPollStats } from "@/lib/catalog-report/catalog-competition-poll-stats";
 import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 import { requireOrganization } from "@/lib/api/api-auth";
+import { loadListingGroups } from "@/lib/products/listing-groups";
+import { groupCatalogReportRows } from "@/lib/catalog-report/catalog-report-groups";
 
 export async function GET() {
   const auth = await requireOrganization();
@@ -24,13 +26,16 @@ export async function GET() {
           catalogSellerPrice: true,
           catalogPriceToWin: true,
           catalogPolledAt: true,
+          listingTypeId: true,
         },
       }),
       getCatalogPollStats(auth.ctx.organizationId),
     ]);
 
-    const items = listings
-      .map((listing) => ({
+    // Opções de venda: uma linha por produto, com as opções dentro.
+    const groups = await loadListingGroups(auth.ctx.organizationId);
+    const items = groupCatalogReportRows(
+      listings.map((listing) => ({
         mlItemId: listing.mlItemId,
         titleSnapshot: listing.titleSnapshot,
         skuSnapshot: listing.skuSnapshot,
@@ -44,7 +49,10 @@ export async function GET() {
           ? Number(listing.catalogPriceToWin)
           : null,
         catalogPolledAt: listing.catalogPolledAt?.toISOString() ?? null,
-      }))
+        listingTypeId: listing.listingTypeId,
+      })),
+      groups,
+    )
       .sort((a, b) => {
         const skuA = (a.skuSnapshot ?? a.titleSnapshot ?? a.mlItemId).toLowerCase();
         const skuB = (b.skuSnapshot ?? b.titleSnapshot ?? b.mlItemId).toLowerCase();

@@ -173,3 +173,23 @@ describe("buildRollingTaxLookup", () => {
     assert.equal(result.byMlItemId.get("MLB1")?.basis, "month");
   });
 });
+
+describe("buildRollingTaxLookup — opções de venda", () => {
+  it("uses the product percent (all options in the window) for every option", () => {
+    const principalOf = (id: string) => (id === "MLB-PREMIUM" ? "MLB-CLASSICO" : id);
+    const lookup = buildRollingTaxLookup({
+      window: { from: "2026-10-26", to: "2026-11-24" },
+      windowSnapshot: { year: 2026, month: 11, generatedAt: "2026-11-24T10:00:00.000Z" },
+      windowRows: [
+        { mlItemId: "MLB-CLASSICO", skus: ["CABO"], receita: 900, imposto: 90 },
+        { mlItemId: "MLB-PREMIUM", skus: ["CABO"], receita: 100, imposto: 20 },
+      ],
+      fallbackRows: [],
+      generatedAt: "2026-11-24T10:00:00.000Z",
+      principalOf,
+    });
+    // (90 + 20) ÷ (900 + 100) = 11%
+    assert.equal(lookup.byMlItemId.get("MLB-CLASSICO")?.taxPercent, 11);
+    assert.equal(lookup.byMlItemId.get("MLB-PREMIUM")?.taxPercent, 11);
+  });
+});

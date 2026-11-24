@@ -10,6 +10,7 @@ import { BlurredValue } from "@/components/shared/BlurredValue";
 import { MetricWithHint } from "@/components/shared/MetricWithHint";
 import { supplierPathSegment } from "@/lib/compras/purchase-analysis";
 import type { OperationsBoardCard } from "@/lib/compras/replenishment-cycle-data";
+import { listingOptionsSummary } from "@/lib/products/listing-option-label";
 import { cn } from "@/lib/utils";
 
 function OperationsCardHeader({ card, menu }: { card: OperationsBoardCard; menu?: ReactNode }) {
@@ -37,6 +38,14 @@ function OperationsCardHeader({ card, menu }: { card: OperationsBoardCard; menu?
             {card.sku ?? card.title}
           </p>
           <p className="truncate text-xs text-[var(--muted-foreground)]">{card.mlItemId}</p>
+          {card.options ? (
+            <p
+              className="truncate text-[11px] text-[var(--muted-foreground)]"
+              title="Opções de venda do mesmo produto: a venda é somada e o estoque do ML conta uma vez."
+            >
+              Opções: {listingOptionsSummary(card.options)}
+            </p>
+          ) : null}
           <p className="mt-0.5 text-[11px] text-[var(--muted-foreground)]">{card.supplier}</p>
         </div>
         {menu ? <div className="-my-1 -mr-1.5 shrink-0">{menu}</div> : null}

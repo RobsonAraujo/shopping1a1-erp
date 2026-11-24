@@ -284,6 +284,11 @@ export function RotinaStaleSalesGroup({
                       <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-[var(--muted-foreground)]">
                         <SegmentTag segment={row.segment} />
                         <ListingTypeTag listingTypeId={listing.listingTypeId} />
+                        {listing.saleOption ? (
+                          <span className="shrink-0 text-[11px] text-[var(--muted-foreground)]">
+                            produto com {listing.saleOption.optionsLabel}
+                          </span>
+                        ) : null}
                         {listing.sku ? (
                           <span className="truncate font-mono tabular-nums">{listing.sku}</span>
                         ) : null}

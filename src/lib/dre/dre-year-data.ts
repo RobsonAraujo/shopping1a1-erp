@@ -12,10 +12,15 @@ import {
   type DreLineBreakdownItem,
   type DreMonthSnapshotPayload,
   LEAN_SNAPSHOT_PAYLOAD_KEYS,
+  mergeLineBreakdowns,
+  mergeProductCostBreakdowns,
+  mergeTaxBreakdowns,
   type DreProductCostBreakdownItem,
   type DreTaxBreakdownItem,
   type DreTaxSource,
 } from "@/lib/dre/dre-calculations";
+import { groupBreakdownByProduct } from "@/lib/dre/dre-breakdown-options";
+import { loadListingGroups } from "@/lib/products/listing-groups";
 import {
   detectZeroLineAnomalies,
   type DreZeroLineAnomaly,
@@ -733,6 +738,13 @@ export async function loadDreYearView(
     explicitMap,
   );
 
+  // Opções de venda: auditorias por produto (o modo Home não lê breakdowns).
+  const groups = lean ? null : await loadListingGroups(organizationId);
+  const byProduct = <T extends { key: string }>(
+    list: T[] | null,
+    merge: (lists: T[][]) => T[],
+  ): T[] | null => (groups ? groupBreakdownByProduct(list, groups.principalOf, merge) : list);
+
   const months: DreMonthView[] = [];
 
   for (let month = 1; month <= 12; month += 1) {
@@ -793,21 +805,22 @@ export async function loadDreYearView(
       syncWarnings: payload?.syncWarnings ?? [],
       lines,
       cancelledIncludeOverlay: payload?.cancelledIncludeOverlay ?? null,
-      productCostBreakdown: payload?.productCostBreakdown ?? null,
-      taxBreakdown: payload?.taxBreakdown ?? null,
-      revenueBreakdown: payload?.revenueBreakdown ?? null,
-      cancelledSalesBreakdown: payload?.cancelledSalesBreakdown ?? null,
-      saleFeeBreakdown: payload?.saleFeeBreakdown ?? null,
-      sellerShippingBreakdown: payload?.sellerShippingBreakdown ?? null,
-      adsCostBreakdown: payload?.adsCostBreakdown ?? null,
-      partialReturnsBreakdown: payload?.partialReturnsBreakdown ?? null,
-      returnFeeBreakdown: payload?.returnFeeBreakdown ?? null,
-      specialFeesBreakdown: payload?.specialFeesBreakdown ?? null,
-      fullShippingBreakdown: payload?.fullShippingBreakdown ?? null,
-      fullStorageBreakdown: payload?.fullStorageBreakdown ?? null,
-      fullNonComplianceBreakdown: payload?.fullNonComplianceBreakdown ?? null,
-      minhaPaginaBreakdown: payload?.minhaPaginaBreakdown ?? null,
-      affiliateFeeBreakdown: payload?.affiliateFeeBreakdown ?? null,
+      // Opções de venda: as linhas por anúncio se juntam no produto (leitura só).
+      productCostBreakdown: byProduct(payload?.productCostBreakdown ?? null, mergeProductCostBreakdowns),
+      taxBreakdown: byProduct(payload?.taxBreakdown ?? null, mergeTaxBreakdowns),
+      revenueBreakdown: byProduct(payload?.revenueBreakdown ?? null, mergeLineBreakdowns),
+      cancelledSalesBreakdown: byProduct(payload?.cancelledSalesBreakdown ?? null, mergeLineBreakdowns),
+      saleFeeBreakdown: byProduct(payload?.saleFeeBreakdown ?? null, mergeLineBreakdowns),
+      sellerShippingBreakdown: byProduct(payload?.sellerShippingBreakdown ?? null, mergeLineBreakdowns),
+      adsCostBreakdown: byProduct(payload?.adsCostBreakdown ?? null, mergeLineBreakdowns),
+      partialReturnsBreakdown: byProduct(payload?.partialReturnsBreakdown ?? null, mergeLineBreakdowns),
+      returnFeeBreakdown: byProduct(payload?.returnFeeBreakdown ?? null, mergeLineBreakdowns),
+      specialFeesBreakdown: byProduct(payload?.specialFeesBreakdown ?? null, mergeLineBreakdowns),
+      fullShippingBreakdown: byProduct(payload?.fullShippingBreakdown ?? null, mergeLineBreakdowns),
+      fullStorageBreakdown: byProduct(payload?.fullStorageBreakdown ?? null, mergeLineBreakdowns),
+      fullNonComplianceBreakdown: byProduct(payload?.fullNonComplianceBreakdown ?? null, mergeLineBreakdowns),
+      minhaPaginaBreakdown: byProduct(payload?.minhaPaginaBreakdown ?? null, mergeLineBreakdowns),
+      affiliateFeeBreakdown: byProduct(payload?.affiliateFeeBreakdown ?? null, mergeLineBreakdowns),
       reconciliation: resolveMonthReconciliation(
         payload,
         reconciliationImportsByMonth.get(month) ?? [],

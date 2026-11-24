@@ -3,6 +3,8 @@ import { loadTaxReportForPeriod } from "@/lib/tax-report/service/period-report";
 import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 import { requireOrganization } from "@/lib/api/api-auth";
 import { stripTransacoesForResponse } from "@/lib/tax-report/strip-transacoes-for-response";
+import { loadListingGroups } from "@/lib/products/listing-groups";
+import { agruparRelatorioPorProduto } from "@/lib/tax-report/aggregation/agrupar-por-produto";
 
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_RANGE_DAYS = 90;
@@ -37,12 +39,12 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const { payload, missingMonths } = await loadTaxReportForPeriod(
-      organizationId,
-      userId,
-      parsed.from,
-      parsed.to,
-    );
+    const [{ payload: byListing, missingMonths }, groups] = await Promise.all([
+      loadTaxReportForPeriod(organizationId, userId, parsed.from, parsed.to),
+      loadListingGroups(organizationId),
+    ]);
+    // Opções de venda: uma linha por produto (os totais não mudam).
+    const payload = agruparRelatorioPorProduto(byListing, groups.principalOf);
     // Por padrão devolve o payload completo (ex.: card DIFAL de Insights
     // precisa de `porSku[].transacoes` de todos os SKUs). Consumidores que só
     // usam agregados ou 1 SKU pedem `summary`/`sku` para evitar trafegar o
@@ -51,7 +53,9 @@ export async function GET(request: NextRequest) {
     const sku = searchParams.get("sku") ?? undefined;
     const summary = searchParams.get("summary") === "1";
     const responsePayload =
-      sku || summary ? stripTransacoesForResponse(payload, sku) : payload;
+      sku || summary
+        ? stripTransacoesForResponse(payload, sku ? groups.principalOf(sku) : undefined)
+        : payload;
     return NextResponse.json({ ...responsePayload, missingMonths });
   } catch (e) {
     logServerError("api/reports/period-tax GET", e);

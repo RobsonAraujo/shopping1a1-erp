@@ -7,10 +7,11 @@ import {
 import { fetchUnitsSoldForItemsInWindowCached } from "@/lib/mercadolibre/sales-window-cache";
 import { formatCategoryPath } from "@/lib/mercadolibre/category-labels";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
-import { isFulfillmentListing } from "@/lib/mercadolibre/fulfillment-stock";
 import { automaticWarehouseQtyByListing, overlayAutomaticWarehouse } from "@/lib/stock/stock-bridge";
 import { getItemSku, getSkuSupplier, isKitItem } from "@/lib/mercadolibre/item-sku";
 import { loadSupplierNamesByMlItemId } from "@/lib/products/product-resolver";
+import { loadListingGroups } from "@/lib/products/listing-groups";
+import { foldSaleOptions, foldSalesByKey, foldWarehouseByKey } from "@/lib/compras/sale-options-fold";
 import {
   buildPurchasePlan,
   computePurchaseAnalysis,
@@ -222,7 +223,7 @@ export async function loadDashboardPurchaseData(
   const allIds =
     restrictToIds ??
     (await fetchOperationalListingIds(token, userId, organizationId));
-  const [rawItems, salesByItem, warehouseStocks, replenishmentCycles, latestSnapshotById, supplierNames] =
+  const [rawItems, salesByItem, warehouseStocks, replenishmentCycles, latestSnapshotById] =
     await Promise.all([
       fetchItemsByIdsBatched(token, allIds),
       fetchUnitsSoldForItemsInWindowCached(
@@ -244,26 +245,37 @@ export async function loadDashboardPurchaseData(
       }),
       loadLatestPurchaseCyclesByItem(organizationId, allIds),
       loadLatestCatalogCompetitionSnapshots(allIds),
-      loadSupplierNamesByMlItemId(organizationId, allIds),
     ]);
-  const items = rawItems.filter((item) => !isKitItem(item));
+  // Opções de venda: uma linha por produto físico — venda somada, estoque do
+  // ML uma vez, galpão do produto (`sale-options-fold.ts`).
+  const groups = await loadListingGroups(organizationId, { extraItems: rawItems });
+  const supplierNames = await loadSupplierNamesByMlItemId(organizationId, allIds, { groups });
+  const fold = foldSaleOptions(
+    rawItems.filter((item) => !isKitItem(item)),
+    groups,
+  );
+  const items = fold.items;
+  const salesByKey = foldSalesByKey(salesByItem, fold);
 
-  const warehouseById = Object.fromEntries(
-    warehouseStocks.map((s) => [
-      s.mlItemId,
-      {
-        quantity: s.quantity,
-        purchaseLeadTimeDays: s.purchaseLeadTimeDays,
-        targetCoverageDays: s.targetCoverageDays,
-      } satisfies WarehouseStockRow,
-    ]),
+  const warehouseById = foldWarehouseByKey(
+    Object.fromEntries(
+      warehouseStocks.map((s) => [
+        s.mlItemId,
+        {
+          quantity: s.quantity,
+          purchaseLeadTimeDays: s.purchaseLeadTimeDays,
+          targetCoverageDays: s.targetCoverageDays,
+        } satisfies WarehouseStockRow,
+      ]),
+    ),
+    fold,
   );
   // Estoque automático: galpão sai do livro de estoque (sem somar o depósito duas vezes).
   overlayAutomaticWarehouse(
     warehouseById,
     await automaticWarehouseQtyByListing(
       organizationId,
-      items.map((item) => ({ mlItemId: item.id, isFulfillment: isFulfillmentListing(item) })),
+      items.map((item) => ({ mlItemId: item.id, isFulfillment: fold.allFulfillment(item.id) })),
     ),
     () => ({ quantity: 0, purchaseLeadTimeDays: null, targetCoverageDays: null }),
   );
@@ -290,7 +302,7 @@ export async function loadDashboardPurchaseData(
     const purchaseLead = warehouse?.purchaseLeadTimeDays ?? 0;
     const mlStock = mlAvailableStockUnits(item);
     const totalStock = mlStock + warehouseStock;
-    const unitsSold = salesByItem[item.id] ?? 0;
+    const unitsSold = salesByKey[item.id] ?? 0;
     const plan = buildPurchasePlan(totalStock, unitsSold, purchaseLead, stockPlanning);
     const analysis = computePurchaseAnalysis(
       {
@@ -333,6 +345,8 @@ export async function loadDashboardPurchaseData(
       unitsSoldLastMonth: 0,
       unitsSoldCurrentMonth: 0,
       targetCoverageDays: warehouse?.targetCoverageDays ?? null,
+      memberIds: fold.membersOf(item.id),
+      options: fold.optionsOf(item.id),
     };
   });
 
@@ -355,7 +369,7 @@ export async function loadDashboardPurchaseData(
 
   return {
     items,
-    salesByItem,
+    salesByItem: salesByKey,
     warehouseById,
     rows,
     needsPurchase,

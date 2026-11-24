@@ -142,6 +142,12 @@ export type FinancialEvaluationRow = {
    * streaming — só usado no modo `stream=1` de `loadFinancialEvaluationRows`.
    * Ausente/`false` em qualquer outro caminho (linha já resolvida). */
   pending?: boolean;
+  /**
+   * Anúncio principal do produto físico (opções de venda: Clássico, Premium…
+   * do mesmo produto). A tabela junta as linhas com o mesmo principal numa
+   * linha do produto; o resumo do topo continua sobre as linhas dos anúncios.
+   */
+  principalMlItemId?: string;
 };
 
 async function mapWithConcurrency<T, R>(
@@ -495,6 +501,7 @@ function buildFastRowPreview(
     kitComponents: costs.kitComponents,
     kitMissingSkus: costs.kitMissingSkus,
     pmaPrice: resolvePmaPrice(pmaLookup, item.id, costs.sku),
+    principalMlItemId: pmaLookup?.principalOf?.(item.id) ?? item.id,
     pending: true,
   };
 }
@@ -683,6 +690,7 @@ async function buildRowForItem(
     kitComponents,
     kitMissingSkus,
     pmaPrice: resolvePmaPrice(pmaLookup, item.id, sku),
+    principalMlItemId: pmaLookup?.principalOf?.(item.id) ?? item.id,
   };
 }
 
@@ -888,6 +896,7 @@ async function buildRowForPeriodItem(
     kitComponents,
     kitMissingSkus,
     pmaPrice: resolvePmaPrice(pmaLookup, item.id, sku),
+    principalMlItemId: pmaLookup?.principalOf?.(item.id) ?? item.id,
     periodUnitsSold: agg.quantity,
     periodRevenue: roundMoney(agg.revenue),
     salesMix: agg.mix,

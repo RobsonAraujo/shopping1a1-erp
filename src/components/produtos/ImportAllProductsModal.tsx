@@ -14,7 +14,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { readApiError } from "@/lib/api/api-client-error";
-import { listingOptionsSummary } from "@/components/products/ListingOptionChips";
+import { listingOptionsSummary } from "@/lib/products/listing-option-label";
 
 /** Um produto físico sem cadastro: o anúncio principal e as opções de venda dele. */
 type Suggestion = {

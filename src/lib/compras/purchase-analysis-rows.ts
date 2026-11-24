@@ -1,4 +1,5 @@
 import type { ItemBody } from "@/lib/mercadolibre/types";
+import type { ListingOption } from "@/lib/products/listing-groups";
 import {
   buildPurchasePlan,
   comparePurchaseAnalysisRows,
@@ -25,6 +26,14 @@ export type PurchaseAnalysisItemRow = {
   unitsSoldLastMonth: number;
   unitsSoldCurrentMonth: number;
   targetCoverageDays: number | null;
+  /**
+   * Opções de venda: MLBs lidos do produto (a chave `item.id` primeiro). A
+   * linha é do produto físico — venda somada, estoque do ML uma vez —, e o
+   * faturamento do mês soma as opções. Ausente = só o próprio anúncio.
+   */
+  memberIds?: string[];
+  /** Opções de venda do produto, para as etiquetas (só quando há mais de uma). */
+  options?: ListingOption[];
 };
 
 export type SupplierSummary = {
@@ -44,12 +53,14 @@ export function mergeSupplierRevenueIntoRows(
   unitsLastMonth: Record<string, number> = {},
   unitsCurrentMonth: Record<string, number> = {},
 ): PurchaseAnalysisItemRow[] {
+  const sum = (map: Record<string, number>, row: PurchaseAnalysisItemRow) =>
+    (row.memberIds ?? [row.item.id]).reduce((total, id) => total + (map[id] ?? 0), 0);
   return rows.map((row) => ({
     ...row,
-    revenueLastMonth: lastMonth[row.item.id] ?? 0,
-    revenueCurrentMonth: currentMonth[row.item.id] ?? 0,
-    unitsSoldLastMonth: unitsLastMonth[row.item.id] ?? 0,
-    unitsSoldCurrentMonth: unitsCurrentMonth[row.item.id] ?? 0,
+    revenueLastMonth: sum(lastMonth, row),
+    revenueCurrentMonth: sum(currentMonth, row),
+    unitsSoldLastMonth: sum(unitsLastMonth, row),
+    unitsSoldCurrentMonth: sum(unitsCurrentMonth, row),
   }));
 }
 

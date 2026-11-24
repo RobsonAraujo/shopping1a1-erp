@@ -687,3 +687,46 @@ describe("buildRotinaView: sem venda recente", () => {
     assert.equal(view.staleSalesActions.length, 0);
   });
 });
+
+describe("buildRotinaView: opções de venda", () => {
+  const saleOptions = new Map([
+    ["CLASSICO", { principalMlItemId: "CLASSICO", optionsLabel: "Clássico + Premium" }],
+    ["PREMIUM", { principalMlItemId: "CLASSICO", optionsLabel: "Clássico + Premium" }],
+  ]);
+  const classico = listing({
+    mlItemId: "CLASSICO",
+    title: "Cabo",
+    lastSaleAt: "2026-11-09T12:00:00.000Z",
+    unitsPerDay: 3,
+    adsStatus: "idle",
+    hasPromotion: false,
+    regularPrice: null,
+  });
+  const premium = listing({
+    mlItemId: "PREMIUM",
+    title: "Cabo",
+    listingTypeId: "gold_pro",
+    lastSaleAt: "2026-10-01T12:00:00.000Z",
+    unitsPerDay: 0,
+    adsStatus: "idle",
+    hasPromotion: false,
+    regularPrice: null,
+  });
+
+  it("the Premium that sells little is not 'sem venda' when the Clássico sells", () => {
+    const view = buildRotinaView(input({ health: [classico, premium], saleOptions }));
+    const stale = view.staleSalesActions.map((action) => action.stateItemId);
+    // Um card só, do produto, com a venda mais recente entre as opções.
+    assert.deepEqual(stale, ["CLASSICO"]);
+    assert.equal(view.staleSalesActions[0].staleSales?.lastSaleAt, "2026-11-09T12:00:00.000Z");
+  });
+
+  it("tags each card with the product and weighs the priority by the product sales", () => {
+    const view = buildRotinaView(input({ health: [classico, premium], saleOptions }));
+    const premiumCard = view.actions.find((action) => action.stateItemId === "PREMIUM");
+    assert.ok(premiumCard);
+    assert.equal(premiumCard.listing.saleOption?.principalMlItemId, "CLASSICO");
+    assert.equal(premiumCard.listing.saleOption?.productUnitsPerDay, 3);
+    assert.ok(premiumCard.impact > 0);
+  });
+});

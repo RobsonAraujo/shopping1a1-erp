@@ -18,6 +18,8 @@ import {
 import { getItemSku } from "@/lib/mercadolibre/item-sku";
 import { fetchItemSalePrice } from "@/lib/mercadolibre/item-sale-price";
 import type { ItemBody } from "@/lib/mercadolibre/types";
+import { loadListingGroups } from "@/lib/products/listing-groups";
+import { listingOptionLabel } from "@/lib/products/listing-option-label";
 
 export type PromotionSummaryRow = {
   mlItemId: string;
@@ -35,6 +37,8 @@ export type PromotionSummaryRow = {
   scheduledInChain: boolean;
   catalogListing: boolean;
   soldQuantity: number;
+  /** Opções de venda: "Premium", "Clássico"… quando o produto tem mais de uma (a promoção é de cada anúncio). */
+  optionLabel?: string;
 };
 
 /** Quais tipos de anúncio entram na varredura (Configurações > Planejamento). */
@@ -239,6 +243,8 @@ export async function loadPromotionSummary(
     expiringSoonDays?: number;
     monitor?: PromotionMonitor;
     scanBudgetMs?: number;
+    /** Com a organização, as linhas de opções de venda ganham o rótulo da opção. */
+    organizationId?: string;
   },
 ): Promise<PromotionSummaryPayload> {
   const expiringSoonDays =
@@ -334,6 +340,15 @@ export async function loadPromotionSummary(
       if (dateA !== dateB) return dateA - dateB;
       return compareBySku(a, b);
     });
+
+  if (options?.organizationId) {
+    const groups = await loadListingGroups(options.organizationId);
+    for (const row of [...expiringSoon, ...withoutPromotion]) {
+      const productOptions = groups.optionsOf(row.mlItemId);
+      const own = productOptions.find((option) => option.mlItemId === row.mlItemId);
+      if (productOptions.length > 1 && own) row.optionLabel = listingOptionLabel(own, productOptions);
+    }
+  }
 
   return {
     expiringSoon,

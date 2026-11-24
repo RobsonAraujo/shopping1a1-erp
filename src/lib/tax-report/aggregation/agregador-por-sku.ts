@@ -34,12 +34,14 @@ export function aggregationKey(det: DetalhamentoTributario): string {
 
 export function agregarPorSku(
   transacoes: DetalhamentoTributario[],
+  /** Chave de agrupamento (padrão: o anúncio, `aggregationKey`). */
+  keyOf: (det: DetalhamentoTributario) => string = aggregationKey,
 ): SkuAggregation[] {
   const map = new Map<string, SkuAggregation>();
 
   for (const det of transacoes) {
     if (!det.incluidoNaApuracao) continue;
-    const key = aggregationKey(det);
+    const key = keyOf(det);
     const sku = det.transacao.sku || "(sem SKU)";
     const existing = map.get(key) ?? {
       sku,

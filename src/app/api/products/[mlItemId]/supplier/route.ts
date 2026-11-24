@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db/db";
 import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 import { requireOrganization } from "@/lib/api/api-auth";
 import { parseJsonBody } from "@/lib/api/api-validation";
+import { loadListingGroups } from "@/lib/products/listing-groups";
 
 type RouteContext = { params: Promise<{ mlItemId: string }> };
 
@@ -41,6 +42,21 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         supplier: { select: { id: true, name: true } },
       },
     });
+    // Opções de venda: o fornecedor é do produto — um cadastro duplicado
+    // antigo (com custo) de outra opção acompanha o principal.
+    const groups = await loadListingGroups(organizationId);
+    if (!groups.isOption(mlItemId)) {
+      const duplicateIds = groups
+        .optionsOf(mlItemId)
+        .filter((o) => !o.isPrincipal && o.registered && !o.pendingCost)
+        .map((o) => o.mlItemId);
+      if (duplicateIds.length > 0) {
+        await prisma.product.updateMany({
+          where: { organizationId, mlItemId: { in: duplicateIds } },
+          data: { supplierId: supplierId ?? null },
+        });
+      }
+    }
     return NextResponse.json({ product });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2003") {

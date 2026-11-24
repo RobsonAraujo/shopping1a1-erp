@@ -100,7 +100,8 @@ export function SupplierPurchaseAnalysisView({
     if (rows.length === 0) return;
 
     let cancelled = false;
-    const itemIds = rows.map((row) => row.item.id).join(",");
+    // Opções de venda: o faturamento da linha soma todas as opções do produto.
+    const itemIds = [...new Set(rows.flatMap((row) => row.memberIds ?? [row.item.id]))].join(",");
     const url = `/api/compras/${encodeURIComponent(supplierParam)}/revenue?itemIds=${encodeURIComponent(itemIds)}`;
 
     fetch(url)

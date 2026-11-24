@@ -1,6 +1,8 @@
 "use client";
 
+import { Fragment, useMemo, useState } from "react";
 import Image from "next/image";
+import { ChevronRight } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { FormSelect } from "@/components/ui/form-select";
 import {
@@ -25,6 +27,13 @@ import type {
   FinancialEvaluationTableProps,
   SortKey,
 } from "@/components/lucratividade/financial-evaluation-table/types";
+import type { FinancialEvaluationRow } from "@/lib/lucratividade/financial-evaluation-data";
+import {
+  aggregateProductGroup,
+  groupEvaluationRowsByProduct,
+  type EvaluationProductGroup,
+} from "@/lib/lucratividade/product-groups";
+import { listingOptionsSummary } from "@/lib/products/listing-option-label";
 
 const SORT_OPTIONS: Array<{ value: string; label: string; key: SortKey; dir: "asc" | "desc"; periodOnly?: boolean }> = [
   { value: "sales-desc", label: "Mais vendidos", key: "sales", dir: "desc", periodOnly: true },
@@ -44,6 +53,136 @@ export function FinancialEvaluationTableMobile({
   targetCellFor,
   onSelect,
 }: FinancialEvaluationTableProps) {
+  // Opções de venda: um card por produto, que abre para as opções.
+  const groups = useMemo(() => groupEvaluationRowsByProduct(rows), [rows]);
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
+  const toggle = (key: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  function renderListingCard(row: FinancialEvaluationRow, nested: boolean) {
+      const excluded = marginExclusionReason(row) !== null;
+      const tacosSublabel =
+        row.adsMetricsAvailable &&
+        row.tacosPercent != null &&
+        row.tacosPercent > 0
+          ? `TACOS ${formatFinancialPercent(row.tacosPercent)}`
+          : null;
+      return (
+        <li key={row.mlItemId}>
+          <Card
+            className={cn(
+              "cursor-pointer p-4 shadow-sm transition-colors active:bg-[var(--muted)]/30",
+              listingRowMutedClass(row.status, 0, 0),
+              nested && "ml-4 bg-[var(--muted)]/15",
+            )}
+            onClick={() => onSelect(row.mlItemId)}
+          >
+            <div className="flex items-start gap-3">
+              {row.imageUrl ? (
+                <Image
+                  src={row.imageUrl}
+                  alt={row.title}
+                  width={40}
+                  height={40}
+                  className="size-10 shrink-0 rounded-md object-cover"
+                />
+              ) : (
+                <div className="size-10 shrink-0 rounded-md bg-[var(--muted)]" />
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-[var(--foreground)]">
+                  {row.sku ?? row.title}
+                </p>
+                <p className="truncate text-xs text-[var(--muted-foreground)]">
+                  {row.mlItemId}
+                  {row.listingTypeLabel ? ` · ${row.listingTypeLabel}` : ""}
+                </p>
+                <div className="mt-1 flex flex-wrap items-center gap-1">
+                  <ListingStatusBadge
+                    status={row.status}
+                    mlStock={0}
+                    warehouseStock={0}
+                  />
+                  <CatalogBadge row={row} />
+                  <ExclusionBadge row={row} />
+                  <PmaBadge row={row} isSimulation={isSimulation} />
+                </div>
+              </div>
+              <div className="shrink-0 text-right">
+                {row.pending ? (
+                  <BlurredValue srLabel="Preço ainda carregando" />
+                ) : (
+                  <>
+                    <div className="text-sm font-medium tabular-nums">
+                      {formatFinancialMoney(row.salePrice)}
+                    </div>
+                    <div className="text-[10px] text-[var(--muted-foreground)]">
+                      {isSimulation ? "hoje" : "preço médio"}
+                    </div>
+                    {isSimulation ? null : (
+                      <div className="mt-0.5 text-xs tabular-nums text-[var(--muted-foreground)]">
+                        {(row.periodUnitsSold ?? 0).toLocaleString("pt-BR")} un. ·{" "}
+                        {formatFinancialMoney(row.periodRevenue ?? null)}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-3 gap-2 border-t border-[var(--border)] pt-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
+                  Margem
+                </p>
+                <div className="mt-0.5">
+                  <StackedMarginCell
+                    percent={row.breakdown?.marginPercent ?? null}
+                    value={row.breakdown?.marginValue ?? null}
+                    pending={row.pending}
+                    excluded={excluded}
+                    excludedNote="fora da média"
+                  />
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
+                  Após ADS
+                </p>
+                <div className="mt-0.5">
+                  <StackedMarginCell
+                    percent={row.marginAfterAdsPercent}
+                    value={row.marginAfterAdsValue}
+                    sublabel={tacosSublabel}
+                    unavailable={!row.adsMetricsAvailable}
+                    pending={row.pending}
+                    excluded={excluded}
+                  />
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
+                  Preço p/ meta
+                </p>
+                <div className="mt-0.5 text-right">
+                  <TargetPriceCellView
+                    cell={targetCellFor(row)}
+                    targetMarginPercent={targetMarginPercent}
+                    marginBasis={marginBasis}
+                  />
+                </div>
+              </div>
+            </div>
+          </Card>
+        </li>
+      );
+      }
+
   const options = SORT_OPTIONS.filter((option) => !(isSimulation && option.periodOnly));
   const current =
     options.find(
@@ -63,124 +202,131 @@ export function FinancialEvaluationTableMobile({
         }}
       />
       <ul className="space-y-3">
-        {rows.map((row) => {
-          const excluded = marginExclusionReason(row) !== null;
-          const tacosSublabel =
-            row.adsMetricsAvailable &&
-            row.tacosPercent != null &&
-            row.tacosPercent > 0
-              ? `TACOS ${formatFinancialPercent(row.tacosPercent)}`
-              : null;
-          return (
-            <li key={row.mlItemId}>
-              <Card
-                className={cn(
-                  "cursor-pointer p-4 shadow-sm transition-colors active:bg-[var(--muted)]/30",
-                  listingRowMutedClass(row.status, 0, 0),
-                )}
-                onClick={() => onSelect(row.mlItemId)}
-              >
-                <div className="flex items-start gap-3">
-                  {row.imageUrl ? (
-                    <Image
-                      src={row.imageUrl}
-                      alt={row.title}
-                      width={40}
-                      height={40}
-                      className="size-10 shrink-0 rounded-md object-cover"
-                    />
-                  ) : (
-                    <div className="size-10 shrink-0 rounded-md bg-[var(--muted)]" />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-[var(--foreground)]">
-                      {row.sku ?? row.title}
-                    </p>
-                    <p className="truncate text-xs text-[var(--muted-foreground)]">
-                      {row.mlItemId}
-                      {row.listingTypeLabel ? ` · ${row.listingTypeLabel}` : ""}
-                    </p>
-                    <div className="mt-1 flex flex-wrap items-center gap-1">
-                      <ListingStatusBadge
-                        status={row.status}
-                        mlStock={0}
-                        warehouseStock={0}
-                      />
-                      <CatalogBadge row={row} />
-                      <ExclusionBadge row={row} />
-                      <PmaBadge row={row} isSimulation={isSimulation} />
-                    </div>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    {row.pending ? (
-                      <BlurredValue srLabel="Preço ainda carregando" />
-                    ) : (
-                      <>
-                        <div className="text-sm font-medium tabular-nums">
-                          {formatFinancialMoney(row.salePrice)}
-                        </div>
-                        <div className="text-[10px] text-[var(--muted-foreground)]">
-                          {isSimulation ? "hoje" : "preço médio"}
-                        </div>
-                        {isSimulation ? null : (
-                          <div className="mt-0.5 text-xs tabular-nums text-[var(--muted-foreground)]">
-                            {(row.periodUnitsSold ?? 0).toLocaleString("pt-BR")} un. ·{" "}
-                            {formatFinancialMoney(row.periodRevenue ?? null)}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                <div className="mt-3 grid grid-cols-3 gap-2 border-t border-[var(--border)] pt-3">
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
-                      Margem
-                    </p>
-                    <div className="mt-0.5">
-                      <StackedMarginCell
-                        percent={row.breakdown?.marginPercent ?? null}
-                        value={row.breakdown?.marginValue ?? null}
-                        pending={row.pending}
-                        excluded={excluded}
-                        excludedNote="fora da média"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
-                      Após ADS
-                    </p>
-                    <div className="mt-0.5">
-                      <StackedMarginCell
-                        percent={row.marginAfterAdsPercent}
-                        value={row.marginAfterAdsValue}
-                        sublabel={tacosSublabel}
-                        unavailable={!row.adsMetricsAvailable}
-                        pending={row.pending}
-                        excluded={excluded}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
-                      Preço p/ meta
-                    </p>
-                    <div className="mt-0.5 text-right">
-                      <TargetPriceCellView
-                        cell={targetCellFor(row)}
-                        targetMarginPercent={targetMarginPercent}
-                        marginBasis={marginBasis}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            </li>
-          );
-        })}
+        {groups.map((group) =>
+          group.rows.length === 1 ? (
+            renderListingCard(group.rows[0], false)
+          ) : (
+            <Fragment key={`product:${group.key}`}>
+              <ProductGroupCardMobile
+                group={group}
+                isSimulation={isSimulation}
+                expanded={expanded.has(group.key)}
+                onToggle={() => toggle(group.key)}
+              />
+              {expanded.has(group.key)
+                ? group.rows.map((row) => renderListingCard(row, true))
+                : null}
+            </Fragment>
+          ),
+        )}
       </ul>
     </div>
+  );
+}
+
+/** Card do produto (opções de venda juntas): vendas somadas e margem ponderada. */
+function ProductGroupCardMobile({
+  group,
+  isSimulation,
+  expanded,
+  onToggle,
+}: {
+  group: EvaluationProductGroup;
+  isSimulation: boolean;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const agg = aggregateProductGroup(group, isSimulation);
+  const lead = agg.lead;
+  return (
+    <li>
+      <Card
+        className="cursor-pointer p-4 shadow-sm transition-colors active:bg-[var(--muted)]/30"
+        onClick={onToggle}
+        aria-expanded={expanded}
+      >
+        <div className="flex items-start gap-3">
+          {lead.imageUrl ? (
+            <Image
+              src={lead.imageUrl}
+              alt={lead.title}
+              width={40}
+              height={40}
+              className="size-10 shrink-0 rounded-md object-cover"
+            />
+          ) : (
+            <div className="size-10 shrink-0 rounded-md bg-[var(--muted)]" />
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-[var(--foreground)]">
+              {lead.sku ?? lead.title}
+            </p>
+            <p className="flex items-center gap-1 truncate text-xs text-[var(--muted-foreground)]">
+              <ChevronRight
+                className={cn("size-3.5 shrink-0 transition-transform", expanded && "rotate-90")}
+                aria-hidden
+              />
+              {group.rows.length} opções ·{" "}
+              {listingOptionsSummary(
+                group.rows.map((row) => ({
+                  mlItemId: row.mlItemId,
+                  listingTypeId: row.listingTypeId,
+                  catalogListing: row.catalogListing,
+                })),
+              )}
+            </p>
+          </div>
+          <div className="shrink-0 text-right">
+            {agg.pending && agg.price === null ? (
+              <BlurredValue srLabel="Preço ainda carregando" />
+            ) : (
+              <>
+                <div className="text-sm font-medium tabular-nums">
+                  {formatFinancialMoney(agg.price)}
+                </div>
+                <div className="text-[10px] text-[var(--muted-foreground)]">
+                  {isSimulation ? "principal, hoje" : "preço médio"}
+                </div>
+                {isSimulation ? null : (
+                  <div className="mt-0.5 text-xs tabular-nums text-[var(--muted-foreground)]">
+                    {agg.units.toLocaleString("pt-BR")} un. · {formatFinancialMoney(agg.revenue)}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2 border-t border-[var(--border)] pt-3">
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
+              Margem
+            </p>
+            <div className="mt-0.5">
+              <StackedMarginCell
+                percent={agg.marginPercent}
+                value={agg.marginValue}
+                pending={agg.pending}
+                excluded={agg.allExcluded}
+                excludedNote="fora da média"
+              />
+            </div>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
+              Após ADS
+            </p>
+            <div className="mt-0.5">
+              <StackedMarginCell
+                percent={agg.afterAdsPercent}
+                value={agg.afterAdsValue}
+                unavailable={!agg.afterAdsAvailable}
+                pending={agg.pending}
+                excluded={agg.allExcluded}
+              />
+            </div>
+          </div>
+        </div>
+      </Card>
+    </li>
   );
 }

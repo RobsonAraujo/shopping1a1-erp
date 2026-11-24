@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/db";
+import { loadListingGroups } from "@/lib/products/listing-groups";
 import { fetchItemsByIdsBatched } from "@/lib/mercadolibre/api";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { fetchItemSalePrice } from "@/lib/mercadolibre/item-sale-price";
@@ -85,13 +86,20 @@ export async function loadPmaAlerts(
   });
   if (productsWithPma.length === 0) return [];
 
+  const groups = await loadListingGroups(organizationId);
   const pmaByMlItemId = new Map<string, { sku: string; pmaPrice: number }>();
   for (const product of productsWithPma) {
     if (product.pmaPrice == null) continue;
-    pmaByMlItemId.set(product.mlItemId, {
-      sku: product.sku ?? product.mlItemId,
-      pmaPrice: Number(product.pmaPrice),
-    });
+    // Opções de venda: o PMA é do produto (cadastro principal) e vale para
+    // cada opção — cada uma tem o próprio preço. Cadastro duplicado de uma
+    // opção não define PMA por cima do principal.
+    if (groups.isOption(product.mlItemId)) continue;
+    const pma = { sku: product.sku ?? product.mlItemId, pmaPrice: Number(product.pmaPrice) };
+    for (const option of groups.optionsOf(product.mlItemId)) {
+      if (option.mlStatus && option.mlStatus !== "active" && option.mlItemId !== product.mlItemId) continue;
+      pmaByMlItemId.set(option.mlItemId, pma);
+    }
+    pmaByMlItemId.set(product.mlItemId, pma);
   }
 
   // Só busca os itens com PMA cadastrado — sem isso, varria o catálogo

@@ -87,22 +87,62 @@ function queryLosingListings(
   organizationId: string,
   limit: number,
 ): Promise<CatalogLosingListing[]> {
+  // Opções de venda (mesmo `user_product_id`): uma opção que "perde" para a
+  // outra opção do mesmo produto não é catálogo perdendo — o produto está
+  // ganhando. E um produto com duas opções perdendo conta uma vez, pela opção
+  // mais perto de ganhar (menor diferença de preço).
   return prisma.$queryRaw<CatalogLosingListing[]>`
-    select ml_item_id          as "mlItemId",
-           sku_snapshot        as "skuSnapshot",
-           title_snapshot      as "titleSnapshot",
-           image_url_snapshot  as "imageUrlSnapshot",
-           catalog_seller_price as "catalogSellerPrice",
-           catalog_price_to_win as "catalogPriceToWin"
-      from listings
-     where organization_id = ${organizationId}
-       and catalog_listing = true
-       and catalog_status = 'losing'
-       and ml_status = 'active'
-     order by (catalog_seller_price - catalog_price_to_win) desc nulls last,
-              coalesce(sku_snapshot, title_snapshot, ml_item_id) asc
+    select "mlItemId", "skuSnapshot", "titleSnapshot", "imageUrlSnapshot",
+           "catalogSellerPrice", "catalogPriceToWin"
+      from (
+        select distinct on (coalesce(l.user_product_id, l.ml_item_id))
+               l.ml_item_id           as "mlItemId",
+               l.sku_snapshot         as "skuSnapshot",
+               l.title_snapshot       as "titleSnapshot",
+               l.image_url_snapshot   as "imageUrlSnapshot",
+               l.catalog_seller_price as "catalogSellerPrice",
+               l.catalog_price_to_win as "catalogPriceToWin"
+          from listings l
+         where l.organization_id = ${organizationId}
+           and l.catalog_listing = true
+           and l.catalog_status = 'losing'
+           and l.ml_status = 'active'
+           and not exists (
+             select 1 from listings s
+              where s.organization_id = l.organization_id
+                and s.user_product_id = l.user_product_id
+                and s.ml_item_id <> l.ml_item_id
+                and s.catalog_status in ('winning', 'shared')
+                and s.ml_status = 'active'
+           )
+         order by coalesce(l.user_product_id, l.ml_item_id),
+                  (l.catalog_seller_price - l.catalog_price_to_win) asc nulls last
+      ) by_product
+     order by ("catalogSellerPrice" - "catalogPriceToWin") desc nulls last,
+              coalesce("skuSnapshot", "titleSnapshot", "mlItemId") asc
      limit ${limit}
   `;
+}
+
+/** Quantos produtos estão perdendo o catálogo (mesma regra de `queryLosingListings`). */
+async function countLosingProducts(organizationId: string): Promise<number> {
+  const rows = await prisma.$queryRaw<Array<{ total: bigint }>>`
+    select count(distinct coalesce(l.user_product_id, l.ml_item_id)) as total
+      from listings l
+     where l.organization_id = ${organizationId}
+       and l.catalog_listing = true
+       and l.catalog_status = 'losing'
+       and l.ml_status = 'active'
+       and not exists (
+         select 1 from listings s
+          where s.organization_id = l.organization_id
+            and s.user_product_id = l.user_product_id
+            and s.ml_item_id <> l.ml_item_id
+            and s.catalog_status in ('winning', 'shared')
+            and s.ml_status = 'active'
+       )
+  `;
+  return Number(rows[0]?.total ?? 0);
 }
 
 /**
@@ -119,14 +159,7 @@ export async function loadCatalogLosingAlerts(
 ): Promise<CatalogLosingResult> {
   const [listings, total] = await Promise.all([
     queryLosingListings(organizationId, limit),
-    prisma.listing.count({
-      where: {
-        organizationId,
-        catalogListing: true,
-        catalogStatus: "losing",
-        mlStatus: "active",
-      },
-    }),
+    countLosingProducts(organizationId),
   ]);
 
   return { rows: buildCatalogLosingRows(listings), total };

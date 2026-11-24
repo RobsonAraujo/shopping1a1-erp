@@ -14,6 +14,8 @@ import { cn } from "@/lib/utils";
 import { readSession } from "@/lib/mercadolibre/session";
 import { getOrganizationContext } from "@/lib/organizations/context";
 import { loadDashboardPurchaseData } from "@/lib/compras/dashboard-purchase-data";
+import { loadListingGroups } from "@/lib/products/listing-groups";
+import { agruparRelatorioPorProduto } from "@/lib/tax-report/aggregation/agrupar-por-produto";
 import { loadLatestTaxReportSnapshot } from "@/lib/tax-report/service/generate-monthly-report";
 import { mapToSlowMoverRows } from "@/lib/insights/slow-movers";
 import { buildDifalMap } from "@/lib/insights/difal-map";
@@ -41,10 +43,15 @@ async function InsightsDataSection({
   userId: number;
   organizationId: string;
 }) {
-  const [purchaseData, taxSnapshot] = await Promise.all([
+  const [purchaseData, taxSnapshotByListing, groups] = await Promise.all([
     loadDashboardPurchaseData(token, userId, organizationId).catch(() => null),
     loadLatestTaxReportSnapshot(userId).catch(() => null),
+    loadListingGroups(organizationId),
   ]);
+  // Opções de venda: o Pareto conta o produto, não cada opção.
+  const taxSnapshot = taxSnapshotByListing
+    ? agruparRelatorioPorProduto(taxSnapshotByListing, groups.principalOf)
+    : null;
 
   const allSlowMoverRows = purchaseData ? mapToSlowMoverRows(purchaseData.rows) : [];
   const difalRows = taxSnapshot ? buildDifalMap(taxSnapshot) : [];

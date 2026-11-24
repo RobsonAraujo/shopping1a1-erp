@@ -1,5 +1,7 @@
 import { reportsConfig } from "@/config/reports";
 import { prisma } from "@/lib/db/db";
+import { loadListingGroups } from "@/lib/products/listing-groups";
+import { listingOptionLabel, listingOptionsSummary } from "@/lib/products/listing-option-label";
 import {
   toCalculatorListings,
   type CalculatorData,
@@ -15,7 +17,7 @@ import {
  * por fluxos avulsos (SKUs, catálogo, estoque) e pode não ter todos.
  */
 export async function loadCalculatorListings(organizationId: string): Promise<CalculatorData> {
-  const [known, seen] = await Promise.all([
+  const [known, seen, groups] = await Promise.all([
     prisma.listing.findMany({
       where: { organizationId, activeOnMl: true },
       select: {
@@ -38,7 +40,21 @@ export async function loadCalculatorListings(organizationId: string): Promise<Ca
         mlStatus: true,
       },
     }),
+    loadListingGroups(organizationId),
   ]);
+  const saleOptions = new Map<string, { principalMlItemId: string; label: string; optionsLabel: string }>();
+  for (const options of groups.multiOptionGroups()) {
+    const principal = options.find((option) => option.isPrincipal)?.mlItemId;
+    if (!principal) continue;
+    const optionsLabel = listingOptionsSummary(options);
+    for (const option of options) {
+      saleOptions.set(option.mlItemId, {
+        principalMlItemId: principal,
+        label: listingOptionLabel(option, options),
+        optionsLabel,
+      });
+    }
+  }
   return {
     timeZone: reportsConfig.catalogCompetitionTimezone,
     listings: toCalculatorListings([
@@ -51,6 +67,6 @@ export async function loadCalculatorListings(organizationId: string): Promise<Ca
         catalogListing: row.catalogListing,
         mlStatus: row.mlStatus,
       })),
-    ]),
+    ], saleOptions),
   };
 }

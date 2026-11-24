@@ -16,6 +16,8 @@ import type {
   TaxReportPayload,
   TaxReportScreenStatus,
 } from "@/lib/tax-report/types";
+import { loadListingGroups } from "@/lib/products/listing-groups";
+import { agruparRelatorioPorProduto } from "@/lib/tax-report/aggregation/agrupar-por-produto";
 
 /** Último `updatedAt` dos nivelamentos do DRE que cobrem o mês. */
 async function loadLevelingUpdatedAt(
@@ -93,11 +95,14 @@ export async function loadTaxReportScreen(input: {
   const stored = row.payload as unknown as TaxReportPayload;
   const saved =
     (row.payloadSummary as unknown as TaxReportPayload | null) ?? stored;
-  const [shown, levelingUpdatedAt, dre] = await Promise.all([
+  const [repaired, levelingUpdatedAt, dre, groups] = await Promise.all([
     repairTaxReportPayload(input.sellerId, stored),
     loadLevelingUpdatedAt(input.organizationId, input.year, input.month),
     loadDreTaxUsage(input.organizationId, input.year, input.month, row.generatedAt),
+    loadListingGroups(input.organizationId),
   ]);
+  // Opções de venda: uma linha por produto na tela (os totais não mudam).
+  const shown = agruparRelatorioPorProduto(repaired, groups.principalOf);
 
   const savedTax = impostoOperacionalTotalRelatorio(saved);
   const savedRevenue = saved.consolidado.faturamento;

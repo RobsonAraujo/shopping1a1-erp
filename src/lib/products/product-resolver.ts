@@ -86,18 +86,32 @@ export async function loadProductResolverMaps(
 export async function loadSupplierNamesByMlItemId(
   organizationId: string,
   mlItemIds: string[],
+  options?: { groups?: ListingGroups },
 ): Promise<Map<string, string>> {
   const uniqueIds = [...new Set(mlItemIds.filter(Boolean))];
   if (uniqueIds.length === 0) return new Map();
 
+  // O fornecedor é do produto: a opção de venda usa o do cadastro principal.
+  const groups = options?.groups ?? (await loadListingGroups(organizationId));
+  const principalById = new Map(uniqueIds.map((id) => [id, groups.principalOf(id)]));
   const products = await prisma.product.findMany({
-    where: { organizationId, mlItemId: { in: uniqueIds }, supplierId: { not: null } },
+    where: {
+      organizationId,
+      mlItemId: { in: [...new Set([...uniqueIds, ...principalById.values()])] },
+      supplierId: { not: null },
+    },
     select: { mlItemId: true, supplier: { select: { name: true } } },
   });
+  const nameById = new Map(
+    products
+      .filter((product) => product.supplier)
+      .map((product) => [product.mlItemId, product.supplier!.name]),
+  );
 
   const result = new Map<string, string>();
-  for (const product of products) {
-    if (product.supplier) result.set(product.mlItemId, product.supplier.name);
+  for (const id of uniqueIds) {
+    const name = nameById.get(principalById.get(id) ?? id) ?? nameById.get(id);
+    if (name) result.set(id, name);
   }
   return result;
 }
@@ -112,15 +126,31 @@ export async function loadSupplierNamesByMlItemId(
 export async function loadInactiveProductMlItemIds(
   organizationId: string,
   mlItemIds: string[],
+  options?: { groups?: ListingGroups },
 ): Promise<Set<string>> {
   const uniqueIds = [...new Set(mlItemIds.filter(Boolean))];
   if (uniqueIds.length === 0) return new Set();
 
+  // Opção de venda segue o cadastro principal: produto inativado some com
+  // todas as opções; um cadastro duplicado inativo de uma opção não esconde
+  // o produto.
+  const groups = options?.groups ?? (await loadListingGroups(organizationId));
+  const principalById = new Map(uniqueIds.map((id) => [id, groups.principalOf(id)]));
   const rows = await prisma.product.findMany({
-    where: { organizationId, mlItemId: { in: uniqueIds }, active: false },
-    select: { mlItemId: true },
+    where: {
+      organizationId,
+      mlItemId: { in: [...new Set([...uniqueIds, ...principalById.values()])] },
+    },
+    select: { mlItemId: true, active: true },
   });
-  return new Set(rows.map((r) => r.mlItemId));
+  const activeById = new Map(rows.map((r) => [r.mlItemId, r.active]));
+  const result = new Set<string>();
+  for (const id of uniqueIds) {
+    const principal = principalById.get(id) ?? id;
+    const active = activeById.get(principal) ?? activeById.get(id);
+    if (active === false) result.add(id);
+  }
+  return result;
 }
 
 /**

@@ -609,6 +609,21 @@ export function RotinaPriceSimulator({
 
       {controls}
 
+      {otherType && meta?.existingOption && meta.listingTypeId === activeType ? (
+        <p className="rounded-md border border-[var(--border)] bg-[var(--muted)]/30 px-2.5 py-1.5 text-[11px] text-[var(--muted-foreground)]">
+          Este produto já tem a opção {listingTypeShortLabel(activeType) ?? "deste tipo"}:{" "}
+          {meta.existingOption.mlItemId}
+          {meta.existingOption.salePrice !== null
+            ? `, a ${meta.existingOption.salePrice.toLocaleString("pt-BR", {
+                style: "currency",
+                currency: "BRL",
+              })} hoje`
+            : ""}
+          . A simulação abaixo é deste anúncio como{" "}
+          {listingTypeShortLabel(activeType) ?? "o outro tipo"}.
+        </p>
+      ) : null}
+
       <div
         id={canSwitchType ? panelId : undefined}
         role={canSwitchType ? "tabpanel" : undefined}

@@ -4,11 +4,14 @@
  * produto a produto. Lógica pura, sem I/O, pra ser testável isolada.
  */
 import type { OperationsBoardCard } from "@/lib/compras/replenishment-cycle-data";
+import { listingOptionsSummary } from "@/lib/products/listing-option-label";
 
 export type SupplierBoardTopItem = {
   mlItemId: string;
   sku: string | null;
   suggestedQty: number | null;
+  /** "Clássico + Premium" quando o produto tem mais de uma opção de venda. */
+  optionsSummary?: string;
   /** Já vem "de graça" no card do ciclo (extraída do anúncio já buscado do
    * ML) — não é uma chamada de rede extra. Só mostramos pros top items
    * (no máximo `MAX_TOP_ITEMS`), não pra lista inteira, pra manter o custo
@@ -142,6 +145,7 @@ export function buildSupplierBoardCards(
       sku: card.sku,
       suggestedQty: card.suggestedQty,
       imageUrl: card.imageUrl,
+      optionsSummary: card.options ? listingOptionsSummary(card.options) : undefined,
     }));
 
     result.push({
@@ -191,7 +195,8 @@ function sameSupplierBoardCard(a: SupplierBoardCard, b: SupplierBoardCard): bool
         item.mlItemId === b.topItems[i].mlItemId &&
         item.sku === b.topItems[i].sku &&
         item.suggestedQty === b.topItems[i].suggestedQty &&
-        item.imageUrl === b.topItems[i].imageUrl,
+        item.imageUrl === b.topItems[i].imageUrl &&
+        item.optionsSummary === b.topItems[i].optionsSummary,
     )
   );
 }

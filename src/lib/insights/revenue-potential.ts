@@ -22,6 +22,7 @@ import { getItemSku, isKitItem } from "@/lib/mercadolibre/item-sku";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { loadStockReportProductsByMlItemId } from "@/lib/products/product-data";
 import { loadSupplierNamesByMlItemId } from "@/lib/products/product-resolver";
+import { loadListingGroups } from "@/lib/products/listing-groups";
 import { skuKeyFromListing } from "@/lib/inventory/inventory-stock-report";
 import { zonedYmd } from "@/lib/report-timezone";
 import { DAYS_IN_MONTH } from "@/lib/insights/revenue-potential-math";
@@ -41,10 +42,24 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
  */
 export function mergeRevenuePotentialRowsBySku(
   rows: RevenuePotentialRow[],
+  /**
+   * Opções de venda: junta primeiro pelo produto físico (o anúncio
+   * principal) — as opções com SKU diferente (texto editado no ML) também se
+   * juntam —, depois pelo texto de SKU, como sempre.
+   */
+  principalOf?: (mlItemId: string) => string,
+): RevenuePotentialRow[] {
+  const byProduct = principalOf ? mergeRows(rows, (row) => `up:${principalOf(row.mlItemId)}`) : rows;
+  return mergeRows(byProduct, (row) => skuKeyFromListing(row.sku, row.mlItemId));
+}
+
+function mergeRows(
+  rows: RevenuePotentialRow[],
+  keyOf: (row: RevenuePotentialRow) => string,
 ): RevenuePotentialRow[] {
   const groupsBySku = new Map<string, RevenuePotentialRow[]>();
   for (const row of rows) {
-    const skuKey = skuKeyFromListing(row.sku, row.mlItemId);
+    const skuKey = keyOf(row);
     const group = groupsBySku.get(skuKey);
     if (group) group.push(row);
     else groupsBySku.set(skuKey, [row]);
@@ -185,7 +200,10 @@ export async function loadRevenuePotentialData(
     };
   });
 
-  const mergedRows = mergeRevenuePotentialRowsBySku(rows);
+  const mergedRows = mergeRevenuePotentialRowsBySku(
+    rows,
+    (await loadListingGroups(organizationId)).principalOf,
+  );
   mergedRows.sort((a, b) => b.gap - a.gap);
 
   const totalPotential = mergedRows.reduce(

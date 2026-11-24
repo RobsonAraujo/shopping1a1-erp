@@ -282,6 +282,7 @@ export async function simulateCalculatorPrices(
     userId,
     prices: body.prices,
     listingTypeId: body.listingTypeId,
+    organizationId,
   });
 }
 

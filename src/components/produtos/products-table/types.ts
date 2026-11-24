@@ -1,5 +1,5 @@
 import type { TableSort } from "@/components/ui/sortable-th";
-import type { ListingOptionChip } from "@/components/products/ListingOptionChips";
+import type { ListingOptionChip } from "@/lib/products/listing-option-label";
 import type { ProductView } from "@/lib/products/product-data";
 
 export type ProductSortKey = "sku" | "ncm" | "pricingCost" | "taxPercent" | "pmaPrice";

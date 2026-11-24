@@ -271,6 +271,14 @@ export function CalculatorListingPicker({
                     </p>
                     <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
                       <SegmentTag segment={listing.catalogListing ? "catalog" : "own"} />
+                      {listing.saleOption ? (
+                        <span
+                          className="shrink-0 rounded-md border border-[var(--border)] bg-[var(--muted)]/40 px-1.5 py-0.5 text-[11px] font-medium leading-none"
+                          title={`Opção de venda do produto (${listing.saleOption.optionsLabel}): preço e tarifa são deste anúncio.`}
+                        >
+                          {listing.saleOption.label}
+                        </span>
+                      ) : null}
                       <span className="truncate">{listing.sku ?? listing.mlItemId}</span>
                     </p>
                   </div>

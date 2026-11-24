@@ -9,8 +9,11 @@ import { loadFinancialEvaluationRows } from "@/lib/lucratividade/financial-evalu
 import type { FinancialEvaluationRow } from "@/lib/lucratividade/financial-evaluation-data";
 import {
   fetchCategoryById,
+  fetchItemsByIdsBatched,
   fetchUnitsSoldForItemsInWindow,
 } from "@/lib/mercadolibre/api";
+import { pooledMlStock } from "@/lib/compras/sale-options-fold";
+import { loadListingGroups, type ListingOption } from "@/lib/products/listing-groups";
 import { mlAvailableStockUnits } from "@/lib/mercadolibre/ml-available-stock";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import {
@@ -52,6 +55,12 @@ export type ItemDetailContext = {
   openCycle: ItemOpenCycleContext | null;
   financial: FinancialEvaluationRow | null;
   categoryName: string | null;
+  /**
+   * Opções de venda do produto (só quando há mais de uma). Estoque, venda e
+   * planejamento acima são do **produto** (todas as opções); preço, margem e
+   * catálogo continuam deste anúncio.
+   */
+  options?: ListingOption[];
 };
 
 function decimalToNumber(value: unknown): number | null {
@@ -68,16 +77,32 @@ export async function loadItemDetailContext(input: {
   item: ItemBody;
 }): Promise<ItemDetailContext> {
   const { accessToken, userId, organizationId, itemId, item } = input;
-  const mlStock = mlAvailableStockUnits(item);
   const stockPlanning = toStockPlanningValues(
     await loadOperationalSettings(organizationId),
   );
   const windowDays = stockPlanning.salesAverageWindowDays;
   const dateField = stockPlanning.salesWindowDateField;
 
+  // Opções de venda: o estoque e a venda são do produto físico. As outras
+  // opções ativas ou pausadas entram na conta (o estoque do ML uma vez).
+  const groups = await loadListingGroups(organizationId, { extraItems: [item] });
+  const groupOptions = groups.optionsOf(itemId);
+  const otherIds = groupOptions
+    .filter((o) => o.mlItemId !== itemId && (o.mlStatus === "active" || o.mlStatus === "paused"))
+    .map((o) => o.mlItemId);
+  const otherItems =
+    otherIds.length > 0
+      ? (await fetchItemsByIdsBatched(accessToken, otherIds)).filter(
+          (other) => (other.variations?.length ?? 0) === 0,
+        )
+      : [];
+  const members = (item.variations?.length ?? 0) > 0 ? [item] : [item, ...otherItems];
+  const memberIds = members.map((member) => member.id);
+  const mlStock = members.length > 1 ? pooledMlStock(members) : mlAvailableStockUnits(item);
+
   const [
     salesByItem,
-    warehouseRow,
+    warehouseRows,
     listingRow,
     openCycle,
     financialRows,
@@ -86,21 +111,22 @@ export async function loadItemDetailContext(input: {
     fetchUnitsSoldForItemsInWindow(
       accessToken,
       userId,
-      [itemId],
+      memberIds,
       windowDays,
       dateField,
     ),
-    prisma.warehouseStock.findUnique({
-      where: { mlItemId: itemId, organizationId },
+    prisma.warehouseStock.findMany({
+      where: { mlItemId: { in: memberIds }, organizationId },
       select: {
+        mlItemId: true,
         quantity: true,
         purchaseLeadTimeDays: true,
         notes: true,
       },
     }),
     item.catalog_listing
-      ? prisma.listing.findUnique({
-          where: { mlItemId: itemId },
+      ? prisma.listing.findFirst({
+          where: { mlItemId: itemId, organizationId },
           select: {
             catalogStatus: true,
             catalogSellerPrice: true,
@@ -111,7 +137,8 @@ export async function loadItemDetailContext(input: {
       : Promise.resolve(null),
     prisma.replenishmentCycle.findFirst({
       where: {
-        mlItemId: itemId,
+        organizationId,
+        mlItemId: { in: [...new Set([...memberIds, groups.principalOf(itemId)])] },
         status: { not: "completed" },
       },
       orderBy: { updatedAt: "desc" },
@@ -136,15 +163,21 @@ export async function loadItemDetailContext(input: {
       })()
     : null;
 
-  // Estoque automático: galpão do livro de estoque (sem somar o depósito duas vezes).
+  // Estoque automático: galpão do livro de estoque (sem somar o depósito duas
+  // vezes) — o anúncio aberto responde pelo produto. Sem automático: o
+  // galpão digitado somado entre as opções, como na ativação do Estoque.
   const autoWarehouse = await automaticWarehouseQtyByListing(organizationId, [
-    { mlItemId: itemId, isFulfillment: isFulfillmentListing(item) },
+    { mlItemId: itemId, isFulfillment: members.every((member) => isFulfillmentListing(member)) },
   ]);
+  const warehouseRow = warehouseRows.find((row) => row.mlItemId === itemId) ?? null;
   const warehouseStock = autoWarehouse
     ? (autoWarehouse.get(itemId) ?? 0)
-    : (warehouseRow?.quantity ?? 0);
-  const leadTimeDays = warehouseRow?.purchaseLeadTimeDays ?? 0;
-  const unitsSoldInWindow = salesByItem[itemId] ?? 0;
+    : warehouseRows.reduce((sum, row) => sum + row.quantity, 0);
+  const leadTimeDays =
+    warehouseRow?.purchaseLeadTimeDays ??
+    warehouseRows.find((row) => row.purchaseLeadTimeDays != null)?.purchaseLeadTimeDays ??
+    0;
+  const unitsSoldInWindow = memberIds.reduce((sum, id) => sum + (salesByItem[id] ?? 0), 0);
   const plan = computeStockPlanningDisplay(
     mlStock + warehouseStock,
     unitsSoldInWindow,
@@ -180,5 +213,6 @@ export async function loadItemDetailContext(input: {
       : null,
     financial: financialRows[0] ?? null,
     categoryName: category?.name ?? null,
+    options: groupOptions.length > 1 ? groupOptions : undefined,
   };
 }

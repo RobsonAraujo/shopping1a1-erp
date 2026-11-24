@@ -61,7 +61,7 @@ import type { ProductView } from "@/lib/products/product-data";
 import {
   listingOptionsSummary,
   type ListingOptionChip,
-} from "@/components/products/ListingOptionChips";
+} from "@/lib/products/listing-option-label";
 import {
   formatFinancialMoney,
   formatFinancialPercent,

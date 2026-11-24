@@ -38,6 +38,7 @@ import {
   statusVariants,
   type SupplierPurchaseAnalysisTableDesktopProps,
 } from "@/components/compras/supplier-purchase-analysis-table/types";
+import { listingOptionsSummary } from "@/lib/products/listing-option-label";
 
 export function SupplierPurchaseAnalysisTableDesktop({
   rows,
@@ -177,6 +178,11 @@ export function SupplierPurchaseAnalysisTableDesktop({
                                   <span className="mt-0.5 block truncate text-[11px] leading-snug text-[var(--muted-foreground)]">
                                     {row.item.title}
                                   </span>
+                                  {row.options ? (
+                                    <span className="mt-0.5 block truncate text-[10px] leading-snug text-[var(--muted-foreground)]">
+                                      Opções: {listingOptionsSummary(row.options)}
+                                    </span>
+                                  ) : null}
                                 </span>
                               </TooltipTrigger>
                               <TooltipContent

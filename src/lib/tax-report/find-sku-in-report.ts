@@ -16,6 +16,13 @@ export function findSkuInReport(
   const viaMlItemId = porSku.find((row) => row.mlItemId === value);
   if (viaMlItemId) return viaMlItemId;
 
+  // Opção de venda somada na linha do produto (`agrupar-por-produto.ts`): o
+  // link com o MLB da opção abre a linha do produto.
+  const viaOption = porSku.find((row) =>
+    row.transacoes.some((det) => det.transacao.itemId === value),
+  );
+  if (viaOption) return viaOption;
+
   const key = normalizeProductSku(value);
   if (!key) return undefined;
 

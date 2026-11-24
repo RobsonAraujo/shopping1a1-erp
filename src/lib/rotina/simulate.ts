@@ -74,6 +74,12 @@ export type RotinaSimulation = {
    */
   inputs?: RotinaPricingInputs;
   results: SimulatedPrice[];
+  /**
+   * Opções de venda: simulando o outro tipo (Clássico ↔ Premium) quando o
+   * produto **já tem** um anúncio desse tipo — a simulação mostra o anúncio
+   * de verdade, com o preço dele hoje.
+   */
+  existingOption?: { mlItemId: string; salePrice: number | null } | null;
 };
 
 /** Mínimo para uma meta num tipo (o de hoje ou o outro), já com o PMA aplicado. */
@@ -239,7 +245,35 @@ export async function simulateListingPrices(
   },
 ): Promise<RotinaSimulation> {
   const ctx = await loadSimulationContext(organizationId, params);
-  return simulateWithContext(ctx, params);
+  return simulateWithContext(ctx, { ...params, organizationId });
+}
+
+/**
+ * A opção de venda do mesmo produto que já é do tipo simulado (ativa ou
+ * pausada), com o preço de hoje do retrato da Central.
+ */
+export async function findExistingOptionOfType(
+  organizationId: string,
+  mlItemId: string,
+  listingTypeId: string,
+): Promise<{ mlItemId: string; salePrice: number | null } | null> {
+  const { loadListingGroups } = await import("@/lib/products/listing-groups");
+  const groups = await loadListingGroups(organizationId);
+  const option = groups
+    .optionsOf(mlItemId)
+    .find(
+      (o) =>
+        o.mlItemId !== mlItemId &&
+        o.listingTypeId === listingTypeId &&
+        (o.mlStatus === "active" || o.mlStatus === "paused"),
+    );
+  if (!option) return null;
+  const health = await prisma.listingHealth.findFirst({
+    where: { organizationId, mlItemId: option.mlItemId },
+    select: { salePrice: true },
+  });
+  const price = health?.salePrice != null ? Number(health.salePrice) : null;
+  return { mlItemId: option.mlItemId, salePrice: Number.isFinite(price) ? price : null };
 }
 
 /** A simulação com o contexto já montado (retrato da Central ou leitura da Calculadora). */
@@ -252,6 +286,8 @@ export async function simulateWithContext(
     prices?: number[];
     /** Outro tipo (Clássico ↔ Premium). Omitido = o tipo de hoje. */
     listingTypeId?: SimulatableListingType;
+    /** Para achar a opção de venda que já é do tipo simulado. */
+    organizationId?: string;
   },
 ): Promise<RotinaSimulation> {
   const { token, userId } = params;
@@ -261,6 +297,12 @@ export async function simulateWithContext(
   const listingTypeId = params.listingTypeId ?? currentListingTypeId;
   const inputs = inputsForListingType(ctx.inputs, currentListingTypeId, listingTypeId);
 
+  const existingOption =
+    params.organizationId && listingTypeId && listingTypeId !== currentListingTypeId
+      ? await findExistingOptionOfType(params.organizationId, ctx.mlItemId, listingTypeId).catch(
+          () => null,
+        )
+      : null;
   const base = {
     mlItemId: ctx.mlItemId,
     targetPercent: ctx.targetPercent,
@@ -271,6 +313,7 @@ export async function simulateWithContext(
     listingTypeId,
     salePrice,
     inputs: { ...ctx.inputs, listingTypeId: currentListingTypeId ?? ctx.inputs.listingTypeId },
+    existingOption,
   };
   if (ctx.blocked) return { ...base, blocked: ctx.blocked, results: [] };
 

@@ -134,6 +134,19 @@ export type RotinaActionListing = {
   catalogProductId: string | null;
   /** Tem retrato da rodada (dá para "recalcular este anúncio"). */
   hasHealth: boolean;
+  /**
+   * Opções de venda: o produto deste anúncio tem mais de uma (Clássico,
+   * Premium…). Os cards continuam por anúncio (preço, promoção e ADS são de
+   * cada opção), mas a prioridade e o "sem venda" usam a venda do produto.
+   */
+  saleOption?: {
+    principalMlItemId: string;
+    isPrincipal: boolean;
+    /** "Clássico + Premium". */
+    optionsLabel: string;
+    /** Venda por dia somada das opções. */
+    productUnitsPerDay: number | null;
+  };
 };
 
 export type RotinaRelatedListing = {
@@ -306,6 +319,14 @@ export type RotinaViewInput = {
   states: readonly ActionStateSnapshot[];
   lastRun: RotinaRunSummary | null;
   lastCompleteRunAt: string | null;
+  /**
+   * Opções de venda: anúncio → principal do produto e rótulo das opções
+   * (`listing-groups.ts`). Ausente = cada anúncio é um produto (como antes).
+   */
+  saleOptions?: ReadonlyMap<
+    string,
+    { principalMlItemId: string; optionsLabel: string; listingTypeLabel?: string | null }
+  >;
 };
 
 const ELIGIBLE_TAG = "catalog_listing_eligible";
@@ -393,10 +414,12 @@ function identity(
   entity: Entity,
   settings: RotinaSettings,
   target: ListingTargetValues | null,
+  saleOption?: RotinaActionListing["saleOption"],
 ): RotinaActionListing {
   const { health, catalog } = entity;
   const catalogListing = health?.catalogListing ?? catalog !== null;
   return {
+    ...(saleOption ? { saleOption } : {}),
     mlItemId: entity.mlItemId,
     title: health?.title ?? catalog?.title ?? entity.mlItemId,
     sku: health?.sku ?? catalog?.sku ?? null,
@@ -530,21 +553,34 @@ function raiseBeforeEpisode(
   return gap >= 0 && gap <= RAISE_EXPLAINS_WITHIN_MS ? raise : null;
 }
 
-function ownOtherWarning(raise: CatalogRaiseEstimate): string | null {
+/**
+ * Rótulo do outro anúncio do vendedor no mesmo produto de catálogo: quando é
+ * uma opção de venda do mesmo produto físico, nomeia a opção ("sua opção
+ * Premium"); senão, "seu outro anúncio".
+ */
+type OwnOtherLabelOf = (itemId: string) => string | null;
+
+function ownOtherWarning(raise: CatalogRaiseEstimate, labelOf?: OwnOtherLabelOf): string | null {
   if (!raise.ownOther) return null;
-  return `Seu outro anúncio neste produto (${raise.ownOther.itemId}) está a ${formatMoney(
-    raise.ownOther.price,
-  )}: acima disso, a vitrine tende a passar para ele. Para a alta valer, suba os dois.`;
+  const option = labelOf?.(raise.ownOther.itemId) ?? null;
+  const price = formatMoney(raise.ownOther.price);
+  if (option) {
+    return `Sua opção de venda ${option} (${raise.ownOther.itemId}) está a ${price}: acima disso, a vitrine tende a passar para ela. Para a alta valer, suba as duas.`;
+  }
+  return `Seu outro anúncio neste produto (${raise.ownOther.itemId}) está a ${price}: acima disso, a vitrine tende a passar para ele. Para a alta valer, suba os dois.`;
 }
 
-function describeRaise(raise: CatalogRaiseEstimate | null): { headline: string; details: string[] } {
+function describeRaise(
+  raise: CatalogRaiseEstimate | null,
+  labelOf?: OwnOtherLabelOf,
+): { headline: string; details: string[] } {
   if (!raise) return { headline: "Ganhando no catálogo", details: [] };
   if (raise.alone || raise.cheapest === null || raise.winCeiling === null) {
     const details = [
       `Hoje: ${formatMoney(raise.currentPrice)} · nenhum outro vendedor neste produto`,
       "Sem concorrente, não há teto pela disputa do catálogo. O ML ainda pode rebaixar um preço muito acima do mercado.",
     ];
-    const own = ownOtherWarning(raise);
+    const own = ownOtherWarning(raise, labelOf);
     if (own) details.push(own);
     return { headline: "Ganhando sem concorrente no catálogo", details };
   }
@@ -565,6 +601,7 @@ function describeRaise(raise: CatalogRaiseEstimate | null): { headline: string; 
 export function buildRaisePanel(
   raise: CatalogRaiseEstimate | null,
   unitsPerDay: number | null,
+  labelOf?: OwnOtherLabelOf,
 ): RotinaRaisePanel | null {
   if (
     !raise ||
@@ -587,7 +624,7 @@ export function buildRaisePanel(
       } a ${formatMoney(raise.betterLogistics.price)}: a folga real pode ser menor.`,
     );
   }
-  const own = ownOtherWarning(raise);
+  const own = ownOtherWarning(raise, labelOf);
   if (own) warnings.push(own);
   return {
     currentPrice: raise.currentPrice,
@@ -655,14 +692,19 @@ function describe(
   entity: Entity,
   listing: RotinaActionListing,
   floor: RotinaFloorView | null,
-  ctx: { now: Date; timeZone: string; raise: CatalogRaiseEstimate | null },
+  ctx: {
+    now: Date;
+    timeZone: string;
+    raise: CatalogRaiseEstimate | null;
+    ownOtherLabelOf?: OwnOtherLabelOf;
+  },
 ): { headline: string; details: string[] } {
   const { health, catalog } = entity;
   const details: string[] = [];
 
   switch (rule) {
     case "catalog_raise_price":
-      return describeRaise(ctx.raise);
+      return describeRaise(ctx.raise, ctx.ownOtherLabelOf);
 
     case "catalog_losing":
     case "catalog_shared": {
@@ -863,6 +905,37 @@ function staleSalesDiagnosis(
 export function buildRotinaView(input: RotinaViewInput): RotinaView {
   const { now, timeZone, settings } = input;
   const nowIso = now.toISOString();
+  const ownOtherLabelOf: OwnOtherLabelOf = (itemId) =>
+    input.saleOptions?.get(itemId)?.listingTypeLabel ?? null;
+
+  // Opções de venda: venda do produto (soma das opções) e a venda mais
+  // recente entre elas.
+  const productUnits = new Map<string, number>();
+  const productLastSale = new Map<string, string | null>();
+  for (const health of input.health) {
+    const option = input.saleOptions?.get(health.mlItemId);
+    if (!option) continue;
+    const key = option.principalMlItemId;
+    if (health.unitsPerDay !== null) {
+      productUnits.set(key, (productUnits.get(key) ?? 0) + health.unitsPerDay);
+    }
+    const previous = productLastSale.get(key) ?? null;
+    if (health.lastSaleAt && (!previous || health.lastSaleAt > previous)) {
+      productLastSale.set(key, health.lastSaleAt);
+    } else if (!productLastSale.has(key)) {
+      productLastSale.set(key, previous);
+    }
+  }
+  const saleOptionOf = (mlItemId: string): RotinaActionListing["saleOption"] => {
+    const option = input.saleOptions?.get(mlItemId);
+    if (!option) return undefined;
+    return {
+      principalMlItemId: option.principalMlItemId,
+      isPrincipal: option.principalMlItemId === mlItemId,
+      optionsLabel: option.optionsLabel,
+      productUnitsPerDay: productUnits.get(option.principalMlItemId) ?? null,
+    };
+  };
 
   const entities = new Map<string, Entity>();
   for (const health of input.health) {
@@ -895,7 +968,7 @@ export function buildRotinaView(input: RotinaViewInput): RotinaView {
   }) {
     const definition = ROTINA_RULES[args.rule];
     const target = input.targets.get(args.entity.mlItemId) ?? null;
-    const listing = identity(args.entity, settings, target);
+    const listing = identity(args.entity, settings, target, saleOptionOf(args.entity.mlItemId));
     const state = states.get(stateKey(args.stateItemId, args.rule)) ?? null;
     const visibility = resolveActionVisibility({
       kind: definition.kind,
@@ -922,7 +995,7 @@ export function buildRotinaView(input: RotinaViewInput): RotinaView {
         : null;
     const text =
       args.headlineOverride ??
-      describe(args.rule, args.entity, listing, floor, { now, timeZone, raise });
+      describe(args.rule, args.entity, listing, floor, { now, timeZone, raise, ownOtherLabelOf });
     const verdictData =
       live && floor && live.priceToWin !== null ? catalogVerdict(floor, live.priceToWin) : null;
 
@@ -949,7 +1022,7 @@ export function buildRotinaView(input: RotinaViewInput): RotinaView {
       details: text.details,
       floor,
       verdict,
-      raisePanel: buildRaisePanel(raise, listing.unitsPerDay),
+      raisePanel: buildRaisePanel(raise, listing.unitsPerDay, ownOtherLabelOf),
       related: args.relatedListing ?? null,
       catalog: live
         ? {
@@ -963,11 +1036,14 @@ export function buildRotinaView(input: RotinaViewInput): RotinaView {
             raise,
           }
         : null,
-      // Na subida, o que importa é quanto entra a mais por dia.
+      // Na subida, o que importa é quanto entra a mais por dia. Opção de
+      // venda pesa pela venda do produto (a opção que vende menos não some
+      // do topo só porque a venda se divide entre as opções).
       impact:
         raise !== null
           ? (listing.unitsPerDay ?? 0) * (raise.gainPerUnit ?? 0)
-          : (listing.unitsPerDay ?? 0) * (listing.salePrice ?? 0),
+          : (listing.saleOption?.productUnitsPerDay ?? listing.unitsPerDay ?? 0) *
+            (listing.salePrice ?? 0),
       snoozedUntil: state?.status === "snoozed" ? state.snoozedUntil : null,
       decidedAt: visibility.bucket !== "active" && state ? state.statusChangedAt : null,
       links: buildActionLinks({
@@ -1307,25 +1383,39 @@ export function buildRotinaView(input: RotinaViewInput): RotinaView {
   // decisão abre um episódio novo, e a decisão antiga deixa de valer.
   const staleSalesActions: RotinaActionView[] = [];
   if (isRuleEnabled(settings, "no_recent_sales")) {
-    for (const entity of entities.values()) {
+    // Opções de venda: "sem venda" é do produto — um card só, e só se nenhuma
+    // opção vendeu (a venda mais recente entre elas).
+    const staleProductsSeen = new Set<string>();
+    const staleCandidates = [...entities.values()].sort((a, b) => {
+      const principalA = input.saleOptions?.get(a.mlItemId)?.principalMlItemId === a.mlItemId;
+      const principalB = input.saleOptions?.get(b.mlItemId)?.principalMlItemId === b.mlItemId;
+      return Number(principalB) - Number(principalA);
+    });
+    for (const entity of staleCandidates) {
       const health = entity.health;
       if (!health || health.mlStatus !== "active") continue;
       if (health.salesWindowDays === null || health.salesWindowDays <= 0) continue;
+      const product = input.saleOptions?.get(entity.mlItemId)?.principalMlItemId;
+      if (product) {
+        if (staleProductsSeen.has(product)) continue;
+        staleProductsSeen.add(product);
+      }
+      const lastSaleAt = product ? (productLastSale.get(product) ?? health.lastSaleAt) : health.lastSaleAt;
       const salesWindowDays = health.salesWindowDays;
       pushAction({
         rule: "no_recent_sales",
         entity,
         stateItemId: entity.mlItemId,
         dataAt: health.computedAt,
-        episodeStart: health.lastSaleAt,
+        episodeStart: lastSaleAt,
         isNew: false,
         ageLabel: null,
         headlineOverride: {
-          headline: noRecentSalesNote({ lastSaleAt: health.lastSaleAt, salesWindowDays }, now),
+          headline: noRecentSalesNote({ lastSaleAt, salesWindowDays }, now),
           details: [],
         },
         staleSales: {
-          lastSaleAt: health.lastSaleAt,
+          lastSaleAt,
           salesWindowDays,
           listedAt: health.listedAt,
           firstSeenAt: health.firstSeenAt,

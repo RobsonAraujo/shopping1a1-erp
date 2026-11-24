@@ -23,6 +23,12 @@ export type CalculatorListing = {
   permalink: string;
   catalogListing: boolean;
   mlStatus: string | null;
+  /**
+   * Opções de venda: o produto deste anúncio tem mais de uma (Clássico,
+   * Premium…). A lista mostra o tipo e põe as opções do produto juntas — cada
+   * uma tem preço e tarifa próprios, então a conta continua por anúncio.
+   */
+  saleOption?: { principalMlItemId: string; label: string; optionsLabel: string };
 };
 
 export type CalculatorData = {
@@ -58,6 +64,7 @@ function fromKnown(listing: CalculatorKnownListing): CalculatorListing {
  */
 export function toCalculatorListings(
   known: readonly CalculatorKnownListing[],
+  saleOptions?: ReadonlyMap<string, NonNullable<CalculatorListing["saleOption"]>>,
 ): CalculatorListing[] {
   const merged = new Map<string, CalculatorKnownListing>();
   for (const listing of known) {
@@ -75,7 +82,26 @@ export function toCalculatorListings(
       mlStatus: current.mlStatus ?? listing.mlStatus,
     });
   }
-  return [...merged.values()]
-    .map(fromKnown)
-    .sort((a, b) => a.title.localeCompare(b.title, "pt-BR"));
+  const listings = [...merged.values()].map((listing) => {
+    const row = fromKnown(listing);
+    const saleOption = saleOptions?.get(listing.mlItemId);
+    return saleOption ? { ...row, saleOption } : row;
+  });
+  // A–Z pelo título do produto; as opções do mesmo produto ficam juntas.
+  const titleOfProduct = new Map<string, string>();
+  for (const row of listings) {
+    const key = row.saleOption?.principalMlItemId ?? row.mlItemId;
+    if (!titleOfProduct.has(key) || row.mlItemId === key) titleOfProduct.set(key, row.title);
+  }
+  const productKey = (row: CalculatorListing) => row.saleOption?.principalMlItemId ?? row.mlItemId;
+  return listings.sort(
+    (a, b) =>
+      (titleOfProduct.get(productKey(a)) ?? a.title).localeCompare(
+        titleOfProduct.get(productKey(b)) ?? b.title,
+        "pt-BR",
+      ) ||
+      productKey(a).localeCompare(productKey(b)) ||
+      Number(b.mlItemId === productKey(b)) - Number(a.mlItemId === productKey(a)) ||
+      a.mlItemId.localeCompare(b.mlItemId),
+  );
 }

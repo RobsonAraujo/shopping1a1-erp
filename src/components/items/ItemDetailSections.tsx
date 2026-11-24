@@ -16,6 +16,7 @@ import {
 } from "@/lib/pricing/financial-margin";
 import type { ItemDetailContext } from "@/lib/items/item-detail-data";
 import type { ItemBody } from "@/lib/mercadolibre/types";
+import { ListingOptionChips } from "@/components/products/ListingOptionChips";
 
 function formatDatePtBR(d: Date | string | null): string {
   if (!d) return "—";
@@ -59,6 +60,12 @@ export function ItemDetailStockSection({
         <CardTitle className="text-lg text-[var(--primary)]">
           Estoque e planejamento
         </CardTitle>
+        {context.options ? (
+          <p className="text-xs text-[var(--muted-foreground)]">
+            Do produto: soma as {context.options.length} opções de venda (o estoque do ML
+            conta uma vez).
+          </p>
+        ) : null}
       </CardHeader>
       <CardContent className="space-y-4">
         <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -395,6 +402,7 @@ export function ItemDetailHeroMeta({
           warehouseStock={context.warehouseStock}
         />
       </div>
+      <ListingOptionChips options={context.options} />
 
       <dl className="grid gap-4 sm:grid-cols-2">
         <div className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/50 p-4">

@@ -19,6 +19,8 @@ import type {
   RotinaRunSummary,
 } from "@/lib/rotina/types";
 import { buildRotinaView, type RotinaView } from "@/lib/rotina/view";
+import { loadListingGroups } from "@/lib/products/listing-groups";
+import { listingOptionLabel, listingOptionsSummary } from "@/lib/products/listing-option-label";
 
 /**
  * Leitura da página da Rotina — **só banco**, nenhuma chamada ao Mercado
@@ -199,6 +201,26 @@ export async function loadRotinaView(
     relatedItemId: row.relatedItemId,
   }));
 
+  // Opções de venda: de qual produto cada anúncio é opção (etiqueta, prioridade
+  // e "sem venda" pelo produto).
+  const groups = await loadListingGroups(organizationId);
+  const saleOptions = new Map<
+    string,
+    { principalMlItemId: string; optionsLabel: string; listingTypeLabel: string | null }
+  >();
+  for (const options of groups.multiOptionGroups()) {
+    const principal = options.find((option) => option.isPrincipal)?.mlItemId;
+    if (!principal) continue;
+    const optionsLabel = listingOptionsSummary(options);
+    for (const option of options) {
+      saleOptions.set(option.mlItemId, {
+        principalMlItemId: principal,
+        optionsLabel,
+        listingTypeLabel: listingOptionLabel(option, options),
+      });
+    }
+  }
+
   return buildRotinaView({
     now,
     timeZone,
@@ -209,5 +231,6 @@ export async function loadRotinaView(
     states,
     lastRun: toRunSummary(lastRun),
     lastCompleteRunAt: lastComplete?.finishedAt?.toISOString() ?? null,
+    saleOptions,
   });
 }

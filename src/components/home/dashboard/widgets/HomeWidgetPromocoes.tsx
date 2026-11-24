@@ -64,7 +64,7 @@ function ExpiringRow({ row }: { row: PromotionSummaryRow }) {
     <HomeWidgetListRow
       href={row.permalink}
       imageUrl={row.imageUrl}
-      title={row.sku ?? "Sem SKU"}
+      title={row.optionLabel ? `${row.sku ?? "Sem SKU"} · ${row.optionLabel}` : (row.sku ?? "Sem SKU")}
       subtitle={joinSubtitle([
         formatFinancialMoney(row.salePrice),
         row.promotionName,
@@ -83,7 +83,7 @@ function WithoutPromotionRow({ row }: { row: PromotionSummaryRow }) {
     <HomeWidgetListRow
       href={row.permalink}
       imageUrl={row.imageUrl}
-      title={row.sku ?? "Sem SKU"}
+      title={row.optionLabel ? `${row.sku ?? "Sem SKU"} · ${row.optionLabel}` : (row.sku ?? "Sem SKU")}
       subtitle={joinSubtitle([
         `${row.soldQuantity.toLocaleString("pt-BR")} vendidos`,
         row.catalogListing && "Catálogo",

@@ -80,6 +80,34 @@ function fallbackPercent(row: TaxFallbackRow): number {
   } as Partial<SkuAggregation> as SkuAggregation);
 }
 
+/** Soma as linhas da janela por produto (chave = principal; `members` = os MLBs somados). */
+function combineWindowRowsByProduct(
+  rows: TaxWindowRow[],
+  principalOf: (mlItemId: string) => string,
+): Array<TaxWindowRow & { members?: string[] }> {
+  const byKey = new Map<string, TaxWindowRow & { members: string[] }>();
+  const out: Array<TaxWindowRow & { members?: string[] }> = [];
+  for (const row of rows) {
+    if (!row.mlItemId) {
+      out.push(row);
+      continue;
+    }
+    const key = principalOf(row.mlItemId);
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.receita += row.receita;
+      existing.imposto += row.imposto;
+      existing.skus = [...new Set([...existing.skus, ...row.skus])];
+      existing.members.push(row.mlItemId);
+      continue;
+    }
+    const combined = { ...row, mlItemId: key, members: [row.mlItemId] };
+    byKey.set(key, combined);
+    out.push(combined);
+  }
+  return out;
+}
+
 /**
  * Monta o lookup por anúncio: o % das vendas da janela (Σ imposto ÷ Σ
  * receita) quando o anúncio vendeu nela; senão o % do mês mais recente em que
@@ -92,6 +120,12 @@ export function buildRollingTaxLookup(input: {
   windowRows: TaxWindowRow[];
   fallbackRows: TaxFallbackRow[];
   generatedAt: string | null;
+  /**
+   * Opções de venda: o % é do **produto** — Σ imposto ÷ Σ receita de todas
+   * as opções na janela —, e vale para cada opção (uma opção que quase não
+   * vendeu não fica com um % solto nem sem %).
+   */
+  principalOf?: (mlItemId: string) => string;
 }): ProductTaxReportLookup {
   const byMlItemId = new Map<string, ProductTaxFromReport>();
   const bySku = new Map<string, ProductTaxFromReport>();
@@ -101,8 +135,10 @@ export function buildRollingTaxLookup(input: {
   };
 
   const { window, windowSnapshot } = input;
+  const principalOf = input.principalOf;
+  const windowRows = principalOf ? combineWindowRowsByProduct(input.windowRows, principalOf) : input.windowRows;
   if (window && windowSnapshot) {
-    for (const row of input.windowRows) {
+    for (const row of windowRows) {
       if (!(row.receita > 0)) continue;
       const entry: ProductTaxFromReport = {
         taxPercent: roundMoney((row.imposto / row.receita) * 100),
@@ -114,6 +150,9 @@ export function buildRollingTaxLookup(input: {
         periodTo: window.to,
       };
       if (row.mlItemId) byMlItemId.set(row.mlItemId, entry);
+      for (const member of (row as TaxWindowRow & { members?: string[] }).members ?? []) {
+        byMlItemId.set(member, entry);
+      }
       for (const sku of row.skus) setSku(sku, entry);
     }
   }
@@ -126,8 +165,13 @@ export function buildRollingTaxLookup(input: {
       year: row.year,
       month: row.month,
     };
-    // SKU/alias antigo de um anúncio que vendeu na janela aponta pro % da janela.
-    const entry = (row.mlItemId && byMlItemId.get(row.mlItemId)) || own;
+    // SKU/alias antigo de um anúncio que vendeu na janela aponta pro % da janela
+    // (de uma opção de venda: o % do produto).
+    const principal = row.mlItemId && principalOf ? principalOf(row.mlItemId) : null;
+    const entry =
+      (row.mlItemId && byMlItemId.get(row.mlItemId)) ||
+      (principal && byMlItemId.get(principal)) ||
+      own;
     if (row.mlItemId && !byMlItemId.has(row.mlItemId)) {
       byMlItemId.set(row.mlItemId, entry);
     }
@@ -180,11 +224,24 @@ export async function loadProductTaxRolling30d(
       generatedAtByMonth.get(`${row.year}-${row.month}`) ?? metas[0].generatedAt,
   }));
 
-  return buildRollingTaxLookup({
+  const { loadListingGroups } = await import("@/lib/products/listing-groups");
+  const groups = await loadListingGroups(organizationId);
+  const lookup = buildRollingTaxLookup({
     window,
     windowSnapshot,
     windowRows,
     fallbackRows,
     generatedAt: metas[0].generatedAt,
+    principalOf: groups.principalOf,
   });
+  // Opção que não vendeu na janela nem aparece no Tributário: % do produto.
+  for (const options of groups.multiOptionGroups()) {
+    const principal = options.find((option) => option.isPrincipal)?.mlItemId;
+    const entry = principal ? lookup.byMlItemId.get(principal) : undefined;
+    if (!entry) continue;
+    for (const option of options) {
+      if (!lookup.byMlItemId.has(option.mlItemId)) lookup.byMlItemId.set(option.mlItemId, entry);
+    }
+  }
+  return lookup;
 }

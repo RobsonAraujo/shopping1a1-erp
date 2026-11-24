@@ -2,33 +2,11 @@
 
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
-import { listingTypeLabel } from "@/components/stock/stock-format";
+import {
+  listingOptionLabel,
+  type ListingOptionChip,
+} from "@/lib/products/listing-option-label";
 import { cn } from "@/lib/utils";
-
-/** O mínimo de uma opção de venda para mostrar a etiqueta (vem de `ListingOption`). */
-export type ListingOptionChip = {
-  mlItemId: string;
-  listingTypeId: string | null;
-  catalogListing?: boolean | null;
-  registered?: boolean;
-  isPrincipal?: boolean;
-};
-
-/** "Clássico", "Premium"… e Catálogo/Próprio só quando as opções diferem nisso. */
-export function listingOptionLabel(
-  option: ListingOptionChip,
-  options: readonly ListingOptionChip[],
-): string {
-  const type = listingTypeLabel(option.listingTypeId);
-  const catalogValues = new Set(options.map((o) => o.catalogListing ?? null));
-  if (catalogValues.size <= 1 || option.catalogListing == null) return type;
-  return `${type} · ${option.catalogListing ? "Catálogo" : "Próprio"}`;
-}
-
-/** "Clássico + Premium" — resumo das opções de um produto. */
-export function listingOptionsSummary(options: readonly ListingOptionChip[]): string {
-  return options.map((option) => listingOptionLabel(option, options)).join(" + ");
-}
 
 /**
  * Etiquetas das opções de venda de um produto (o mesmo padrão do Estoque):
@@ -89,3 +67,4 @@ export function ListingOptionChips({
     </div>
   );
 }
+

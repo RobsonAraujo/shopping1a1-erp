@@ -297,6 +297,16 @@ export function RotinaActionRow({
           <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-[var(--muted-foreground)]">
             <SegmentTag segment={action.segment} />
             <ListingTypeTag listingTypeId={listing.listingTypeId} />
+            {listing.saleOption ? (
+              <span
+                className="shrink-0 text-[11px] text-[var(--muted-foreground)]"
+                title="Opções de venda do mesmo produto: preço, promoção e ADS são de cada anúncio; a prioridade usa a venda do produto."
+              >
+                {listing.saleOption.isPrincipal
+                  ? `principal · ${listing.saleOption.optionsLabel}`
+                  : `opção de ${listing.saleOption.principalMlItemId}`}
+              </span>
+            ) : null}
             <span className="min-w-0 truncate tabular-nums">{meta.join(" · ")}</span>
           </div>
 

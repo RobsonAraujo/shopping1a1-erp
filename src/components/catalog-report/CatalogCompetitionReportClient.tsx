@@ -26,18 +26,10 @@ import { useIsMobile } from "@/hooks/use-is-mobile";
 import { SortableTh } from "@/components/ui/sortable-th";
 import { useTableSort } from "@/hooks/use-table-sort";
 import { CatalogCompetitionReportSkeleton } from "@/components/catalog-report/CatalogCompetitionReportSkeleton";
+import type { CatalogReportRow } from "@/lib/catalog-report/catalog-report-groups";
+import { listingOptionLabel } from "@/lib/products/listing-option-label";
 
-type ReportItem = {
-  mlItemId: string;
-  titleSnapshot: string | null;
-  skuSnapshot: string | null;
-  imageUrlSnapshot: string | null;
-  mlStatus: string | null;
-  catalogStatus: string | null;
-  catalogSellerPrice: number | null;
-  catalogPriceToWin: number | null;
-  catalogPolledAt: string | null;
-};
+type ReportItem = CatalogReportRow;
 
 type ReportResponse = {
   pollStats: {
@@ -74,6 +66,62 @@ function statusLabel(status: string | null) {
   if (status === "losing") return "Perdendo";
   if (status === "shared") return "Compartilhando";
   return "Sem sinal";
+}
+
+/**
+ * Opções de venda do produto dentro da linha (Clássico, Premium…): cada uma
+ * concorre separada no catálogo, com o próprio status. Quando uma opção
+ * ganha, a outra aparece "perdendo" para ela — não para um concorrente.
+ */
+function CatalogProductOptions({
+  options,
+  expanded,
+  onToggle,
+}: {
+  options: NonNullable<ReportItem["options"]>;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="mt-1">
+      <button
+        type="button"
+        className="text-[11px] font-medium text-[var(--primary)] underline-offset-2 hover:underline"
+        aria-expanded={expanded}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onToggle();
+        }}
+      >
+        {expanded ? "Ocultar opções" : `${options.length} opções de venda`}
+      </button>
+      {expanded ? (
+        <ul className="mt-1 space-y-1">
+          {options.map((option) => (
+            <li key={option.mlItemId} className="flex flex-wrap items-center gap-1.5 text-[11px]">
+              <Link
+                href={`/dashboard/catalog-report/${option.mlItemId}`}
+                className="font-mono text-[var(--muted-foreground)] hover:underline"
+                onClick={(event) => event.stopPropagation()}
+              >
+                {listingOptionLabel(option, options)} · {option.mlItemId}
+              </Link>
+              <span className={cn(statusBadgeClass(option.catalogStatus), "px-1.5 py-0.5 text-[10px]")}>
+                {statusLabel(option.catalogStatus)}
+              </span>
+              {option.siblingWinning && option.catalogStatus !== "winning" ? (
+                <span className="text-[var(--muted-foreground)]">a outra opção está ganhando</span>
+              ) : null}
+              {option.mlStatus && option.mlStatus !== "active" ? (
+                <span className="text-[var(--muted-foreground)]">({option.mlStatus})</span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
 }
 
 function formatLastRun(iso: string | null, timeZone: string): string {
@@ -116,6 +164,14 @@ export function CatalogCompetitionReportClient() {
   const [data, setData] = useState<ReportResponse | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showPaused, setShowPaused] = useState(false);
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleExpanded = (mlItemId: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(mlItemId)) next.delete(mlItemId);
+      else next.add(mlItemId);
+      return next;
+    });
 
   const statusVisibleItems = useMemo(
     () =>
@@ -134,6 +190,8 @@ export function CatalogCompetitionReportClient() {
         sku: row.skuSnapshot,
         title: row.titleSnapshot,
         mlItemId: row.mlItemId,
+        // Qualquer MLB das opções de venda acha o produto.
+        extra: (row.options ?? []).map((option) => option.mlItemId),
       })),
     [statusVisibleItems, searchQuery],
   );
@@ -323,6 +381,13 @@ export function CatalogCompetitionReportClient() {
                           {statusLabel(row.catalogStatus)}
                         </span>
                       </div>
+                      {row.options ? (
+                        <CatalogProductOptions
+                          options={row.options}
+                          expanded={expanded.has(row.mlItemId)}
+                          onToggle={() => toggleExpanded(row.mlItemId)}
+                        />
+                      ) : null}
                     </div>
                   </Link>
                 );
@@ -397,6 +462,15 @@ export function CatalogCompetitionReportClient() {
                               </div>
                             </div>
                           </Link>
+                          {row.options ? (
+                            <div className="pl-[3.25rem]">
+                              <CatalogProductOptions
+                                options={row.options}
+                                expanded={expanded.has(row.mlItemId)}
+                                onToggle={() => toggleExpanded(row.mlItemId)}
+                              />
+                            </div>
+                          ) : null}
                         </td>
                         <td className="py-2 pr-3">
                           <span className={statusBadgeClass(row.catalogStatus)}>

@@ -54,8 +54,14 @@ function SupplierCardHeader({ card, menu }: { card: SupplierBoardCard; menu?: Re
                 <ImageOff className="size-3.5" aria-hidden />
               </span>
             )}
-            <span className="min-w-0 flex-1 truncate text-xs text-[var(--foreground)]">
+            <span
+              className="min-w-0 flex-1 truncate text-xs text-[var(--foreground)]"
+              title={item.optionsSummary ? `Opções de venda: ${item.optionsSummary}` : undefined}
+            >
               {item.sku ?? item.mlItemId}
+              {item.optionsSummary ? (
+                <span className="text-[var(--muted-foreground)]"> · {item.optionsSummary}</span>
+              ) : null}
             </span>
             {item.suggestedQty ? (
               <span className="shrink-0 text-[11px] tabular-nums text-[var(--muted-foreground)]">
