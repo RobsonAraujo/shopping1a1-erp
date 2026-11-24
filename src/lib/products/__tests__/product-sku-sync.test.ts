@@ -7,6 +7,40 @@ function current(entries: [string, string | null][]): Map<string, string | null>
 }
 
 describe("planSkuUpdates", () => {
+  it("two sale options of the same product take the new SKU together, without a false conflict", () => {
+    // Clássico + Premium do mesmo produto físico: o vendedor trocou o SKU no
+    // ML e as duas opções querem o texto novo.
+    const principalOf = (id: string) => (id === "MLB_PREMIUM" ? "MLB_CLASSICO" : id);
+    const { applied, skippedDuplicate } = planSkuUpdates(
+      current([
+        ["MLB_CLASSICO", "CABO 5m"],
+        ["MLB_PREMIUM", "CABO 5m"],
+      ]),
+      [
+        { mlItemId: "MLB_CLASSICO", from: "CABO 5m", to: "CABO 5 metros" },
+        { mlItemId: "MLB_PREMIUM", from: "CABO 5m", to: "CABO 5 metros" },
+      ],
+      principalOf,
+    );
+    assert.equal(applied.length, 2);
+    assert.deepEqual(skippedDuplicate, []);
+  });
+
+  it("still refuses a SKU owned by another physical product", () => {
+    const principalOf = (id: string) => (id === "MLB_PREMIUM" ? "MLB_CLASSICO" : id);
+    const { applied, skippedDuplicate } = planSkuUpdates(
+      current([
+        ["MLB_CLASSICO", "CABO 5m (Catálogo)"],
+        ["MLB_PREMIUM", "CABO 5m (Catálogo)"],
+        ["MLB_PROPRIO", "CABO 5m (Próprio)"],
+      ]),
+      [{ mlItemId: "MLB_PROPRIO", from: "CABO 5m (Próprio)", to: "CABO 5m (Catálogo)" }],
+      principalOf,
+    );
+    assert.deepEqual(applied, []);
+    assert.equal(skippedDuplicate[0]?.conflictsWith, "MLB_CLASSICO");
+  });
+
   it("applies an update whose SKU nobody else owns", () => {
     const updates: SkuSyncUpdate[] = [
       { mlItemId: "MLB1", from: "ANTIGO", to: "NOVO" },

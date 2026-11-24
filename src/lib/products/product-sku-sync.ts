@@ -4,6 +4,7 @@ import { ITEMS_BULK_MAX_IDS, fetchItemsByIds } from "@/lib/mercadolibre/api";
 import { mapWithConcurrency } from "@/lib/mercadolibre/concurrency";
 import { getItemSku } from "@/lib/mercadolibre/item-sku";
 import { upsertListingsFromItems } from "@/lib/mercadolibre/listing-sync";
+import { loadListingGroups } from "@/lib/products/listing-groups";
 import type { ItemBody } from "@/lib/mercadolibre/types";
 import { normalizeProductSku } from "@/lib/pricing/product-pricing";
 
@@ -70,24 +71,34 @@ function emptyResult(): SkuSyncResult {
  * arrumar o passado. E a decisão é deliberadamente conservadora — se A quer o
  * texto que B só vai liberar mais adiante no mesmo lote, A é recusado em vez
  * de arriscar. Como o resultado é reportado, basta rodar de novo.
+ *
+ * Opções de venda (`principalOf`): os cadastros de opções do **mesmo
+ * produto físico** têm o mesmo SKU por natureza (o SKU é do produto), então
+ * entre eles não há conflito — o dono do texto é o produto (o principal),
+ * não o anúncio. Conflito continua sendo com outro produto físico.
  */
 export function planSkuUpdates(
   currentSkuByMlItemId: Map<string, string | null>,
   updates: SkuSyncUpdate[],
+  principalOf: (mlItemId: string) => string = (mlItemId) => mlItemId,
 ): { applied: SkuSyncUpdate[]; skippedDuplicate: SkuSyncSkip[] } {
   const skuOwner = new Map<string, string>();
+  const holders = new Map<string, string[]>();
   for (const [mlItemId, sku] of currentSkuByMlItemId) {
     const key = sku ? normalizeProductSku(sku) : "";
+    if (!key) continue;
     // Duplicata pré-existente: o primeiro dono responde pelo texto.
-    if (key && !skuOwner.has(key)) skuOwner.set(key, mlItemId);
+    if (!skuOwner.has(key)) skuOwner.set(key, principalOf(mlItemId));
+    holders.set(key, [...(holders.get(key) ?? []), mlItemId]);
   }
 
   const applied: SkuSyncUpdate[] = [];
   const skippedDuplicate: SkuSyncSkip[] = [];
 
   for (const update of updates) {
+    const self = principalOf(update.mlItemId);
     const owner = skuOwner.get(update.to);
-    if (owner && owner !== update.mlItemId) {
+    if (owner && owner !== self) {
       skippedDuplicate.push({
         mlItemId: update.mlItemId,
         sku: update.to,
@@ -96,12 +107,16 @@ export function planSkuUpdates(
       continue;
     }
     // Este produto larga o texto antigo ao assumir o novo, liberando-o para
-    // outro produto do mesmo lote (caso de troca de SKU entre anúncios).
+    // outro produto do mesmo lote (caso de troca de SKU entre anúncios) — só
+    // se nenhum outro cadastro do mesmo produto ainda o usa.
     const previousKey = update.from ? normalizeProductSku(update.from) : "";
-    if (previousKey && skuOwner.get(previousKey) === update.mlItemId) {
+    const stillHeld = (holders.get(previousKey) ?? []).some(
+      (id) => id !== update.mlItemId && principalOf(id) === self,
+    );
+    if (previousKey && skuOwner.get(previousKey) === self && !stillHeld) {
       skuOwner.delete(previousKey);
     }
-    skuOwner.set(update.to, update.mlItemId);
+    skuOwner.set(update.to, self);
     applied.push(update);
   }
 
@@ -201,13 +216,17 @@ export async function syncProductSkusFromMl(
   // Colisão precisa ser avaliada contra a organização inteira, não só contra
   // os produtos deste lote: o texto novo pode já pertencer a um produto que
   // nem entrou no sync.
-  const orgProducts = await prisma.product.findMany({
-    where: { organizationId },
-    select: { mlItemId: true, sku: true },
-  });
+  const [orgProducts, groups] = await Promise.all([
+    prisma.product.findMany({
+      where: { organizationId },
+      select: { mlItemId: true, sku: true },
+    }),
+    loadListingGroups(organizationId, { extraItems: items }),
+  ]);
   const { applied, skippedDuplicate } = planSkuUpdates(
     new Map(orgProducts.map((p) => [p.mlItemId, p.sku])),
     updates,
+    groups.principalOf,
   );
   result.skippedDuplicate = skippedDuplicate;
 

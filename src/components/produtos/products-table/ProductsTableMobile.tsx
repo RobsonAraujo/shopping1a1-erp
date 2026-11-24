@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PlanningInfoTrigger } from "@/components/shared/PlanningInfoTrigger";
 import { ProductThumbnail } from "@/components/produtos/ProductThumbnail";
+import { ListingOptionChips } from "@/components/products/ListingOptionChips";
 import { itemListSearchEmptyMessage } from "@/components/shared/ItemListSearch";
 import { formatFinancialMoney, formatFinancialPercent } from "@/lib/pricing/financial-margin";
 import type { ProductsTableProps } from "@/components/produtos/products-table/types";
@@ -34,6 +35,8 @@ export function ProductsTableMobile({
   onToggleActive,
   onSyncSku,
   syncingSkuId,
+  onRemoveDuplicateOption,
+  removingOptionId,
 }: ProductsTableProps) {
   if (loading) {
     return (
@@ -91,6 +94,15 @@ export function ProductsTableMobile({
                       ) : null}
                     </div>
                   ) : null}
+                  <ListingOptionChips
+                    options={product.options}
+                    removingId={removingOptionId}
+                    onRemoveDuplicate={
+                      onRemoveDuplicateOption
+                        ? (option) => onRemoveDuplicateOption(product, option)
+                        : undefined
+                    }
+                  />
                 </div>
               </div>
               <div className="flex shrink-0 gap-1">

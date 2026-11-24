@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/db/db";
 import { fetchOperationalListings } from "@/lib/mercadolibre/api";
-import { getItemSku } from "@/lib/mercadolibre/item-sku";
 import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 import { requireOrganization } from "@/lib/api/api-auth";
+import { loadListingGroups } from "@/lib/products/listing-groups";
+import { planProductImport } from "@/lib/products/product-options";
 
+/**
+ * Anúncios sem cadastro em Meus Produtos — **um por produto físico**: as
+ * opções de venda (Clássico, Premium…) do mesmo produto entram juntas, no
+ * anúncio principal; produto com qualquer opção já cadastrada não é sugerido.
+ */
 export async function GET() {
   const auth = await requireOrganization();
   if (!auth.ok) {
@@ -14,23 +19,10 @@ export async function GET() {
 
   try {
     const items = await fetchOperationalListings(token, userId, organizationId);
-
-    const existing = await prisma.product.findMany({
-      where: { organizationId, mlItemId: { in: items.map((item) => item.id) } },
-      select: { mlItemId: true },
-    });
-    const existingSet = new Set(existing.map((row) => row.mlItemId));
-
-    const suggestions = items
-      .filter((item) => !existingSet.has(item.id))
-      .map((item) => ({ mlItemId: item.id, sku: getItemSku(item) }))
-      .sort((a, b) =>
-        (a.sku ?? a.mlItemId).localeCompare(b.sku ?? b.mlItemId, "pt-BR", {
-          sensitivity: "base",
-        }),
-      );
-
-    return NextResponse.json({ suggestions });
+    // O UP vem no corpo do anúncio: agrupa até a opção que o ERP ainda não viu.
+    const groups = await loadListingGroups(organizationId, { extraItems: items });
+    const plan = planProductImport(items, groups);
+    return NextResponse.json(plan);
   } catch (e) {
     logServerError("api/products/suggestions GET", e);
     return NextResponse.json(apiErrorPayload(e, "products_suggestions_failed"), {

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db/db";
 import type { Product } from "@/generated/prisma/client";
 import { getSkuSupplier } from "@/lib/mercadolibre/item-sku";
+import { loadListingGroups, type ListingGroups } from "@/lib/products/listing-groups";
 
 export type ProductResolution = {
   product: Product | null;
@@ -18,11 +19,12 @@ export type ProductResolverMaps = {
 /**
  * Lógica pura de resolução de produto para uma linha de venda.
  *
- * Identidade = `mlItemId` (o "MLB..." do Mercado Livre) direto: `Product` é
- * cadastrado 1:1 por anúncio, sem tabela de vínculo nem matching por texto
- * de SKU. Sem `Product` cadastrado para o `mlItemId`, a linha fica sem
- * produto resolvido (sinalizada como alerta pelos consumidores, nunca
- * bloqueia geração de relatório).
+ * Identidade = `mlItemId` (o "MLB..." do Mercado Livre) direto, sem tabela
+ * de vínculo nem matching por texto de SKU. Opção de venda (outro MLB do
+ * mesmo produto físico) resolve para o cadastro do anúncio principal — o
+ * mapa já vem montado assim por `loadProductResolverMaps`. Sem cadastro, a
+ * linha fica sem produto resolvido (sinalizada como alerta pelos
+ * consumidores, nunca bloqueia geração de relatório).
  */
 export function resolveProductForLine(
   line: OrderLineRef,
@@ -45,26 +47,29 @@ export function resolveProductForLine(
 export async function loadProductResolverMaps(
   organizationId: string,
   lines: OrderLineRef[],
-  options?: { excludeInactive?: boolean },
+  options?: { excludeInactive?: boolean; groups?: ListingGroups },
 ): Promise<ProductResolverMaps> {
   const itemIds = [
     ...new Set(lines.map((l) => l.itemId).filter((v): v is string => Boolean(v))),
   ];
-
-  const products =
-    itemIds.length > 0
-      ? await prisma.product.findMany({
-          where: {
-            organizationId,
-            mlItemId: { in: itemIds },
-            ...(options?.excludeInactive ? { active: true } : {}),
-          },
-        })
-      : [];
-
   const productByMlItemId = new Map<string, Product>();
-  for (const product of products) {
-    if (product.mlItemId) productByMlItemId.set(product.mlItemId, product);
+  if (itemIds.length === 0) return { productByMlItemId };
+
+  // Opção de venda usa o cadastro do principal; o cadastro da própria opção
+  // (duplicado antigo) só vale se o principal não tiver.
+  const groups = options?.groups ?? (await loadListingGroups(organizationId));
+  const principalByItemId = new Map(itemIds.map((id) => [id, groups.principalOf(id)]));
+  const products = await prisma.product.findMany({
+    where: {
+      organizationId,
+      mlItemId: { in: [...new Set([...itemIds, ...principalByItemId.values()])] },
+      ...(options?.excludeInactive ? { active: true } : {}),
+    },
+  });
+  const byId = new Map(products.map((product) => [product.mlItemId, product]));
+  for (const itemId of itemIds) {
+    const product = byId.get(principalByItemId.get(itemId) ?? itemId) ?? byId.get(itemId);
+    if (product) productByMlItemId.set(itemId, product);
   }
 
   return { productByMlItemId };
@@ -174,9 +179,10 @@ export async function createProductResolver(
 export async function resolveEffectiveSkuByItemId(
   organizationId: string,
   items: { id: string; sku: string | null }[],
+  options?: { groups?: ListingGroups },
 ): Promise<Map<string, string | null>> {
   const lines: OrderLineRef[] = items.map((item) => ({ itemId: item.id }));
-  const maps = await loadProductResolverMaps(organizationId, lines);
+  const maps = await loadProductResolverMaps(organizationId, lines, { groups: options?.groups });
 
   const result = new Map<string, string | null>();
   for (const item of items) {

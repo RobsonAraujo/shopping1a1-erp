@@ -10,6 +10,7 @@ import type {
   ProductTaxBasis,
   ProductTaxReportLookup,
 } from "@/lib/products/product-tax-from-report";
+import { loadListingGroups, type ListingGroups, type ListingOption } from "@/lib/products/listing-groups";
 import { loadProductResolverMaps, resolveProductForLine } from "@/lib/products/product-resolver";
 import {
   DEFAULT_WHOLESALE_REDUCTIONS,
@@ -74,6 +75,11 @@ export type ProductView = ProductRecordForPricing & {
   active: boolean;
   /** `true` = veio do import em massa e ainda não teve custo real preenchido. */
   needsCostReview: boolean;
+  /**
+   * Opções de venda do produto (outros MLBs do mesmo produto físico), o
+   * principal primeiro. Só quando há mais de uma; o cadastro vale para todas.
+   */
+  options?: ListingOption[];
 };
 
 export function buildProductView(
@@ -293,10 +299,31 @@ export function indexProductPricingLookup(
   return { byMlItemId, bySku };
 }
 
+/**
+ * Opções de venda: o anúncio que é opção de outro (mesmo produto físico)
+ * passa a responder com o cadastro do principal em `byMlItemId`; e, no
+ * índice por SKU ("primeiro que chega"), o cadastro do principal chega
+ * antes do cadastro duplicado de uma opção.
+ */
+export function applyPrincipalsToPricingLookup(
+  lookup: ProductPricingLookup,
+  requestedMlItemIds: readonly string[],
+  groups: ListingGroups,
+): ProductPricingLookup {
+  for (const id of requestedMlItemIds) {
+    const principal = groups.principalOf(id);
+    if (principal === id) continue;
+    const pricing = lookup.byMlItemId.get(principal);
+    if (pricing) lookup.byMlItemId.set(id, pricing);
+  }
+  return lookup;
+}
+
 export async function loadProductsMapBySku(
   organizationId: string,
   skus: string[],
   mlItemIds: string[] = [],
+  options?: { groups?: ListingGroups },
 ): Promise<ProductPricingLookup> {
   const normalized = [
     ...new Set(skus.map((s) => normalizeProductSku(s)).filter(Boolean)),
@@ -306,7 +333,12 @@ export async function loadProductsMapBySku(
     return { byMlItemId: new Map(), bySku: new Map() };
   }
 
-  const pisCofins = await getCompanyPisCofinsPercent(organizationId);
+  const [pisCofins, groups] = await Promise.all([
+    getCompanyPisCofinsPercent(organizationId),
+    options?.groups ?? loadListingGroups(organizationId),
+  ]);
+  const principalIds = uniqueMlItemIds.map((id) => groups.principalOf(id));
+  const lookupIds = [...new Set([...uniqueMlItemIds, ...principalIds])];
   const products = await prisma.product.findMany({
     where: {
       organizationId,
@@ -316,14 +348,19 @@ export async function loadProductsMapBySku(
       needsCostReview: false,
       OR: [
         ...(normalized.length > 0 ? [{ sku: { in: normalized } }] : []),
-        ...(uniqueMlItemIds.length > 0
-          ? [{ mlItemId: { in: uniqueMlItemIds } }]
-          : []),
+        ...(lookupIds.length > 0 ? [{ mlItemId: { in: lookupIds } }] : []),
       ],
     },
   });
+  const principalsFirst = [...products].sort(
+    (a, b) => Number(groups.isOption(a.mlItemId)) - Number(groups.isOption(b.mlItemId)),
+  );
 
-  return indexProductPricingLookup(products, pisCofins);
+  return applyPrincipalsToPricingLookup(
+    indexProductPricingLookup(principalsFirst, pisCofins),
+    uniqueMlItemIds,
+    groups,
+  );
 }
 
 function productToStockReportInfo(product: {

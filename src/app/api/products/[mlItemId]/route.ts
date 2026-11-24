@@ -16,6 +16,8 @@ import { productDeleteBlockedMessage } from "@/lib/products/product-delete-guard
 import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 import { requireOrganization } from "@/lib/api/api-auth";
 import { parseJsonBody } from "@/lib/api/api-validation";
+import { alignStockPrimaries, loadListingGroups } from "@/lib/products/listing-groups";
+import { productOptionsView } from "@/lib/products/product-options";
 
 type RouteContext = { params: Promise<{ mlItemId: string }> };
 
@@ -132,22 +134,55 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       logServerError("api/products/[mlItemId] PATCH lot cost sync", e);
     }
 
+    // Opções de venda: um cadastro duplicado antigo (com custo) de outra
+    // opção do mesmo produto acompanha o principal, para nunca divergir. Os
+    // pendentes ficam como estão (sem efeito; o usuário remove).
+    const groups = await loadListingGroups(organizationId);
+    const duplicateIds = groups.isOption(mlItemId)
+      ? []
+      : groups
+          .optionsOf(mlItemId)
+          .filter((o) => !o.isPrincipal && o.registered && !o.pendingCost)
+          .map((o) => o.mlItemId);
+    if (duplicateIds.length > 0) {
+      await prisma.product.updateMany({
+        where: { organizationId, mlItemId: { in: duplicateIds } },
+        data: {
+          ncm: product.ncm,
+          unitCostNf: product.unitCostNf,
+          purchaseIcmsPercent: product.purchaseIcmsPercent,
+          hasIcmsSt: product.hasIcmsSt,
+          purchaseCostWithSt: product.purchaseCostWithSt,
+          ipiPercent: product.ipiPercent,
+          extraCosts: product.extraCosts,
+          isMonophasic: product.isMonophasic,
+          saleIcmsPercent: product.saleIcmsPercent,
+          isImported: product.isImported,
+          pmaPrice: product.pmaPrice,
+          supplierId: product.supplierId,
+        },
+      });
+    }
+
     const imageUrl = await listingImageUrlForMlItemId(
       organizationId,
       product.mlItemId,
     );
     return NextResponse.json({
-      product: buildProductView(
-        product,
-        settings.pisCofinsPercent,
-        undefined,
-        {
-          taxRegime: settings.taxRegime,
-          simplesAliquotaEfetivaPercent: settings.simplesAliquotaEfetivaPercent,
-        },
-        imageUrl,
-        product.supplier,
-      ),
+      product: {
+        ...buildProductView(
+          product,
+          settings.pisCofinsPercent,
+          undefined,
+          {
+            taxRegime: settings.taxRegime,
+            simplesAliquotaEfetivaPercent: settings.simplesAliquotaEfetivaPercent,
+          },
+          imageUrl,
+          product.supplier,
+        ),
+        options: productOptionsView(groups, product.mlItemId),
+      },
       levelingSuggestion:
         changedFields.length > 0
           ? {
@@ -210,6 +245,12 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     }
 
     await prisma.product.delete({ where: { mlItemId, organizationId } });
+    // O principal do produto pode passar para outra opção (ou para o estoque).
+    try {
+      await alignStockPrimaries(organizationId);
+    } catch (e) {
+      logServerError("api/products/[mlItemId] DELETE alignStockPrimaries", e);
+    }
     return NextResponse.json({ ok: true });
   } catch (e) {
     logServerError("api/products/[mlItemId] DELETE", e);

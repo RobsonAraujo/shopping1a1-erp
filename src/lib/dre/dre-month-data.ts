@@ -38,6 +38,7 @@ import {
 import { loadDreTaxRates } from "@/lib/dre/dre-sales-tax-data";
 import { loadProductsMapBySku } from "@/lib/products/product-data";
 import { resolveEffectiveSkuByItemId } from "@/lib/products/product-resolver";
+import { loadListingGroups } from "@/lib/products/listing-groups";
 import { roundMoney } from "@/lib/pricing/financial-margin";
 import { getItemSku, isKitItem } from "@/lib/mercadolibre/item-sku";
 import {
@@ -148,6 +149,8 @@ async function fetchItemsWithCache(
  */
 type ErpCostContext = {
   itemById: Map<string, ItemBody>;
+  /** Anúncio principal (opções de venda): o nivelamento do principal vale para a opção. */
+  principalOf: (mlItemId: string) => string;
   skuByItemId: Map<string, string | null>;
   kitsByMlItemId: Map<string, KitComponent[]>;
   pricingByMlItemIdBase: Map<string, ResolvedProductPricing>;
@@ -171,17 +174,22 @@ async function loadErpCostContext(input: {
   const itemIds = [...new Set(input.itemIds)];
   const items = await fetchItemsWithCache(accessToken, itemIds, input.itemCache);
   const itemById = new Map(items.map((item) => [item.id, item]));
+  // Opções de venda: a venda de uma opção usa o cadastro (e o nivelamento)
+  // do anúncio principal. O UP do corpo do anúncio cobre a opção que ainda
+  // não passou pela rodada de vínculo.
+  const groups = await loadListingGroups(organizationId, { extraItems: items });
   // SKU "efetivo": segue o cadastro do Product vinculado ao anúncio via
   // mlItemId quando existe (estável mesmo se o SKU mudar no anúncio ML);
   // cai para o SKU ao vivo do anúncio quando não há vínculo ainda.
   const skuByItemId = await resolveEffectiveSkuByItemId(
     organizationId,
     items.map((item) => ({ id: item.id, sku: getItemSku(item) })),
+    { groups },
   );
   const kitItemIds = items
     .filter((item) => !getItemSku(item) && isKitItem(item))
     .map((item) => item.id);
-  const kitsByMlItemId = await loadKitsByMlItemId(organizationId, kitItemIds);
+  const kitsByMlItemId = await loadKitsByMlItemId(organizationId, kitItemIds, { groups });
   const kitComponentSkus = [...kitsByMlItemId.values()].flatMap((components) =>
     components.map((c) => c.sku),
   );
@@ -190,12 +198,13 @@ async function loadErpCostContext(input: {
     .map((sku) => normalizeProductSku(sku))
     .concat(kitComponentSkus);
   const [pricingLookup, taxRates, levelings] = await Promise.all([
-    loadProductsMapBySku(organizationId, skus, itemIds),
+    loadProductsMapBySku(organizationId, skus, itemIds, { groups }),
     loadDreTaxRates(organizationId, sellerId, year, month),
     loadLevelingsOverlappingMonth(organizationId, year, month),
   ]);
   return {
     itemById,
+    principalOf: groups.principalOf,
     skuByItemId,
     kitsByMlItemId,
     pricingByMlItemIdBase: pricingLookup.byMlItemId,
@@ -233,6 +242,7 @@ function computeErpCostsForLines(
 ): ErpLineCosts {
   const {
     itemById,
+    principalOf,
     skuByItemId,
     kitsByMlItemId,
     pricingByMlItemIdBase,
@@ -321,14 +331,21 @@ function computeErpCostsForLines(
     // DreProductCostLeveling.sku fazia o nivelamento sumir sem aviso quando o
     // vendedor trocava o SKU no ML.
     const pricingBaseForItem = pricingByMlItemIdBase.get(line.itemId);
-    const leveledCostForItem = resolveLevelingCostForOrderDate(
-      levelings,
-      line.itemId,
-      normalizedSku,
-      line.orderDateYmd ?? null,
-      year,
-      month,
-    );
+    const levelingCostFor = (mlItemId: string) =>
+      resolveLevelingCostForOrderDate(
+        levelings,
+        mlItemId,
+        normalizedSku,
+        line.orderDateYmd ?? null,
+        year,
+        month,
+      );
+    // Opção de venda: o nivelamento do principal vale para ela; o da própria
+    // opção (cadastro duplicado antigo) fica de reserva.
+    const principalId = principalOf(line.itemId);
+    const leveledCostForItem =
+      (principalId !== line.itemId ? levelingCostFor(principalId) : null) ??
+      levelingCostFor(line.itemId);
     const isLeveledForItem = leveledCostForItem !== null;
     const pricing: ResolvedProductPricing | undefined = isLeveledForItem
       ? {

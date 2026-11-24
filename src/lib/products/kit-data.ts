@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/db";
+import { loadListingGroups, type ListingGroups } from "@/lib/products/listing-groups";
 import { normalizeProductSku, type ResolvedProductPricing } from "@/lib/pricing/product-pricing";
 
 export type KitComponent = { sku: string; quantity: number };
@@ -11,17 +12,27 @@ export type KitPricingResolution = {
   missingSkus: string[];
 };
 
-/** Cadastro manual mlItemId → SKUs componentes, usado quando o item é um kit sem SKU próprio. */
+/**
+ * Cadastro manual mlItemId → SKUs componentes, usado quando o item é um kit
+ * sem SKU próprio. Opção de venda de um kit (outro MLB do mesmo kit) usa a
+ * composição cadastrada no anúncio principal.
+ */
 export async function loadKitsByMlItemId(
   organizationId: string,
   mlItemIds: string[],
+  options?: { groups?: ListingGroups },
 ): Promise<Map<string, KitComponent[]>> {
   if (mlItemIds.length === 0) return new Map();
+  const groups = options?.groups ?? (await loadListingGroups(organizationId));
+  const principalById = new Map(mlItemIds.map((id) => [id, groups.principalOf(id)]));
   const kits = await prisma.kit.findMany({
-    where: { organizationId, mlItemId: { in: mlItemIds } },
+    where: {
+      organizationId,
+      mlItemId: { in: [...new Set([...mlItemIds, ...principalById.values()])] },
+    },
     include: { items: { include: { product: { select: { sku: true } } } } },
   });
-  return new Map(
+  const componentsByKit = new Map(
     kits.map((kit) => [
       kit.mlItemId,
       kit.items.map((item) => ({
@@ -36,6 +47,12 @@ export async function loadKitsByMlItemId(
       })),
     ]),
   );
+  const result = new Map<string, KitComponent[]>();
+  for (const id of mlItemIds) {
+    const components = componentsByKit.get(principalById.get(id) ?? id) ?? componentsByKit.get(id);
+    if (components) result.set(id, components);
+  }
+  return result;
 }
 
 /** Soma custo/extras/alíquota dos componentes do kit já cadastrados em Meus produtos. */

@@ -1,4 +1,5 @@
 import type { TableSort } from "@/components/ui/sortable-th";
+import type { ListingOptionChip } from "@/components/products/ListingOptionChips";
 import type { ProductView } from "@/lib/products/product-data";
 
 export type ProductSortKey = "sku" | "ncm" | "pricingCost" | "taxPercent" | "pmaPrice";
@@ -21,4 +22,8 @@ export type ProductsTableProps = {
   onSyncSku: (mlItemId: string) => void;
   /** mlItemId com sync de SKU em andamento — desabilita o botão e gira o ícone. */
   syncingSkuId: string | null;
+  /** Remove o cadastro duplicado de uma opção de venda (o produto fica no principal). */
+  onRemoveDuplicateOption?: (product: ProductView, option: ListingOptionChip) => void;
+  /** mlItemId da opção com remoção em andamento. */
+  removingOptionId?: string | null;
 };

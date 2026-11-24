@@ -6,6 +6,7 @@ import {
   Boxes,
   Coins,
   Download,
+  Info,
   Landmark,
   Percent,
   Plus,
@@ -58,6 +59,10 @@ import { readApiError } from "@/lib/api/api-client-error";
 import { filterByItemListSearch } from "@/lib/item-list-search";
 import type { ProductView } from "@/lib/products/product-data";
 import {
+  listingOptionsSummary,
+  type ListingOptionChip,
+} from "@/components/products/ListingOptionChips";
+import {
   formatFinancialMoney,
   formatFinancialPercent,
 } from "@/lib/pricing/financial-margin";
@@ -75,7 +80,14 @@ type ProductsResponse = {
   taxReportGeneratedAt: string | null;
   /** Janela de 30 dias do imposto (null = Tributário ainda sem totais diários). */
   taxWindow: { from: string; to: string } | null;
+  /** Cadastros de opção de venda (mostrados dentro do principal, sem efeito nos cálculos). */
+  duplicateOptionCount?: number;
+  /** Desses, os ainda com custo pendente (vindos do "Importar todos"). */
+  pendingDuplicateOptionCount?: number;
 };
+
+/** Opções de venda que um cadastro novo cobre (vindas da sugestão de importação). */
+type CreateOptions = Array<{ mlItemId: string; listingTypeId: string | null }>;
 
 const DATE_TIME_FORMATTER = new Intl.DateTimeFormat("pt-BR", {
   day: "2-digit",
@@ -295,6 +307,7 @@ function ProductFormModal({
   initial,
   title,
   taxRegime,
+  createOptions,
   onClose,
   onSaved,
   onLevelingSuggested,
@@ -302,6 +315,8 @@ function ProductFormModal({
   initial: ProductFormState;
   title: string;
   taxRegime: TaxRegime;
+  /** Opções de venda do produto: o cadastro vale para todas. */
+  createOptions?: CreateOptions;
   onClose: () => void;
   onSaved: (product: ProductView) => void;
   onLevelingSuggested?: (suggestion: {
@@ -514,9 +529,15 @@ function ProductFormModal({
                   setForm((f) => ({ ...f, mlItemId: e.target.value.trim() }))
                 }
               />
-              {!isEdit ? (
+              {!isEdit && createOptions && createOptions.length > 1 ? (
                 <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
-                  O custo é vinculado a este anúncio específico.
+                  Este produto tem {createOptions.length} opções de venda (
+                  {listingOptionsSummary(createOptions)}). O cadastro vale para todas.
+                </p>
+              ) : !isEdit ? (
+                <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
+                  O custo é vinculado a este produto. Se ele tiver outras opções de venda
+                  (Clássico, Premium…), o cadastro vale para todas.
                 </p>
               ) : null}
             </div>
@@ -723,10 +744,17 @@ export function ProductsClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modal, setModal] = useState<
-    | { mode: "create"; form: ProductFormState }
+    | { mode: "create"; form: ProductFormState; options?: CreateOptions }
     | { mode: "edit"; form: ProductFormState }
     | null
   >(null);
+  const [pendingOptionRemoval, setPendingOptionRemoval] = useState<{
+    product: ProductView;
+    option: ListingOptionChip;
+  } | null>(null);
+  const [removingOptionId, setRemovingOptionId] = useState<string | null>(null);
+  const [confirmRemovePending, setConfirmRemovePending] = useState(false);
+  const [removingPending, setRemovingPending] = useState(false);
   const [importing, setImporting] = useState(false);
   const [syncingSkuId, setSyncingSkuId] = useState<string | null>(null);
   const [syncingAllSkus, setSyncingAllSkus] = useState(false);
@@ -787,7 +815,8 @@ export function ProductsClient() {
       filterByItemListSearch(sortedProducts, searchQuery, (product) => ({
         sku: product.sku,
         mlItemId: product.mlItemId,
-        extra: [product.ncm],
+        // Qualquer MLB das opções de venda acha o produto.
+        extra: [product.ncm, ...(product.options ?? []).map((o) => o.mlItemId)],
       })),
     [sortedProducts, searchQuery],
   );
@@ -826,7 +855,7 @@ export function ProductsClient() {
         return;
       }
       const json = (await res.json()) as {
-        suggestions: { mlItemId: string; sku: string | null }[];
+        suggestions: { mlItemId: string; sku: string | null; options?: CreateOptions }[];
       };
       if (json.suggestions.length === 0) {
         // Não é falha: é resposta válida a "importar anúncio".
@@ -837,6 +866,7 @@ export function ProductsClient() {
       setModal({
         mode: "create",
         form: emptyForm(first.mlItemId, first.sku ?? ""),
+        options: first.options,
       });
     } catch {
       toastError("Falha de rede ao importar anúncios.");
@@ -855,7 +885,9 @@ export function ProductsClient() {
       const exists = prev.products.some((p) => p.mlItemId === product.mlItemId);
       const products = exists
         ? prev.products.map((p) =>
-            p.mlItemId === product.mlItemId ? product : p,
+            p.mlItemId === product.mlItemId
+              ? { ...product, options: product.options ?? p.options }
+              : p,
           )
         : [...prev.products, product];
       return { ...prev, products };
@@ -994,6 +1026,50 @@ export function ProductsClient() {
     if (!pendingDeactivate) return;
     await setProductActive(pendingDeactivate.mlItemId, false);
     setPendingDeactivate(null);
+  }
+
+  async function confirmRemoveOption() {
+    if (!pendingOptionRemoval) return;
+    const { option } = pendingOptionRemoval;
+    setPendingOptionRemoval(null);
+    setRemovingOptionId(option.mlItemId);
+    try {
+      const res = await fetch(
+        `/api/products/${encodeURIComponent(option.mlItemId)}/remove-option`,
+        { method: "POST" },
+      );
+      if (!res.ok) {
+        toastError(await readApiError(res, "product_option_remove_failed"));
+        return;
+      }
+      toast.success("Cadastro da opção removido. O produto continua cadastrado no principal.");
+      await load();
+    } catch {
+      toastError("Falha de rede ao remover o cadastro da opção.");
+    } finally {
+      setRemovingOptionId(null);
+    }
+  }
+
+  async function removePendingOptions() {
+    setConfirmRemovePending(false);
+    setRemovingPending(true);
+    try {
+      const res = await fetch("/api/products/remove-pending-options", { method: "POST" });
+      if (!res.ok) {
+        toastError(await readApiError(res, "product_option_remove_failed"));
+        return;
+      }
+      const json = (await res.json()) as { removed: number };
+      toast.success(
+        `${json.removed} ${json.removed === 1 ? "cadastro de opção removido" : "cadastros de opção removidos"}. Os produtos continuam cadastrados no principal.`,
+      );
+      await load();
+    } catch {
+      toastError("Falha de rede ao remover os cadastros das opções.");
+    } finally {
+      setRemovingPending(false);
+    }
   }
 
   async function confirmDelete() {
@@ -1170,6 +1246,34 @@ export function ProductsClient() {
         onImported={() => void load()}
       />
 
+      {(data?.pendingDuplicateOptionCount ?? 0) > 0 ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--muted)]/30 px-3 py-2.5 text-sm text-[var(--muted-foreground)]">
+          <p className="flex min-w-0 items-start gap-2">
+            <Info className="mt-0.5 size-4 shrink-0 opacity-70" aria-hidden />
+            <span>
+              {data?.pendingDuplicateOptionCount}{" "}
+              {data?.pendingDuplicateOptionCount === 1
+                ? "opção de venda foi cadastrada como produto à parte"
+                : "opções de venda foram cadastradas como produto à parte"}{" "}
+              (custo pendente). O cadastro do produto principal já vale para elas: esses
+              cadastros não entram em nenhum cálculo e aparecem como &quot;cadastro
+              duplicado&quot; dentro do produto.
+            </span>
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={removingPending}
+            onClick={() => setConfirmRemovePending(true)}
+          >
+            {removingPending
+              ? "Removendo…"
+              : `Remover ${data?.pendingDuplicateOptionCount === 1 ? "o cadastro duplicado" : `os ${data?.pendingDuplicateOptionCount} cadastros duplicados`}`}
+          </Button>
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ItemListSearch
           value={searchQuery}
@@ -1226,11 +1330,16 @@ export function ProductsClient() {
           )
         }
         onToggleActive={onToggleActive}
+        onRemoveDuplicateOption={(product, option) =>
+          setPendingOptionRemoval({ product, option })
+        }
+        removingOptionId={removingOptionId}
       />
 
       {modal ? (
         <ProductFormModal
           initial={modal.form}
+          createOptions={modal.mode === "create" ? modal.options : undefined}
           title={
             modal.mode === "create"
               ? "Novo produto"
@@ -1297,6 +1406,48 @@ export function ProductsClient() {
               variant="destructive"
               onClick={() => void confirmDelete()}
             >
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={pendingOptionRemoval != null}
+        onOpenChange={(next) => !next && setPendingOptionRemoval(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover o cadastro desta opção?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingOptionRemoval
+                ? `O anúncio ${pendingOptionRemoval.option.mlItemId} continua no Mercado Livre e continua agrupado no produto "${pendingOptionRemoval.product.sku ?? pendingOptionRemoval.product.mlItemId}" (${pendingOptionRemoval.product.mlItemId}), que já tem o cadastro que vale para todas as opções. Sai só o cadastro duplicado; kits, nivelamentos e fornecedor que apontavam para a opção passam para o principal.`
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void confirmRemoveOption()}>
+              Remover cadastro da opção
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={confirmRemovePending}
+        onOpenChange={(next) => !next && setConfirmRemovePending(false)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover os cadastros duplicados pendentes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`Saem ${data?.pendingDuplicateOptionCount ?? 0} cadastros de opção de venda que ainda estão com custo pendente (R$ 0,00). Os anúncios continuam no Mercado Livre e agrupados nos produtos principais, que mantêm o cadastro. Cadastros de opção com custo preenchido não entram nesta remoção.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void removePendingOptions()}>
               Remover
             </AlertDialogAction>
           </AlertDialogFooter>

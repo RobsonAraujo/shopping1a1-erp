@@ -15,6 +15,7 @@ import {
   type FulfillmentRead,
   type UserProductStockRead,
 } from "@/lib/stock/stock-ml-read";
+import { alignStockPrimaries } from "@/lib/products/listing-groups";
 import { ensureStockItemsForItems } from "@/lib/stock/stock-items";
 
 /**
@@ -201,9 +202,16 @@ export async function refreshStockPositions(input: {
  * liga. Sem isto, um produto recém-anunciado só apareceria no Estoque na
  * primeira venda, e não daria para registrar a entrada dele antes.
  *
- * Roda junto com a releitura completa (no máximo a cada 2 h, ver
- * `stock-sync.ts`). Custo: a busca de anúncios do seller (1 chamada a cada 50)
- * e o `/items/bulk` só dos que faltam.
+ * Também é a base das opções de venda (`listing-groups.ts`): lê de novo os
+ * cadastros (Product/Kit) cujo anúncio ainda não tem UP gravado, mesmo
+ * encerrados, e no fim alinha o principal de cada item ao anúncio
+ * cadastrado (`alignStockPrimaries`).
+ *
+ * Roda junto com a releitura completa do Estoque (no máximo a cada 2 h, ver
+ * `stock-sync.ts`) e, para toda organização, na rodada de vínculo do
+ * segundo plano (`maybeLinkListingGroups`, a cada 6 h). Custo: a busca de
+ * anúncios do seller (1 chamada a cada 50) e o `/items/bulk` só dos que
+ * faltam.
  */
 export async function linkNewSellerListings(input: {
   organizationId: string;
@@ -216,18 +224,33 @@ export async function linkNewSellerListings(input: {
     fetchAllUserItemIds(accessToken, mlUserId, { status: "paused" }),
   ]);
   const ids = [...new Set([...active, ...paused])];
-  if (ids.length === 0) return 0;
-  const [linked, kits] = await Promise.all([
+  const [linked, kits, products, listingsWithUp] = await Promise.all([
     prisma.listing.findMany({
       where: { organizationId, mlItemId: { in: ids }, stockItemId: { not: null } },
       select: { mlItemId: true },
     }),
     // Kit não vira item (a venda baixa os componentes): não precisa reler.
-    prisma.kit.findMany({ where: { organizationId, mlItemId: { in: ids } }, select: { mlItemId: true } }),
+    prisma.kit.findMany({ where: { organizationId }, select: { mlItemId: true } }),
+    prisma.product.findMany({ where: { organizationId }, select: { mlItemId: true } }),
+    prisma.listing.findMany({
+      where: { organizationId, userProductId: { not: null } },
+      select: { mlItemId: true },
+    }),
   ]);
-  const known = new Set([...linked, ...kits].map((r) => r.mlItemId));
+  const kitIds = new Set(kits.map((k) => k.mlItemId));
+  const known = new Set([...linked.map((r) => r.mlItemId), ...kitIds]);
   const missing = ids.filter((id) => !known.has(id));
-  if (missing.length === 0) return 0;
-  await ensureStockItemsForItems(organizationId, await fetchItemsByIdsBatched(accessToken, missing));
-  return missing.length;
+  // Cadastro cujo anúncio ainda não tem UP (encerrado, ou nunca lido): entra
+  // uma vez para o grupo das opções de venda ficar completo.
+  const withUp = new Set(listingsWithUp.map((l) => l.mlItemId));
+  const missingSet = new Set(missing);
+  const backfill = [...products.map((p) => p.mlItemId), ...kitIds].filter(
+    (id) => !withUp.has(id) && !missingSet.has(id),
+  );
+  const toRead = [...missing, ...backfill];
+  if (toRead.length > 0) {
+    await ensureStockItemsForItems(organizationId, await fetchItemsByIdsBatched(accessToken, toRead));
+  }
+  await alignStockPrimaries(organizationId);
+  return toRead.length;
 }

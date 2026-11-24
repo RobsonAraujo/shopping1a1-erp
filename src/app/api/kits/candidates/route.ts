@@ -5,6 +5,7 @@ import { isKitItem } from "@/lib/mercadolibre/item-sku";
 import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 import { requireOrganization } from "@/lib/api/api-auth";
+import { loadListingGroups } from "@/lib/products/listing-groups";
 
 export type KitCandidate = {
   mlItemId: string;
@@ -23,14 +24,23 @@ export async function GET() {
     const items = await fetchOperationalListings(token, userId, organizationId);
     const kitItems = items.filter((item) => isKitItem(item));
 
-    const registered = await prisma.kit.findMany({
-      where: { organizationId, mlItemId: { in: kitItems.map((item) => item.id) } },
-      select: { mlItemId: true },
-    });
+    const [registered, groups] = await Promise.all([
+      prisma.kit.findMany({ where: { organizationId }, select: { mlItemId: true } }),
+      loadListingGroups(organizationId, { extraItems: kitItems }),
+    ]);
     const registeredSet = new Set(registered.map((row) => row.mlItemId));
 
+    // Opções de venda de um kit (Clássico, Premium… do mesmo kit) usam a
+    // composição cadastrada no principal: um candidato por kit físico.
+    const seen = new Set<string>();
     const candidates: KitCandidate[] = kitItems
-      .filter((item) => !registeredSet.has(item.id))
+      .filter((item) => {
+        const principal = groups.principalOf(item.id);
+        if (registeredSet.has(item.id) || registeredSet.has(principal)) return false;
+        if (seen.has(principal)) return false;
+        seen.add(principal);
+        return true;
+      })
       .map((item) => ({
         mlItemId: item.id,
         title: item.title,

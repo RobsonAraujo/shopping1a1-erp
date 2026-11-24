@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/db";
+import { loadListingGroups } from "@/lib/products/listing-groups";
 import {
   decimalToNumber,
   deriveStatusFromPriceToWin,
@@ -132,8 +133,13 @@ async function loadPurchaseBasis(
   const sku = component ? component.sku : row.sku;
   const units = component ? component.quantity : 1;
   const normalizedSku = sku ? normalizeProductSku(sku) : null;
+  // Opção de venda: o cadastro é o do anúncio principal (mesma regra da leitura).
+  const principal = component
+    ? mlItemId
+    : (await loadListingGroups(organizationId)).principalOf(mlItemId);
+  const ownIds = component ? [] : [...new Set([principal, mlItemId])];
   const or = [
-    ...(component ? [] : [{ mlItemId }]),
+    ...ownIds.map((id) => ({ mlItemId: id })),
     ...(normalizedSku ? [{ sku: normalizedSku }] : []),
   ];
   if (or.length === 0) return unknown;
@@ -149,10 +155,8 @@ async function loadPurchaseBasis(
       ipiPercent: true,
     },
   });
-  const ordered = [
-    ...products.filter((product) => !component && product.mlItemId === mlItemId),
-    ...products.filter((product) => component || product.mlItemId !== mlItemId),
-  ];
+  const rank = (id: string) => (component ? 2 : id === principal ? 0 : id === mlItemId ? 1 : 2);
+  const ordered = [...products].sort((a, b) => rank(a.mlItemId) - rank(b.mlItemId));
   for (const product of ordered) {
     const basis = nfBasisFromProduct(
       {

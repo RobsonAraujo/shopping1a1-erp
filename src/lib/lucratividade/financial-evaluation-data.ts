@@ -40,6 +40,7 @@ import {
   type CompanySettings,
 } from "@/lib/products/product-data";
 import { resolveEffectiveSkuByItemId } from "@/lib/products/product-resolver";
+import { loadListingGroups } from "@/lib/products/listing-groups";
 import {
   loadKitsByMlItemId,
   resolveKitPricing,
@@ -326,6 +327,8 @@ export type PmaLookup = {
   bySku: Map<string, number>;
   /** Anúncios que têm cadastro próprio em Meus Produtos, com ou sem PMA. */
   linkedMlItemIds: Set<string>;
+  /** Opções de venda: a opção usa o PMA do anúncio principal. Ausente = o próprio MLB. */
+  principalOf?: (mlItemId: string) => string;
 };
 
 export function indexPmaLookup(
@@ -354,6 +357,13 @@ export function resolvePmaPrice(
   sku: string | null | undefined,
 ): number | null {
   if (!lookup) return null;
+  // Opção de venda: vale o PMA do cadastro do principal (o produto é o mesmo).
+  const principal = lookup.principalOf?.(mlItemId);
+  if (principal && principal !== mlItemId) {
+    const fromPrincipal = lookup.byMlItemId.get(principal);
+    if (fromPrincipal !== undefined) return fromPrincipal;
+    if (lookup.linkedMlItemIds.has(principal)) return null;
+  }
   const own = lookup.byMlItemId.get(mlItemId);
   if (own !== undefined) return own;
   // Anúncio com cadastro próprio e sem PMA não herda o PMA de um irmão de
@@ -1004,27 +1014,31 @@ async function loadRowContext(
   // SKU "efetivo" por anúncio: segue o cadastro do Product vinculado via
   // mlItemId quando existe (estável mesmo se o SKU mudar no anúncio ML);
   // cai pro SKU ao vivo do anúncio quando não há vínculo.
+  // Opções de venda: custo, kit e PMA da opção vêm do anúncio principal.
+  const groups = await loadListingGroups(organizationId, { extraItems: items });
   const effectiveSkuByItemId = await resolveEffectiveSkuByItemId(
     organizationId,
     items.map((item) => ({ id: item.id, sku: getItemSku(item) })),
+    { groups },
   );
 
   const kitItemIds = items
     .filter((item) => !getItemSku(item) && isKitItem(item))
     .map((item) => item.id);
-  const kitsByMlItemId = await loadKitsByMlItemId(organizationId, kitItemIds);
+  const kitsByMlItemId = await loadKitsByMlItemId(organizationId, kitItemIds, { groups });
   const kitComponentSkus = [...kitsByMlItemId.values()].flatMap((components) =>
     components.map((c) => c.sku),
   );
 
   const itemIds = items.map((item) => item.id);
+  const principalIds = [...new Set(itemIds.map((id) => groups.principalOf(id)))];
   const skus = [...effectiveSkuByItemId.values()]
     .filter((sku): sku is string => Boolean(sku))
     .concat(kitComponentSkus);
   const companySettingsPromise = getCompanySettings(organizationId);
   const [pricingLookup, taxFromReport, productsForPma, companySettings] =
     await Promise.all([
-      loadProductsMapBySku(organizationId, skus, itemIds),
+      loadProductsMapBySku(organizationId, skus, itemIds, { groups }),
       // No Simples o imposto é a alíquota única da empresa: não lê o Tributário.
       companySettingsPromise.then((settings) =>
         settings.taxRegime === "SIMPLES"
@@ -1034,7 +1048,7 @@ async function loadRowContext(
       prisma.product.findMany({
         where: {
           organizationId,
-          OR: [{ mlItemId: { in: itemIds } }, { sku: { in: skus } }],
+          OR: [{ mlItemId: { in: [...itemIds, ...principalIds] } }, { sku: { in: skus } }],
         },
         select: { mlItemId: true, sku: true, pmaPrice: true },
       }),
@@ -1058,7 +1072,7 @@ async function loadRowContext(
     taxByMlItemId,
     taxSource,
     kitContext,
-    pmaLookup: indexPmaLookup(productsForPma),
+    pmaLookup: { ...indexPmaLookup(productsForPma), principalOf: groups.principalOf },
     skuFor: (itemId: string) => effectiveSkuByItemId.get(itemId) ?? null,
     pricingFor: (itemId: string, sku: string | null) =>
       pricingByMlItemId.get(itemId) ??

@@ -19,6 +19,13 @@ import { getItemSku } from "@/lib/mercadolibre/item-sku";
 import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 import { requireOrganization } from "@/lib/api/api-auth";
 import { parseJsonBody } from "@/lib/api/api-validation";
+import { loadListingGroups } from "@/lib/products/listing-groups";
+import {
+  cadastroBlockedMessage,
+  linkAfterCadastro,
+  pendingOptionCadastros,
+  productOptionsView,
+} from "@/lib/products/product-options";
 
 const productWriteSchema = z.object({
   mlItemId: z.string().trim().min(1, "Selecione um anúncio do Mercado Livre"),
@@ -45,13 +52,14 @@ export async function GET() {
 
   try {
     const settingsPromise = ensureCompanySettings(organizationId);
-    const [settings, products, taxFromReport] = await Promise.all([
+    const [settings, allProducts, groups, taxFromReport] = await Promise.all([
       settingsPromise,
       prisma.product.findMany({
         where: { organizationId },
         orderBy: { sku: "asc" },
         include: { supplier: { select: { id: true, name: true } } },
       }),
+      loadListingGroups(organizationId),
       // No Simples o imposto é a alíquota única da empresa: não lê o Tributário.
       settingsPromise.then((s) =>
         s.taxRegime === "SIMPLES"
@@ -59,6 +67,10 @@ export async function GET() {
           : loadProductTaxRolling30d(organizationId, userId),
       ),
     ]);
+    // Um produto por linha: o cadastro de uma opção de venda (outro MLB do
+    // mesmo produto físico) aparece dentro do principal, como "cadastro
+    // duplicado", e não como produto à parte.
+    const products = allProducts.filter((p) => !groups.isOption(p.mlItemId));
     const imageUrlsByMlItemId = await loadListingImageUrlsByMlItemId(
       organizationId,
       products.map((p) => p.mlItemId),
@@ -73,8 +85,8 @@ export async function GET() {
       simplesAliquotaEfetivaPercent: settings.simplesAliquotaEfetivaPercent,
       taxReportGeneratedAt: taxFromReport.generatedAt,
       taxWindow: taxFromReport.window,
-      products: products.map((p) =>
-        buildProductView(
+      products: products.map((p) => ({
+        ...buildProductView(
           p,
           settings.pisCofinsPercent,
           taxFromReport,
@@ -82,7 +94,10 @@ export async function GET() {
           imageUrlsByMlItemId.get(p.mlItemId) ?? null,
           p.supplier,
         ),
-      ),
+        options: productOptionsView(groups, p.mlItemId),
+      })),
+      duplicateOptionCount: allProducts.length - products.length,
+      pendingDuplicateOptionCount: pendingOptionCadastros(groups).length,
     });
   } catch (e) {
     logServerError("api/products GET", e);
@@ -117,6 +132,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: validationError }, { status: 400 });
   }
 
+  // Opção de venda de um produto já cadastrado: o cadastro do principal já
+  // vale para ela (o UP vem do corpo do anúncio, mesmo se o ERP ainda não o viu).
+  const groups = await loadListingGroups(organizationId, { extraItems: [item] });
+  const blocked = cadastroBlockedMessage(groups, item);
+  if (blocked) {
+    return NextResponse.json({ error: blocked }, { status: 409 });
+  }
+
   try {
     const settings = await ensureCompanySettings(organizationId);
     const data = productWriteToPrismaData(organizationId, input);
@@ -125,22 +148,32 @@ export async function POST(request: NextRequest) {
       include: { supplier: { select: { id: true, name: true } } },
     });
 
-    const imageUrl = await listingImageUrlForMlItemId(
-      organizationId,
-      product.mlItemId,
-    );
+    // Este anúncio vira o principal do produto (o cadastro vale para as
+    // opções). Falhar aqui não desfaz o cadastro: a rodada de vínculo completa.
+    try {
+      await linkAfterCadastro(organizationId, [item]);
+    } catch (e) {
+      logServerError("api/products POST linkAfterCadastro", e);
+    }
+    const [imageUrl, groupsAfter] = await Promise.all([
+      listingImageUrlForMlItemId(organizationId, product.mlItemId),
+      loadListingGroups(organizationId),
+    ]);
     return NextResponse.json({
-      product: buildProductView(
-        product,
-        settings.pisCofinsPercent,
-        undefined,
-        {
-          taxRegime: settings.taxRegime,
-          simplesAliquotaEfetivaPercent: settings.simplesAliquotaEfetivaPercent,
-        },
-        imageUrl,
-        product.supplier,
-      ),
+      product: {
+        ...buildProductView(
+          product,
+          settings.pisCofinsPercent,
+          undefined,
+          {
+            taxRegime: settings.taxRegime,
+            simplesAliquotaEfetivaPercent: settings.simplesAliquotaEfetivaPercent,
+          },
+          imageUrl,
+          product.supplier,
+        ),
+        options: productOptionsView(groupsAfter, product.mlItemId),
+      },
     });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {

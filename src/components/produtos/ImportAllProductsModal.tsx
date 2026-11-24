@@ -14,8 +14,14 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { readApiError } from "@/lib/api/api-client-error";
+import { listingOptionsSummary } from "@/components/products/ListingOptionChips";
 
-type Suggestion = { mlItemId: string; sku: string | null };
+/** Um produto físico sem cadastro: o anúncio principal e as opções de venda dele. */
+type Suggestion = {
+  mlItemId: string;
+  sku: string | null;
+  options?: Array<{ mlItemId: string; listingTypeId: string | null }>;
+};
 
 type ImportAllProductsModalProps = {
   open: boolean;
@@ -28,7 +34,13 @@ type ImportResult = {
   createdCount: number;
   skippedExistingCount: number;
   notFoundCount: number;
+  /** Opções de venda que entraram junto, no cadastro do principal (contadas na sugestão). */
+  groupedOptionsCount?: number;
 };
+
+function optionExtras(suggestions: Suggestion[]): number {
+  return suggestions.reduce((sum, s) => sum + Math.max(0, (s.options?.length ?? 1) - 1), 0);
+}
 
 export function ImportAllProductsModal({
   open,
@@ -78,7 +90,7 @@ export function ImportAllProductsModal({
         return;
       }
       const json = (await res.json()) as ImportResult;
-      setResult(json);
+      setResult({ ...json, groupedOptionsCount: optionExtras(suggestions) });
       setSuggestions([]);
       if (json.createdCount > 0) {
         toast.success(
@@ -104,12 +116,17 @@ export function ImportAllProductsModal({
         <SheetHeader>
           <SheetTitle>Importar todos os anúncios</SheetTitle>
           <p className="text-xs text-[var(--muted-foreground)]">
-            Cadastra de uma vez todo anúncio do Mercado Livre ainda sem
-            produto em Meus Produtos. Cada um entra com custo{" "}
+            Cadastra de uma vez todo produto do Mercado Livre ainda sem
+            cadastro em Meus Produtos. Cada um entra com custo{" "}
             <strong>R$ 0,00</strong> e a marca <strong>&quot;Custo
             pendente&quot;</strong>, ficando fora dos cálculos de DRE,
             Lucratividade e Relatório Tributário até você editar e preencher
             o custo real.
+          </p>
+          <p className="text-xs text-[var(--muted-foreground)]">
+            Opções de venda do mesmo produto (Clássico, Premium…) entram
+            juntas, num cadastro só: o custo que você preencher vale para
+            todas.
           </p>
         </SheetHeader>
 
@@ -123,6 +140,15 @@ export function ImportAllProductsModal({
                 {result.createdCount === 1 ? "" : "s"} importado
                 {result.createdCount === 1 ? "" : "s"}.
               </p>
+              {(result.groupedOptionsCount ?? 0) > 0 ? (
+                <p className="mt-1 text-[var(--muted-foreground)]">
+                  {result.groupedOptionsCount} opç
+                  {result.groupedOptionsCount === 1 ? "ão" : "ões"} de venda
+                  ficar{result.groupedOptionsCount === 1 ? "ou" : "am"} agrupada
+                  {result.groupedOptionsCount === 1 ? "" : "s"} no cadastro do
+                  produto.
+                </p>
+              ) : null}
               {result.skippedExistingCount > 0 ? (
                 <p className="mt-1 text-[var(--muted-foreground)]">
                   {result.skippedExistingCount} já estava
@@ -151,17 +177,26 @@ export function ImportAllProductsModal({
           ) : (
             <>
               <p className="text-sm font-medium">
-                {suggestions.length} anúncio
+                {suggestions.length} produto
                 {suggestions.length === 1 ? "" : "s"} sem cadastro encontrado
-                {suggestions.length === 1 ? "" : "s"}.
+                {suggestions.length === 1 ? "" : "s"}
+                {optionExtras(suggestions) > 0
+                  ? ` (${optionExtras(suggestions)} ${optionExtras(suggestions) === 1 ? "opção de venda agrupada" : "opções de venda agrupadas"})`
+                  : ""}
+                .
               </p>
               <ul className="max-h-52 space-y-1 overflow-y-auto rounded-lg border border-[var(--border)] p-2">
                 {suggestions.map((s) => (
                   <li
                     key={s.mlItemId}
-                    className="truncate rounded px-2 py-1 text-sm text-[var(--muted-foreground)]"
+                    className="flex items-baseline justify-between gap-2 rounded px-2 py-1 text-sm text-[var(--muted-foreground)]"
                   >
-                    {s.sku ?? s.mlItemId}
+                    <span className="truncate">{s.sku ?? s.mlItemId}</span>
+                    {s.options && s.options.length > 1 ? (
+                      <span className="shrink-0 text-[11px]">
+                        {listingOptionsSummary(s.options)}
+                      </span>
+                    ) : null}
                   </li>
                 ))}
               </ul>

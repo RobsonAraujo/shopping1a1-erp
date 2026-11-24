@@ -88,6 +88,10 @@ model OrganizationMlSeller {
   /// de uma tabela de cursor separada. Atualizado mesmo em caso de erro, pra
   /// um seller com falha não travar a rotação dos outros.
   lastCatalogCronPolledAt DateTime? @map("last_catalog_cron_polled_at")
+  /// Última rodada de vínculo dos anúncios deste seller (UP + item de estoque,
+  /// base das opções de venda — `listing-groups-sync.ts`). Roda pelo segundo
+  /// plano no máximo a cada 6 h, com ou sem o Estoque ativado.
+  lastListingsLinkedAt    DateTime? @map("last_listings_linked_at")
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 

@@ -56,14 +56,22 @@ export function resolveCustoDaVenda(input: {
     (input.itemId ? input.custoLookup.byMlItemId.get(input.itemId) : undefined) ??
     input.custoLookup.bySku.get(normalizeProductSku(input.sku));
   if (input.levelings.length === 0) return { custo: base, fonte: "cadastro" };
-  const leveling = findLevelingForOrderDate(
-    input.levelings,
-    input.itemId || null,
-    input.sku,
-    orderDateYmdFromOrder({ date_closed: input.orderDate }),
-    input.year,
-    input.month,
-  );
+  const orderDateYmd = orderDateYmdFromOrder({ date_closed: input.orderDate });
+  const findFor = (mlItemId: string | null) =>
+    findLevelingForOrderDate(
+      input.levelings,
+      mlItemId,
+      input.sku,
+      orderDateYmd,
+      input.year,
+      input.month,
+    );
+  // Opção de venda: o nivelamento do anúncio principal vale para ela; o da
+  // própria opção (cadastro duplicado antigo) fica de reserva.
+  const principal = input.itemId ? input.custoLookup.principalOf?.(input.itemId) : undefined;
+  const leveling =
+    (principal && principal !== input.itemId ? findFor(principal) : null) ??
+    findFor(input.itemId || null);
   if (!leveling) return { custo: base, fonte: "cadastro" };
   return { custo: applyLevelingToCusto(base, leveling), fonte: "nivelamento" };
 }

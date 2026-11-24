@@ -29,7 +29,7 @@ import {
  *
  * Custo medido em queries: 2 (onboarding) + 1 (operações) + 2 (catálogo
  * perdendo: as piores linhas + o total) + 2 (poll stats) + 1 (groupBy de
- * produtos) + 1 (anúncios ativos) + 3 (pendências) = 12 idas ao banco, todas
+ * produtos físicos) + 1 (anúncios ativos) + 3 (pendências) = 12 idas ao banco, todas
  * indexadas por `organizationId`, numa onda só. Não deixar crescer sem medir: o
  * pool padrão é pequeno (`DATABASE_POOL_MAX`, default 5) e o layout do dashboard
  * disputa as mesmas conexões.
@@ -42,24 +42,29 @@ import {
 async function loadCatalogHealth(
   organizationId: string,
 ): Promise<HomeCatalogHealth> {
-  const [productGroups, activeListingCount] = await Promise.all([
-    // Um groupBy resolve total + "precisa revisar" — duas contagens seriam
-    // duas idas ao banco pelo mesmo dado.
-    prisma.product.groupBy({
-      by: ["needsCostReview"],
-      where: { organizationId },
-      _count: { _all: true },
-    }),
+  const [productRows, activeListingCount] = await Promise.all([
+    // Uma ida resolve total + "precisa revisar", contando **produto físico**:
+    // as opções de venda (MLBs do mesmo `user_product_id`) são um produto só,
+    // e o cadastro duplicado de uma opção não conta. O produto só "precisa
+    // revisar" quando todos os seus cadastros estão pendentes — com um
+    // cadastro com custo, ele é o principal e o produto está em dia.
+    prisma.$queryRaw<Array<{ product_count: bigint; needs_review_count: bigint }>>`
+      SELECT count(*) AS product_count,
+             count(*) FILTER (WHERE all_pending) AS needs_review_count
+      FROM (
+        SELECT coalesce(l.user_product_id, p.ml_item_id) AS physical,
+               bool_and(p.needs_cost_review) AS all_pending
+        FROM products p
+        LEFT JOIN listings l
+          ON l.ml_item_id = p.ml_item_id AND l.organization_id = p.organization_id
+        WHERE p.organization_id = ${organizationId}
+        GROUP BY 1
+      ) grouped`,
     prisma.listing.count({ where: { organizationId, mlStatus: "active" } }),
   ]);
 
-  let productCount = 0;
-  let needsCostReviewCount = 0;
-  for (const group of productGroups) {
-    const count = group._count._all;
-    productCount += count;
-    if (group.needsCostReview) needsCostReviewCount += count;
-  }
+  const productCount = Number(productRows[0]?.product_count ?? 0);
+  const needsCostReviewCount = Number(productRows[0]?.needs_review_count ?? 0);
 
   return { productCount, needsCostReviewCount, activeListingCount };
 }

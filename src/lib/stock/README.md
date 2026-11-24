@@ -27,10 +27,12 @@ O ícone ao lado do título "Estoque" abre o guia "Como funciona o estoque" (`St
 - `StockItem` é 1 por UP, e cada `Listing` aponta para o seu (`stockItemId`). Nunca por SKU: o SKU é editável e repetível.
 - MLB desconhecido numa venda: a sincronização busca o anúncio e o liga pelo UP (`stock-items.ts`).
 - Kit (tag `bundle`) não vira item: a venda baixa os componentes (`KitItem`).
+- **O principal do item é o mesmo das opções de venda no resto do ERP** (`src/lib/products/listing-groups.ts`): o anúncio cadastrado em Meus Produtos; sem cadastro, o que o item já tinha. `alignStockPrimaries` corrige `primaryMlItemId` quando o cadastro entra numa opção que não era o principal.
+- **Item de estoque existe também sem o Estoque ativado.** A rodada de vínculo das opções de venda (`maybeLinkListingGroups`, no segundo plano, no máximo a cada 6 h por seller) cria `Listing` + `StockItem` para toda organização, sem saldo, lote ou movimentação. A ativação reaproveita esses itens.
 
 ## Sincronização (`stock-sync.ts`) — sem cron
 
-Não existe cron de estoque. A sincronização roda em três situações:
+Não existe cron de estoque. A sincronização roda em três situações (antes de tudo, em segundo plano, a rodada de vínculo das opções de venda, com ou sem ativação — ver "Identidade"):
 
 - **Quando alguém usa o ERP:** o `StockBackgroundSync`, montado no layout do dashboard, entra em segundo plano. Ele não recebe nada do servidor e só começa com a página já pronta. Roda no máximo 1 vez a cada 10 min por aba, e o servidor responde `skipped: "fresh"` na hora, sem chamar o ML, se outra aba ou pessoa já leu.
   - Fora do Estoque, faz só o leve: vendas novas + depósito/Full de até 30 produtos que venderam.

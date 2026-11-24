@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PlanningInfoTrigger } from "@/components/shared/PlanningInfoTrigger";
 import { ProductThumbnail } from "@/components/produtos/ProductThumbnail";
+import { ListingOptionChips } from "@/components/products/ListingOptionChips";
 import { itemListSearchEmptyMessage } from "@/components/shared/ItemListSearch";
 import { SortableTh } from "@/components/ui/sortable-th";
 import { formatFinancialMoney, formatFinancialPercent } from "@/lib/pricing/financial-margin";
@@ -28,6 +29,8 @@ export function ProductsTableDesktop({
   onToggleActive,
   onSyncSku,
   syncingSkuId,
+  onRemoveDuplicateOption,
+  removingOptionId,
 }: ProductsTableProps) {
   const columnCount = showFiscalFlags ? 9 : 6;
   return (
@@ -135,6 +138,15 @@ export function ProductsTableDesktop({
                             ) : null}
                           </div>
                         ) : null}
+                        <ListingOptionChips
+                          options={product.options}
+                          removingId={removingOptionId}
+                          onRemoveDuplicate={
+                            onRemoveDuplicateOption
+                              ? (option) => onRemoveDuplicateOption(product, option)
+                              : undefined
+                          }
+                        />
                       </div>
                     </div>
                   </td>

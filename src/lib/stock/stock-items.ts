@@ -3,6 +3,7 @@ import { bestItemImageUrl } from "@/lib/mercadolibre/item-image";
 import { getItemSku, isKitItem } from "@/lib/mercadolibre/item-sku";
 import { itemUserProductId, upsertListingsFromItems } from "@/lib/mercadolibre/listing-sync";
 import type { ItemBody } from "@/lib/mercadolibre/types";
+import { pickPrincipal } from "@/lib/products/listing-groups";
 import type { ListingStockTarget } from "@/lib/stock/stock-order-effects";
 
 /**
@@ -17,13 +18,29 @@ import type { ListingStockTarget } from "@/lib/stock/stock-order-effects";
  * baixa os itens dos componentes (`KitItem`).
  */
 
-type ProductFlags = { mlItemId: string; active: boolean };
+type ProductFlags = { mlItemId: string; needsCostReview: boolean; createdAt: Date };
 
+function parseMlDate(raw: string | undefined): Date | null {
+  if (!raw) return null;
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/** Principal do item: a mesma regra das opções de venda no resto do ERP (`pickPrincipal`). */
 function pickPrimary(items: ItemBody[], products: Map<string, ProductFlags>): ItemBody {
-  const score = (item: ItemBody) =>
-    (products.get(item.id)?.active ? 4 : products.has(item.id) ? 2 : 0) +
-    (item.status === "active" ? 1 : 0);
-  return [...items].sort((a, b) => score(b) - score(a))[0];
+  const principal = pickPrincipal(
+    items.map((item) => {
+      const product = products.get(item.id);
+      return {
+        mlItemId: item.id,
+        product: product ? { pending: product.needsCostReview, createdAt: product.createdAt } : null,
+        isKit: false,
+        active: item.status === "active",
+        firstSeenAt: parseMlDate(item.date_created),
+      };
+    }),
+  );
+  return items.find((item) => item.id === principal) ?? items[0];
 }
 
 /**
@@ -43,7 +60,7 @@ export async function ensureStockItemsForItems(
     (
       await prisma.product.findMany({
         where: { organizationId, mlItemId: { in: physical.map((i) => i.id) } },
-        select: { mlItemId: true, active: true },
+        select: { mlItemId: true, needsCostReview: true, createdAt: true },
       })
     ).map((p) => [p.mlItemId, p]),
   );

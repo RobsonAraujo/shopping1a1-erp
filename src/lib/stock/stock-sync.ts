@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db/db";
 import { logServerError } from "@/lib/infra/server-public-error";
 import { toDbSellerId } from "@/lib/mercadolibre/seller-id";
+import { maybeLinkListingGroups } from "@/lib/products/listing-groups-sync";
 import { syncStockOrders } from "@/lib/stock/stock-orders-sync";
 import {
   linkNewSellerListings,
@@ -100,6 +101,10 @@ export async function runStockSyncForSeller(input: {
 }): Promise<StockSyncRunResult> {
   const { organizationId, mlUserId, accessToken, signal } = input;
   const background = input.background === true;
+  // Opções de venda (`listing-groups.ts`): o vínculo dos anúncios vale para
+  // toda organização, com ou sem o Estoque ativado. No máximo a cada 6 h por
+  // seller; fresco, é só uma leitura no banco. Nunca derruba a rodada.
+  if (background) await maybeLinkListingGroups({ organizationId, mlUserId, accessToken });
   const settings = await prisma.stockSettings.findUnique({ where: { organizationId } });
   if (!settings) {
     if (background) return skippedResult("not_activated");

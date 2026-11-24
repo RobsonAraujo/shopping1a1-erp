@@ -83,6 +83,8 @@ const API_ERROR_MESSAGES: Record<string, string> = {
   product_create_failed: "Não foi possível criar o produto.",
   product_update_failed: "Não foi possível atualizar o produto.",
   product_delete_failed: "Não foi possível remover o produto.",
+  product_option_remove_failed:
+    "Não foi possível remover o cadastro da opção de venda. Tente de novo.",
   product_aliases_load_failed: "Não foi possível carregar os SKUs alias.",
   product_alias_create_failed: "Não foi possível adicionar o SKU alias.",
   product_alias_delete_failed: "Não foi possível remover o SKU alias.",
