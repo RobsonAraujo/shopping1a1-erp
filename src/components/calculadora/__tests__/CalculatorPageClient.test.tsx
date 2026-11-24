@@ -171,13 +171,13 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
-function render(initialSelectedId: string | null = null) {
+function render(initialSelectedId: string | null = null, pageData: CalculatorData = data()) {
   // Como na página de verdade: a URL já traz o anúncio que o servidor leu.
   if (initialSelectedId) {
     window.history.replaceState(null, "", `/dashboard/calculadora?anuncio=${initialSelectedId}`);
   }
   const rendered = renderIntoDocument(
-    <CalculatorPageClient data={data()} initialSelectedId={initialSelectedId} />,
+    <CalculatorPageClient data={pageData} initialSelectedId={initialSelectedId} />,
   );
   cleanup = rendered.unmount;
   return rendered.container;
@@ -450,5 +450,81 @@ describe("CalculatorPageClient", () => {
     assert.ok(week, "falta a sugestão do TACOS de 7 dias para compra");
     await act(async () => week.click());
     await waitFor(() => assert.equal(count("/ads"), 1));
+  });
+
+  it("shows a product with sale options once, opens its options and switches between them", async () => {
+    const both = { principalMlItemId: "MLB10", optionsLabel: "Clássico + Premium" };
+    const withOptions: CalculatorData = {
+      timeZone: TZ,
+      listings: toCalculatorListings(
+        [
+          {
+            mlItemId: "MLB10",
+            titleSnapshot: "Cabo Ninja 3m",
+            skuSnapshot: "NINJA-3",
+            imageUrlSnapshot: null,
+            catalogListing: true,
+            mlStatus: "active",
+          },
+          {
+            mlItemId: "MLB11",
+            titleSnapshot: "Cabo Ninja 3m",
+            skuSnapshot: "NINJA-3",
+            imageUrlSnapshot: null,
+            catalogListing: true,
+            mlStatus: "active",
+          },
+          {
+            mlItemId: "MLB2",
+            titleSnapshot: "Mouse Sem Fio",
+            skuSnapshot: "MOUSE-W",
+            imageUrlSnapshot: null,
+            catalogListing: false,
+            mlStatus: "active",
+          },
+        ],
+        new Map([
+          ["MLB10", { ...both, label: "Clássico" }],
+          ["MLB11", { ...both, label: "Premium" }],
+        ]),
+      ),
+    };
+    const container = render(null, withOptions);
+
+    // O produto aparece uma vez, fechado; clicar abre as opções (sem ler o anúncio).
+    assert.equal(options(container).length, 2);
+    const product = [...container.querySelectorAll('[role="option"]')].find((option) =>
+      option.textContent?.includes("2 opções"),
+    ) as HTMLElement;
+    assert.ok(product);
+    assert.match(product.textContent ?? "", /Clássico \+ Premium/);
+    act(() => product.click());
+    await waitFor(() => assert.equal(options(container).length, 4));
+    assert.equal(requests.length, 0);
+
+    // Escolher a Premium abre a calculadora dela.
+    const premium = [...container.querySelectorAll('[role="option"]')].find((option) =>
+      option.textContent?.includes("MLB11"),
+    ) as HTMLElement;
+    await act(async () => premium.click());
+    await waitFor(() => assert.match(window.location.search, /anuncio=MLB11/));
+    let panel = visiblePanel(container);
+    assert.ok(panel);
+    await nowStrip(panel);
+
+    // A troca no cabeçalho passa para a Clássico, sem voltar à lista.
+    const tab = [...panel.querySelectorAll('[role="tab"]')].find(
+      (candidate) => candidate.textContent?.trim() === "Clássico",
+    ) as HTMLElement;
+    assert.ok(tab);
+    await act(async () => tab.click());
+    await waitFor(() => assert.match(window.location.search, /anuncio=MLB10/));
+    panel = visiblePanel(container);
+    assert.ok(panel);
+    assert.match(panel.textContent ?? "", /MLB10/);
+
+    // Colar o MLB da Premium mostra o produto já aberto, com a Premium dentro.
+    type(searchInput(container), "mlb11");
+    await waitFor(() => assert.match(options(container).join(" | "), /MLB11/));
   });
 });

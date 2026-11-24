@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type Ref } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type Ref } from "react";
 import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ListingTypeTag } from "@/components/rotina/ListingTypeTag";
@@ -29,6 +29,7 @@ import {
   PROMO_DISCOUNT_SHORTCUTS,
   buildSimulatorSuggestions,
 } from "@/lib/rotina/simulator-suggestions";
+import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 
 type ReadState =
   | { status: "loading" }
@@ -85,6 +86,8 @@ export function CalculatorPanel({
   priceInputRef,
   api = fetchCalculatorApi,
   demo = false,
+  options,
+  onSelectOption,
 }: {
   listing: CalculatorListing;
   timeZone: string;
@@ -96,7 +99,15 @@ export function CalculatorPanel({
   api?: CalculatorApi;
   /** Demonstração: sem link para o anúncio no ML e título como h3 (a seção já tem h2). */
   demo?: boolean;
+  /**
+   * Opções de venda do produto (Clássico, Premium…), quando há mais de uma:
+   * o cabeçalho troca entre elas sem voltar à lista. Cada uma tem a própria
+   * calculadora (preço, tarifa e margem do anúncio).
+   */
+  options?: CalculatorListing[];
+  onSelectOption?: (mlItemId: string) => void;
 }) {
+  const optionTabsId = useId();
   const { mlItemId } = listing;
   const [state, setState] = useState<ReadState>({ status: "loading" });
   const [ads7d, setAds7d] = useState<Ads7dState | null>(null);
@@ -239,6 +250,26 @@ export function CalculatorPanel({
               {paused ? " · pausado" : ""}
             </span>
           </p>
+          {options && options.length > 1 && onSelectOption ? (
+            <div className="mt-2.5 flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-medium text-[var(--muted-foreground)]">
+                Opção de venda
+              </span>
+              <SegmentedTabs<string>
+                baseId={optionTabsId}
+                ariaLabel="Opção de venda do produto"
+                value={mlItemId}
+                onValueChange={(next) => {
+                  if (next !== mlItemId) onSelectOption(next);
+                }}
+                tabs={options.map((option) => ({
+                  id: option.mlItemId,
+                  label: option.saleOption?.label ?? option.mlItemId,
+                  badge: option.mlStatus && option.mlStatus !== "active" ? "pausado" : undefined,
+                }))}
+              />
+            </div>
+          ) : null}
         </div>
         {demo ? null : (
           <a

@@ -17,6 +17,8 @@ import { CalculatorPanel } from "@/components/calculadora/CalculatorPanel";
 import type { CalculatorApi } from "@/lib/calculadora/calculator-api";
 import {
   CALCULATOR_PARAM,
+  calculatorProductKey,
+  groupCalculatorListings,
   normalizeListingParam,
   type CalculatorData,
 } from "@/lib/calculadora/calculator-listings";
@@ -138,6 +140,16 @@ export function CalculatorPageClient({
     [data.listings],
   );
   const selected = selectedId ? (byId.get(selectedId) ?? null) : null;
+  // Opções de venda: as opções de cada produto, para a troca no cabeçalho.
+  const optionsByProduct = useMemo(
+    () =>
+      new Map(
+        groupCalculatorListings(data.listings, data.listings)
+          .filter((group) => group.options.length > 1)
+          .map((group) => [group.key, group.options]),
+      ),
+    [data.listings],
+  );
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const priceInputs = useRef(new Map<string, HTMLInputElement>());
@@ -324,6 +336,8 @@ export function CalculatorPageClient({
                 priceInputRef={priceRefFor(id)}
                 api={api}
                 demo={!isPage}
+                options={optionsByProduct.get(calculatorProductKey(listing))}
+                onSelectOption={(mlItemId) => select(mlItemId, { viaKeyboard: false })}
               />
             </Activity>
           );

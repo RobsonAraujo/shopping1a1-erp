@@ -105,3 +105,56 @@ export function toCalculatorListings(
       a.mlItemId.localeCompare(b.mlItemId),
   );
 }
+
+/** Chave do produto físico do anúncio: o principal das opções de venda, ou o próprio MLB. */
+export function calculatorProductKey(listing: CalculatorListing): string {
+  return listing.saleOption?.principalMlItemId ?? listing.mlItemId;
+}
+
+/** Um produto na lista da Calculadora, com as opções de venda dele. */
+export type CalculatorProductGroup = {
+  key: string;
+  /** O que representa o produto (foto, título): o principal, se está nas opções. */
+  lead: CalculatorListing;
+  /** Opções que passam no filtro, o principal primeiro (depois Clássico, Premium…). */
+  options: CalculatorListing[];
+};
+
+/**
+ * Lista por **produto**: as opções de venda (Clássico, Premium…) do mesmo
+ * produto ficam juntas, para a lista mostrar o produto uma vez e abrir as
+ * opções ao clicar. A ordem é a da busca — o produto entra onde aparece a
+ * primeira opção encontrada — e as opções mostradas são as do produto que
+ * passam no filtro (Próprio/Catálogo), mesmo as que a busca não achou: quem
+ * cola o MLB da Premium vê a Premium dentro do produto.
+ */
+export function groupCalculatorListings(
+  matches: readonly CalculatorListing[],
+  allListings: readonly CalculatorListing[],
+  passes: (listing: CalculatorListing) => boolean = () => true,
+): CalculatorProductGroup[] {
+  const byKey = new Map<string, CalculatorListing[]>();
+  for (const listing of allListings) {
+    if (!passes(listing)) continue;
+    const key = calculatorProductKey(listing);
+    const list = byKey.get(key) ?? [];
+    list.push(listing);
+    byKey.set(key, list);
+  }
+
+  const groups: CalculatorProductGroup[] = [];
+  const seen = new Set<string>();
+  for (const match of matches) {
+    const key = calculatorProductKey(match);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const options = [...(byKey.get(key) ?? [match])].sort(
+      (a, b) =>
+        Number(b.mlItemId === key) - Number(a.mlItemId === key) ||
+        (a.saleOption?.label ?? "").localeCompare(b.saleOption?.label ?? "", "pt-BR") ||
+        a.mlItemId.localeCompare(b.mlItemId),
+    );
+    groups.push({ key, lead: options.find((o) => o.mlItemId === key) ?? options[0], options });
+  }
+  return groups;
+}
