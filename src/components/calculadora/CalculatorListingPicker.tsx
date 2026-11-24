@@ -406,7 +406,9 @@ export function CalculatorListingPicker({
                   onClick={() => activateRow(position, false)}
                   className={cn(
                     "relative flex cursor-pointer items-center gap-3 px-3 py-2.5 transition-colors",
-                    nested && "border-l-2 border-l-[var(--border)] bg-[var(--muted)]/20 py-2 pl-12",
+                    // Opção dentro do produto aberto: recuada, com a faixa e a
+                    // miniatura à esquerda para destacar sem pesar.
+                    nested && "border-l-2 border-l-[var(--primary)]/35 bg-[var(--muted)]/20 py-2 pl-8",
                     active && "bg-[var(--accent)]/50",
                     selected && "bg-[var(--primary)]/[0.07]",
                   )}
@@ -417,7 +419,9 @@ export function CalculatorListingPicker({
                       aria-hidden
                     />
                   ) : null}
-                  {nested ? null : (
+                  {nested ? (
+                    <RotinaThumb src={listing.imageUrl} size={32} className="size-8" />
+                  ) : (
                     <RotinaThumb src={listing.imageUrl} size={40} className="size-10" />
                   )}
                   <div className="min-w-0 flex-1">

@@ -30,6 +30,7 @@ import {
   buildSimulatorSuggestions,
 } from "@/lib/rotina/simulator-suggestions";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
+import { cn } from "@/lib/utils";
 
 type ReadState =
   | { status: "loading" }
@@ -227,6 +228,7 @@ export function CalculatorPanel({
   );
 
   const paused = listing.mlStatus !== null && listing.mlStatus !== "active";
+  const hasOptionTabs = Boolean(options && options.length > 1 && onSelectOption);
   const Heading = demo ? "h3" : "h2";
   const taxLabel = reading ? taxSourceLabel(reading) : null;
 
@@ -235,9 +237,19 @@ export function CalculatorPanel({
       aria-label={`Calculadora: ${listing.title}`}
       className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-sm"
     >
-      <header className="flex items-start gap-3 border-b border-[var(--border)] px-4 py-4 sm:px-5">
+      <header
+        className={cn(
+          "grid items-start gap-3 border-b border-[var(--border)] px-4 py-4 sm:px-5",
+          // Com opções de venda: no celular, as abas descem para uma linha
+          // própria (com o "Ver no ML" à direita); da tela média para cima,
+          // ficam no canto direito, sob o "Ver no ML".
+          hasOptionTabs
+            ? "grid-cols-[auto_minmax(0,1fr)] sm:grid-cols-[auto_minmax(0,1fr)_auto]"
+            : "grid-cols-[auto_minmax(0,1fr)_auto]",
+        )}
+      >
         <RotinaThumb src={listing.imageUrl} size={48} className="size-12" />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0">
           <Heading className="line-clamp-2 text-base font-semibold leading-snug text-[var(--foreground)]">
             {listing.title}
           </Heading>
@@ -250,38 +262,41 @@ export function CalculatorPanel({
               {paused ? " · pausado" : ""}
             </span>
           </p>
-          {options && options.length > 1 && onSelectOption ? (
-            <div className="mt-2.5 flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-medium text-[var(--muted-foreground)]">
-                Opção de venda
-              </span>
-              <SegmentedTabs<string>
-                baseId={optionTabsId}
-                ariaLabel="Opção de venda do produto"
-                value={mlItemId}
-                onValueChange={(next) => {
-                  if (next !== mlItemId) onSelectOption(next);
-                }}
-                tabs={options.map((option) => ({
-                  id: option.mlItemId,
-                  label: option.saleOption?.label ?? option.mlItemId,
-                  badge: option.mlStatus && option.mlStatus !== "active" ? "pausado" : undefined,
-                }))}
-              />
-            </div>
-          ) : null}
         </div>
-        {demo ? null : (
-          <a
-            href={listing.permalink}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
-          >
-            Ver no ML
-            <ExternalLink className="size-3.5" aria-hidden />
-          </a>
-        )}
+        <div
+          className={cn(
+            "flex items-center gap-2",
+            hasOptionTabs &&
+              "col-span-2 justify-between sm:col-span-1 sm:flex-col-reverse sm:items-end sm:justify-start",
+          )}
+        >
+          {hasOptionTabs && options && onSelectOption ? (
+            <SegmentedTabs<string>
+              baseId={optionTabsId}
+              ariaLabel="Opção de venda do produto"
+              value={mlItemId}
+              onValueChange={(next) => {
+                if (next !== mlItemId) onSelectOption(next);
+              }}
+              tabs={options.map((option) => ({
+                id: option.mlItemId,
+                label: option.saleOption?.label ?? option.mlItemId,
+                badge: option.mlStatus && option.mlStatus !== "active" ? "pausado" : undefined,
+              }))}
+            />
+          ) : null}
+          {demo ? null : (
+            <a
+              href={listing.permalink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+            >
+              Ver no ML
+              <ExternalLink className="size-3.5" aria-hidden />
+            </a>
+          )}
+        </div>
       </header>
 
       {state.status === "loading" ? <CalculatorNowStripSkeleton /> : null}
