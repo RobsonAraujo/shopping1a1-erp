@@ -524,18 +524,6 @@ export async function listTaxReportSnapshotPeriods(
   }));
 }
 
-export async function loadLatestTaxReportSnapshot(
-  sellerId: number,
-): Promise<TaxReportPayload | null> {
-  const row = await prisma.taxReportMonthSnapshot.findFirst({
-    where: { sellerId },
-    orderBy: [{ year: "desc" }, { month: "desc" }],
-  });
-  if (!row) return null;
-  const payload = row.payload as unknown as TaxReportPayload;
-  return repairTaxReportPayload(sellerId, payload);
-}
-
 /** Últimos `limit` snapshots do seller, do mais recente ao mais antigo. */
 export async function loadRecentTaxReportSnapshots(
   sellerId: number,

@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { reportsConfig } from "@/config/reports";
+import { catalogStatusLabel } from "@/lib/catalog-report/catalog-status-label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
@@ -78,12 +79,7 @@ function segmentClass(status: string): string {
   return "bg-slate-400";
 }
 
-function statusLabel(status: string | null) {
-  if (status === "winning") return "Ganhando";
-  if (status === "losing") return "Perdendo";
-  if (status === "shared") return "Compartilhando";
-  return "Sem sinal";
-}
+const statusLabel = catalogStatusLabel;
 
 function isoDateInput(d: Date): string {
   return new Intl.DateTimeFormat("en-CA", {

@@ -4,7 +4,7 @@ import type { ItemBody } from "@/lib/mercadolibre/types";
 import type { ListingGroups, ListingOption } from "@/lib/products/listing-groups";
 
 /**
- * Opções de venda em Compras, Operações Full e Insights: o planejamento é do
+ * Opções de venda em Compras e Operações Full: o planejamento é do
  * **produto físico**, não do anúncio.
  *
  * Antes, cada opção (Clássico, Premium…) era planejada sozinha: usava o

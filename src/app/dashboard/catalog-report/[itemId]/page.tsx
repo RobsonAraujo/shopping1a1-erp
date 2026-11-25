@@ -25,7 +25,7 @@ export default async function CatalogReportItemPage({ params }: PageProps) {
         <Breadcrumbs
           items={[
             { label: "Início", href: "/dashboard" },
-            { label: "Catálogo", href: "/dashboard/catalog-report" },
+            { label: "Relatório de catálogo", href: "/dashboard/catalog-report" },
             { label: itemId },
           ]}
         />

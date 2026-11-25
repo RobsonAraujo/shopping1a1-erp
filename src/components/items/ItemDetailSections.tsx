@@ -291,10 +291,7 @@ export function ItemDetailCatalogSection({
           <span
             className={catalogStatusBadgeClass(catalog.catalogStatus)}
           >
-            {catalogStatusLabel(
-              (catalog.catalogStatus as "winning" | "losing" | "shared" | "unknown") ??
-                "unknown",
-            )}
+            {catalogStatusLabel(catalog.catalogStatus ?? null)}
           </span>
           {catalog.catalogPolledAt ? (
             <span className="text-xs text-[var(--muted-foreground)]">

@@ -290,12 +290,7 @@ export function formatCatalogMoney(value: number | null): string | null {
   return formatMoneyBRL(value);
 }
 
-export function catalogStatusLabel(status: CompetitionStatus): string {
-  if (status === "winning") return "Ganhando";
-  if (status === "losing") return "Perdendo";
-  if (status === "shared") return "Compartilhando";
-  return "Sem sinal";
-}
+export { catalogStatusHint, catalogStatusLabel } from "@/lib/catalog-report/catalog-status-label";
 
 export function catalogStatusBadgeClass(status: string | null): string {
   if (status === "winning") {

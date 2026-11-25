@@ -50,6 +50,50 @@ function readCatalogProductId(
   return null;
 }
 
+/**
+ * Anúncio de catálogo que o banco ainda tem como "no ar", mas que saiu da
+ * listagem de ativos/pausados do ML (encerrado, inativo, excluído): sem isso
+ * ninguém o relê e o status fica velho para sempre. Relê só esses e grava o
+ * status real. Só mexe no que é deste seller (org com mais de um seller) e,
+ * se o ML não devolver o item, deixa como está. Falha aqui não derruba o poll.
+ */
+async function reconcileListingsGoneFromMl(
+  accessToken: string,
+  mlUserId: number,
+  organizationId: string,
+  liveIds: string[],
+): Promise<void> {
+  try {
+    const stale = await prisma.listing.findMany({
+      where: {
+        organizationId,
+        catalogListing: true,
+        activeOnMl: true,
+        mlItemId: { notIn: liveIds },
+      },
+      select: { mlItemId: true },
+    });
+    if (stale.length === 0) return;
+
+    const staleIds = stale.map((row) => row.mlItemId);
+    const items = await fetchItemsByIdsBatched(accessToken, staleIds, 20);
+    const own = items.filter((item) => Number(item.seller_id) === mlUserId);
+    for (const item of own) {
+      await upsertListingFromItem(organizationId, item);
+    }
+    const returned = new Set(items.map((item) => item.id));
+    const missing = staleIds.filter((id) => !returned.has(id));
+    if (own.length > 0 || missing.length > 0) {
+      console.info(
+        `[catalog-poll] org=${organizationId} seller=${mlUserId} reconciled=${own.length} ` +
+          `notReturned=${missing.length}${missing.length > 0 ? ` (${missing.slice(0, 10).join(",")})` : ""}`,
+      );
+    }
+  } catch (e) {
+    logServerError(`catalog-competition-poll reconcile org=${organizationId}`, e);
+  }
+}
+
 export async function pollCatalogCompetitionForSeller(
   accessToken: string,
   mlUserId: number,
@@ -70,6 +114,7 @@ export async function pollCatalogCompetitionForSeller(
       }),
     ]);
     ids = [...new Set([...activeIds, ...pausedIds])];
+    await reconcileListingsGoneFromMl(accessToken, mlUserId, organizationId, ids);
   }
 
   if (ids.length === 0) {

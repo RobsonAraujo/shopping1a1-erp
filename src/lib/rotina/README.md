@@ -190,7 +190,8 @@ Página `/dashboard/calculadora` (menu Financeiro, depois de Lucratividade): tod
 - Lotes de 20, cada um gravado em transação própria (retrato + reconciliação + eventos).
 - Orçamento de 240 s (`ROTINA_REFRESH_BUDGET_MS` sobrescreve em teste). Passou dele, fica `partial` e o client chama de novo.
 - **Baseline**: a primeira rodada completa não gera `catalog_takeover`; os vínculos existentes vão para "Próprios que já têm catálogo ligado". Catálogo criado há mais de 30 dias também não vira evento.
-- Só sai do retrato o que o ML confirmou que não está mais ativo/pausado. Falha de leitura **não** apaga.
+- **Só anúncios ativos** (`fetchAllUserItemIds` com `status: active`): toda regra descarta pausado e encerrado, e calcular pausado era ~metade da rodada sem gerar tarefa. A aba "Todos os anúncios" lista só ativos; pausado que volta entra na rodada seguinte.
+- Só sai do retrato o que o ML confirmou que não está mais ativo. Falha de leitura **não** apaga.
 - Custo: 3–5 chamadas por anúncio para preço/taxa/frete/rebate (a mesma linha da Lucratividade), mais ~20–40 cotações por anúncio para os mínimos (só frete na busca do limiar). Log `[rotina-refresh]` com tempo por etapa.
 
 ## Pendente de validação com dados reais

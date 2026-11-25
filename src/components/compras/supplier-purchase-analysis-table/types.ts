@@ -77,7 +77,7 @@ export function catalogStatusLabel(status: string | null): string | null {
   if (status === "winning") return "Ganhando";
   if (status === "losing") return "Perdendo";
   if (status === "shared") return "Compartilhado";
-  return "Desconhecido";
+  return "Fora da disputa";
 }
 
 export function catalogReportHref(itemId: string) {

@@ -28,6 +28,10 @@ import { useTableSort } from "@/hooks/use-table-sort";
 import { CatalogCompetitionReportSkeleton } from "@/components/catalog-report/CatalogCompetitionReportSkeleton";
 import type { CatalogReportRow } from "@/lib/catalog-report/catalog-report-groups";
 import { listingOptionLabel } from "@/lib/products/listing-option-label";
+import {
+  catalogStatusHint,
+  catalogStatusLabel,
+} from "@/lib/catalog-report/catalog-status-label";
 
 type ReportItem = CatalogReportRow;
 
@@ -61,12 +65,7 @@ function statusDotClass(status: string | null): string {
   return "size-1.5 rounded-full bg-[var(--muted-foreground)]";
 }
 
-function statusLabel(status: string | null) {
-  if (status === "winning") return "Ganhando";
-  if (status === "losing") return "Perdendo";
-  if (status === "shared") return "Compartilhando";
-  return "Sem sinal";
-}
+const statusLabel = catalogStatusLabel;
 
 /**
  * Opções de venda do produto dentro da linha (Clássico, Premium…): cada uma
@@ -107,7 +106,10 @@ function CatalogProductOptions({
               >
                 {listingOptionLabel(option, options)} · {option.mlItemId}
               </Link>
-              <span className={cn(statusBadgeClass(option.catalogStatus), "px-1.5 py-0.5 text-[10px]")}>
+              <span
+                className={cn(statusBadgeClass(option.catalogStatus), "px-1.5 py-0.5 text-[10px]")}
+                title={catalogStatusHint(option.catalogStatus) ?? undefined}
+              >
                 {statusLabel(option.catalogStatus)}
               </span>
               {option.siblingWinning && option.catalogStatus !== "winning" ? (
@@ -138,7 +140,7 @@ function itemMlStatus(row: ReportItem): string {
   return row.mlStatus ?? "active";
 }
 
-/** Ordem lógica de relevância: ganhando > compartilhando > perdendo > sem sinal. */
+/** Ordem lógica de relevância: ganhando > compartilhando > perdendo > fora da disputa. */
 const STATUS_RANK: Record<string, number> = {
   winning: 0,
   shared: 1,
@@ -305,7 +307,7 @@ export function CatalogCompetitionReportClient() {
       <Card>
         <CardHeader className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <CardTitle className="text-base">Catálogo anúncios</CardTitle>
+            <CardTitle className="text-base">Anúncios de catálogo</CardTitle>
             <ShowPausedListingsSwitch
               checked={showPaused}
               onCheckedChange={setShowPaused}
@@ -376,7 +378,10 @@ export function CatalogCompetitionReportClient() {
                         {row.mlItemId}
                       </div>
                       <div className="mt-1">
-                        <span className={statusBadgeClass(row.catalogStatus)}>
+                        <span
+                          className={statusBadgeClass(row.catalogStatus)}
+                          title={catalogStatusHint(row.catalogStatus) ?? undefined}
+                        >
                           <span className={statusDotClass(row.catalogStatus)} />
                           {statusLabel(row.catalogStatus)}
                         </span>
@@ -473,7 +478,10 @@ export function CatalogCompetitionReportClient() {
                           ) : null}
                         </td>
                         <td className="py-2 pr-3">
-                          <span className={statusBadgeClass(row.catalogStatus)}>
+                          <span
+                            className={statusBadgeClass(row.catalogStatus)}
+                            title={catalogStatusHint(row.catalogStatus) ?? undefined}
+                          >
                             {statusLabel(row.catalogStatus)}
                           </span>
                         </td>

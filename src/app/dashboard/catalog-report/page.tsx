@@ -3,7 +3,7 @@ import { Trophy } from "lucide-react";
 import { CatalogCompetitionReportClient } from "@/components/catalog-report/CatalogCompetitionReportClient";
 
 export const metadata: Metadata = {
-  title: "Catálogo",
+  title: "Relatório de catálogo",
 };
 
 export default function CatalogReportPage() {

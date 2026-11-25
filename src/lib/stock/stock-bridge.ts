@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db/db";
 /**
  * Ponte do estoque automático para os módulos que ainda raciocinam por
  * anúncio com a fórmula `total = estoque do anúncio no ML + galpão`: Compras,
- * Kanban, Insights, detalhe do item e fechamento mensal.
+ * Kanban, detalhe do item e fechamento mensal.
  *
  * - **Organização sem estoque automático:** nada muda (galpão digitado em
  *   `WarehouseStock.quantity`).

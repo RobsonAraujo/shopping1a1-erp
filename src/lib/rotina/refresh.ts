@@ -11,8 +11,8 @@ import {
 } from "@/lib/lucratividade/financial-evaluation-data";
 import { marginExclusionReason } from "@/lib/lucratividade/margin-summary";
 import {
+  fetchAllUserItemIds,
   fetchItemsByIdsBatched,
-  fetchOperationalListingIds,
 } from "@/lib/mercadolibre/api";
 import { mapWithConcurrency } from "@/lib/mercadolibre/concurrency";
 import {
@@ -71,7 +71,12 @@ export class RotinaRefreshBusyError extends Error {
   }
 }
 
-const OPERATIONAL_STATUSES = new Set(["active", "paused"]);
+/**
+ * Só anúncio ativo entra na rodada: toda regra descarta o resto (`rules.ts`),
+ * e calcular pausado era metade do tempo e das chamadas ao ML sem gerar
+ * nenhuma tarefa. Pausado que volta a ativo entra na rodada seguinte.
+ */
+const OPERATIONAL_STATUSES = new Set(["active"]);
 
 function budgetFromEnv(): number {
   const raw = Number(process.env.ROTINA_REFRESH_BUDGET_MS);
@@ -539,7 +544,7 @@ export async function runRotinaRefresh(
     if (scope === "all" && !resumed) {
       emit({ type: "stage", stage: "listing", message: "Buscando seus anúncios no Mercado Livre…" });
       planned = await time("listing", () =>
-        fetchOperationalListingIds(params.token, params.userId, organizationId),
+        fetchAllUserItemIds(params.token, params.userId, { status: "active" }),
       );
       await prisma.listingHealthRun.update({
         where: { id: run.id },
@@ -708,7 +713,7 @@ export async function runRotinaRefresh(
     const finished = !stoppedEarly;
     if (finished && scope === "all") {
       emit({ type: "stage", stage: "finishing", message: "Fechando a rodada…" });
-      // Só sai do retrato o que o ML confirmou que não está mais ativo/pausado
+      // Só sai do retrato o que o ML confirmou que não está mais ativo
       // (ou que nem apareceu na listagem). Falha de leitura NÃO apaga: senão
       // um anúncio "resolveria" todas as ações só porque o ML engasgou.
       const plannedSet = new Set(planned);

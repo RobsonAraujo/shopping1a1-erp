@@ -8,7 +8,6 @@ import {
   Factory,
   Kanban,
   LayoutGrid,
-  Lightbulb,
   LineChart,
   ListChecks,
   Scale,
@@ -153,15 +152,9 @@ export const DASHBOARD_NAV_GROUPS: DashboardNavGroup[] = [
     items: [
       {
         href: "/dashboard/catalog-report",
-        label: "Catálogo",
-        description: "Mudanças de competição no catálogo",
+        label: "Relatório de catálogo",
+        description: "Quem está ganhando, dividindo ou perdendo no catálogo",
         icon: ChartNoAxesColumn,
-      },
-      {
-        href: "/dashboard/insights",
-        label: "Insights",
-        description: "Rotação baixa, ruptura, ads e concentração de receita",
-        icon: Lightbulb,
       },
       {
         href: "/dashboard/insights/potencial-faturamento",

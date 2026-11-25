@@ -94,7 +94,7 @@ Foi construído e removido, a pedido do usuário: precisava de cron e era compli
 
 ## Ponte com os módulos por anúncio (`stock-bridge.ts`)
 
-Compras, Kanban, Insights, detalhe do item e fechamento mensal usam `total = estoque do anúncio no ML + galpão`. Com o estoque ativado, o "galpão" de cada anúncio passa a sair do livro:
+Compras, Kanban, detalhe do item e fechamento mensal usam `total = estoque do anúncio no ML + galpão`. Com o estoque ativado, o "galpão" de cada anúncio passa a sair do livro:
 
 - anúncio Full: Em casa inteiro;
 - anúncio fora do Full: Em casa − depósito;

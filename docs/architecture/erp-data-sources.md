@@ -21,7 +21,7 @@
 | `/dashboard/dre` | DRE mensal (receita, COGS, resultado) | ML API + DB |
 | `/dashboard/relatorio-tributario` | Apuração fiscal PIS/COFINS + ICMS/DIFAL por venda | DB `tax_report_month_snapshots` + ML API |
 | `/dashboard/configuracoes-tributarias` | Regime tributário, alíquotas | DB `company_tax_settings` + `icms_internal_rates` |
-| `/dashboard/insights` | Insights cruzados acionáveis | Múltiplas fontes (ver abaixo) |
+| `/dashboard/insights/potencial-faturamento` | Potencial de faturamento sem ruptura + capital de giro (a página "Insights" foi removida em 2026-11) | ML API + DB `products` |
 
 ---
 
@@ -29,7 +29,7 @@
 
 ### Vendas e tributação (`src/lib/tax-report/types.ts`)
 
-| Tipo | Descrição | Campos-chave para insights |
+| Tipo | Descrição | Campos-chave |
 |------|-----------|---------------------------|
 | `TransacaoVenda` | Uma linha de venda enriquecida | `sku`, `ufDestino`, `receitaBruta`, `quantidade` |
 | `DetalhamentoTributario` | Venda + todos os impostos calculados | `margemOperacionalEstimada`, `impostoTotal`, `incluidoNaApuracao` |
@@ -40,7 +40,7 @@
 
 ### Avaliação financeira (`src/lib/financial-evaluation-data.ts`)
 
-| Tipo | Campos-chave para insights |
+| Tipo | Campos-chave |
 |------|---------------------------|
 | `FinancialEvaluationRow` | `sku`, `title`, `tacosPercent`, `marginAfterAdsPercent`, `marginAfterAdsValue`, `hasActiveAds`, `breakdown.marginPercent` |
 
@@ -52,7 +52,7 @@
 
 ### Análise de compras (`src/lib/purchase-analysis.ts`, `src/lib/purchase-analysis-rows.ts`)
 
-| Tipo | Campos-chave para insights |
+| Tipo | Campos-chave |
 |------|---------------------------|
 | `PurchaseAnalysisResult` | `coverageDays` (dias de cobertura), `dailyAvg` (média/dia), `performanceTier` ("alta"\|"media"\|"baixa"\|"zero"), `unitsSoldInWindow`, `purchaseStatus` |
 | `PurchaseAnalysisItemRow` | `item` (dados ML), `sku`, `totalStock`, `mlStock`, `warehouseStock`, `purchaseLeadTimeDays`, `analysis: PurchaseAnalysisResult` |
@@ -83,63 +83,6 @@
 
 ### `GET /api/inventory/[mlItemId]`
 - Estoque e movimentações de um anúncio específico
-
----
-
-## Campos de alto valor para insights
-
-| Campo | Onde está | Para que serve |
-|-------|-----------|----------------|
-| `margemOperacionalEstimada` | `DetalhamentoTributario` | Margem real por venda (base para mapa DIFAL) |
-| `creditoPisCofinsPerdidoEstimado` | `ApuracaoConsolidada.diagnostico` | Crédito fiscal perdido por custo não cadastrado |
-| `coverageDays` | `PurchaseAnalysisResult` | Dias de cobertura de estoque (slow movers + ruptura) |
-| `dailyAvg` | `PurchaseAnalysisResult` | Média de vendas por dia |
-| `performanceTier` | `PurchaseAnalysisResult` | Classificação de rotação ("alta"\|"media"\|"baixa"\|"zero") |
-| `tacosPercent` | `FinancialEvaluationRow` | % de ads sobre receita total |
-| `marginAfterAdsPercent` | `FinancialEvaluationRow` | Margem líquida após descontar ads |
-| `receitaTotal` | `SkuAggregation` | Receita total por SKU no período (base para Pareto) |
-| `ufDestino` | `TransacaoVenda` | Estado do comprador (base para mapa DIFAL) |
-| `purchaseLeadTimeDays` | `PurchaseAnalysisItemRow` | Lead time de reposição (para alerta de ruptura) |
-
----
-
-## Como carregar dados nos insights
-
-### Slow movers + Ruptura iminente
-```typescript
-// src/lib/dashboard-purchase-data.ts
-const data = await loadDashboardPurchaseData(token, userId)
-// data.rows: PurchaseAnalysisItemRow[]
-// row.analysis.coverageDays — dias de cobertura
-// row.analysis.dailyAvg — média de vendas/dia
-// row.purchaseLeadTimeDays — lead time de reposição
-```
-
-### DIFAL por estado + Pareto de receita
-```typescript
-// src/lib/tax-report/service/generate-monthly-report.ts
-const payload = await loadLatestTaxReportSnapshot(sellerId)
-// payload.porSku[].transacoes[].transacao.ufDestino
-// payload.porSku[].transacoes[].margemOperacionalEstimada
-// payload.porSku[].receitaTotal
-```
-
-### Ads × Margem
-```typescript
-// Client component via fetch('/api/financial-evaluation')
-// row.tacosPercent vs row.breakdown?.marginPercent
-// row.hasActiveAds — filtrar apenas com ads ativos
-```
-
----
-
-## Função para buscar snapshot mais recente
-
-`loadLatestTaxReportSnapshot(sellerId)` em `src/lib/tax-report/service/generate-monthly-report.ts`:
-```typescript
-// Retorna o snapshot mais recente disponível (qualquer mês)
-// ou null se não houver nenhum gerado ainda
-```
 
 ---
 

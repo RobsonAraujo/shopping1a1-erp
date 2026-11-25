@@ -288,7 +288,6 @@ export function RotinaAllListingsTable({
                         <ListingTypeTag listingTypeId={row.listingTypeId} />
                         <span className="truncate">
                           {row.sku ?? row.mlItemId} · {formatUnitsRate(row.unitsPerDay)}
-                          {row.mlStatus !== "active" ? " · pausado" : ""}
                         </span>
                       </span>
                     </div>

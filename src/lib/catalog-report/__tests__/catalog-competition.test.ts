@@ -368,7 +368,8 @@ describe("catalogStatusLabel", () => {
     assert.equal(catalogStatusLabel("winning"), "Ganhando");
     assert.equal(catalogStatusLabel("losing"), "Perdendo");
     assert.equal(catalogStatusLabel("shared"), "Compartilhando");
-    assert.equal(catalogStatusLabel("unknown"), "Sem sinal");
+    assert.equal(catalogStatusLabel("unknown"), "Fora da disputa");
+    assert.equal(catalogStatusLabel(null), "Ainda não lido");
   });
 });
 

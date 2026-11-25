@@ -391,7 +391,7 @@ function productToStockReportInfo(product: {
 /**
  * Custo/NCM por `mlItemId` (1:1 real) — usada pelo cron de fechamento de
  * estoque (que agrupa por SKU só na hora de montar o relatório, a partir do
- * snapshot já congelado) e por consumidores como Insights, onde cada
+ * snapshot já congelado) e pelo Potencial de faturamento, onde cada
  * anúncio precisa do seu próprio custo mesmo que dois anúncios compartilhem
  * o mesmo texto de SKU exibido (`Product.sku` não é único).
  */

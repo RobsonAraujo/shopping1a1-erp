@@ -15,7 +15,14 @@ export async function GET() {
   try {
     const [listings, pollStats] = await Promise.all([
       prisma.listing.findMany({
-        where: { organizationId: auth.ctx.organizationId, catalogListing: true },
+        // Só o que está no ar (ativo ou pausado): encerrado, inativo e
+        // excluído não são mais disputa de catálogo. O poll corrige o status
+        // dos que saíram da listagem do ML.
+        where: {
+          organizationId: auth.ctx.organizationId,
+          catalogListing: true,
+          mlStatus: { in: ["active", "paused"] },
+        },
         select: {
           mlItemId: true,
           titleSnapshot: true,
