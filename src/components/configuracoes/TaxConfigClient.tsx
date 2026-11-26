@@ -134,25 +134,6 @@ export function TaxConfigClient() {
     }
   };
 
-  const saveIcmsRow = async (row: IcmsRateRow) => {
-    setSaving(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/tax-config", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ icmsRate: row }),
-      });
-      if (!res.ok) throw new Error(await readApiError(res, "icms_save"));
-      setData((await res.json()) as TaxConfigResponse);
-      setMessage(`Alíquota ${row.uf} atualizada.`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao salvar ICMS");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   if (loading) {
     return <ConfiguracoesSkeleton cards={2} />;
   }
@@ -354,17 +335,14 @@ export function TaxConfigClient() {
                 ICMS interno + FCP por UF
               </h2>
               <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-                Valores iniciais devem ser validados com CONFAZ/RICMS. Alíquota
-                total = base + FCP.
+                Alíquota modal vigente em cada estado (total = base + FCP),
+                usada na venda interna e no DIFAL. Vale para todas as empresas
+                e é mantida pela Maipo.
               </p>
             </div>
           </div>
           <div className="p-4 sm:p-5">
-            <IcmsRatesTable
-              rows={data?.icmsRates ?? []}
-              saving={saving}
-              onSave={saveIcmsRow}
-            />
+            <IcmsRatesTable rows={data?.icmsRates ?? []} />
           </div>
         </Card>
       ) : null}

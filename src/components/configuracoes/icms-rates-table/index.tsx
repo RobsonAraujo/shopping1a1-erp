@@ -3,7 +3,7 @@
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { useTableSort } from "@/hooks/use-table-sort";
 import type { IcmsRateRow } from "@/lib/tax-report/types";
-import type { IcmsRateSortKey } from "./types";
+import type { IcmsRateSortKey, IcmsRatesTableProps } from "./types";
 import { IcmsRatesDesktop } from "./IcmsRatesDesktop";
 import { IcmsRatesMobile } from "./IcmsRatesMobile";
 
@@ -15,27 +15,14 @@ function getValue(row: IcmsRateRow, key: IcmsRateSortKey): string | number {
   return row.fcp;
 }
 
-export function IcmsRatesTable({
-  rows,
-  saving,
-  onSave,
-}: {
-  rows: IcmsRateRow[];
-  saving: boolean;
-  onSave: (row: IcmsRateRow) => Promise<void>;
-}) {
+/** Tabela global (todas as organizações), só leitura — mantida por migration. */
+export function IcmsRatesTable({ rows }: IcmsRatesTableProps) {
   const isMobile = useIsMobile();
   const { sort, sortedRows, onSortChange } = useTableSort(rows, getValue, DEFAULT_SORT);
 
   return isMobile ? (
-    <IcmsRatesMobile rows={sortedRows} saving={saving} onSave={onSave} />
+    <IcmsRatesMobile rows={sortedRows} />
   ) : (
-    <IcmsRatesDesktop
-      rows={sortedRows}
-      saving={saving}
-      onSave={onSave}
-      sort={sort}
-      onSortChange={onSortChange}
-    />
+    <IcmsRatesDesktop rows={sortedRows} sort={sort} onSortChange={onSortChange} />
   );
 }

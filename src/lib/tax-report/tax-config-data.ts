@@ -151,21 +151,10 @@ export async function updateTaxCompanyConfig(
   };
 }
 
-export async function upsertIcmsInternalRate(input: IcmsRateRow): Promise<void> {
-  await prisma.icmsInternalRate.upsert({
-    where: { uf: input.uf },
-    create: {
-      uf: input.uf,
-      aliquotaBase: input.aliquotaBase,
-      fcp: input.fcp,
-    },
-    update: {
-      aliquotaBase: input.aliquotaBase,
-      fcp: input.fcp,
-    },
-  });
-}
-
+/*
+ * As tabelas de ICMS interno e CBS/IBS são globais (valem para todas as
+ * organizações) e só mudam por migration — nenhuma org pode editá-las.
+ */
 export async function listIcmsInternalRates(): Promise<IcmsRateRow[]> {
   const rows = await prisma.icmsInternalRate.findMany({ orderBy: { uf: "asc" } });
   return rows.map((row) => ({
@@ -173,27 +162,6 @@ export async function listIcmsInternalRates(): Promise<IcmsRateRow[]> {
     aliquotaBase: decimalToNumber(row.aliquotaBase),
     fcp: decimalToNumber(row.fcp),
   }));
-}
-
-export async function upsertCbsIbsVigencia(
-  input: CbsIbsVigenciaRow,
-): Promise<void> {
-  await prisma.cbsIbsVigencia.upsert({
-    where: { year: input.year },
-    create: {
-      year: input.year,
-      cbsRate: input.cbsRate,
-      ibsEstadualRate: input.ibsEstadualRate,
-      ibsMunicipalRate: input.ibsMunicipalRate,
-      notes: input.notes,
-    },
-    update: {
-      cbsRate: input.cbsRate,
-      ibsEstadualRate: input.ibsEstadualRate,
-      ibsMunicipalRate: input.ibsMunicipalRate,
-      notes: input.notes,
-    },
-  });
 }
 
 export async function listCbsIbsVigencia(): Promise<CbsIbsVigenciaRow[]> {

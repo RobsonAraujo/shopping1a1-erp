@@ -5,8 +5,6 @@ import {
   listIcmsInternalRates,
   loadTaxCompanyConfig,
   updateTaxCompanyConfig,
-  upsertCbsIbsVigencia,
-  upsertIcmsInternalRate,
 } from "@/lib/tax-report/tax-config-data";
 import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 import { requireOrganization } from "@/lib/api/api-auth";
@@ -46,22 +44,12 @@ const patchBodySchema = z.object({
     })
     .partial()
     .optional(),
-  icmsRate: z
-    .object({
-      uf: z.string().length(2),
-      aliquotaBase: z.number().finite(),
-      fcp: z.number().finite(),
-    })
-    .optional(),
-  cbsIbs: z
-    .object({
-      year: z.number().int(),
-      cbsRate: z.number().finite().nullable(),
-      ibsEstadualRate: z.number().finite().nullable(),
-      ibsMunicipalRate: z.number().finite().nullable(),
-      notes: z.string().nullish(),
-    })
-    .optional(),
+  /**
+   * ICMS interno por UF e CBS/IBS são tabelas globais (todas as organizações);
+   * mantidas só por migration. Aceitos no schema apenas para responder 403.
+   */
+  icmsRate: z.unknown().optional(),
+  cbsIbs: z.unknown().optional(),
 });
 
 export async function PATCH(request: NextRequest) {
@@ -75,18 +63,20 @@ export async function PATCH(request: NextRequest) {
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data;
 
+  if (body.icmsRate !== undefined || body.cbsIbs !== undefined) {
+    return NextResponse.json(
+      {
+        error:
+          "As alíquotas de ICMS por UF e de CBS/IBS valem para todas as empresas e são mantidas pela Maipo.",
+        code: "global_tax_table_read_only",
+      },
+      { status: 403 },
+    );
+  }
+
   try {
     if (body.company) {
       await updateTaxCompanyConfig(organizationId, body.company);
-    }
-    if (body.icmsRate) {
-      await upsertIcmsInternalRate(body.icmsRate);
-    }
-    if (body.cbsIbs) {
-      await upsertCbsIbsVigencia({
-        ...body.cbsIbs,
-        notes: body.cbsIbs.notes ?? null,
-      });
     }
 
     const [company, icmsRates, cbsIbs] = await Promise.all([

@@ -25,7 +25,7 @@ src/lib/tax-report/
 
 ## Tabelas configuráveis (sem deploy)
 
-- **ICMS interno + FCP**: `icms_internal_rates` — UI em `/dashboard/configuracoes-tributarias`
+- **ICMS interno + FCP**: `icms_internal_rates` — tabela global, só leitura em `/dashboard/configuracoes-tributarias`; muda só por migration (a API recusa edição com 403)
 - **CBS/IBS por ano**: `cbs_ibs_vigencia`
 - **Empresa**: `company_tax_settings` (regime, UF origem, PIS/COFINS)
 
@@ -71,7 +71,7 @@ O nivelamento do DRE guarda o histórico do cadastro do produto por período: cu
 ## Limitações conhecidas
 
 - Apenas **Lucro Real** na v1
-- Alíquotas internas: validar periodicamente com CONFAZ (seed inicial com TODO)
+- Alíquotas internas: modais de 2026 (migration `20261126120000_icms_internal_rates_2026`); revisar a cada mudança de lei estadual. A tabela não tem vigência: recalcular um mês anterior a uma mudança usa a alíquota atual
 - CBS/IBS 2026: informativo, compensado com PIS/COFINS no mesmo período
 - O DRE aplica o % por anúncio deste relatório à receita sem canceladas/devolvidas (ver `src/lib/dre/README.md` → Imposto sobre vendas); vendas devolvidas não são abatidas aqui (o relatório é por venda paga)
 
