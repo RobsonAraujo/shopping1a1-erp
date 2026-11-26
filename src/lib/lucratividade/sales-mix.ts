@@ -39,6 +39,8 @@ export type SalesMixEntry = {
   /** Tarifa ML somada (já × unidades) das linhas que trouxeram `sale_fee`. */
   saleFeeSum: number;
   saleFeeKnownQty: number;
+  /** Unidades enviadas pelo Flex (frete R$ 0 na margem). */
+  flexUnits: number;
   minUnitPrice: number | null;
   maxUnitPrice: number | null;
 };
@@ -68,7 +70,26 @@ export type SalesMixSale = {
   revenue: number;
   unitPrice: number | null;
   saleFeePerUnit: number | null;
+  /** Unidades desta venda enviadas pelo Flex. Ausente = todas, se `logistic`
+   * é Flex; nenhuma, nos outros casos. */
+  flexUnits?: number;
 };
+
+/**
+ * Frete médio por unidade de um conjunto de vendas. O Flex sai sem frete: o
+ * Mercado Livre não cobra e consideramos que o bônus de envio paga a entrega
+ * (nem o frete nem o bônus entram na conta, nov/2026). As demais vendas pagam
+ * a cotação do anúncio. A conta é linear, então média × un. = Σ dos fretes.
+ */
+export function averageShippingPerUnit(
+  quotePerUnit: number,
+  units: number,
+  flexUnits: number,
+): number {
+  if (units <= 0) return quotePerUnit;
+  const flex = Math.min(Math.max(flexUnits, 0), units);
+  return roundMoney((quotePerUnit * (units - flex)) / units);
+}
 
 export const SALES_CHANNEL_LABEL: Record<OrderChannel, string> = {
   retail: "Varejo",
@@ -122,12 +143,17 @@ export function createSalesMixAccumulator() {
         revenue: 0,
         saleFeeSum: 0,
         saleFeeKnownQty: 0,
+        flexUnits: 0,
         minUnitPrice: null,
         maxUnitPrice: null,
       };
       entry.orders += 1;
       entry.units += sale.quantity;
       entry.revenue += sale.revenue;
+      entry.flexUnits += Math.min(
+        Math.max(sale.flexUnits ?? (sale.logistic === "flex" ? sale.quantity : 0), 0),
+        Math.max(sale.quantity, 0),
+      );
       if (sale.saleFeePerUnit !== null && sale.quantity > 0) {
         entry.saleFeeSum += sale.saleFeePerUnit * sale.quantity;
         entry.saleFeeKnownQty += sale.quantity;
@@ -161,6 +187,7 @@ export type SalesMixRowInput = Parameters<typeof marginExclusionReason>[0] &
   Pick<
     FinancialEvaluationRow,
     | "shippingCost"
+    | "shippingQuoteCost"
     | "mlFeeAmount"
     | "extraCosts"
     | "listingTypeId"
@@ -173,14 +200,17 @@ type EntryMargin = {
   feePerUnit: number | null;
   /** `true` = a modalidade não trouxe `sale_fee`; usou a taxa da linha. */
   feeFromRow: boolean;
+  /** Frete por unidade desta modalidade (Flex = R$ 0). */
+  shippingPerUnit: number | null;
   marginValue: number | null;
   marginPercent: number | null;
 };
 
 /**
- * Margem de uma modalidade com o MESMO frete estimado, custo e imposto da
- * linha — só preço e tarifa mudam. Assim Σ (un. × margem) fecha na margem
- * do anúncio (a menos de centavos de arredondamento).
+ * Margem de uma modalidade com o MESMO custo e imposto da linha e a mesma
+ * cotação de frete — só preço, tarifa e un. Flex (sem frete) mudam. Assim
+ * Σ (un. × margem) fecha na margem do anúncio (a menos de centavos de
+ * arredondamento), que usa o frete médio do período.
  */
 function entryMargin(row: SalesMixRowInput, entry: SalesMixEntry): EntryMargin {
   const averagePrice =
@@ -191,16 +221,20 @@ function entryMargin(row: SalesMixRowInput, entry: SalesMixEntry): EntryMargin {
       : null;
   const feePerUnit = ownFee ?? row.mlFeeAmount;
   const feeFromRow = ownFee === null && feePerUnit !== null;
+  const quote = row.shippingQuoteCost ?? row.shippingCost;
+  const shippingPerUnit =
+    quote === null ? null : averageShippingPerUnit(quote, entry.units, entry.flexUnits);
   if (
     marginExclusionReason(row) !== null ||
     feePerUnit === null ||
-    row.shippingCost === null ||
+    shippingPerUnit === null ||
     averagePrice <= 0
   ) {
     return {
       averagePrice,
       feePerUnit,
       feeFromRow,
+      shippingPerUnit,
       marginValue: null,
       marginPercent: null,
     };
@@ -209,7 +243,7 @@ function entryMargin(row: SalesMixRowInput, entry: SalesMixEntry): EntryMargin {
     salePrice: averagePrice,
     mlFeeAmount: feePerUnit,
     mlFeeRebate: 0,
-    shippingCost: row.shippingCost,
+    shippingCost: shippingPerUnit,
     productCost: row.productCost,
     extraCosts: row.extraCosts ?? 0,
     taxRatePercent: row.taxRatePercent,
@@ -218,6 +252,7 @@ function entryMargin(row: SalesMixRowInput, entry: SalesMixEntry): EntryMargin {
     averagePrice,
     feePerUnit,
     feeFromRow,
+    shippingPerUnit,
     marginValue: breakdown.marginValue,
     marginPercent: breakdown.marginPercent,
   };
@@ -330,6 +365,7 @@ function mergeChannel(entries: SalesMixEntry[], channel: OrderChannel): SalesMix
     revenue: 0,
     saleFeeSum: 0,
     saleFeeKnownQty: 0,
+    flexUnits: 0,
     minUnitPrice: null,
     maxUnitPrice: null,
   };
@@ -339,6 +375,7 @@ function mergeChannel(entries: SalesMixEntry[], channel: OrderChannel): SalesMix
     result.revenue += entry.revenue;
     result.saleFeeSum += entry.saleFeeSum;
     result.saleFeeKnownQty += entry.saleFeeKnownQty;
+    result.flexUnits += entry.flexUnits;
   }
   return result;
 }
@@ -467,9 +504,10 @@ const LOGISTIC_MEANING: Record<SalesMixLogistic, string> = {
 };
 
 /**
- * Tooltip e sublinha de uma modalidade. Hoje TODAS as linhas usam o mesmo
- * frete — a cotação do ML para o envio do anúncio (`row.shippingCost`) —, por
- * isso Flex, outros envios e envio diferente do anúncio são "de referência".
+ * Tooltip e sublinha de uma modalidade. As vendas pagam a cotação do ML para o
+ * envio do anúncio (`ctx.shippingCost`); por isso outros envios e envio
+ * diferente do anúncio são "de referência". O Flex sai sem frete: o bônus de
+ * envio paga a entrega, e nem o frete nem o bônus entram na conta.
  */
 export function describeSalesMixRow(
   tableRow: Pick<SalesMixTableRow, "channel" | "logistic" | "feeFromRow">,
@@ -507,7 +545,6 @@ export function describeSalesMixRow(
   }
 
   const reference =
-    logistic === "flex" ||
     logistic === "other" ||
     logistic === "unclassified" ||
     ((logistic === "full" || logistic === "coleta") && logistic !== ctx.listingLogistic);
@@ -515,7 +552,7 @@ export function describeSalesMixRow(
   let comingSoon: string | null = null;
   if (logistic === "flex") {
     lines.push(
-      `Frete: o Mercado Livre não cobra frete no Flex, e o custo da sua entrega ainda não está cadastrado. Por isso usamos ${source}${value}.`,
+      "Frete: R$ 0. O Mercado Livre não cobra frete no Flex, e consideramos que o bônus de envio paga a sua entrega — nem o frete nem o bônus entram na conta.",
     );
     comingSoon = "cadastrar o custo da sua entrega Flex.";
   } else if (logistic === "other") {
@@ -534,7 +571,12 @@ export function describeSalesMixRow(
   }
 
   return {
-    shippingNote: reference ? `usa ${source}${value}` : null,
+    shippingNote:
+      logistic === "flex"
+        ? "sem frete: o bônus de envio paga a entrega"
+        : reference
+          ? `usa ${source}${value}`
+          : null,
     lines,
     comingSoon,
   };
@@ -559,7 +601,13 @@ export type MarginPrecisionItem = {
 export function describeMarginPrecision(
   row: Pick<
     FinancialEvaluationRow,
-    "shippingCost" | "productCost" | "extraCosts" | "taxRatePercent" | "isKitComposition"
+    | "shippingCost"
+    | "shippingQuoteCost"
+    | "periodFlexUnits"
+    | "productCost"
+    | "extraCosts"
+    | "taxRatePercent"
+    | "isKitComposition"
   >,
   ctx: {
     taxRegime: TaxRegime;
@@ -569,6 +617,8 @@ export function describeMarginPrecision(
 ): MarginPrecisionItem[] {
   const source = listingShippingSource(ctx.listingLogistic);
   const shippingSource = source.charAt(0).toUpperCase() + source.slice(1);
+  const shippingQuote = row.shippingQuoteCost ?? row.shippingCost;
+  const flexUnits = row.periodFlexUnits ?? 0;
   const cost =
     row.productCost === null ? null : roundMoney(row.productCost + (row.extraCosts ?? 0));
   const simples = ctx.taxRegime === "SIMPLES";
@@ -597,7 +647,10 @@ export function describeMarginPrecision(
       label: "Frete",
       status: "estimated",
       statusLabel: "Estimado",
-      detail: `${shippingSource}${perUnit(row.shippingCost)}, cotado pelo Mercado Livre e igual para todas as vendas — não é o frete real de cada pedido.`,
+      detail:
+        flexUnits > 0
+          ? `${shippingSource}${perUnit(shippingQuote)}, cotado pelo Mercado Livre, nas vendas que não são Flex — não é o frete real de cada pedido. As vendas Flex (${flexUnits.toLocaleString("pt-BR")} un.) entram sem frete: o bônus de envio paga a entrega.`
+          : `${shippingSource}${perUnit(shippingQuote)}, cotado pelo Mercado Livre e igual para todas as vendas — não é o frete real de cada pedido.`,
       comingSoon: "frete real de cada pedido e custo da sua entrega Flex.",
     },
     {

@@ -12,12 +12,15 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
-/** Alltec em 17/11 até 17:49: 39 un., preço médio 29,40, tarifa média 3,87. */
+/**
+ * Alltec em 17/11 até 17:49: 39 un., preço médio 29,40, tarifa média 3,87.
+ * 2 un. foram Flex (sem frete), então o frete médio é 7,35 × 37/39 = 6,97.
+ */
 function alltecRow(): FinancialEvaluationRow {
   const breakdown = computeFinancialMargin({
     salePrice: 29.4,
     mlFeeAmount: 3.87,
-    shippingCost: 7.35,
+    shippingCost: 6.97,
     productCost: 18.42,
     extraCosts: 0.3,
     taxRatePercent: 1.64,
@@ -43,7 +46,9 @@ function alltecRow(): FinancialEvaluationRow {
     mlFeeAmount: 3.87,
     mlFeeRebate: null,
     mlFeeRebateOrderId: null,
-    shippingCost: 7.35,
+    shippingCost: 6.97,
+    shippingQuoteCost: 7.35,
+    periodFlexUnits: 2,
     breakdown,
     acosPercent: null,
     tacosPercent: 0,
@@ -71,6 +76,7 @@ function alltecRow(): FinancialEvaluationRow {
         revenue: 896.1,
         saleFeeSum: 120.7,
         saleFeeKnownQty: 30,
+        flexUnits: 2,
         minUnitPrice: 29.87,
         maxUnitPrice: 29.87,
       },
@@ -82,6 +88,7 @@ function alltecRow(): FinancialEvaluationRow {
         revenue: 250.65,
         saleFeeSum: 30.06,
         saleFeeKnownQty: 9,
+        flexUnits: 0,
         minUnitPrice: 27.85,
         maxUnitPrice: 27.85,
       },
@@ -100,6 +107,7 @@ const withShipments: SalesMixForItem = {
       revenue: 836.36,
       saleFeeSum: 100.24,
       saleFeeKnownQty: 28,
+      flexUnits: 0,
       minUnitPrice: 29.87,
       maxUnitPrice: 29.87,
     },
@@ -112,6 +120,7 @@ const withShipments: SalesMixForItem = {
       revenue: 250.65,
       saleFeeSum: 30.06,
       saleFeeKnownQty: 9,
+      flexUnits: 0,
       minUnitPrice: 27.85,
       maxUnitPrice: 27.85,
     },
@@ -124,6 +133,7 @@ const withShipments: SalesMixForItem = {
       revenue: 59.74,
       saleFeeSum: 20.46,
       saleFeeKnownQty: 2,
+      flexUnits: 2,
       minUnitPrice: 29.87,
       maxUnitPrice: 29.87,
     },
@@ -189,12 +199,12 @@ describe("SalesMixSection", () => {
     assert.match(text, /10,23/); // tarifa do Flex
     assert.doesNotMatch(text, /Classificando a forma de envio/);
 
-    // só o Flex usa frete de outro envio — e a linha diz qual
+    // só o Flex tem sublinha de frete: sai sem frete (o bônus paga a entrega)
     const notes = [...container.querySelectorAll("[data-shipping-note]")].map(
       (el) => el.textContent ?? "",
     );
     assert.equal(notes.length, 1);
-    assert.match(notes[0] ?? "", /^usa o frete padrão do Full do anúncio \(R\$\s7,35\/un\.\)$/);
+    assert.equal(notes[0], "sem frete: o bônus de envio paga a entrega");
 
     // cada modalidade tem o próprio (?)
     const triggers = [...container.querySelectorAll("button[aria-label^='Como calculamos']")].map(
@@ -234,7 +244,10 @@ describe("SalesMixSection", () => {
     assert.deepEqual([...items.keys()], ["price", "fee", "shipping", "cost", "tax", "returns", "ads"]);
     assert.match(items.get("price") ?? "", /Real/);
     assert.match(items.get("fee") ?? "", /Real/);
-    assert.match(items.get("shipping") ?? "", /Estimado.*frete padrão do Full do anúncio \(R\$\s7,35\/un\.\).*Em breve/);
+    assert.match(
+      items.get("shipping") ?? "",
+      /Estimado.*frete padrão do Full do anúncio \(R\$\s7,35\/un\.\).*nas vendas que não são Flex.*Flex \(2 un\.\) entram sem frete.*Em breve/,
+    );
     assert.match(items.get("cost") ?? "", /Estimado.*cadastro atual.*R\$\s18,72\/un\./i);
     assert.match(items.get("tax") ?? "", /Estimado.*Tributário.*1,64%.*Em breve/);
     assert.match(items.get("returns") ?? "", /Não descontadas.*Em breve/);

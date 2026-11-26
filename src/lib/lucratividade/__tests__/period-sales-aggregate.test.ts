@@ -145,3 +145,44 @@ describe("aggregatePeriodSalesByItem — composição (canal × tipo do pedido)"
     assert.equal(agg.mix[0]?.saleFeeKnownQty, 0);
   });
 });
+
+describe("aggregatePeriodSalesByItem — vendas Flex", () => {
+  // Pedidos reais de 19/11/2026 (MLB3811115045): um Flex e um Full.
+  const flexOrder: OrderSearchOrder = {
+    id: 2000019655897020,
+    status: "paid",
+    shipping: { id: 48573854217 },
+    order_items: [
+      { item: { id: "MLB3811115045" }, quantity: 1, unit_price: 64.59, sale_fee: 16.15, listing_type_id: "gold_special" },
+    ],
+  };
+  const fullOrder: OrderSearchOrder = {
+    id: 2000019660563168,
+    status: "paid",
+    shipping: { id: 48576504060 },
+    order_items: [
+      { item: { id: "MLB3811115045" }, quantity: 2, unit_price: 67.37, sale_fee: 8.76, listing_type_id: "gold_special" },
+    ],
+  };
+
+  it("conta as unidades dos envios Flex na linha e na composição", () => {
+    const agg = aggregatePeriodSalesByItem(
+      [flexOrder, fullOrder],
+      new Set(["48573854217"]),
+    ).get("MLB3811115045");
+    assert.ok(agg);
+    assert.equal(agg.quantity, 3);
+    assert.equal(agg.flexUnits, 1);
+    // a tarifa continua a do pedido (no Flex, já com o custo fixo)
+    assert.ok(Math.abs(agg.saleFeeSum - (16.15 + 8.76 * 2)) < 1e-9);
+    assert.equal(agg.mix.length, 1);
+    assert.equal(agg.mix[0]?.flexUnits, 1);
+  });
+
+  it("sem envios Flex, nenhuma unidade é Flex", () => {
+    const agg = aggregatePeriodSalesByItem([flexOrder, fullOrder]).get("MLB3811115045");
+    assert.ok(agg);
+    assert.equal(agg.flexUnits, 0);
+    assert.equal(agg.mix[0]?.flexUnits, 0);
+  });
+});

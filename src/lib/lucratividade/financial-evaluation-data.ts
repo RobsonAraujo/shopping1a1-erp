@@ -59,7 +59,11 @@ import {
   aggregatePeriodSalesByItem,
   type PeriodSaleAgg,
 } from "@/lib/lucratividade/period-sales-aggregate";
-import type { SalesMixEntry } from "@/lib/lucratividade/sales-mix";
+import {
+  averageShippingPerUnit,
+  type SalesMixEntry,
+} from "@/lib/lucratividade/sales-mix";
+import { loadFlexShipmentIds } from "@/lib/lucratividade/flex-shipments";
 import { refineMinSalePriceForTargetMargin } from "@/lib/pricing/refine-min-sale-price";
 
 export {
@@ -96,7 +100,15 @@ export type FinancialEvaluationRow = {
   mlFeeAmount: number | null;
   mlFeeRebate: number | null;
   mlFeeRebateOrderId: string | null;
+  /** Frete por unidade usado na margem. No modo período é a média das
+   * vendas: o Flex entra sem frete (o bônus de envio paga a entrega), as
+   * demais pagam `shippingQuoteCost`. */
   shippingCost: number | null;
+  /** Só no modo período: a cotação do ML para o envio do anúncio, por
+   * unidade — o frete das vendas que não são Flex. Ausente = `shippingCost`. */
+  shippingQuoteCost?: number | null;
+  /** Só no modo período: unidades enviadas pelo Flex. */
+  periodFlexUnits?: number;
   breakdown: FinancialMarginBreakdown | null;
   acosPercent: number | null;
   tacosPercent: number | null;
@@ -822,31 +834,43 @@ async function buildRowForPeriodItem(
     }
   }
 
-  let shippingCost: number | null = null;
-
-  async function loadShipping(): Promise<void> {
+  /** Cotação do frete do anúncio no preço médio, por unidade. */
+  async function loadShippingQuote(): Promise<number | null> {
     try {
       const shipping = await fetchSellerShippingCost(accessToken, {
         sellerId: userId,
         item,
         effectiveSalePrice: salePrice,
       });
-      shippingCost = shipping.applicable ? shipping.cost : 0;
       if (!shipping.applicable) {
         notes.push("Frete grátis não aplicável ou indisponível (considerado 0).");
       } else {
         notes.push("Frete estimado no preço médio do período.");
       }
+      return shipping.applicable ? shipping.cost : 0;
     } catch (e) {
       errors.push(
         e instanceof Error ? e.message : "Falha ao consultar frete do vendedor.",
       );
+      return null;
     }
   }
 
   // fetchListingSaleFee (quando necessário) e fetchSellerShippingCost não dependem
   // uma da outra — rodam em paralelo pra reduzir a latência por item.
-  await Promise.all([loadFee(), loadShipping()]);
+  const [, shippingQuoteCost] = await Promise.all([loadFee(), loadShippingQuote()]);
+
+  // Flex: sem frete — o ML não cobra e o bônus de envio paga a entrega (nem
+  // o frete nem o bônus entram na conta). As demais vendas pagam a cotação.
+  const shippingCost =
+    shippingQuoteCost !== null && agg.flexUnits > 0
+      ? averageShippingPerUnit(shippingQuoteCost, agg.quantity, agg.flexUnits)
+      : shippingQuoteCost;
+  if (agg.flexUnits > 0) {
+    notes.push(
+      `${agg.flexUnits} de ${agg.quantity} un. foram Flex: entram sem frete (o bônus de envio do ML paga a entrega). O frete é a média por unidade.`,
+    );
+  }
 
   if (usedOrderFee && item.listing_type_id) {
     listingTypeLabel = listingTypeLabelFromId(item.listing_type_id);
@@ -887,6 +911,8 @@ async function buildRowForPeriodItem(
     mlFeeRebate: null,
     mlFeeRebateOrderId: null,
     shippingCost,
+    shippingQuoteCost,
+    periodFlexUnits: agg.flexUnits,
     breakdown,
     errors,
     warnings,
@@ -1123,7 +1149,9 @@ export type FinancialEvaluationMeta = {
 };
 
 export type FinancialEvaluationProgress = {
-  stage: "orders";
+  /** `orders` = busca dos pedidos; `shipments` = consulta dos envios de
+   * estoque próprio, para achar as vendas Flex. */
+  stage: "orders" | "shipments";
   fetched: number;
   total: number | null;
 };
@@ -1373,7 +1401,16 @@ export async function loadFinancialEvaluationRowsForPeriod(
   );
   // Depois da busca: todo pedido que entrou na conta fechou até aqui.
   const ordersFetchedAt = new Date().toISOString();
-  const salesByItem = aggregatePeriodSalesByItem(orders);
+  // Vendas Flex entram sem frete. Só os envios de estoque próprio são consultados.
+  const flex = await loadFlexShipmentIds(accessToken, orders, {
+    signal,
+    onProgress: options?.onProgress
+      ? ({ checked, total }) =>
+          options.onProgress!({ stage: "shipments", fetched: checked, total })
+      : undefined,
+  });
+  signal?.throwIfAborted();
+  const salesByItem = aggregatePeriodSalesByItem(orders, flex.flexShipmentIds);
   const itemIds = [...salesByItem.keys()];
   const salesCount = [...salesByItem.values()].reduce(
     (sum, agg) => sum + agg.quantity,

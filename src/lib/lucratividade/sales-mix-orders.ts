@@ -106,6 +106,7 @@ export async function loadSalesMixForItem(
         revenue: lineRevenue,
         unitPrice: unitPriceFromOrderLine(line),
         saleFeePerUnit: saleFeePerUnitFromOrderLine(line),
+        flexUnits: logistic === "flex" ? quantity : 0,
       });
     }
   }

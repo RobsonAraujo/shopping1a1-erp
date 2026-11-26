@@ -17,8 +17,12 @@ export type PeriodSaleAgg = {
   saleFeeSum: number;
   /** Unidades cobertas por `saleFeeSum` — divisor da tarifa média por unidade. */
   saleFeeKnownQty: number;
+  /** Unidades enviadas pelo Flex: entram sem frete na margem (o bônus de
+   * envio do ML paga a entrega). */
+  flexUnits: number;
   /** As mesmas vendas por canal (varejo/B2B) × tipo de anúncio do pedido —
-   * sem envio (esse só no painel, sob demanda). */
+   * sem a forma de envio (essa só no painel, sob demanda); cada entrada
+   * traz as suas unidades Flex. */
   mix: SalesMixEntry[];
 };
 
@@ -75,6 +79,8 @@ export function unitPriceFromOrderLine(line: { unit_price?: unknown }): number |
 
 export function aggregatePeriodSalesByItem(
   orders: OrderSearchOrder[],
+  /** Envios (`shipping.id`) que foram Flex — ver `loadFlexShipmentIds`. */
+  flexShipmentIds: ReadonlySet<string> = new Set(),
 ): Map<string, PeriodSaleAgg> {
   const byItem = new Map<string, PeriodSaleAgg>();
   const mixByItem = new Map<string, ReturnType<typeof createSalesMixAccumulator>>();
@@ -82,6 +88,8 @@ export function aggregatePeriodSalesByItem(
   for (const order of orders) {
     if (order.status === "cancelled") continue;
     const channel = orderChannel(order);
+    const isFlex =
+      order.shipping?.id != null && flexShipmentIds.has(String(order.shipping.id));
     for (const line of order.order_items ?? []) {
       const itemId = listingIdFromOrderLine(line);
       if (!itemId) continue;
@@ -95,10 +103,12 @@ export function aggregatePeriodSalesByItem(
         revenue: 0,
         saleFeeSum: 0,
         saleFeeKnownQty: 0,
+        flexUnits: 0,
         mix: [],
       };
       existing.quantity += quantity;
       existing.revenue += revenue;
+      if (isFlex) existing.flexUnits += quantity;
 
       const saleFee = saleFeePerUnitFromOrderLine(line);
       if (saleFee !== null && quantity > 0) {
@@ -116,6 +126,7 @@ export function aggregatePeriodSalesByItem(
         revenue,
         unitPrice: unitPriceFromOrderLine(line),
         saleFeePerUnit: saleFee,
+        flexUnits: isFlex ? quantity : 0,
       });
       mixByItem.set(itemId, mix);
     }

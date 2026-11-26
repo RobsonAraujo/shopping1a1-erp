@@ -417,6 +417,10 @@ export function FinancialEvaluationClient({
         const resolved = rows.filter((row) => !row.pending).length;
         return `Calculando margens… ${resolved.toLocaleString("pt-BR")} de ${stream.meta.listingCount.toLocaleString("pt-BR")} anúncios`;
       }
+      if (stream.progress?.stage === "shipments") {
+        const { fetched, total } = stream.progress;
+        return `Conferindo envios Flex… ${fetched.toLocaleString("pt-BR")}${total !== null ? ` de ${total.toLocaleString("pt-BR")}` : ""} envios`;
+      }
       if (stream.progress) {
         const { fetched, total } = stream.progress;
         return `Buscando vendas no Mercado Livre… ${fetched.toLocaleString("pt-BR")}${total !== null ? ` de ${total.toLocaleString("pt-BR")}` : ""} pedidos`;

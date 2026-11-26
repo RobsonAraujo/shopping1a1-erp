@@ -115,8 +115,8 @@ function MarginCell({ percent, value }: { percent: number | null; value: number 
  * "Composição das vendas" do painel (só períodos de venda), num painel
  * embutido como o "Por canal de venda" do topo. Mostra o que entrou na média
  * do anúncio e diz, por modalidade e para a conta inteira, o que é real e o
- * que é estimado. Não recalcula nada: cada modalidade usa o mesmo custo,
- * imposto e frete da linha, e o total é a própria linha.
+ * que é estimado. Cada modalidade usa o mesmo custo, imposto e cotação de
+ * frete da linha (o Flex sai sem frete), e o total é a própria linha.
  */
 export function SalesMixPanel({
   row,
@@ -141,7 +141,8 @@ export function SalesMixPanel({
     ? salesMixLogisticFromShipmentType(row.shippingLogisticType)
     : null;
   const explainContext = {
-    shippingCost: row.shippingCost,
+    // a cotação do anúncio (o frete das vendas que não são Flex), não a média
+    shippingCost: row.shippingQuoteCost ?? row.shippingCost,
     listingLogistic,
     shipmentsCapped: ready?.shipments.capped ?? false,
   };
@@ -194,7 +195,7 @@ export function SalesMixPanel({
         <PlanningInfoTrigger
           className="h-5 w-5"
           label="Como funciona a composição das vendas"
-          content="As vendas do período separadas por canal (varejo ou B2B) e forma de envio. Preço e tarifa são os de cada venda; frete, custo e imposto são os mesmos da margem do anúncio — por isso o total fecha na margem acima. O (?) de cada linha mostra o que entrou na conta."
+          content="As vendas do período separadas por canal (varejo ou B2B) e forma de envio. Preço e tarifa são os de cada venda. O Flex entra sem frete (o bônus de envio paga a entrega); as demais vendas usam o frete do anúncio. Custo e imposto são os mesmos da margem do anúncio — por isso o total fecha na margem acima. O (?) de cada linha mostra o que entrou na conta."
         />
       </p>
       <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">

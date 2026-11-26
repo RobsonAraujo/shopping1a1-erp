@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { computeFinancialMargin, roundMoney } from "@/lib/pricing/financial-margin";
 import {
+  averageShippingPerUnit,
   buildSalesMixTable,
   computeChannelSplit,
   createSalesMixAccumulator,
@@ -26,10 +27,14 @@ function entry(
     minUnitPrice: unitPrice,
     maxUnitPrice: unitPrice,
     ...overrides,
+    flexUnits: overrides.flexUnits ?? (overrides.logistic === "flex" ? overrides.units : 0),
   };
 }
 
-/** Linha de período montada como `buildRowForPeriodItem`: média das vendas + custos do cadastro. */
+/**
+ * Linha de período montada como `buildRowForPeriodItem`: média das vendas +
+ * custos do cadastro; frete = média (cotação 7,35 e Flex sem frete).
+ */
 function periodRow(
   entries: SalesMixEntry[],
   opts: { productCost?: number | null; taxRatePercent?: number | null; pending?: boolean } = {},
@@ -42,11 +47,13 @@ function periodRow(
   const taxRatePercent = opts.taxRatePercent === undefined ? 1.64 : opts.taxRatePercent;
   const salePrice = roundMoney(revenue / units);
   const mlFeeAmount = feeQty > 0 ? roundMoney(feeSum / feeQty) : 3.5;
+  const flexUnits = entries.reduce((s, e) => s + e.flexUnits, 0);
+  const shippingCost = averageShippingPerUnit(7.35, units, flexUnits);
   const breakdown = computeFinancialMargin({
     salePrice,
     mlFeeAmount,
     mlFeeRebate: 0,
-    shippingCost: 7.35,
+    shippingCost,
     productCost,
     extraCosts: 0.3,
     taxRatePercent,
@@ -62,12 +69,14 @@ function periodRow(
     marginAfterAdsValue: null,
     periodUnitsSold: units,
     periodRevenue: roundMoney(revenue),
-    shippingCost: 7.35,
+    shippingCost,
+    shippingQuoteCost: 7.35,
     mlFeeAmount,
     extraCosts: 0.3,
     listingTypeId: "gold_special",
     salePrice,
-    // a linha do período não tem envio — só o painel traz
+    // a linha do período não tem a forma de envio (só o painel traz), mas
+    // cada entrada mantém as suas un. Flex
     salesMix: entries.map((e) => {
       const copy = { ...e };
       delete copy.logistic;
@@ -82,6 +91,18 @@ const alltec: SalesMixEntry[] = [
   entry({ channel: "retail", logistic: "flex", units: 2 }, 29.87, 10.23),
   entry({ channel: "b2b", logistic: "full", units: 9 }, 27.85, 3.34),
 ];
+
+describe("averageShippingPerUnit", () => {
+  it("Flex units pay no freight; the rest pay the quote", () => {
+    assert.equal(averageShippingPerUnit(8.45, 81, 9), 7.51);
+    assert.equal(averageShippingPerUnit(8.45, 5, 0), 8.45);
+    assert.equal(averageShippingPerUnit(8.45, 5, 5), 0);
+    // nunca passa das unidades nem fica negativo
+    assert.equal(averageShippingPerUnit(8.45, 2, 7), 0);
+    assert.equal(averageShippingPerUnit(8.45, 2, -1), 8.45);
+    assert.equal(averageShippingPerUnit(8.45, 0, 0), 8.45);
+  });
+});
 
 describe("salesMixLogisticFromShipmentType", () => {
   it("maps ML logistic types to Full/Flex/Coleta", () => {
@@ -111,13 +132,31 @@ describe("createSalesMixAccumulator", () => {
     assert.equal(full?.minUnitPrice, 27.85);
     assert.equal(full?.maxUnitPrice, 29.87);
     assert.equal(flex?.logistic, "flex");
+    // sem `flexUnits`, a venda Flex conta todas as unidades
+    assert.equal(full?.flexUnits, 0);
+    assert.equal(flex?.flexUnits, 1);
+  });
+
+  it("period sales (no logistic) carry their own Flex units", () => {
+    const acc = createSalesMixAccumulator();
+    const sale = { channel: "retail" as const, listingTypeId: "gold_special", unitPrice: 64.59 };
+    acc.add({ ...sale, quantity: 1, revenue: 64.59, saleFeePerUnit: 16.15, flexUnits: 1 });
+    acc.add({ ...sale, quantity: 2, revenue: 134.74, saleFeePerUnit: 8.76, flexUnits: 0 });
+    const [only] = acc.entries();
+    assert.equal(only?.units, 3);
+    assert.equal(only?.flexUnits, 1);
   });
 });
 
 describe("buildSalesMixTable", () => {
-  it("closes on the listing's own margin (only price and fee change per modality)", () => {
+  it("closes on the listing's own margin (price, fee and Flex freight change per modality)", () => {
     const row = periodRow(alltec);
+    // 2 de 39 un. Flex: frete médio 7,35 × 37/39
+    assert.equal(row.shippingCost, 6.97);
     const table = buildSalesMixTable(row, alltec);
+    const byLabel = new Map(table.rows.map((r) => [r.label, r]));
+    assert.equal(byLabel.get("Varejo · Flex")?.shippingPerUnit, 0);
+    assert.equal(byLabel.get("Varejo · Full")?.shippingPerUnit, 7.35);
     const mixTotal = table.rows.reduce((s, r) => s + (r.marginValue ?? 0) * r.units, 0);
     const rowTotal = row.breakdown!.marginValue * row.periodUnitsSold!;
     // arredondamento de centavos por unidade (preço/tarifa médios da linha)
@@ -128,7 +167,7 @@ describe("buildSalesMixTable", () => {
     assert.equal(table.marginAvailable, true);
   });
 
-  it("explains the −3,40% case: Flex fee and the B2B price pull the average down", () => {
+  it("explains the −3,40% case: the B2B price pulls the average down; Flex pays no freight", () => {
     const table = buildSalesMixTable(periodRow(alltec), alltec);
     const byLabel = new Map(table.rows.map((r) => [r.label, r]));
     const full = byLabel.get("Varejo · Full");
@@ -136,8 +175,10 @@ describe("buildSalesMixTable", () => {
     const b2b = byLabel.get("B2B · Full");
     assert.ok(full && flex && b2b);
     assert.equal(flex.feePerUnit, 10.23);
+    assert.equal(flex.shippingPerUnit, 0);
     assert.equal(b2b.averagePrice, 27.85);
-    assert.ok(flex.marginPercent! < b2b.marginPercent!);
+    // custo fixo do Flex (6,65) < frete do Full (7,35): o Flex não puxa mais a média
+    assert.ok(flex.marginPercent! > full.marginPercent!);
     assert.ok(b2b.marginPercent! < full.marginPercent!);
     assert.ok(table.total.marginPercent! < full.marginPercent!);
     assert.equal(table.hasFlex, true);
@@ -208,7 +249,12 @@ describe("computeChannelSplit", () => {
     assert.ok(Math.abs(retail.revenueShare! + b2b.revenueShare! - 100) < 0.02);
     // margem do varejo = só as 30 un. do Alltec (a outra linha está fora da média)
     const alltecRetail = buildSalesMixTable(periodRow(alltec), [
-      { ...entry({ channel: "retail", units: 30 }, 29.87, 0), saleFeeSum: 120.7, saleFeeKnownQty: 30 },
+      {
+        ...entry({ channel: "retail", units: 30 }, 29.87, 0),
+        saleFeeSum: 120.7,
+        saleFeeKnownQty: 30,
+        flexUnits: 2,
+      },
     ]).rows[0]!;
     assert.equal(retail.marginValue, roundMoney(alltecRetail.marginValue! * 30));
     assert.ok(b2b.marginPercent! < retail.marginPercent!);
@@ -229,10 +275,11 @@ describe("computeChannelSplit", () => {
 describe("describeSalesMixRow — o que cada modalidade usou", () => {
   const fullListing = { shippingCost: 7.35, listingLogistic: "full" as const, shipmentsCapped: false };
 
-  it("Flex: says which shipping it borrows and what is coming", () => {
+  it("Flex: no freight (the shipping bonus pays the delivery) and what is coming", () => {
     const e = describeSalesMixRow({ channel: "retail", logistic: "flex", feeFromRow: false }, fullListing);
-    assert.match(e.shippingNote ?? "", /^usa o frete padrão do Full do anúncio \(R\$\s7,35\/un\.\)$/);
-    assert.ok(e.lines.some((l) => /não cobra frete no Flex/.test(l)));
+    assert.equal(e.shippingNote, "sem frete: o bônus de envio paga a entrega");
+    assert.ok(e.lines.some((l) => /^Frete: R\$ 0\./.test(l) && /nem o frete nem o bônus entram na conta/.test(l)));
+    assert.ok(!e.lines.some((l) => /frete padrão do Full/.test(l)));
     assert.ok(e.lines.some((l) => /custo fixo por unidade/.test(l)));
     assert.equal(e.comingSoon, "cadastrar o custo da sua entrega Flex.");
   });
@@ -301,10 +348,20 @@ describe("describeMarginPrecision — o que é real e o que é estimado", () => 
     );
     const byKey = new Map(items.map((i) => [i.key, i]));
     assert.match(byKey.get("shipping")!.detail, /^O frete padrão do Full do anúncio \(R\$\s7,35\/un\.\)/);
+    assert.match(byKey.get("shipping")!.detail, /igual para todas as vendas/);
     assert.match(byKey.get("cost")!.detail, /Cadastro atual \(R\$\s18,72\/un\./);
     assert.match(byKey.get("tax")!.detail, /Tributário.*1,64%/);
     assert.equal(byKey.get("tax")!.comingSoon, "imposto de cada venda.");
     assert.equal(byKey.get("returns")!.comingSoon, "descontar as devoluções.");
+  });
+
+  it("shipping: quotes the listing freight and says Flex units have none", () => {
+    const shipping = describeMarginPrecision(
+      { ...row, shippingCost: 6.97, shippingQuoteCost: 7.35, periodFlexUnits: 2 },
+      { taxRegime: "LUCRO_REAL", listingLogistic: "full", feeFromRow: false },
+    ).find((i) => i.key === "shipping")!;
+    assert.match(shipping.detail, /^O frete padrão do Full do anúncio \(R\$\s7,35\/un\.\).*nas vendas que não são Flex/);
+    assert.match(shipping.detail, /Flex \(2 un\.\) entram sem frete: o bônus de envio paga a entrega/);
   });
 
   it("Simples uses the company rate and has nothing coming for tax", () => {
