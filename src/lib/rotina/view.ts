@@ -10,6 +10,7 @@ import {
   type CatalogRaiseEstimate,
 } from "@/lib/rotina/catalog-raise";
 import { roundMoney } from "@/lib/pricing/financial-margin";
+import { belowPmaBy } from "@/lib/pricing/pma";
 import {
   buildFloorView,
   catalogVerdict,
@@ -888,7 +889,7 @@ function staleSalesDiagnosis(
   const notes: string[] = [];
   if (catalog?.status === "losing") notes.push("Perdendo o catálogo");
   else if (catalog?.status === "shared") notes.push("Dividindo o catálogo");
-  if (health.pmaPrice !== null && health.salePrice < health.pmaPrice) {
+  if (belowPmaBy(health.salePrice, health.pmaPrice) !== null) {
     notes.push("Abaixo do PMA");
   }
   if (!health.catalogListing && health.adsAvailable && health.adsStatus !== "active") {

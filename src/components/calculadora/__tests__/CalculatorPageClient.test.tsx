@@ -396,6 +396,48 @@ describe("CalculatorPageClient", () => {
     assert.ok(buttonByText(panel, "Calcular mínimo"));
   });
 
+  it("shows the PMA, offers it as a shortcut and warns on prices below it", async () => {
+    readingOverrides = { pmaPrice: 110 };
+    const container = render("MLB1");
+    const panel = visiblePanel(container);
+    assert.ok(panel);
+    const strip = await nowStrip(panel);
+    // Preço de agora 100 < PMA 110: a faixa avisa, como a tarefa "Subir para o PMA".
+    assert.match(strip.textContent ?? "", /Abaixo do PMA\s*R\$\s?110,00/);
+
+    await submit(panel);
+    await waitFor(() => assert.match(panel.textContent ?? "", /A R\$\s?100,00/));
+    assert.match(panel.textContent ?? "", /Abaixo do PMA de R\$\s?110,00 · faltam R\$\s?10,00/);
+    // Só avisa: a margem e o veredito da meta continuam.
+    assert.match(panel.textContent ?? "", /dentro do mínimo de 2%/);
+
+    const shortcuts = panel.querySelector('[aria-label="Atalhos de preço"]') as HTMLElement;
+    const pma = [...shortcuts.querySelectorAll("button")].find((button) =>
+      /^PMA\s*R\$\s?110,00$/.test(button.textContent?.trim() ?? ""),
+    );
+    assert.ok(pma, "falta o atalho do PMA");
+    await act(async () => pma.click());
+    await waitFor(() => assert.equal(count("/simulate"), 2));
+    await waitFor(() => assert.match(panel.textContent ?? "", /A R\$\s?110,00/));
+    assert.doesNotMatch(panel.textContent ?? "", /Abaixo do PMA de/);
+    // O preço de antes, abaixo do PMA, segue marcado no Comparar.
+    const compare = panel.querySelector("ul") as HTMLElement;
+    assert.match(compare.textContent ?? "", /abaixo do PMA/);
+  });
+
+  it("shows the PMA without a warning when today's price is at or above it", async () => {
+    readingOverrides = { pmaPrice: 90 };
+    const container = render("MLB1");
+    const panel = visiblePanel(container);
+    assert.ok(panel);
+    const strip = await nowStrip(panel);
+    assert.match(strip.textContent ?? "", /PMA\s*R\$\s?90,00/);
+    assert.doesNotMatch(strip.textContent ?? "", /Abaixo do PMA/);
+    await submit(panel);
+    await waitFor(() => assert.match(panel.textContent ?? "", /A R\$\s?100,00/));
+    assert.doesNotMatch(panel.textContent ?? "", /abaixo do PMA/i);
+  });
+
   it("says how much to pay at each price, and redoes the margin with a supplier quote without quoting", async () => {
     const container = render("MLB1");
     const panel = visiblePanel(container);

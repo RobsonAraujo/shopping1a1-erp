@@ -10,11 +10,12 @@ import {
   type ReactNode,
   type Ref,
 } from "react";
-import { Calculator, Check, ChevronRight, Loader2, X } from "lucide-react";
+import { Calculator, Check, ChevronRight, Loader2, ShieldAlert, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FormInput } from "@/components/ui/form-input";
 import { SegmentedTabs, tabId, tabPanelId } from "@/components/ui/segmented-tabs";
 import { ListingTypeTag, listingTypeShortLabel } from "@/components/rotina/ListingTypeTag";
+import { belowPmaBy } from "@/lib/pricing/pma";
 import { rescoreWithInputs, type TacosAds, type TacosBasis } from "@/lib/pricing/tacos-basis";
 import { formatMoney, formatPercent, formatWhen } from "@/lib/rotina/format";
 import type { RotinaSimulation, RotinaTypeFloor } from "@/lib/rotina/simulate";
@@ -200,6 +201,44 @@ function ResultSummary({
   );
 }
 
+/**
+ * Preço simulado abaixo do PMA cadastrado: avisa, sem mudar a margem nem o
+ * veredito da meta. Igual na Calculadora e no "Simular" das Ações do dia.
+ */
+function PmaWarning({
+  price,
+  pmaPrice,
+  compact,
+}: {
+  price: number;
+  pmaPrice: number | null;
+  compact: boolean;
+}) {
+  const missing = belowPmaBy(price, pmaPrice);
+  if (missing === null || pmaPrice === null) return null;
+  if (compact) {
+    return (
+      <span className="inline-flex items-center gap-1 font-medium text-amber-800">
+        <ShieldAlert className="size-3.5 shrink-0" aria-hidden />
+        abaixo do PMA
+      </span>
+    );
+  }
+  return (
+    <p className="mt-2">
+      <span
+        className={cn(
+          "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold",
+          STATUS_PILL_CLASS.warning.wrap,
+        )}
+      >
+        <ShieldAlert className="size-3.5 shrink-0" aria-hidden />
+        Abaixo do PMA de {formatMoney(pmaPrice)} · faltam {formatMoney(missing)}
+      </span>
+    </p>
+  );
+}
+
 function Breakdown({ result }: { result: SimulatedPrice }) {
   return (
     <table className="mt-2 w-full border-collapse text-xs">
@@ -265,6 +304,18 @@ function floorKey(
   return `${type ?? "atual"}|${percent ?? "meta"}|${scope ?? ""}`;
 }
 
+/** Põe o atalho "PMA" antes dos descontos de promoção (ou no fim). */
+function withPmaChip(
+  suggestions: SimulatorSuggestion[],
+  pmaPrice: number,
+): SimulatorSuggestion[] {
+  const chip: SimulatorSuggestion = { label: "PMA", price: pmaPrice };
+  const firstDiscount = suggestions.findIndex((suggestion) => suggestion.label.startsWith("−"));
+  return firstDiscount === -1
+    ? [...suggestions, chip]
+    : [...suggestions.slice(0, firstDiscount), chip, ...suggestions.slice(firstDiscount)];
+}
+
 /** Por que não saiu o mínimo pedido (outro tipo e/ou outra margem). */
 function floorNoteFor(
   state: TypeFloorState | undefined,
@@ -309,6 +360,9 @@ function floorNoteFor(
  * `adsOverride` refaz os preços já cotados com o TACOS da base escolhida (hoje
  * ↔ 7 dias), sem nova cotação. Na Calculadora, `costOverride` faz o mesmo com o
  * custo do orçamento e `resultExtra` põe o "pague até" em cada preço.
+ *
+ * Com `pmaPrice` (as duas telas), o PMA vira um atalho de preço e cada preço
+ * simulado abaixo dele ganha o aviso "Abaixo do PMA" — só avisa, não bloqueia.
  */
 export function RotinaPriceSimulator({
   mlItemId,
@@ -328,6 +382,7 @@ export function RotinaPriceSimulator({
   inputsNote,
   costOverride = null,
   resultExtra,
+  pmaPrice = null,
 }: {
   mlItemId: string;
   /** Tipo de hoje pelo retrato; a resposta do simulador (item ao vivo) prevalece. */
@@ -375,6 +430,11 @@ export function RotinaPriceSimulator({
   costOverride?: number | null;
   /** Conteúdo extra de cada preço simulado (Calculadora: "pague até" na compra). */
   resultExtra?: (result: SimulatedPrice, place: "latest" | "compare") => ReactNode;
+  /**
+   * PMA cadastrado em Meus produtos (`null` = sem PMA). Vale em qualquer tipo
+   * do anúncio: vira o atalho "PMA" e o aviso nos preços abaixo dele.
+   */
+  pmaPrice?: number | null;
 }) {
   const baseId = useId();
   const [input, setInput] = useState(defaultPrice !== null ? inputValue(defaultPrice) : "");
@@ -566,11 +626,25 @@ export function RotinaPriceSimulator({
     !baseSuggestions.some((suggestion) => Math.abs(suggestion.price - todayPrice) < 0.005)
       ? [...baseSuggestions, { label: "Preço de hoje", price: todayPrice }]
       : baseSuggestions;
+  // O PMA como atalho: se outro atalho já cai nele (ex.: o "Mínimo" quando o
+  // piso é o PMA), esse atalho diz "· PMA" em vez de repetir o preço.
+  const samePrice = (price: number) => pmaPrice !== null && Math.abs(price - pmaPrice) < 0.005;
+  const floorIsPma = computedFloorPrice !== null && samePrice(computedFloorPrice);
+  const chipSuggestions =
+    pmaPrice === null || floorIsPma
+      ? shownSuggestions
+      : shownSuggestions.some((suggestion) => samePrice(suggestion.price))
+        ? shownSuggestions.map((suggestion) =>
+            samePrice(suggestion.price)
+              ? { ...suggestion, label: `${suggestion.label} · PMA` }
+              : suggestion,
+          )
+        : withPmaChip(shownSuggestions, pmaPrice);
   const offerTodayPrice = defaultPrice === null && meta === null;
   const chipClass =
     "cursor-pointer rounded-full border border-[var(--border)] bg-[var(--card)] px-2.5 py-1 text-xs text-[var(--foreground)] transition-colors hover:border-[var(--primary)]/40 hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-50";
   const hasChips =
-    shownSuggestions.length > 0 ||
+    chipSuggestions.length > 0 ||
     computedFloorPrice !== null ||
     floorState?.status === "loading" ||
     offerFloorButton;
@@ -695,13 +769,14 @@ export function RotinaPriceSimulator({
                   }}
                   className={chipClass}
                 >
-                  Mínimo{floorSuffix}{" "}
+                  Mínimo{floorSuffix}
+                  {floorIsPma ? " · PMA" : ""}{" "}
                   <span className="tabular-nums text-[var(--muted-foreground)]">
                     {formatMoney(computedFloorPrice)}
                   </span>
                 </button>
               ) : null}
-              {shownSuggestions.map((suggestion) => (
+              {chipSuggestions.map((suggestion) => (
                 <button
                   key={`${suggestion.label}-${suggestion.price}`}
                   type="button"
@@ -765,6 +840,7 @@ export function RotinaPriceSimulator({
               </span>
               <ResultSummary result={latest} targetPercent={effectiveTarget} emphasis />
             </div>
+            <PmaWarning price={latest.price} pmaPrice={pmaPrice} compact={false} />
             {latest.quoted ? (
               <button
                 type="button"
@@ -825,6 +901,7 @@ export function RotinaPriceSimulator({
                       targetPercent={effectiveTarget}
                       emphasis={false}
                     />
+                    <PmaWarning price={result.price} pmaPrice={pmaPrice} compact />
                     {resultExtra ? resultExtra(result, "compare") : null}
                   </button>
                 </li>

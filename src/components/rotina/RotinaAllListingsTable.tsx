@@ -438,6 +438,7 @@ export function RotinaAllListingsTable({
                   suggestions={simulation.suggestions}
                   defaultPrice={simulation.defaultPrice}
                   timeZone={timeZone}
+                  pmaPrice={simulating.floor.pmaPrice}
                   initialBasis="today"
                 />
               </SheetBody>

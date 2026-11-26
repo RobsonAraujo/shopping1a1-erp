@@ -649,6 +649,7 @@ export function RotinaActionRow({
             suggestions={simulator.suggestions}
             defaultPrice={simulator.defaultPrice}
             timeZone={timeZone}
+            pmaPrice={listing.pmaPrice}
             initialBasis={TACOS_RULES.has(action.rule) ? "7d" : "today"}
           />
         </div>

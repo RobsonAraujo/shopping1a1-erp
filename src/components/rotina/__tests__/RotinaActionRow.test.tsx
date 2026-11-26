@@ -296,6 +296,68 @@ describe("RotinaActionRow", () => {
       [{ mlItemId: "CAT1", prices: [94.9] }],
     );
   });
+
+  it("offers the PMA in the simulator and warns when the simulated price is below it", async () => {
+    // Preço p/ ganhar 94,90 abaixo do PMA 96,00 (o piso que vale).
+    const view = viewWith(
+      [
+        {
+          mlItemId: "CAT1",
+          imageUrl: null,
+          catalogListing: true,
+          floorAfterAdsPrice: 91.2,
+          floorMcPrice: 88.7,
+          pmaPrice: 96,
+        },
+      ],
+      [catalogLive({ mlItemId: "CAT1", priceToWin: 94.9 })],
+    );
+    const action = view.actions.find((candidate) => candidate.rule === "catalog_losing")!;
+    mock.method(globalThis, "fetch", async (input: unknown, init?: RequestInit) => {
+      if (String(input).endsWith("/simulate/ads")) return Response.json(todayAds());
+      const body = JSON.parse(String(init?.body)) as { prices: number[] };
+      return Response.json({
+        mlItemId: "CAT1",
+        targetPercent: 2,
+        inputsFrom: "refresh",
+        inputsAt: "2026-11-10T09:00:00.000Z",
+        feeRebate: null,
+        blocked: null,
+        results: [
+          {
+            price: body.prices[0],
+            quoted: true,
+            mlFeeAmount: 11.39,
+            shippingCost: 20,
+            marginPercent: 6.2,
+            marginValue: 5.88,
+            marginAfterAdsPercent: 3.2,
+            marginAfterAdsValue: 3.04,
+            decidingBasis: "afterAds",
+            meetsTarget: true,
+            lines: [],
+          },
+        ],
+      });
+    });
+
+    const rendered = render(action);
+    cleanup = rendered.unmount;
+    const simulateButton = [...rendered.container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Simular a"),
+    );
+    assert.ok(simulateButton);
+    await act(async () => {
+      simulateButton.click();
+    });
+    await waitFor(() => {
+      assert.match(text(rendered.container), /A R\$ 94,90:/);
+    });
+    assert.match(text(rendered.container), /Abaixo do PMA de R\$ 96,00 · faltam R\$ 1,10/);
+    const shortcuts = rendered.container.querySelector('[aria-label="Atalhos de preço"]');
+    assert.ok(shortcuts);
+    assert.match(text(shortcuts as HTMLElement), /PMA\s*R\$ 96,00/);
+  });
 });
 
 describe("RotinaActionRow: TACOS no card de Ajustar margem", () => {

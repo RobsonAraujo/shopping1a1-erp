@@ -341,6 +341,7 @@ export function CalculatorPanel({
             target={{ percent: targetPercent, saved: reading.targetPercent }}
             adsOverride={ads}
             costOverride={quoteCost ?? reading.inputs.productCost}
+            pmaPrice={reading.pmaPrice}
             floorScope={`${ads.basis}|${reading.readAt}|${quoteCost ?? "cadastro"}`}
             refreshFloor={false}
             inputsNote={

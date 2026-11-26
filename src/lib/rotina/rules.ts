@@ -9,6 +9,7 @@ import {
   type PromotionCoverage,
   type PromotionWindow,
 } from "@/lib/mercadolibre/promotion-coverage";
+import { belowPmaBy } from "@/lib/pricing/pma";
 import { localDayDiff } from "@/lib/rotina/time";
 import type { RotinaRuleKey } from "@/lib/rotina/rule-registry";
 import {
@@ -215,7 +216,7 @@ export function evaluateRefreshRules(
     hits.push("margin_below_min");
   }
 
-  if (listing.pmaPrice !== null && listing.salePrice < listing.pmaPrice - 0.005) {
+  if (belowPmaBy(listing.salePrice, listing.pmaPrice) !== null) {
     hits.push("below_pma");
   }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, ShieldAlert } from "lucide-react";
 import { TacosBasisToggle } from "@/components/shared/TacosBasisToggle";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,6 +13,7 @@ import {
   type TacosBasis,
 } from "@/lib/calculadora/reading";
 import { MARGIN_EXCLUSION_LABEL } from "@/lib/lucratividade/margin-summary";
+import { belowPmaBy } from "@/lib/pricing/pma";
 import { formatClock, formatMoney, formatPercent, formatWhen } from "@/lib/rotina/format";
 import type { SimulatedPrice } from "@/lib/rotina/simulate-margin";
 import { STATUS_PILL_CLASS } from "@/lib/ui/tone";
@@ -96,7 +97,8 @@ export function taxSourceLabel(reading: CalculatorReading): string | null {
 /**
  * Faixa "Agora": o anúncio lido agora no ML. Preço com promoção, MC e após
  * ADS com o TACOS da base escolhida, o TACOS e o imposto com a janela de cada
- * um. Trocar a base refaz a conta aqui, sem cotar de novo.
+ * um, e o PMA cadastrado (em âmbar quando o preço de agora está abaixo dele).
+ * Trocar a base refaz a conta aqui, sem cotar de novo.
  */
 export function CalculatorNowStrip({
   reading,
@@ -134,6 +136,8 @@ export function CalculatorNowStrip({
       ? { ...CATALOG_STATUS_TEXT[reading.catalog.status], priceToWin: reading.catalog.priceToWin }
       : null;
   const exclusion = reading.blocked ? MARGIN_EXCLUSION_LABEL[reading.blocked] : null;
+  // O PMA cadastrado; abaixo dele é o mesmo caso da tarefa "Subir para o PMA".
+  const pmaBelow = belowPmaBy(reading.price, reading.pmaPrice) !== null;
   const notQuoted = !exclusion && !margin.quoted;
 
   return (
@@ -166,22 +170,38 @@ export function CalculatorNowStrip({
             Ler de novo
           </Button>
         </div>
-        {catalog ? (
-          <span
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold",
-              STATUS_PILL_CLASS[catalog.tone].wrap,
-            )}
-          >
-            <span
-              className={cn("size-1.5 rounded-full", STATUS_PILL_CLASS[catalog.tone].dot)}
-              aria-hidden
-            />
-            {catalog.label}
-            {catalog.priceToWin !== null && reading.catalog?.status !== "winning"
-              ? ` · p/ ganhar ${formatMoney(catalog.priceToWin)}`
-              : ""}
-          </span>
+        {catalog || reading.pmaPrice !== null ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {reading.pmaPrice !== null ? (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                  STATUS_PILL_CLASS[pmaBelow ? "warning" : "neutral"].wrap,
+                )}
+                title="PMA cadastrado em Meus produtos"
+              >
+                {pmaBelow ? <ShieldAlert className="size-3 shrink-0" aria-hidden /> : null}
+                {pmaBelow ? "Abaixo do PMA" : "PMA"} {formatMoney(reading.pmaPrice)}
+              </span>
+            ) : null}
+            {catalog ? (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                  STATUS_PILL_CLASS[catalog.tone].wrap,
+                )}
+              >
+                <span
+                  className={cn("size-1.5 rounded-full", STATUS_PILL_CLASS[catalog.tone].dot)}
+                  aria-hidden
+                />
+                {catalog.label}
+                {catalog.priceToWin !== null && reading.catalog?.status !== "winning"
+                  ? ` · p/ ganhar ${formatMoney(catalog.priceToWin)}`
+                  : ""}
+              </span>
+            ) : null}
+          </div>
         ) : null}
       </div>
 
