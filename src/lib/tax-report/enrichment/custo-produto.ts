@@ -12,6 +12,10 @@ export type CustoProduto = {
   isMonophasic: boolean;
   isImported: boolean;
   ipiPercent: number;
+  /** NCM do cadastro (texto como digitado) — casa o incentivo de ICMS do NCM. */
+  ncm?: string | null;
+  /** "Não se aplica a este produto" no incentivo de ICMS do NCM. */
+  icmsIncentiveExcluded?: boolean;
 };
 
 export function custoProdutoFromView(view: ProductView): CustoProduto {
@@ -37,5 +41,7 @@ export function custoProdutoFromView(view: ProductView): CustoProduto {
     isMonophasic: view.isMonophasic,
     isImported: view.isImported,
     ipiPercent: view.ipiPercent ?? 0,
+    ncm: view.ncm,
+    icmsIncentiveExcluded: view.icmsIncentiveExcluded,
   };
 }

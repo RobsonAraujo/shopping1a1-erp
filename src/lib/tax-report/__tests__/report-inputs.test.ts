@@ -6,7 +6,9 @@ import { calcularRelatorioFromTransacoes } from "@/lib/tax-report/service/comput
 import {
   buildReportInputsFromTransactions,
   collectDetalhes,
+  enrichTransacao,
 } from "@/lib/tax-report/service/report-inputs";
+import type { CustoProduto } from "@/lib/tax-report/enrichment/custo-produto";
 import type {
   IcmsRateRow,
   TaxCompanyConfig,
@@ -173,5 +175,80 @@ describe("buildReportInputsFromTransactions — ida e volta", () => {
       0,
     );
     assert.equal(report.consolidado.impostoOperacionalTotal, Math.round(sumOfSkus * 100) / 100);
+  });
+});
+
+describe("enrichTransacao — incentivo de ICMS do NCM", () => {
+  const custo: CustoProduto = {
+    sku: "SKU1",
+    pricingCost: 50,
+    unitCostNf: 50,
+    purchaseIcmsPercent: 12,
+    hasIcmsSt: false,
+    saleIcmsPercent: 0,
+    extraCosts: 0,
+    isMonophasic: false,
+    isImported: false,
+    ipiPercent: 0,
+    ncm: "8516.31.00",
+    icmsIncentiveExcluded: false,
+  };
+  const custoLookup = { byMlItemId: new Map([["MLB1", custo]]), bySku: new Map() };
+  const saved: TransacaoVenda = {
+    transactionKey: "1-MLB1-SKU1",
+    orderId: "1",
+    orderDate: "2026-11-10T12:00:00.000-03:00",
+    sku: "SKU1",
+    itemId: "MLB1",
+    quantidade: 1,
+    receitaBruta: 100,
+    ufDestino: "SP",
+    tipoDocumento: "CPF",
+    documento: null,
+    contribuinteIcms: false,
+    contribuinteSource: null,
+    dadosFiscaisIndisponiveis: false,
+    custoAquisicaoUnitario: 50,
+    unitCostNf: 50,
+    purchaseIcmsPercent: 12,
+    hasIcmsSt: false,
+    saleIcmsPercent: 0,
+    extraCostsUnitario: 0,
+    mercadoriaImportada: false,
+    isMonophasic: false,
+    saleFee: 0,
+    freightCost: 0,
+    ipiPercent: 0,
+  };
+  const rule = {
+    ncm: "85163100",
+    ratePercent: 12,
+    appliesTo: "all" as const,
+    validFrom: null,
+    validTo: null,
+    note: null,
+    updatedAt: "2026-11-26T00:00:00.000Z",
+  };
+
+  it("recálculo aplica o incentivo cadastrado depois da venda", () => {
+    const enriched = enrichTransacao(saved, custoLookup, [], { year: 2026, month: 11 }, new Map([[rule.ncm, rule]]));
+    assert.deepEqual(enriched.incentivoIcms, { ncm: "85163100", aliquotaPercent: 12, appliesTo: "all" });
+  });
+
+  it("recálculo tira o incentivo removido", () => {
+    const enriched = enrichTransacao(
+      { ...saved, incentivoIcms: { ncm: "85163100", aliquotaPercent: 12, appliesTo: "all" } },
+      custoLookup,
+      [],
+      { year: 2026, month: 11 },
+      new Map(),
+    );
+    assert.equal(enriched.incentivoIcms, null);
+  });
+
+  it("sem o índice de incentivos, fica o que estava gravado", () => {
+    const gravado = { ncm: "85163100", aliquotaPercent: 12, appliesTo: "all" as const };
+    const enriched = enrichTransacao({ ...saved, incentivoIcms: gravado }, custoLookup);
+    assert.deepEqual(enriched.incentivoIcms, gravado);
   });
 });

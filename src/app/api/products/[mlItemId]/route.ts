@@ -18,6 +18,7 @@ import { requireOrganization } from "@/lib/api/api-auth";
 import { parseJsonBody } from "@/lib/api/api-validation";
 import { alignStockPrimaries, loadListingGroups } from "@/lib/products/listing-groups";
 import { productOptionsView } from "@/lib/products/product-options";
+import { normalizeNcm } from "@/lib/tax-incentives/ncm";
 
 type RouteContext = { params: Promise<{ mlItemId: string }> };
 
@@ -36,6 +37,7 @@ const productPatchBodySchema = z.object({
   saleIcmsPercent: z.coerce.number().finite().optional(),
   pmaPrice: z.coerce.number().finite().nullable().optional(),
   supplierId: z.string().trim().nullable().optional(),
+  icmsIncentiveExcluded: z.boolean().optional(),
 });
 
 export async function GET(_request: NextRequest, context: RouteContext) {
@@ -104,11 +106,19 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
 
+    const ncmChanged =
+      parsedBody.data.ncm !== undefined &&
+      normalizeNcm(parsedBody.data.ncm) !== normalizeNcm(before.ncm);
     const parsed = {
       ...parsedBody.data,
       mlItemId,
       // Valor já gravado — só alimenta `validateProductInput`, não é reescrito.
       sku: before.sku ?? "",
+      // "Não se aplica" é do incentivo do NCM antigo: trocou o NCM sem dizer
+      // nada, volta a valer o incentivo do NCM novo (se houver).
+      icmsIncentiveExcluded:
+        parsedBody.data.icmsIncentiveExcluded ??
+        (ncmChanged ? false : undefined),
     };
     const validationError = validateProductInput(parsed);
     if (validationError) {
@@ -160,6 +170,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           isImported: product.isImported,
           pmaPrice: product.pmaPrice,
           supplierId: product.supplierId,
+          icmsIncentiveExcluded: product.icmsIncentiveExcluded,
         },
       });
     }

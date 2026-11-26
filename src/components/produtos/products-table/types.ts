@@ -1,6 +1,7 @@
 import type { TableSort } from "@/components/ui/sortable-th";
 import type { ListingOptionChip } from "@/lib/products/listing-option-label";
 import type { ProductView } from "@/lib/products/product-data";
+import type { IcmsIncentiveRule } from "@/lib/tax-incentives/types";
 
 export type ProductSortKey = "sku" | "ncm" | "pricingCost" | "taxPercent" | "pmaPrice";
 
@@ -15,6 +16,8 @@ export type ProductsTableProps = {
   taxPercentExplainer: (product: ProductView) => string;
   /** false para empresas Simples Nacional — oculta colunas/badges fiscais de Lucro Real. */
   showFiscalFlags?: boolean;
+  /** Incentivos de ICMS por NCM normalizado — selo "Incentivo X%" na coluna NCM. */
+  incentiveByNcm?: ReadonlyMap<string, IcmsIncentiveRule>;
   onEdit: (product: ProductView) => void;
   onDelete: (mlItemId: string) => void;
   onToggleActive: (mlItemId: string, nextActive: boolean) => void;

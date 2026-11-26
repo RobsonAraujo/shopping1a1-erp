@@ -49,6 +49,7 @@ const TENANT_SCOPED_MODELS = new Set([
   "StockCount",
   "StockCountLine",
   "StockSyncState",
+  "IcmsIncentive",
 ]);
 
 /**

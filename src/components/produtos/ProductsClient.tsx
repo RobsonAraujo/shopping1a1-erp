@@ -46,6 +46,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ProductsTable } from "@/components/produtos/products-table";
+import {
+  IcmsIncentiveCard,
+  IcmsIncentiveNcmNotice,
+  type IcmsIncentiveExclusion,
+  type IcmsIncentiveProductRef,
+} from "@/components/produtos/IcmsIncentiveField";
 import { ProductLevelingSuggestionSheet } from "@/components/produtos/ProductLevelingSuggestionSheet";
 import type { DreProductCostLevelingFormValues } from "@/components/dre/DreProductCostLevelingFields";
 import { UserFeedback } from "@/components/ui/user-feedback";
@@ -68,6 +74,8 @@ import {
 } from "@/lib/pricing/financial-margin";
 import { computeEffectivePricingCost } from "@/lib/pricing/product-pricing";
 import { TAX_REPORT_MONTH_NAMES } from "@/lib/tax-report/routes";
+import { normalizeNcm } from "@/lib/tax-incentives/ncm";
+import type { IcmsIncentiveScreenData } from "@/lib/tax-incentives/types";
 import { cn } from "@/lib/utils";
 
 type TaxRegime = "LUCRO_REAL" | "LUCRO_PRESUMIDO" | "SIMPLES";
@@ -174,6 +182,8 @@ type ProductFormState = {
   saleIcmsPercent: number | null;
   pmaPrice: number | null;
   supplierId: string | null;
+  /** "Não se aplica a este produto" no incentivo de ICMS do NCM. */
+  icmsIncentiveExcluded: boolean;
 };
 
 function emptyForm(mlItemId = "", sku = ""): ProductFormState {
@@ -192,6 +202,7 @@ function emptyForm(mlItemId = "", sku = ""): ProductFormState {
     saleIcmsPercent: null,
     pmaPrice: null,
     supplierId: null,
+    icmsIncentiveExcluded: false,
   };
 }
 
@@ -211,6 +222,7 @@ function formFromProduct(product: ProductView): ProductFormState {
     saleIcmsPercent: product.saleIcmsPercent,
     pmaPrice: product.pmaPrice,
     supplierId: product.supplierId,
+    icmsIncentiveExcluded: product.icmsIncentiveExcluded,
   };
 }
 
@@ -301,6 +313,7 @@ const SIMPLES_HIDDEN_FIELD_KEYS = [
   "isMonophasic",
   "isImported",
   "saleIcmsPercent",
+  "icmsIncentiveExcluded",
 ] as const;
 
 function ProductFormModal({
@@ -308,6 +321,10 @@ function ProductFormModal({
   title,
   taxRegime,
   createOptions,
+  products,
+  incentives,
+  onIncentiveSaved,
+  onIncentiveDeleted,
   onClose,
   onSaved,
   onLevelingSuggested,
@@ -315,6 +332,15 @@ function ProductFormModal({
   initial: ProductFormState;
   title: string;
   taxRegime: TaxRegime;
+  /** Produtos da organização — acha os outros do mesmo NCM (incentivo de ICMS). */
+  products: readonly IcmsIncentiveProductRef[];
+  /** Incentivos de ICMS por NCM (null = ainda carregando). */
+  incentives: IcmsIncentiveScreenData | null;
+  onIncentiveSaved: (
+    screen: IcmsIncentiveScreenData,
+    exclusions: IcmsIncentiveExclusion[],
+  ) => void;
+  onIncentiveDeleted: (screen: IcmsIncentiveScreenData, ncm: string) => void;
   /** Opções de venda do produto: o cadastro vale para todas. */
   createOptions?: CreateOptions;
   onClose: () => void;
@@ -332,6 +358,10 @@ function ProductFormModal({
   const [error, setError] = useState<string | null>(null);
   const isEdit = Boolean(initial.mlItemId && initial.unitCostNf !== null);
   const isSimples = taxRegime === "SIMPLES";
+  // Aviso de "NCM já tem incentivo" só faz sentido para quem acabou de
+  // digitar o NCM: produto novo ou NCM trocado na edição.
+  const ncmIsNew =
+    !isEdit || normalizeNcm(form.ncm) !== normalizeNcm(initial.ncm);
   const suppliersResource = useApiResource<{ suppliers: SupplierRow[] }>(
     "/api/suppliers?active=true",
   );
@@ -575,7 +605,19 @@ function ProductFormModal({
               label="NCM"
               value={form.ncm}
               placeholder="0000.00.00"
-              onChange={(e) => setForm((f) => ({ ...f, ncm: e.target.value }))}
+              onChange={(e) => {
+                const ncm = e.target.value;
+                setForm((f) => ({
+                  ...f,
+                  ncm,
+                  // "Não se aplica" é do incentivo do NCM gravado: noutro NCM
+                  // começa valendo; voltando ao NCM gravado, volta o que era.
+                  icmsIncentiveExcluded:
+                    normalizeNcm(ncm) === normalizeNcm(initial.ncm)
+                      ? initial.icmsIncentiveExcluded
+                      : false,
+                }));
+              }}
             />
             <Combobox
               id="supplier"
@@ -590,6 +632,18 @@ function ProductFormModal({
               searchPlaceholder="Buscar fornecedor…"
               emptyMessage="Nenhum fornecedor com esse nome."
             />
+            {!isSimples && ncmIsNew ? (
+              <IcmsIncentiveNcmNotice
+                ncm={form.ncm}
+                mlItemId={form.mlItemId}
+                excluded={form.icmsIncentiveExcluded}
+                onExcludedChange={(excluded) =>
+                  setForm((f) => ({ ...f, icmsIncentiveExcluded: excluded }))
+                }
+                products={products}
+                screen={incentives}
+              />
+            ) : null}
           </FormSection>
 
           <FormSection icon={Coins} title="Custos de compra">
@@ -617,7 +671,7 @@ function ProductFormModal({
                   hint={
                     form.hasIcmsSt
                       ? "Com ICMS-ST, só vira crédito nas vendas interestaduais em que o ST for recuperável (config. tributária)."
-                      : undefined
+                      : "Use o % efetivo da nota: ICMS destacado ÷ valor do produto (em nota com redução de base, não a alíquota cheia)."
                   }
                 />
                 <MaskedPercentField
@@ -685,6 +739,20 @@ function ProductFormModal({
                 onCheckedChange={(checked) =>
                   setForm((f) => ({ ...f, isImported: checked }))
                 }
+              />
+              <IcmsIncentiveCard
+                ncm={form.ncm}
+                mlItemId={form.mlItemId}
+                excluded={form.icmsIncentiveExcluded}
+                onExcludedChange={(excluded) =>
+                  setForm((f) => ({ ...f, icmsIncentiveExcluded: excluded }))
+                }
+                purchaseIcmsPercent={form.purchaseIcmsPercent}
+                hasIcmsSt={form.hasIcmsSt}
+                products={products}
+                screen={incentives}
+                onSaved={onIncentiveSaved}
+                onDeleted={onIncentiveDeleted}
               />
               {/* "Imposto venda ICMS" (`saleIcmsPercent`) saiu da tela: só
                   alimentava `computePricingTaxPercent`, cujo resultado não é
@@ -794,6 +862,69 @@ export function ProductsClient() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Incentivos de ICMS por NCM: o formulário avisa quando o NCM digitado já
+  // tem incentivo e a tabela mostra o selo. Falha aqui não bloqueia a página.
+  const [incentives, setIncentives] = useState<IcmsIncentiveScreenData | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/tax-incentives");
+        if (!res.ok) return;
+        const json = (await res.json()) as IcmsIncentiveScreenData;
+        if (!cancelled) setIncentives(json);
+      } catch {
+        // Sem incentivos carregados: o switch fica desabilitado.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const applyIncentiveExclusions = useCallback(
+    (exclusions: ReadonlyMap<string, boolean>) => {
+      if (exclusions.size === 0) return;
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              products: prev.products.map((p) =>
+                exclusions.has(p.mlItemId)
+                  ? { ...p, icmsIncentiveExcluded: exclusions.get(p.mlItemId) ?? false }
+                  : p,
+              ),
+            }
+          : prev,
+      );
+    },
+    [],
+  );
+
+  const onIncentiveSaved = useCallback(
+    (screen: IcmsIncentiveScreenData, exclusions: IcmsIncentiveExclusion[]) => {
+      setIncentives(screen);
+      applyIncentiveExclusions(new Map(exclusions.map((e) => [e.mlItemId, e.excluded])));
+    },
+    [applyIncentiveExclusions],
+  );
+
+  const onIncentiveDeleted = useCallback(
+    (screen: IcmsIncentiveScreenData, ncm: string) => {
+      setIncentives(screen);
+      const ids = (data?.products ?? [])
+        .filter((p) => normalizeNcm(p.ncm) === ncm)
+        .map((p) => [p.mlItemId, false] as const);
+      applyIncentiveExclusions(new Map(ids));
+    },
+    [applyIncentiveExclusions, data?.products],
+  );
+
+  const incentiveByNcm = useMemo(
+    () => new Map((incentives?.rules ?? []).map((rule) => [rule.ncm, rule])),
+    [incentives],
+  );
 
   const inactiveCount = useMemo(
     () => (data?.products ?? []).filter((p) => !p.active).length,
@@ -1316,6 +1447,7 @@ export function ProductsClient() {
         onSyncSku={(mlItemId) => void syncProductSku(mlItemId)}
         syncingSkuId={syncingSkuId}
         showFiscalFlags={data?.taxRegime !== "SIMPLES"}
+        incentiveByNcm={incentiveByNcm}
         taxPercentExplainer={(product) =>
           data?.taxRegime === "SIMPLES"
             ? "Alíquota efetiva do Simples Nacional (DAS), informada manualmente em Configurações > Empresa — aplicada da mesma forma a todos os produtos (o Simples não apura ICMS/PIS/COFINS por SKU)."
@@ -1346,6 +1478,10 @@ export function ProductsClient() {
               : `Editar ${modal.form.sku || modal.form.mlItemId}`
           }
           taxRegime={data?.taxRegime ?? "LUCRO_REAL"}
+          products={data?.products ?? []}
+          incentives={incentives}
+          onIncentiveSaved={onIncentiveSaved}
+          onIncentiveDeleted={onIncentiveDeleted}
           onClose={() => setModal(null)}
           onSaved={upsertProductLocally}
           onLevelingSuggested={setLevelingSuggestion}

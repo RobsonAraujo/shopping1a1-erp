@@ -91,3 +91,25 @@ describe("resolveCustoDaVenda", () => {
     assert.equal(fonte, "cadastro");
   });
 });
+
+describe("resolveCustoDaVenda — NCM no nivelamento", () => {
+  it("mantém o NCM e o 'não se aplica' do cadastro (o nivelamento não guarda NCM)", () => {
+    const comNcm: CustoProduto = {
+      ...cadastro,
+      ncm: "8516.31.00",
+      icmsIncentiveExcluded: true,
+    };
+    const { custo, fonte } = resolveCustoDaVenda({
+      itemId: "MLB1",
+      sku: "SKU-A",
+      orderDate: "2026-01-15T12:00:00.000Z",
+      custoLookup: { byMlItemId: new Map([["MLB1", comNcm]]), bySku: new Map() },
+      levelings: [leveling()],
+      year: 2026,
+      month: 1,
+    });
+    assert.equal(fonte, "nivelamento");
+    assert.equal(custo?.ncm, "8516.31.00");
+    assert.equal(custo?.icmsIncentiveExcluded, true);
+  });
+});

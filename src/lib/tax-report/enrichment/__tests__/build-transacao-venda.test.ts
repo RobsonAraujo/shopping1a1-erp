@@ -185,3 +185,60 @@ describe("buildTransacoesFromOrder", () => {
     assert.equal(rows[1].unitCostNf, 55);
   });
 });
+
+describe("buildTransacoesFromOrder — incentivo de ICMS do NCM", () => {
+  const rule = {
+    ncm: "85163100",
+    ratePercent: 12,
+    appliesTo: "all" as const,
+    validFrom: "2026-11-01",
+    validTo: null,
+    note: null,
+    updatedAt: "2026-11-26T00:00:00.000Z",
+  };
+  const icmsIncentives = new Map([[rule.ncm, rule]]);
+
+  function build(custo: Partial<CustoProduto>, dateClosed: string) {
+    return buildTransacoesFromOrder({
+      order: {
+        id: 200,
+        status: "paid",
+        date_closed: dateClosed,
+        order_items: [
+          { quantity: 1, unit_price: 100, item: { id: "MLB1", seller_sku: "SKU-A" } },
+        ],
+      },
+      billing: null,
+      itemById: new Map(),
+      custoLookup: {
+        byMlItemId: new Map([["MLB1", custoFixture(custo)]]),
+        bySku: new Map(),
+      },
+      contributorByCnpj: new Map(),
+      icmsIncentives,
+    });
+  }
+
+  it("grava o incentivo do NCM do produto na venda", () => {
+    const [row] = build({ ncm: "8516.31.00" }, "2026-11-10T10:00:00.000-04:00");
+    assert.deepEqual(row.incentivoIcms, {
+      ncm: "85163100",
+      aliquotaPercent: 12,
+      appliesTo: "all",
+    });
+  });
+
+  it("produto marcado 'não se aplica' fica sem incentivo", () => {
+    const [row] = build(
+      { ncm: "8516.31.00", icmsIncentiveExcluded: true },
+      "2026-11-10T10:00:00.000-04:00",
+    );
+    assert.equal(row.incentivoIcms, null);
+  });
+
+  it("venda antes do início da vigência (dia em São Paulo) fica sem incentivo", () => {
+    // 31/10 às 23h30 em São Paulo — ainda outubro, mesmo sendo 01/11 em UTC.
+    const [row] = build({ ncm: "85163100" }, "2026-10-31T23:30:00.000-03:00");
+    assert.equal(row.incentivoIcms, null);
+  });
+});

@@ -11,6 +11,7 @@ import { itemListSearchEmptyMessage } from "@/components/shared/ItemListSearch";
 import { SortableTh } from "@/components/ui/sortable-th";
 import { formatFinancialMoney, formatFinancialPercent } from "@/lib/pricing/financial-margin";
 import type { ProductsTableProps } from "@/components/produtos/products-table/types";
+import { IcmsIncentiveBadge } from "@/components/produtos/products-table/IcmsIncentiveBadge";
 import { ProductsTableSkeletonRows } from "@/components/produtos/products-table/ProductsTableSkeleton";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +25,7 @@ export function ProductsTableDesktop({
   formatPricingCostExplainer,
   taxPercentExplainer,
   showFiscalFlags = true,
+  incentiveByNcm,
   onEdit,
   onDelete,
   onToggleActive,
@@ -151,7 +153,12 @@ export function ProductsTableDesktop({
                     </div>
                   </td>
                   <td className="px-4 py-3 text-[var(--muted-foreground)]">
-                    {product.ncm ?? "—"}
+                    <div className="flex flex-col items-start gap-1">
+                      <span>{product.ncm ?? "—"}</span>
+                      {showFiscalFlags ? (
+                        <IcmsIncentiveBadge product={product} incentiveByNcm={incentiveByNcm} />
+                      ) : null}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">
                     <div className="flex items-center justify-end gap-1">

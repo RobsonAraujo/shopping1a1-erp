@@ -1,3 +1,4 @@
+import type { IcmsIncentivoVenda } from "@/lib/tax-incentives/types";
 import type { TaxReportStaleness } from "@/lib/tax-report/tax-report-staleness";
 
 export type BuyerDocumentType = "CPF" | "CNPJ" | "UNKNOWN";
@@ -46,6 +47,12 @@ export type TransacaoVenda = {
    * período); senão o cadastro atual. Ausente em relatórios antigos.
    */
   custoFonte?: "cadastro" | "nivelamento";
+  /**
+   * Incentivo fiscal de ICMS do NCM do produto que vale no dia da venda
+   * (`IcmsIncentive`). Só a venda interna usa — o % substitui a alíquota da
+   * tabela da UF. Ausente em relatórios antigos.
+   */
+  incentivoIcms?: IcmsIncentivoVenda | null;
 };
 
 export type ManualFiscalOverride = {
@@ -98,6 +105,12 @@ export type IcmsDifalBreakdown = {
   aliquotaSaidaEfetiva?: number;
   /** Indica ST na compra (operação interna). */
   icmsStNaCompra?: boolean;
+  /**
+   * Incentivo de ICMS do NCM na venda interna: `aplicado` = a alíquota de
+   * saída veio dele; `false` quando o incentivo é só para contribuinte e o
+   * comprador não é. Ausente sem incentivo (ou em venda interestadual).
+   */
+  incentivoIcms?: IcmsIncentivoVenda & { aplicado: boolean };
 };
 
 export type CreditoOutrasDespesasBreakdown = {

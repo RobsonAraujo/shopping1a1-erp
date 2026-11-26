@@ -15,6 +15,9 @@ import { roundMoney } from "@/lib/pricing/financial-margin";
 import type { CustoLookup } from "@/lib/tax-report/enrichment/obter-custo-por-sku";
 import { resolveCustoDaVenda } from "@/lib/tax-report/enrichment/aplicar-nivelamento";
 import type { DreProductCostLevelingRecord } from "@/lib/dre/dre-product-cost-leveling-shared";
+import { orderDateYmdFromOrder } from "@/lib/mercadolibre/api";
+import { resolveIcmsIncentive } from "@/lib/tax-incentives/resolve";
+import type { IcmsIncentiveIndex } from "@/lib/tax-incentives/types";
 import type {
   ManualFiscalOverride,
   TransacaoVenda,
@@ -47,6 +50,8 @@ export function buildTransacoesFromOrder(input: {
   /** Mês do relatório — casa o nivelamento quando o pedido vem sem data. */
   year?: number;
   month?: number;
+  /** Incentivos de ICMS da organização por NCM — vale o do NCM do produto. */
+  icmsIncentives?: IcmsIncentiveIndex;
 }): TransacaoVenda[] {
   const orderId = String(input.order.id ?? "");
   const orderDate =
@@ -68,6 +73,7 @@ export function buildTransacoesFromOrder(input: {
     input.billing?.buyer?.billing_info?.taxes?.taxpayer_type?.description,
   );
   const ufFromBilling = parseUfFromBilling(input.billing);
+  const orderDateYmd = orderDateYmdFromOrder({ date_closed: orderDate });
 
   const transacoes: TransacaoVenda[] = [];
 
@@ -152,6 +158,12 @@ export function buildTransacoesFromOrder(input: {
       freightCost,
       ipiPercent: custo?.ipiPercent ?? 0,
       custoFonte,
+      incentivoIcms: resolveIcmsIncentive({
+        index: input.icmsIncentives,
+        ncm: custo?.ncm,
+        excluded: custo?.icmsIncentiveExcluded,
+        orderDateYmd,
+      }),
     });
   }
 

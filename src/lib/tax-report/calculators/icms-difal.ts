@@ -1,4 +1,6 @@
 import { roundMoney } from "@/lib/pricing/financial-margin";
+import { formatNcm } from "@/lib/tax-incentives/ncm";
+import { icmsIncentiveAppliesToBuyer } from "@/lib/tax-incentives/resolve";
 import {
   UFS_SUL_SUDESTE_SEM_ES,
   normalizeUf,
@@ -55,7 +57,10 @@ export function aliquotaInternaTotal(
 /**
  * Alíquota ICMS na saída em operação interna (mesma UF).
  * ST na compra → 0% (imposto já recolhido pelo substituto tributário).
- * Sem ST → alíquota interna da tabela UF (saleIcmsPercent do cadastro é campo de precificação).
+ * Incentivo de ICMS do NCM (`transacao.incentivoIcms`) que vale para o
+ * comprador → o % cadastrado, já com o incentivo (substitui base + FCP).
+ * Senão → alíquota interna da tabela UF (saleIcmsPercent do cadastro é campo
+ * de precificação, não entra aqui).
  */
 export function obterAliquotaIcmsSaidaInterna(
   transacao: TransacaoVenda,
@@ -63,6 +68,13 @@ export function obterAliquotaIcmsSaidaInterna(
 ): number {
   if (transacao.hasIcmsSt) {
     return 0;
+  }
+  const incentivo = transacao.incentivoIcms;
+  if (
+    incentivo &&
+    icmsIncentiveAppliesToBuyer(incentivo, isContribuinteIcms(transacao))
+  ) {
+    return incentivo.aliquotaPercent / 100;
   }
   return aliquotaInternaTabela;
 }
@@ -95,6 +107,16 @@ export function calcularIcmsDifal(input: IcmsDifalInput): IcmsDifalBreakdown | n
   if (isOperacaoInterna) {
     const aliquotaSaida = obterAliquotaIcmsSaidaInterna(transacao, internaTabela);
     const icmsTotal = roundMoney(receita * aliquotaSaida);
+    const incentivo =
+      transacao.incentivoIcms && !transacao.hasIcmsSt
+        ? {
+            ...transacao.incentivoIcms,
+            aplicado: icmsIncentiveAppliesToBuyer(
+              transacao.incentivoIcms,
+              isContribuinteIcms(transacao),
+            ),
+          }
+        : undefined;
     return {
       ufOrigem: origem,
       ufDestino,
@@ -107,6 +129,7 @@ export function calcularIcmsDifal(input: IcmsDifalInput): IcmsDifalBreakdown | n
       icmsTotal,
       isContribuinte: false,
       isOperacaoInterna: true,
+      ...(incentivo ? { incentivoIcms: incentivo } : {}),
     };
   }
 
@@ -155,8 +178,17 @@ export function buildIcmsMemoria(result: IcmsDifalBreakdown): string[] {
     const lines = [
       `Operação interna ${result.ufOrigem} → ${result.ufDestino}`,
     ];
+    const incentivo = result.incentivoIcms;
     if (result.icmsStNaCompra) {
       lines.push("ICMS-ST na compra — ICMS na saída = 0%");
+    } else if (incentivo?.aplicado) {
+      lines.push(
+        `Incentivo fiscal NCM ${formatNcm(incentivo.ncm)}: ${incentivo.aliquotaPercent.toFixed(2)}% (tabela ${result.ufOrigem} ${tabelaPct.toFixed(2)}%)`,
+      );
+    } else if (incentivo) {
+      lines.push(
+        `Incentivo do NCM ${formatNcm(incentivo.ncm)} só para contribuinte — comprador não contribuinte, alíquota interna tabela ${tabelaPct.toFixed(2)}%`,
+      );
     } else {
       lines.push(`Alíquota interna tabela ${tabelaPct.toFixed(2)}%`);
     }

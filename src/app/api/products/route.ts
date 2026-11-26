@@ -41,6 +41,7 @@ const productWriteSchema = z.object({
   saleIcmsPercent: z.coerce.number().finite().optional(),
   pmaPrice: z.coerce.number().finite().nullable().optional(),
   supplierId: z.string().trim().nullable().optional(),
+  icmsIncentiveExcluded: z.boolean().optional(),
 });
 
 export async function GET() {

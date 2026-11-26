@@ -1,6 +1,10 @@
 import { loadLevelingRecordsOverlappingMonth } from "@/lib/dre/dre-product-cost-leveling";
 import type { DreProductCostLevelingRecord } from "@/lib/dre/dre-product-cost-leveling-shared";
 import type { ItemAdMetrics } from "@/lib/mercadolibre/product-ads-metrics";
+import { orderDateYmdFromOrder } from "@/lib/mercadolibre/api";
+import { loadIcmsIncentiveIndex } from "@/lib/tax-incentives/icms-incentive-data";
+import { resolveIcmsIncentive } from "@/lib/tax-incentives/resolve";
+import type { IcmsIncentiveIndex } from "@/lib/tax-incentives/types";
 import { resolveCustoDaVenda } from "@/lib/tax-report/enrichment/aplicar-nivelamento";
 import {
   loadCustoBySkuMap,
@@ -42,13 +46,16 @@ export function collectDetalhes(
 /**
  * Atualiza os campos de cadastro de uma venda salva: o nivelamento que cobre
  * o dia da venda ou, sem ele, o cadastro atual. Sem custo nenhum para o
- * produto, a venda fica como estava.
+ * produto, a venda fica como estava. Com `icmsIncentives`, o incentivo de
+ * ICMS do NCM também é resolvido de novo (regras de hoje, vigência pelo dia
+ * da venda); sem ele, fica o que estava gravado.
  */
 export function enrichTransacao(
   transacao: TransacaoVenda,
   custoLookup: CustoLookup,
   levelings: readonly DreProductCostLevelingRecord[] = [],
   period?: { year: number; month: number },
+  icmsIncentives?: IcmsIncentiveIndex,
 ): TransacaoVenda {
   const orderDate = transacao.orderDate;
   const { custo, fonte } = resolveCustoDaVenda({
@@ -78,6 +85,14 @@ export function enrichTransacao(
     saleFee: transacao.saleFee ?? 0,
     freightCost: transacao.freightCost ?? 0,
     custoFonte: fonte,
+    incentivoIcms: icmsIncentives
+      ? resolveIcmsIncentive({
+          index: icmsIncentives,
+          ncm: custo.ncm,
+          excluded: custo.icmsIncentiveExcluded,
+          orderDateYmd: orderDateYmdFromOrder({ date_closed: orderDate }),
+        })
+      : (transacao.incentivoIcms ?? null),
   };
 }
 
@@ -169,8 +184,15 @@ export async function recomputeTaxReportPayload(input: {
   const itemIds = [
     ...new Set(detalhes.map((d) => d.transacao.itemId).filter(Boolean)),
   ];
-  const [custoLookup, levelings, config, icmsRates, cbsIbsVigencia, fixedCosts] =
-    await Promise.all([
+  const [
+    custoLookup,
+    levelings,
+    config,
+    icmsRates,
+    cbsIbsVigencia,
+    fixedCosts,
+    icmsIncentives,
+  ] = await Promise.all([
       loadCustoBySkuMap(organizationId, skus, itemIds),
       loadLevelingRecordsOverlappingMonth(
         organizationId,
@@ -181,10 +203,11 @@ export async function recomputeTaxReportPayload(input: {
       loadIcmsRatesMap(),
       loadCbsIbsVigencia(payload.year),
       loadFixedCostResolutionForMonth(organizationId, payload.year, payload.month),
+      loadIcmsIncentiveIndex(organizationId),
     ]);
 
   const transacoes = detalhes.map((d) =>
-    enrichTransacao(d.transacao, custoLookup, levelings, payload),
+    enrichTransacao(d.transacao, custoLookup, levelings, payload, icmsIncentives),
   );
   const inputs = buildReportInputsFromTransactions(transacoes, detalhes);
 

@@ -50,6 +50,8 @@ export type ProductView = ProductRecordForPricing & {
   sku: string | null;
   ncm: string | null;
   isImported: boolean;
+  /** "Não se aplica a este produto" no incentivo de ICMS do NCM (`IcmsIncentive`). */
+  icmsIncentiveExcluded: boolean;
   pricingCost: number | null;
   /** % médio operacional de imposto vindo do relatório tributário (null = sem dados para o SKU). */
   taxPercent: number | null;
@@ -107,6 +109,7 @@ export function buildProductView(
     ncm: product.ncm,
     ...record,
     isImported: product.isImported,
+    icmsIncentiveExcluded: product.icmsIncentiveExcluded,
     pricingCost: resolved?.pricingCost ?? null,
     taxPercent: isSimples
       ? (companyTaxContext?.simplesAliquotaEfetivaPercent ?? null)
@@ -432,6 +435,8 @@ export type ProductWriteInput = {
   saleIcmsPercent?: number;
   pmaPrice?: number | null;
   supplierId?: string | null;
+  /** "Não se aplica a este produto" no incentivo de ICMS do NCM. */
+  icmsIncentiveExcluded?: boolean;
 };
 
 export function validateProductInput(
@@ -510,6 +515,7 @@ export function productWriteToPrismaData(
     saleIcmsPercent: input.saleIcmsPercent ?? 0,
     pmaPrice: input.pmaPrice ?? null,
     supplierId: input.supplierId || null,
+    icmsIncentiveExcluded: input.icmsIncentiveExcluded ?? false,
   };
 }
 
@@ -541,6 +547,9 @@ export function productPatchToPrismaData(
   if (input.isImported !== undefined) data.isImported = input.isImported;
   if (input.saleIcmsPercent !== undefined) data.saleIcmsPercent = input.saleIcmsPercent;
   if (input.pmaPrice !== undefined) data.pmaPrice = input.pmaPrice ?? null;
+  if (input.icmsIncentiveExcluded !== undefined) {
+    data.icmsIncentiveExcluded = input.icmsIncentiveExcluded;
+  }
   if (input.supplierId !== undefined) {
     data.supplier = input.supplierId
       ? { connect: { id: input.supplierId } }

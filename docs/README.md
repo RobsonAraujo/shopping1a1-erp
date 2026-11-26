@@ -16,6 +16,7 @@ Documentação de arquitetura e processos do projeto. O README na raiz cobre set
 Módulos com README co-localizado (padrão do projeto):
 
 - [Relatório tributário](../src/lib/tax-report/README.md)
+- [Incentivo fiscal de ICMS por NCM (venda interna)](../src/lib/tax-incentives/README.md)
 - [Simples Nacional](../src/lib/simples-nacional/README.md)
 - [DRE](../src/lib/dre/README.md)
 - [Estoque automático — livro de estoque, baixa por venda, Full, custo por lote, inventário](../src/lib/stock/README.md)

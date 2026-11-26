@@ -17,6 +17,7 @@ function sampleView(overrides: Partial<ProductView> = {}): ProductView {
     isMonophasic: false,
     saleIcmsPercent: 18,
     isImported: true,
+    icmsIncentiveExcluded: false,
     pricingCost: 95,
     taxPercent: 9.25,
     taxPercentGeneratedAt: "2026-01-01T00:00:00.000Z",

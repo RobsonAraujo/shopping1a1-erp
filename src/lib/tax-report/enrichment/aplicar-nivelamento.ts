@@ -30,6 +30,9 @@ export function applyLevelingToCusto(
     isMonophasic: leveling.isMonophasic ?? custo?.isMonophasic ?? false,
     isImported: leveling.isImported ?? custo?.isImported ?? false,
     ipiPercent: leveling.ipiPercent,
+    // NCM não entra no nivelamento (classificação fixa): vale o do cadastro.
+    ncm: custo?.ncm ?? null,
+    icmsIncentiveExcluded: custo?.icmsIncentiveExcluded ?? false,
   };
 }
 

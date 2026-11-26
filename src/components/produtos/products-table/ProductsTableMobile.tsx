@@ -10,6 +10,7 @@ import { ListingOptionChips } from "@/components/products/ListingOptionChips";
 import { itemListSearchEmptyMessage } from "@/components/shared/ItemListSearch";
 import { formatFinancialMoney, formatFinancialPercent } from "@/lib/pricing/financial-margin";
 import type { ProductsTableProps } from "@/components/produtos/products-table/types";
+import { IcmsIncentiveBadge } from "@/components/produtos/products-table/IcmsIncentiveBadge";
 import { ProductsTableSkeletonRows } from "@/components/produtos/products-table/ProductsTableSkeleton";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +31,7 @@ export function ProductsTableMobile({
   formatPricingCostExplainer,
   taxPercentExplainer,
   showFiscalFlags = true,
+  incentiveByNcm,
   onEdit,
   onDelete,
   onToggleActive,
@@ -77,8 +79,11 @@ export function ProductsTableMobile({
                   <p className="truncate text-sm font-semibold text-[var(--foreground)]">
                     {product.sku ?? "—"}
                   </p>
-                  <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                  <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
                     NCM {product.ncm ?? "—"}
+                    {showFiscalFlags ? (
+                      <IcmsIncentiveBadge product={product} incentiveByNcm={incentiveByNcm} />
+                    ) : null}
                   </p>
                   {!product.active || product.needsCostReview ? (
                     <div className="mt-1 flex flex-wrap gap-1">

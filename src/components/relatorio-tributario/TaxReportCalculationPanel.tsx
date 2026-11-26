@@ -17,6 +17,7 @@ import {
   formatFinancialPercent,
   percentOfSale,
 } from "@/lib/pricing/financial-margin";
+import { formatNcm } from "@/lib/tax-incentives/ncm";
 import { margemOperacionalEstimadaLinha } from "@/lib/tax-report/imposto-operacional";
 import type { DetalhamentoTributario } from "@/lib/tax-report/types";
 import { cn } from "@/lib/utils";
@@ -317,12 +318,30 @@ export function TaxReportCalculationPanel({
                       muted
                     />
                   ) : (
-                    <MemoriaRow
-                      label="Débito de ICMS"
-                      value={money(icms.icmsTotal)}
-                      conta={`${money(t.receitaBruta)} × ${pct(icms.aliquotaInternaTotal * 100)} = ${money(icms.icmsTotal)}`}
-                      emphasis
-                    />
+                    <>
+                      {icms.incentivoIcms ? (
+                        <MemoriaRow
+                          label="Incentivo fiscal"
+                          value={
+                            icms.incentivoIcms.aplicado
+                              ? `NCM ${formatNcm(icms.incentivoIcms.ncm)} — ${pct(icms.incentivoIcms.aliquotaPercent)}`
+                              : `NCM ${formatNcm(icms.incentivoIcms.ncm)} — não se aplica`
+                          }
+                          conta={
+                            icms.incentivoIcms.aplicado
+                              ? `Venda interna com incentivo: ${pct(icms.incentivoIcms.aliquotaPercent)} no lugar da alíquota da tabela ${icms.ufOrigem} (${pct(icms.aliquotaInternaTotal * 100)}).`
+                              : `O incentivo deste NCM vale só para comprador contribuinte de ICMS; este comprador não é, então fica a tabela ${icms.ufOrigem} (${pct(icms.aliquotaInternaTotal * 100)}).`
+                          }
+                          muted={!icms.incentivoIcms.aplicado}
+                        />
+                      ) : null}
+                      <MemoriaRow
+                        label="Débito de ICMS"
+                        value={money(icms.icmsTotal)}
+                        conta={`${money(t.receitaBruta)} × ${pct((icms.aliquotaSaidaEfetiva ?? icms.aliquotaInternaTotal) * 100)} = ${money(icms.icmsTotal)}`}
+                        emphasis
+                      />
+                    </>
                   )
                 ) : (
                   <>

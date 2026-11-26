@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   aliquotaInternaTotal,
+  buildIcmsMemoria,
   calcularIcmsDifal,
   icmsSemDifal,
   obterAliquotaIcmsSaidaInterna,
@@ -305,5 +306,104 @@ describe("icmsSemDifal", () => {
     assert.ok(result);
     assert.equal(icmsSemDifal(result), 18);
     assert.equal(result.difal, 0);
+  });
+});
+
+describe("incentivo fiscal de ICMS (NCM) na venda interna", () => {
+  const incentivo = { ncm: "85163100", aliquotaPercent: 12, appliesTo: "all" as const };
+
+  it("SP to SP: o % do incentivo substitui a tabela (18% → 12%)", () => {
+    const r = calcularIcmsDifal({
+      transacao: baseTransacao({ ufDestino: "SP", incentivoIcms: incentivo }),
+      ufOrigem: "SP",
+      rates,
+    });
+    assert.ok(r);
+    assert.equal(r.aliquotaSaidaEfetiva, 0.12);
+    assert.equal(r.aliquotaInternaTotal, 0.18);
+    assert.equal(r.icmsTotal, 12);
+    assert.deepEqual(r.incentivoIcms, { ...incentivo, aplicado: true });
+    assert.ok(
+      buildIcmsMemoria(r).some((l) => l.includes("Incentivo fiscal NCM 8516.31.00: 12.00%")),
+    );
+  });
+
+  it("substitui base + FCP inteiros (RJ 20% + 2% → 12%)", () => {
+    const r = calcularIcmsDifal({
+      transacao: baseTransacao({ ufDestino: "RJ", incentivoIcms: incentivo }),
+      ufOrigem: "RJ",
+      rates,
+    });
+    assert.ok(r);
+    assert.equal(r.icmsTotal, 12);
+  });
+
+  it("só contribuinte: comprador CPF fica com a tabela", () => {
+    const r = calcularIcmsDifal({
+      transacao: baseTransacao({
+        ufDestino: "SP",
+        tipoDocumento: "CPF",
+        contribuinteIcms: false,
+        incentivoIcms: { ...incentivo, appliesTo: "contribuinte" },
+      }),
+      ufOrigem: "SP",
+      rates,
+    });
+    assert.ok(r);
+    assert.equal(r.icmsTotal, 18);
+    assert.equal(r.incentivoIcms?.aplicado, false);
+    assert.ok(buildIcmsMemoria(r).some((l) => l.includes("só para contribuinte")));
+  });
+
+  it("só contribuinte: CNPJ contribuinte usa o incentivo", () => {
+    const r = calcularIcmsDifal({
+      transacao: baseTransacao({
+        ufDestino: "SP",
+        tipoDocumento: "CNPJ",
+        contribuinteIcms: true,
+        incentivoIcms: { ...incentivo, appliesTo: "contribuinte" },
+      }),
+      ufOrigem: "SP",
+      rates,
+    });
+    assert.ok(r);
+    assert.equal(r.icmsTotal, 12);
+  });
+
+  it("venda interestadual ignora o incentivo (SP → RJ: 12% + DIFAL 10%)", () => {
+    const r = calcularIcmsDifal({
+      transacao: baseTransacao({ ufDestino: "RJ", incentivoIcms: incentivo }),
+      ufOrigem: "SP",
+      rates,
+    });
+    assert.ok(r);
+    assert.equal(r.icmsInterestadual, 12);
+    assert.equal(r.difal, 10);
+    assert.equal(r.icmsTotal, 22);
+    assert.equal(r.incentivoIcms, undefined);
+  });
+
+  it("ICMS-ST na compra continua 0% mesmo com incentivo", () => {
+    const r = calcularIcmsDifal({
+      transacao: baseTransacao({ ufDestino: "SP", hasIcmsSt: true, incentivoIcms: incentivo }),
+      ufOrigem: "SP",
+      rates,
+    });
+    assert.ok(r);
+    assert.equal(r.icmsTotal, 0);
+    assert.equal(r.incentivoIcms, undefined);
+  });
+
+  it("incentivo de 0% (isenção) zera o débito", () => {
+    const r = calcularIcmsDifal({
+      transacao: baseTransacao({
+        ufDestino: "SP",
+        incentivoIcms: { ...incentivo, aliquotaPercent: 0 },
+      }),
+      ufOrigem: "SP",
+      rates,
+    });
+    assert.ok(r);
+    assert.equal(r.icmsTotal, 0);
   });
 });

@@ -21,6 +21,7 @@ function sampleProduct(overrides: Partial<Product> = {}): Product {
     isMonophasic: false,
     saleIcmsPercent: 0 as unknown as Product["saleIcmsPercent"],
     isImported: false,
+    icmsIncentiveExcluded: false,
     pmaPrice: null,
     supplierId: null,
     active: true,

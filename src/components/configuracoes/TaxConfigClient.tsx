@@ -16,6 +16,7 @@ import type { IcmsRateRow, TaxCompanyConfig } from "@/lib/tax-report/types";
 import type { CbsIbsVigenciaRow } from "@/lib/tax-report/calculators/cbs-ibs";
 import { cn } from "@/lib/utils";
 import { IcmsRatesTable } from "./icms-rates-table";
+import { IcmsIncentivesCard } from "./IcmsIncentivesCard";
 
 type TaxConfigResponse = {
   company: TaxCompanyConfig;
@@ -346,6 +347,8 @@ export function TaxConfigClient() {
           </div>
         </Card>
       ) : null}
+
+      {!isSimples ? <IcmsIncentivesCard /> : null}
 
       <Card className="overflow-hidden rounded-2xl p-0">
         <div className="border-b border-[var(--border)] px-4 py-4 sm:px-5">

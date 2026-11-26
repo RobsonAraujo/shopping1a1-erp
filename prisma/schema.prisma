@@ -685,35 +685,39 @@ enum TaxRegime {
 /// espelho de exibição/filtro (populado no import, pode ficar desatualizado
 /// sem problema) — nunca é lido por nenhuma lógica de identidade/agrupamento.
 model Product {
-  mlItemId            String   @id @map("ml_item_id")
-  organizationId      String   @map("organization_id")
-  sku                 String?
-  ncm                 String?
-  unitCostNf          Decimal  @map("unit_cost_nf") @db.Decimal(18, 2)
-  purchaseIcmsPercent Decimal  @map("purchase_icms_percent") @db.Decimal(8, 4)
-  hasIcmsSt           Boolean  @default(false) @map("has_icms_st")
-  purchaseCostWithSt  Decimal? @map("purchase_cost_with_st") @db.Decimal(18, 2)
-  ipiPercent          Decimal  @default(0) @map("ipi_percent") @db.Decimal(8, 4)
-  extraCosts          Decimal  @default(0) @map("extra_costs") @db.Decimal(18, 2)
-  isMonophasic        Boolean  @default(false) @map("is_monophasic")
-  saleIcmsPercent     Decimal  @map("sale_icms_percent") @db.Decimal(8, 4)
-  isImported          Boolean  @default(false) @map("is_imported")
-  pmaPrice            Decimal? @map("pma_price") @db.Decimal(18, 2)
-  supplierId          String?  @map("supplier_id")
+  mlItemId              String   @id @map("ml_item_id")
+  organizationId        String   @map("organization_id")
+  sku                   String?
+  ncm                   String?
+  unitCostNf            Decimal  @map("unit_cost_nf") @db.Decimal(18, 2)
+  purchaseIcmsPercent   Decimal  @map("purchase_icms_percent") @db.Decimal(8, 4)
+  hasIcmsSt             Boolean  @default(false) @map("has_icms_st")
+  purchaseCostWithSt    Decimal? @map("purchase_cost_with_st") @db.Decimal(18, 2)
+  ipiPercent            Decimal  @default(0) @map("ipi_percent") @db.Decimal(8, 4)
+  extraCosts            Decimal  @default(0) @map("extra_costs") @db.Decimal(18, 2)
+  isMonophasic          Boolean  @default(false) @map("is_monophasic")
+  saleIcmsPercent       Decimal  @map("sale_icms_percent") @db.Decimal(8, 4)
+  isImported            Boolean  @default(false) @map("is_imported")
+  pmaPrice              Decimal? @map("pma_price") @db.Decimal(18, 2)
+  /// "Não se aplica a este produto": o NCM tem incentivo de ICMS
+  /// (`IcmsIncentive`), mas este produto não tem direito a ele (o RICMS
+  /// lista o benefício por descrição + NCM). Zerado quando o NCM muda.
+  icmsIncentiveExcluded Boolean  @default(false) @map("icms_incentive_excluded")
+  supplierId            String?  @map("supplier_id")
   /// Produto inativado pelo usuário (anúncio pausado/excluído no ML, mas
   /// mantido aqui para preservar histórico de relatórios). Telas
   /// operacionais (Kanban, Inventory, Alertas, Fornecedores) excluem
   /// produto inativo; relatórios históricos (DRE, Lucratividade,
   /// Relatório Tributário) continuam considerando normalmente.
-  active              Boolean  @default(true) @map("active")
+  active                Boolean  @default(true) @map("active")
   /// `true` quando o produto veio do import em massa e ainda não teve o
   /// custo real preenchido (nasce com unitCostNf=0). Enquanto `true`, é
   /// tratado como "sem Product" nos cálculos de custo de DRE/Lucratividade/
   /// Relatório Tributário. Limpo automaticamente no primeiro PATCH salvo
   /// pelo formulário de edição.
-  needsCostReview     Boolean  @default(false) @map("needs_cost_review")
-  createdAt           DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @updatedAt @map("updated_at")
+  needsCostReview       Boolean  @default(false) @map("needs_cost_review")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
 
   supplier         Supplier?                @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   kitItems         KitItem[]
@@ -803,6 +807,41 @@ model CompanyTaxSettings {
 
   @@unique([organizationId])
   @@map("company_tax_settings")
+}
+
+/// Quem vale o incentivo fiscal de ICMS da venda interna.
+enum IcmsIncentiveAppliesTo {
+  /// Toda venda interna (UF da empresa = UF do comprador).
+  all
+  /// Só venda interna para comprador contribuinte de ICMS (B2B). Para
+  /// benefícios de atacado/fabricante que não valem para consumidor final.
+  contribuinte
+}
+
+/// Incentivo fiscal de ICMS por NCM, da organização: na venda interna, o ICMS
+/// de débito passa a ser `ratePercent` (o % final, já com o incentivo) em vez
+/// da alíquota da tabela da UF. Vale para todo produto da org com esse NCM,
+/// menos os marcados `Product.icmsIncentiveExcluded`. Venda interestadual,
+/// produto com ICMS-ST e o crédito da compra não mudam. Só o Tributário
+/// (Lucro Real) lê. Ver src/lib/tax-incentives/README.md.
+model IcmsIncentive {
+  id             String                 @id @default(cuid())
+  organizationId String                 @map("organization_id")
+  /// 8 dígitos, sem pontos (`normalizeNcm`).
+  ncm            String
+  /// Carga final do ICMS na venda interna, em % (0–100). Substitui base + FCP.
+  ratePercent    Decimal                @map("rate_percent") @db.Decimal(8, 4)
+  appliesTo      IcmsIncentiveAppliesTo @default(all) @map("applies_to")
+  /// Vigência pelo dia da venda (inclusive); nulo = sem limite.
+  validFrom      DateTime?              @map("valid_from") @db.Date
+  validTo        DateTime?              @map("valid_to") @db.Date
+  /// Base legal / observação livre (ex.: "RICMS/SP Anexo II art. 34").
+  note           String?
+  createdAt      DateTime               @default(now()) @map("created_at")
+  updatedAt      DateTime               @updatedAt @map("updated_at")
+
+  @@unique([organizationId, ncm])
+  @@map("icms_incentives")
 }
 
 /// Alíquota interna de ICMS + FCP por UF de destino (configurável).
@@ -1416,27 +1455,27 @@ model StockBalance {
 /// sincronização reescreve. Nulo = nunca lido ou leitura falhou (a tela
 /// mostra "—", nunca 0).
 model StockItemMlPosition {
-  stockItemId       String    @id @map("stock_item_id")
-  organizationId    String    @map("organization_id")
+  stockItemId           String    @id @map("stock_item_id")
+  organizationId        String    @map("organization_id")
   /// Estoque no depósito do vendedor (`seller_warehouse`/`selling_address`).
-  depositQty        Int?      @map("deposit_qty")
+  depositQty            Int?      @map("deposit_qty")
   /// Full disponível para venda.
-  fullAvailableQty  Int?      @map("full_available_qty")
+  fullAvailableQty      Int?      @map("full_available_qty")
   /// Full em transferência entre centros do ML (status `transfer`; já está com o ML).
-  fullTransferQty   Int?      @map("full_transfer_qty")
+  fullTransferQty       Int?      @map("full_transfer_qty")
   /// Full não disponível por outro motivo (retirada, sem cobertura fiscal, processo interno, avaria…).
-  fullOtherQty      Int?      @map("full_other_qty")
+  fullOtherQty          Int?      @map("full_other_qty")
   /// Parte do `fullOtherQty` reservada para retirada (voltando para o vendedor).
-  fullWithdrawalQty Int?      @map("full_withdrawal_qty")
+  fullWithdrawalQty     Int?      @map("full_withdrawal_qty")
   /// Perdido pelo ML (fora do total: o ML reembolsa, não é estoque).
-  fullLostQty       Int?      @map("full_lost_qty")
+  fullLostQty           Int?      @map("full_lost_qty")
   /// Tudo que está com o ML, menos o perdido (disponível + não disponível).
-  fullTotalQty      Int?      @map("full_total_qty")
+  fullTotalQty          Int?      @map("full_total_qty")
   /// Fora da venda no Full, por status do ML (`[{status, quantity}]`, inclui `lost`), para a tela nomear cada parte.
-  fullUnavailableDetail Json? @map("full_unavailable_detail")
-  fetchedAt         DateTime? @map("fetched_at")
-  error             String?
-  updatedAt         DateTime  @updatedAt @map("updated_at")
+  fullUnavailableDetail Json?     @map("full_unavailable_detail")
+  fetchedAt             DateTime? @map("fetched_at")
+  error                 String?
+  updatedAt             DateTime  @updatedAt @map("updated_at")
 
   stockItem StockItem @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
 

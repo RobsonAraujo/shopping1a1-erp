@@ -62,7 +62,7 @@ O status de contribuinte ICMS vem do campo `taxpayer_type` do `billing_info` do 
 - **Performance:** custos de produto carregados em batch (`loadCustoBySkuMap`); rota com `maxDuration = 300` (Vercel)
 - **ICMS vs DIFAL:** consolidado e tabela por venda separam ICMS (origem) e DIFAL (UF destino); total em `icmsDifalTotal`
 - **Apuração:** consolidado expõe `apuracao` com débito/crédito/líquido (PIS, COFINS, ICMS) e DIFAL por UF; crédito PIS/COFINS na base NF entrada; crédito ICMS de `purchaseIcmsPercent`
-- **ICMS saída interna:** usa `saleIcmsPercent` do cadastro; com `hasIcmsSt` aplica alíquota residual (incl. 0%); sem ST e `saleIcmsPercent` 0, usa tabela UF
+- **ICMS saída interna:** com `hasIcmsSt`, 0%. Sem ST, usa o incentivo fiscal do NCM do produto quando houver (`TransacaoVenda.incentivoIcms`, o % final já com o incentivo, ver [tax-incentives](../tax-incentives/README.md)); senão, a tabela da UF (base + FCP). `saleIcmsPercent` do cadastro é legado e não entra no cálculo
 
 ## Nivelamento de custo
 

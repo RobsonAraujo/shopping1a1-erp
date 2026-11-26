@@ -14,6 +14,7 @@ import { getTaxReportBillingConcurrency } from "@/lib/tax-report/config";
 import { buildTransacoesFromOrder } from "@/lib/tax-report/enrichment/build-transacao-venda";
 import { loadCustoBySkuMap } from "@/lib/tax-report/enrichment/obter-custo-por-sku";
 import { loadLevelingRecordsOverlappingMonth } from "@/lib/dre/dre-product-cost-leveling";
+import { loadIcmsIncentiveIndex } from "@/lib/tax-incentives/icms-incentive-data";
 import {
   buildReportInputsFromTransactions,
   loadFixedCostResolutionForMonth,
@@ -257,10 +258,11 @@ export async function generateMonthlyTaxReport(input: {
     message: `Custos de ${custoLookup.byMlItemId.size} produto${custoLookup.byMlItemId.size === 1 ? "" : "s"} carregados. Montando vendas…`,
   });
 
-  const [loadedConfig, icmsRates, cbsIbsVigencia] = await Promise.all([
+  const [loadedConfig, icmsRates, cbsIbsVigencia, icmsIncentives] = await Promise.all([
     loadTaxCompanyConfig(input.organizationId),
     loadIcmsRatesMap(),
     loadCbsIbsVigencia(input.year),
+    loadIcmsIncentiveIndex(input.organizationId),
   ]);
   const config = resolveConfigForGeneration(loadedConfig, {
     forceRegime: input.forceRegime,
@@ -304,6 +306,7 @@ export async function generateMonthlyTaxReport(input: {
         levelings,
         year: input.year,
         month: input.month,
+        icmsIncentives,
       }),
     );
   }
