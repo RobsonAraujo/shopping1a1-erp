@@ -153,6 +153,7 @@ Página `/dashboard/calculadora` (menu Financeiro, depois de Lucratividade): tod
 - **Simular** (`POST /api/calculadora/simulate`, `/floor`): o navegador devolve os insumos da leitura, então cada preço só cota taxa e frete (item + 2 chamadas).
   - O servidor confere que o anúncio é da loja e monta o contexto para `simulateWithContext` / `floorWithContext`, a mesma conta da Central.
   - Os insumos só calculam um número que volta para o mesmo usuário; nada é gravado.
+  - O imposto aceita de −100% a 100%. Ele pode ser **negativo** e isso é legítimo: em Lucro Real, produto com ICMS-ST vendido para fora do estado tem crédito da compra + ST recuperável maiores que o débito (decisão do usuário, 2026-11-26). Antes a validação exigia ≥ 0 e Simular dava 400 nesses anúncios.
 - **Mínimo**: não há mínimo pronto (`refreshFloor={false}`). Ele sai sempre no botão "Calcular mínimo" (~20–40 cotações), com o PMA e o desconto máximo de promoção.
 - **Margem mínima que eu aceito**: abre na meta que vale (a própria ou a do segmento) e o usuário mexe à vontade, sem gravar nada. O veredito muda no navegador (`withTarget`), sem cotação.
 - **Na compra** (`purchase-cost.ts`): cada preço simulado diz **até quanto dá para pagar** no produto para fechar a margem mínima, e o **custo do orçamento** troca o custo do cadastro na conta.

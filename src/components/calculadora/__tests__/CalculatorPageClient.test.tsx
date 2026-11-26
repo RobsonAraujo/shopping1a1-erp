@@ -396,6 +396,28 @@ describe("CalculatorPageClient", () => {
     assert.ok(buttonByText(panel, "Calcular mínimo"));
   });
 
+  it("simulates and computes the minimum with a negative tax rate (ST credit)", async () => {
+    const base = reading("MLB1");
+    readingOverrides = { inputs: { ...base.inputs, taxRatePercent: -2.36 } };
+    const container = render("MLB1");
+    const panel = visiblePanel(container);
+    assert.ok(panel);
+    const strip = await nowStrip(panel);
+    // A faixa mostra uma casa; o imposto negativo soma na margem (MC 28% → 40,4%).
+    assert.match(strip.textContent ?? "", /Imposto[-−]2,4%/);
+    assert.match(strip.textContent ?? "", /MC40,4%/);
+
+    await submit(panel);
+    await waitFor(() => assert.match(panel.textContent ?? "", /A R\$\s?100,00/));
+    const sent = requests.find((request) => request.url.endsWith("/simulate"))!;
+    assert.equal((sent.body.inputs as RotinaPricingInputs).taxRatePercent, -2.36);
+
+    const compute = buttonByText(panel, "Calcular mínimo");
+    assert.ok(compute);
+    await act(async () => compute.click());
+    await waitFor(() => assert.match(panel.textContent ?? "", /Mínimo\s*R\$\s?120,00/));
+  });
+
   it("shows the PMA, offers it as a shortcut and warns on prices below it", async () => {
     readingOverrides = { pmaPrice: 110 };
     const container = render("MLB1");

@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { blockedFromRow } from "@/lib/calculadora/live-read";
 import {
   calculatorAdsSchema,
+  calculatorFloorSchema,
   calculatorSimulateSchema,
 } from "@/lib/calculadora/request-schema";
 
@@ -50,6 +51,17 @@ describe("calculator request schemas", () => {
 
   it("accepts the reading sent back with the prices", () => {
     assert.equal(calculatorSimulateSchema.safeParse(body).success, true);
+  });
+
+  it("accepts a negative tax rate (ST credit bigger than the sale's ICMS)", () => {
+    const negative = { ...body, inputs: { ...body.inputs, taxRatePercent: -2.36 } };
+    assert.equal(calculatorSimulateSchema.safeParse(negative).success, true);
+    assert.equal(calculatorFloorSchema.safeParse(negative).success, true);
+    assert.equal(
+      calculatorSimulateSchema.safeParse({ ...body, inputs: { ...body.inputs, taxRatePercent: -150 } })
+        .success,
+      false,
+    );
   });
 
   it("rejects inputs out of range and more than 5 prices", () => {

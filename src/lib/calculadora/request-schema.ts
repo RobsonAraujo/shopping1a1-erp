@@ -16,10 +16,18 @@ const mlItemId = z.string().regex(/^[A-Z]{3}\d+$/, "mlItemId inválido");
 const money = z.number().min(0).max(MAX_MONEY);
 const percent = z.number().min(0).max(1000);
 
+/**
+ * O imposto do anúncio (30 dias do Tributário) pode ser negativo: em Lucro
+ * Real, um produto com ICMS-ST vendido para fora do estado tem crédito da
+ * compra + ST recuperável maiores que o débito da venda. A Lucratividade e as
+ * Ações do dia já usam o número assim; aqui ele só volta do navegador.
+ */
+const taxRatePercent = z.number().min(-100).max(100);
+
 export const pricingInputsSchema = z.object({
   productCost: money.nullable(),
   extraCosts: money.nullable(),
-  taxRatePercent: z.number().min(0).max(100).nullable(),
+  taxRatePercent: taxRatePercent.nullable(),
   mlFeeRebate: money.nullable(),
   listingTypeId: z.string().max(40).nullable(),
   listingTypeLabel: z.string().max(80).nullable(),
