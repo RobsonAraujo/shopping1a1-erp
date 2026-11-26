@@ -22,6 +22,8 @@ export type SkuSalesExcelRow = {
   ICMS: number | null;
   "ICMS crédito compra": number | null;
   DIFAL: number | null;
+  /** "Não" quando a empresa não recolhe o DIFAL desta UF (fora do imposto). */
+  "DIFAL recolhido": string;
   "Imp. oper. (R$)": number | null;
   "Imp. oper. (%)": number | null;
   "Margem oper. (R$)": number | null;
@@ -77,6 +79,12 @@ function mapDetalhamentoToExcelRow(row: DetalhamentoTributario): SkuSalesExcelRo
     DIFAL: row.incluidoNaApuracao
       ? (row.icmsDifal?.difal ?? null)
       : null,
+    "DIFAL recolhido":
+      row.incluidoNaApuracao && (row.icmsDifal?.difal ?? 0) > 0
+        ? row.icmsDifal?.difalNaoRecolhido
+          ? "Não"
+          : "Sim"
+        : "",
     "Imp. oper. (R$)": impostoOperacional,
     "Imp. oper. (%)": impostoOperacionalPercent,
     "Margem oper. (R$)": row.incluidoNaApuracao

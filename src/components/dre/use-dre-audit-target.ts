@@ -124,7 +124,7 @@ const LINE_AUDIT_TEXT: Partial<
     rowLabel: "Tarifas especiais",
     amountLabel: "Tarifa",
     description:
-      "Cobranças especiais da fatura ML (CDLIT e correlatas), por label. O DIFAL recolhido pelo ML entra aqui só no Simples — no Lucro Real ele já está em Impostos sobre vendas.",
+      "Cobranças especiais da fatura ML (CDLIT e correlatas), por label. O DIFAL recolhido pelo ML entra aqui no Simples e no Lucro Real de quem não recolhe o DIFAL em todos os estados (Configurações fiscais); recolhendo em todos, ele já está em Impostos sobre vendas.",
   },
   fullShipping: {
     rowLabel: "Full envios",
@@ -168,7 +168,7 @@ export function buildSpecialFeesExternalLink(
   return {
     href: buildMercadoLivreCostsMetricsUrl(year, auditTarget.period),
     label: "Abrir métricas de custos no Mercado Livre",
-    hint: "Para conferir o valor exato de \"Outras Tarifas\": no painel do Mercado Livre, vá em Tarifas e investimentos e passe o mouse sobre a linha \"Outras Tarifas\". O DIFAL que aparece lá só entra aqui no Simples; no Lucro Real ele já está em Impostos sobre vendas.",
+    hint: "Para conferir o valor exato de \"Outras Tarifas\": no painel do Mercado Livre, vá em Tarifas e investimentos e passe o mouse sobre a linha \"Outras Tarifas\". O DIFAL que aparece lá entra aqui no Simples e no Lucro Real de quem não recolhe o DIFAL em todos os estados; recolhendo em todos, ele já está em Impostos sobre vendas.",
   };
 }
 

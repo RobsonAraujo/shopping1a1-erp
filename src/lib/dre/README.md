@@ -40,8 +40,10 @@ Ajuste manual sobre linha conciliada vence a conciliação enquanto for mantido 
 
 A fatura e a planilha trazem "Cobrança do diferencial de alíquota interestadual (ICMS-DIFAL)" (`CDIFAL`), sem número de pedido. É ICMS-DIFAL que o ML recolhe por vendas (Full, na maioria), não tarifa. Regra única (`mlDifalCountsAsFee`):
 
-- **Lucro Real:** o Tributário já calcula o DIFAL venda a venda, e ele está no % de Impostos sobre vendas. A cobrança do ML fica fora de Tarifas especiais (contaria duas vezes) e vira aviso: no sync, em `syncWarnings`; na planilha, em `excludedFees`. Para o caixa vale conferir com o contador se a guia de DIFAL abate o que o ML recolheu.
+- **Lucro Real, recolhendo o DIFAL em todos os estados** (`difalCollection = all`, o padrão): o Tributário já calcula o DIFAL venda a venda, e ele está no % de Impostos sobre vendas. A cobrança do ML fica fora de Tarifas especiais (contaria duas vezes) e vira aviso: no sync, em `syncWarnings`; na planilha, em `excludedFees`. Para o caixa vale conferir com o contador se a guia de DIFAL abate o que o ML recolheu.
+- **Lucro Real sem recolher em todos os estados** (`none` ou `some`, Configurações fiscais): o Tributário deixa esse DIFAL fora de Impostos sobre vendas, então o que o ML cobrou é custo de verdade e entra em Tarifas especiais. No modo `some`, uma cobrança do ML de um estado em que a empresa também recolhe contaria duas vezes — a cobrança não traz pedido nem UF para separar.
 - **Simples:** o imposto do DRE é a alíquota do DAS, que não tem DIFAL. A cobrança entra em Tarifas especiais.
+- Mudar a configuração só move o DIFAL do ML com a sincronização do mês (o valor não fica guardado à parte) ou, nos meses conciliados, subindo a planilha de novo.
 
 Na fatura, o DIFAL vem separado (`MlBillingDreLines.difal`, `MlDetailsAggregation.difalMl`). Só `dre-month-data.ts` decide, no ponto onde o regime já é lido.
 

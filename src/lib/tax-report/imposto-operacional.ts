@@ -1,4 +1,5 @@
 import { roundMoney } from "@/lib/pricing/financial-margin";
+import { icmsDevido } from "@/lib/tax-report/calculators/icms-difal";
 import type {
   DetalhamentoTributario,
   RelatorioConsolidado,
@@ -13,7 +14,7 @@ export function impostoOperacionalLinha(
   if (!row.incluidoNaApuracao) return null;
   return roundMoney(
     (row.pisCofins?.liquido ?? 0) +
-      (row.icmsDifal?.icmsTotal ?? 0) -
+      icmsDevido(row.icmsDifal) -
       (row.icmsCreditoCompra?.creditoTotal ?? 0) -
       (row.creditoOutrasDespesas?.creditoTotal ?? 0),
   );
@@ -29,7 +30,7 @@ function sumImpostoOperacionalTransacoes(
         (sum, row) =>
           sum +
           (row.pisCofins?.liquido ?? 0) +
-          (row.icmsDifal?.icmsTotal ?? 0) -
+          icmsDevido(row.icmsDifal) -
           (row.icmsCreditoCompra?.creditoTotal ?? 0) -
           (row.creditoOutrasDespesas?.creditoTotal ?? 0),
         0,
@@ -110,14 +111,16 @@ export function margemOperacionalConsolidado(
 }
 
 /**
- * PIS/COFINS líquido + ICMS/DIFAL total do consolidado — sem IRPJ/CSLL (não
- * calculados neste motor). Usado pelo simulador Simples x Lucro Real para
+ * PIS/COFINS líquido + ICMS/DIFAL recolhido do consolidado — sem IRPJ/CSLL
+ * (não calculados neste motor). DIFAL não recolhido (configuração) fica fora. Usado pelo simulador Simples x Lucro Real para
  * comparar com o DAS pago; ver disclaimer de "comparação parcial" na UI.
  */
 export function impostoOperacionalConsolidado(
   consolidado: RelatorioConsolidado,
 ): number {
   return roundMoney(
-    consolidado.pisCofinsLiquido + consolidado.icmsDifalTotal,
+    consolidado.pisCofinsLiquido +
+      consolidado.icmsDifalTotal -
+      (consolidado.difalNaoRecolhidoTotal ?? 0),
   );
 }

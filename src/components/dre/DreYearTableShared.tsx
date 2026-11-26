@@ -165,6 +165,9 @@ export function monthTaxStatusMessage(
           ? "nivelamento alterado depois do cálculo"
           : null,
         status.reasons.includes("legacy") ? "calculado por uma versão antiga" : null,
+        status.reasons.includes("config")
+          ? "configuração do DIFAL alterada depois do cálculo"
+          : null,
       ].filter(Boolean);
       return {
         text: `Tributário de ${monthName}: ${parts.join(" e ")}.`,

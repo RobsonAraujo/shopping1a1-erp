@@ -1255,10 +1255,16 @@ export async function buildDreMonthSnapshot(
       `${activeCosts.incompleteItemIds.size} anúncio(s) sem preço de compra no estoque.`,
     );
   }
-  // DIFAL do ML: no Simples é custo a mais (o DAS não tem DIFAL); no Lucro Real
-  // o Tributário já o põe em Impostos sobre vendas — somar seria contar duas vezes.
+  // DIFAL do ML: no Simples, ou no Lucro Real de quem não recolhe o DIFAL em
+  // todos os estados, é custo a mais; com o DIFAL recolhido, o Tributário já o
+  // põe em Impostos sobre vendas — somar seria contar duas vezes.
   if (mlDifal !== 0) {
-    if (mlDifalCountsAsFee(erpContext.taxRates.regime)) {
+    if (
+      mlDifalCountsAsFee(
+        erpContext.taxRates.regime,
+        erpContext.taxRates.difalCollection,
+      )
+    ) {
       specialFeesMl = roundMoney(specialFeesMl + mlDifal);
       if (mlDifalBreakdown?.length) {
         specialFeesBreakdown = mergeLineBreakdowns([

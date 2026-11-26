@@ -16,7 +16,9 @@ export type TaxReportStalenessReason =
   /** Nivelamento do mês alterado depois do cálculo → recálculo rápido. */
   | "leveling"
   /** Versão antiga do cálculo (sem identidade do anúncio) → recálculo rápido. */
-  | "legacy";
+  | "legacy"
+  /** Configuração de DIFAL mudou depois do cálculo → recálculo rápido. */
+  | "config";
 
 export type TaxReportStalenessInput = {
   year: number;
@@ -32,6 +34,12 @@ export type TaxReportStalenessInput = {
   legacy?: boolean;
   /** Último `updatedAt` dos nivelamentos que cobrem o mês. */
   levelingUpdatedAt?: string | Date | null;
+  /**
+   * Configuração de DIFAL do cálculo (`meta.difalRecolhimento`, ausente =
+   * `all`) × a atual. Diferentes → motivo `config`.
+   */
+  difalKeyUsed?: string | null;
+  difalKeyCurrent?: string | null;
   now?: Date;
 };
 
@@ -73,6 +81,12 @@ export function taxReportStaleness(
     reasons.push("leveling");
   }
   if (input.legacy) reasons.push("legacy");
+  if (
+    input.difalKeyCurrent != null &&
+    (input.difalKeyUsed ?? "all") !== input.difalKeyCurrent
+  ) {
+    reasons.push("config");
+  }
 
   return {
     completeness,

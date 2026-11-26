@@ -29,6 +29,7 @@ import {
   taxReportStaleness,
   type TaxReportStalenessReason,
 } from "@/lib/tax-report/tax-report-staleness";
+import { difalCollectionKey } from "@/lib/tax-report/config";
 import { prisma } from "@/lib/db/db";
 import {
   parseSnapshotPayload,
@@ -225,6 +226,8 @@ export type DreTaxReportMeta = {
   ordersFetchedAt: string;
   /** Versão antiga do cálculo (sem identidade do anúncio). */
   legacy: boolean;
+  /** Configuração de DIFAL do cálculo (`meta.difalRecolhimento`); null = antigo (`all`). */
+  difalKey?: string | null;
 };
 
 /**
@@ -260,6 +263,8 @@ export function resolveMonthTaxStatus(input: {
   hasTaxBreakdown: boolean;
   report: DreTaxReportMeta | null;
   levelingUpdatedAt: Date | null;
+  /** Configuração de DIFAL atual (`difalCollectionKey`). */
+  difalKeyCurrent?: string | null;
   now?: Date;
 }): DreMonthTaxStatus | null {
   if (!input.hasSnapshot) return null;
@@ -277,6 +282,8 @@ export function resolveMonthTaxStatus(input: {
     generatedAt: input.report.generatedAt,
     legacy: input.report.legacy,
     levelingUpdatedAt: input.levelingUpdatedAt,
+    difalKeyUsed: input.report.difalKey,
+    difalKeyCurrent: input.difalKeyCurrent,
     now: input.now,
   });
   if (staleness.reasons.length > 0) {
@@ -342,11 +349,13 @@ async function loadTaxReportMetaForYear(
       ordersFetchedAt: string | null;
       geradoEm: string | null;
       legacy: boolean | null;
+      difalKey: string | null;
     }>
   >(
     `select month, generated_at as "generatedAt",
             payload_summary->'meta'->>'pedidosBuscadosEm' as "ordersFetchedAt",
             payload_summary->'meta'->>'geradoEm' as "geradoEm",
+            payload_summary->'meta'->>'difalRecolhimento' as "difalKey",
             (payload_summary is null
               or payload_summary->'consolidado'->'apuracao' is null
               or jsonb_path_exists(payload_summary, '$.porSku[*] ? (!(exists(@.mlItemId)))')) as legacy
@@ -364,6 +373,7 @@ async function loadTaxReportMetaForYear(
       generatedAt,
       ordersFetchedAt: row.ordersFetchedAt ?? row.geradoEm ?? generatedAt,
       legacy: Boolean(row.legacy),
+      difalKey: row.difalKey,
     });
   }
   return byMonth;
@@ -649,10 +659,11 @@ export async function loadDreYearView(
       ? Promise.resolve(null)
       : prisma.companyTaxSettings.findUnique({
           where: { organizationId },
-          select: { taxRegime: true },
+          select: { taxRegime: true, difalCollection: true, difalCollectedUfs: true },
         }),
   ]);
   const taxRegime = taxSettings?.taxRegime === "SIMPLES" ? "SIMPLES" : "LUCRO_REAL";
+  const difalKeyCurrent = taxSettings ? difalCollectionKey(taxSettings) : null;
 
   const reconciliationImportsByMonth = new Map<
     number,
@@ -841,6 +852,7 @@ export async function loadDreYearView(
             taxSource: payload?.taxSource ?? null,
             hasTaxBreakdown: Boolean(payload?.taxBreakdown),
             report: taxReportMeta.get(month) ?? null,
+            difalKeyCurrent,
             levelingUpdatedAt: levelingUpdatedAtForMonth(
               levelingChanges,
               year,

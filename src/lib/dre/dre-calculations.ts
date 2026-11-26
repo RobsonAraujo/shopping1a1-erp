@@ -235,13 +235,18 @@ const RECONCILIATION_SKIPPED_LINE_KEYS = new Set<DreEditableLineKey>([
 
 /**
  * O DIFAL que o ML cobra na fatura (ICMS-DIFAL recolhido por ele) entra em
- * Tarifas especiais? Só no Simples: lá o imposto do DRE é a alíquota do DAS, que
- * não tem DIFAL. No Lucro Real o Tributário já calcula o DIFAL venda a venda e
- * ele está no % de Impostos sobre vendas — somar a cobrança do ML contaria o
- * mesmo imposto duas vezes. Regra única da planilha Por Vendas e do sync da API.
+ * Tarifas especiais? No Simples, sim: lá o imposto do DRE é a alíquota do DAS,
+ * que não tem DIFAL. No Lucro Real, só quando a empresa não recolhe o DIFAL em
+ * todos os estados (`difalCollection` ≠ `all`): o Tributário deixa esse DIFAL
+ * fora de Impostos sobre vendas, e o que o ML cobrou é custo de verdade. Com
+ * `all`, o Tributário já o tem no % de Impostos sobre vendas — somar contaria
+ * o mesmo imposto duas vezes. Regra única da planilha Por Vendas e do sync.
  */
-export function mlDifalCountsAsFee(regime: "SIMPLES" | "LUCRO_REAL"): boolean {
-  return regime === "SIMPLES";
+export function mlDifalCountsAsFee(
+  regime: "SIMPLES" | "LUCRO_REAL",
+  difalCollection: "all" | "none" | "some" = "all",
+): boolean {
+  return regime === "SIMPLES" || difalCollection !== "all";
 }
 
 export function isReconciliationGovernedLineKey(

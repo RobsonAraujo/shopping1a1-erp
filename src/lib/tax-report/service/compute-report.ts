@@ -16,7 +16,9 @@ import {
   buildIcmsMemoria,
   calcularIcmsDifal,
   icmsDestacadoParaBase,
+  icmsDevido,
 } from "@/lib/tax-report/calculators/icms-difal";
+import { isDifalRecolhido } from "@/lib/tax-report/config";
 import {
   buildPisCofinsMemoria,
   calcularPisCofins,
@@ -68,11 +70,20 @@ export function calcularDetalhamentoTransacao(input: {
     };
   }
 
-  const icmsDifal = calcularIcmsDifal({
+  const icmsDifalCalculado = calcularIcmsDifal({
     transacao,
     ufOrigem: config.originUf,
     rates: icmsRates,
   });
+  // DIFAL de UF onde a empresa não recolhe (configuração): fica calculado e
+  // visível, mas fora do imposto (`icmsDevido`).
+  const icmsDifal =
+    icmsDifalCalculado &&
+    !icmsDifalCalculado.isOperacaoInterna &&
+    icmsDifalCalculado.difal > 0 &&
+    !isDifalRecolhido(config, icmsDifalCalculado.ufDestino)
+      ? { ...icmsDifalCalculado, difalNaoRecolhido: true }
+      : icmsDifalCalculado;
   const icmsDestacado = icmsDestacadoParaBase(icmsDifal);
   const pisCofins = calcularPisCofins({
     transacao,
@@ -99,7 +110,7 @@ export function calcularDetalhamentoTransacao(input: {
     (transacao.custoAquisicaoUnitario ?? 0) * transacao.quantidade +
     transacao.extraCostsUnitario * transacao.quantidade;
   const icmsLiquido =
-    (icmsDifal?.icmsTotal ?? 0) - (icmsCreditoCompra?.creditoTotal ?? 0);
+    icmsDevido(icmsDifal) - (icmsCreditoCompra?.creditoTotal ?? 0);
   const impostosOperacionais =
     (pisCofins?.liquido ?? 0) + icmsLiquido - creditoOutrasDespesas.creditoTotal;
   const cbsIbs = calcularCbsIbsInformativo(

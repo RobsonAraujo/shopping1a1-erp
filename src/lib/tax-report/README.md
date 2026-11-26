@@ -64,6 +64,26 @@ O status de contribuinte ICMS vem do campo `taxpayer_type` do `billing_info` do 
 - **Apuração:** consolidado expõe `apuracao` com débito/crédito/líquido (PIS, COFINS, ICMS) e DIFAL por UF; crédito PIS/COFINS na base NF entrada; crédito ICMS de `purchaseIcmsPercent`
 - **ICMS saída interna:** com `hasIcmsSt`, 0%. Sem ST, usa o incentivo fiscal do NCM do produto quando houver (`TransacaoVenda.incentivoIcms`, o % final já com o incentivo, ver [tax-incentives](../tax-incentives/README.md)); senão, a tabela da UF (base + FCP). `saleIcmsPercent` do cadastro é legado e não entra no cálculo
 
+## DIFAL não recolhido
+
+Configuração da empresa em Configurações fiscais (`CompanyTaxSettings.difalCollection`): recolho em todos os estados (`all`, o padrão e a lei), em nenhum (`none`) ou só nos marcados (`some`, `difalCollectedUfs`).
+
+- Na venda interestadual a não contribuinte para uma UF em que a empresa não recolhe, o motor calcula o DIFAL e marca `icmsDifal.difalNaoRecolhido` (`compute-report.ts`).
+- O DIFAL marcado **sai do imposto operacional**: todo cálculo de imposto usa `icmsDevido(icms)`, nunca `icmsTotal` direto. Isso inclui a venda, o agregado por SKU, o `daily_totals`, o consolidado, a apuração e o painel da venda.
+- Venda interna, venda B2B, ICMS interestadual e crédito da compra não mudam.
+- O PIS/COFINS também não muda: o DIFAL continua fora da base (`icmsDestacadoParaBase`), por decisão do usuário (STJ, Tema 1.372). É a opção mais agressiva; confirmar com o contador.
+- O total à parte fica em `consolidado.difalNaoRecolhidoTotal` e em `apuracao.difalNaoRecolhidoEstimado`, e a tela mostra "Fora do imposto: DIFAL não recolhido" embaixo do imposto do mês.
+
+**Exemplo** (`service/__tests__/compute-report-difal.test.ts`): venda SP→RJ para CPF de R$ 100, compra de R$ 50 a 12%. Recolhendo, o imposto é R$ 18,59 (ICMS 12 + DIFAL 10 − 6). Sem recolher, R$ 8,59, exatamente o DIFAL a menos.
+
+**Quando o número muda:**
+- O snapshot grava a configuração usada (`meta.difalRecolhimento`, `difalCollectionKey`; ausente = `all`).
+- Mês calculado com outra configuração ganha o motivo `config` no staleness ("Atualizar cálculo", sem ML).
+- Não há vigência: recalcular um mês antigo usa a configuração de hoje.
+- No DRE, o DIFAL cobrado pelo ML passa a ser Tarifas especiais quando a empresa não recolhe em todos os estados (ver `src/lib/dre/README.md`).
+
+O DIFAL é devido por lei (EC 87/2015, LC 190/2022; STF Tema 1.266). Não recolher é passivo; por isso o padrão é `all` e o não recolhido fica visível.
+
 ## Nivelamento de custo
 
 O nivelamento do DRE guarda o histórico do cadastro do produto por período: custo NF, ICMS da compra, ST, IPI, monofásico, importado. Na data da venda (dia civil em São Paulo, casando por anúncio), ele vale no lugar do cadastro atual nos créditos da compra e no custo (`resolveCustoDaVenda`, `enrichment/aplicar-nivelamento.ts`). A venda fica marcada `custoFonte: "nivelamento"`. Campos não informados em nivelamentos antigos usam o cadastro atual. Nivelamento alterado depois do cálculo marca o mês como desatualizado ("Atualizar cálculo", sem ML).

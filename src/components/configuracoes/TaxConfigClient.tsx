@@ -17,6 +17,9 @@ import type { CbsIbsVigenciaRow } from "@/lib/tax-report/calculators/cbs-ibs";
 import { cn } from "@/lib/utils";
 import { IcmsRatesTable } from "./icms-rates-table";
 import { IcmsIncentivesCard } from "./IcmsIncentivesCard";
+import { DifalCollectionField, difalCollectionLabel } from "./DifalCollectionField";
+import { difalCollectionKey } from "@/lib/tax-report/config";
+import type { DifalCollectionMode } from "@/lib/tax-report/types";
 
 type TaxConfigResponse = {
   company: TaxCompanyConfig;
@@ -30,6 +33,8 @@ type CompanyDraft = {
   cofinsRate: string;
   excludeIcms: boolean;
   considerIcmsStRecuperavel: boolean;
+  difalCollection: DifalCollectionMode;
+  difalCollectedUfs: string[];
 };
 
 function companyToDraft(company: TaxCompanyConfig): CompanyDraft {
@@ -39,6 +44,8 @@ function companyToDraft(company: TaxCompanyConfig): CompanyDraft {
     cofinsRate: String(company.cofinsRatePercent),
     excludeIcms: company.excludeIcmsFromPisCofinsBase,
     considerIcmsStRecuperavel: company.considerIcmsStRecuperavel,
+    difalCollection: company.difalCollection ?? "all",
+    difalCollectedUfs: company.difalCollectedUfs ?? [],
   };
 }
 
@@ -72,6 +79,8 @@ export function TaxConfigClient() {
     cofinsRate: "7.6",
     excludeIcms: true,
     considerIcmsStRecuperavel: true,
+    difalCollection: "all",
+    difalCollectedUfs: [],
   });
 
   const load = useCallback(async () => {
@@ -119,15 +128,24 @@ export function TaxConfigClient() {
             cofinsRatePercent: Number(draft.cofinsRate.replace(",", ".")),
             excludeIcmsFromPisCofinsBase: draft.excludeIcms,
             considerIcmsStRecuperavel: draft.considerIcmsStRecuperavel,
+            difalCollection: draft.difalCollection,
+            difalCollectedUfs: draft.difalCollectedUfs,
           },
         }),
       });
       if (!res.ok) throw new Error(await readApiError(res, "tax_config_save"));
       const json = (await res.json()) as TaxConfigResponse;
+      const difalChanged =
+        data != null &&
+        difalCollectionKey(data.company) !== difalCollectionKey(json.company);
       setData(json);
       setDraft(companyToDraft(json.company));
       setEditingCompany(false);
-      setMessage("Configurações salvas.");
+      setMessage(
+        difalChanged
+          ? "Configurações salvas. Para o DIFAL novo valer nas margens, use \"Atualizar cálculo\" nos meses do Tributário; no DRE, sincronize os meses para o DIFAL cobrado pelo Mercado Livre entrar em Tarifas especiais."
+          : "Configurações salvas.",
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao salvar");
     } finally {
@@ -278,6 +296,18 @@ export function TaxConfigClient() {
                     />
                   </div>
                 </div>
+                <DifalCollectionField
+                  mode={draft.difalCollection}
+                  ufs={draft.difalCollectedUfs}
+                  originUf={draft.originUf}
+                  onChange={({ mode, ufs }) =>
+                    setDraft((current) => ({
+                      ...current,
+                      difalCollection: mode,
+                      difalCollectedUfs: ufs,
+                    }))
+                  }
+                />
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -319,6 +349,14 @@ export function TaxConfigClient() {
               <CompanySettingView
                 label="ICMS-ST recuperável (interestadual)"
                 value={company.considerIcmsStRecuperavel ? "Sim" : "Não"}
+              />
+              <CompanySettingView
+                label="DIFAL (consumidor final de outro estado)"
+                value={difalCollectionLabel(
+                  company.difalCollection,
+                  company.difalCollectedUfs,
+                )}
+                className="sm:col-span-2"
               />
             </div>
           ) : null}

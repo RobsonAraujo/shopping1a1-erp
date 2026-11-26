@@ -1,5 +1,5 @@
 import { roundMoney } from "@/lib/pricing/financial-margin";
-import { icmsSemDifal } from "@/lib/tax-report/calculators/icms-difal";
+import { icmsDevido, icmsSemDifal } from "@/lib/tax-report/calculators/icms-difal";
 import type {
   ApuracaoConsolidada,
   DetalhamentoTributario,
@@ -45,8 +45,14 @@ export function consolidarApuracao(
     (s, t) => s + (t.icmsDifal?.difal ?? 0),
     0,
   );
+  // Débito de ICMS da apuração: sem o DIFAL que a empresa não recolhe
+  // (configuração) — esse fica à parte em `difalNaoRecolhidoEstimado`.
   const icmsDebitoTotal = incluidas.reduce(
-    (s, t) => s + (t.icmsDifal?.icmsTotal ?? 0),
+    (s, t) => s + icmsDevido(t.icmsDifal),
+    0,
+  );
+  const difalNaoRecolhido = incluidas.reduce(
+    (s, t) => s + (t.icmsDifal?.difalNaoRecolhido ? t.icmsDifal.difal : 0),
     0,
   );
   const icmsCreditoCompra = incluidas.reduce(
@@ -115,7 +121,8 @@ export function consolidarApuracao(
       difalDebito: roundMoney(difalDebito),
     },
     icmsARecolherSpEstimado: icmsSemDifalLiquido.liquido,
-    difalARecolherEstimado: roundMoney(difalDebito),
+    difalARecolherEstimado: roundMoney(difalDebito - difalNaoRecolhido),
+    difalNaoRecolhidoEstimado: roundMoney(difalNaoRecolhido),
     difalPorUf,
     icmsStRecuperavelEstimado,
     diagnostico: {

@@ -106,4 +106,28 @@ describe("taxReportStaleness", () => {
     });
     assert.equal(result.completeness, "incomplete");
   });
+
+  it("flags a report computed with another DIFAL setting (old reports count as all)", () => {
+    const common = {
+      year: 2026,
+      month: 9,
+      ordersFetchedAt: "2026-10-02T12:00:00.000Z",
+      generatedAt: "2026-10-02T12:00:00.000Z",
+      now: OCTOBER,
+    };
+    assert.deepEqual(
+      taxReportStaleness({ ...common, difalKeyUsed: undefined, difalKeyCurrent: "none" }).reasons,
+      ["config"],
+    );
+    assert.deepEqual(
+      taxReportStaleness({ ...common, difalKeyUsed: "none", difalKeyCurrent: "none" }).reasons,
+      [],
+    );
+    assert.deepEqual(
+      taxReportStaleness({ ...common, difalKeyUsed: undefined, difalKeyCurrent: "all" }).reasons,
+      [],
+    );
+    // Sem a configuração atual (chamador antigo), nada muda.
+    assert.deepEqual(taxReportStaleness({ ...common, difalKeyUsed: "none" }).reasons, []);
+  });
 });

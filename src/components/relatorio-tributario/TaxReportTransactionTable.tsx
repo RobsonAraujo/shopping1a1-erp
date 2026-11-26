@@ -378,7 +378,24 @@ function TransactionRowCells({
         )}
       </span>
       <span className="px-2 text-right tabular-nums whitespace-nowrap">
-        {formatFinancialMoney(row.icmsDifal?.difal ?? null)}
+        {row.icmsDifal?.difalNaoRecolhido ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="text-[var(--muted-foreground)] line-through decoration-[var(--muted-foreground)]/50"
+              >
+                {formatFinancialMoney(row.icmsDifal.difal)}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs text-left">
+              DIFAL não recolhido ({row.icmsDifal.ufDestino}, pela configuração):
+              fica fora do imposto desta venda.
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          formatFinancialMoney(row.icmsDifal?.difal ?? null)
+        )}
       </span>
       <span className="flex flex-col items-end px-2 text-right tabular-nums">
         <span className="whitespace-nowrap">

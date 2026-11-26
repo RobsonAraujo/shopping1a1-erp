@@ -62,7 +62,9 @@ export function TaxMonthKpi({ report }: { report: TaxReportPayload }) {
             </button>
           </TooltipTrigger>
           <TooltipContent className="max-w-xs text-left">
-            PIS/COFINS líquido + ICMS/DIFAL − créditos, somados venda a venda.
+            PIS/COFINS líquido + ICMS/DIFAL recolhido − créditos, somados venda a
+            venda. DIFAL de estado em que você não recolhe (Configurações
+            fiscais) fica fora.
             O % é a média ponderada pelo valor de cada venda (imposto ÷
             faturamento). O DRE usa o % de cada produto deste relatório em
             Impostos sobre vendas.
@@ -77,7 +79,44 @@ export function TaxMonthKpi({ report }: { report: TaxReportPayload }) {
           ? "Sem faturamento no período"
           : `${formatFinancialPercent(percent)} do faturamento`}
       </p>
+      <DifalNaoRecolhidoLine report={report} />
     </div>
+  );
+}
+
+/**
+ * DIFAL calculado de estados em que a empresa não recolhe (configuração):
+ * fora do imposto, mostrado à parte e discreto — é informação do que ficou
+ * sem recolher, não um alerta.
+ */
+function DifalNaoRecolhidoLine({ report }: { report: TaxReportPayload }) {
+  const value = report.consolidado.difalNaoRecolhidoTotal ?? 0;
+  if (!(value > 0)) return null;
+  const faturamento = report.consolidado.faturamento;
+  const percent = faturamento > 0 ? (value / faturamento) * 100 : null;
+  return (
+    <p className="mt-1.5 flex items-center gap-1 text-xs text-[var(--muted-foreground)]">
+      <span>
+        Fora do imposto: DIFAL não recolhido {formatFinancialMoney(value)}
+        {percent !== null ? ` (${formatFinancialPercent(percent)})` : ""}
+      </span>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className="inline-flex size-4 items-center justify-center rounded-full opacity-60 hover:opacity-100"
+            aria-label="O que é o DIFAL não recolhido"
+          >
+            <Info className="size-3" aria-hidden />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs text-left">
+          DIFAL das vendas a consumidor final de estados em que, pela
+          configuração, você não recolhe. Ele não entra no imposto do mês, nas
+          margens nem no DRE. Se o estado cobrar depois, vira custo.
+        </TooltipContent>
+      </Tooltip>
+    </p>
   );
 }
 
@@ -155,7 +194,7 @@ export function TaxReportStatusBanner({
   }
 
   const quick = staleness.reasons.filter(
-    (reason) => reason === "leveling" || reason === "legacy",
+    (reason) => reason === "leveling" || reason === "legacy" || reason === "config",
   );
   if (quick.length > 0) {
     return (
@@ -166,6 +205,9 @@ export function TaxReportStatusBanner({
             : ""}
           {quick.includes("legacy")
             ? "Calculado por uma versão antiga do relatório (linhas por texto de SKU). "
+            : ""}
+          {quick.includes("config")
+            ? "A configuração do DIFAL (Configurações fiscais) mudou depois deste cálculo. "
             : ""}
           Atualizar refaz o cálculo com as vendas já salvas, sem buscar nada no
           Mercado Livre.

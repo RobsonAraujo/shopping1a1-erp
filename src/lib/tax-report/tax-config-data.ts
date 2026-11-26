@@ -36,6 +36,8 @@ export async function loadTaxCompanyConfig(
       row?.simplesAliquotaEfetivaPercent != null
         ? decimalToNumber(row.simplesAliquotaEfetivaPercent)
         : null,
+    difalCollection: row?.difalCollection ?? "all",
+    difalCollectedUfs: row?.difalCollectedUfs ?? [],
   };
 }
 
@@ -79,6 +81,8 @@ export type TaxConfigUpdateInput = {
   considerIcmsStRecuperavel?: boolean;
   irpjAdditionalThreshold?: number;
   simplesAliquotaEfetivaPercent?: number | null;
+  difalCollection?: NonNullable<TaxCompanyConfig["difalCollection"]>;
+  difalCollectedUfs?: string[];
 };
 
 export async function updateTaxCompanyConfig(
@@ -111,6 +115,8 @@ export async function updateTaxCompanyConfig(
       irpjAdditionalThreshold:
         input.irpjAdditionalThreshold ?? DEFAULT_IRPJ_ADDITIONAL_THRESHOLD,
       simplesAliquotaEfetivaPercent: input.simplesAliquotaEfetivaPercent ?? null,
+      difalCollection: input.difalCollection ?? "all",
+      difalCollectedUfs: input.difalCollectedUfs ?? [],
     },
     update: {
       ...(input.taxRegime !== undefined ? { taxRegime: input.taxRegime } : {}),
@@ -134,6 +140,12 @@ export async function updateTaxCompanyConfig(
       ...(input.simplesAliquotaEfetivaPercent !== undefined
         ? { simplesAliquotaEfetivaPercent: input.simplesAliquotaEfetivaPercent }
         : {}),
+      ...(input.difalCollection !== undefined
+        ? { difalCollection: input.difalCollection }
+        : {}),
+      ...(input.difalCollectedUfs !== undefined
+        ? { difalCollectedUfs: input.difalCollectedUfs }
+        : {}),
     },
   });
 
@@ -148,6 +160,8 @@ export async function updateTaxCompanyConfig(
       row.simplesAliquotaEfetivaPercent != null
         ? decimalToNumber(row.simplesAliquotaEfetivaPercent)
         : null,
+    difalCollection: row.difalCollection,
+    difalCollectedUfs: row.difalCollectedUfs,
   };
 }
 

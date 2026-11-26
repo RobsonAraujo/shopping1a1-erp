@@ -44,6 +44,8 @@ export type DreTaxRates = {
   year: number;
   month: number;
   regime: "LUCRO_REAL" | "SIMPLES";
+  /** Onde a empresa recolhe o DIFAL (Lucro Real). Ausente = `all`. */
+  difalCollection?: "all" | "none" | "some";
   /** Alíquota efetiva do DAS (só Simples). */
   simplesRatePercent: number | null;
   byMlItemId: ReadonlyMap<string, DreTaxRateEntry>;

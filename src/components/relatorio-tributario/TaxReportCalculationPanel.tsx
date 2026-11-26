@@ -18,6 +18,7 @@ import {
   percentOfSale,
 } from "@/lib/pricing/financial-margin";
 import { formatNcm } from "@/lib/tax-incentives/ncm";
+import { icmsDevido } from "@/lib/tax-report/calculators/icms-difal";
 import { margemOperacionalEstimadaLinha } from "@/lib/tax-report/imposto-operacional";
 import type { DetalhamentoTributario } from "@/lib/tax-report/types";
 import { cn } from "@/lib/utils";
@@ -173,8 +174,10 @@ export function TaxReportCalculationPanel({
     ? percentOfSale(pisCofinsLiquidoFinal, t.receitaBruta)
     : null;
 
+  // ICMS que entra no imposto: sem o DIFAL que a empresa não recolhe.
+  const icmsDebitoDevido = icmsDevido(icms);
   const icmsLiquido = icms
-    ? icms.icmsTotal - (icmsCred?.creditoTotal ?? 0)
+    ? icmsDebitoDevido - (icmsCred?.creditoTotal ?? 0)
     : null;
   const icmsLiquidoPercent =
     icmsLiquido != null ? percentOfSale(icmsLiquido, t.receitaBruta) : null;
@@ -357,6 +360,13 @@ export function TaxReportCalculationPanel({
                         conta="Quando quem compra também recolhe ICMS (CNPJ contribuinte), a diferença de alíquota (DIFAL) não é cobrada nesta venda."
                         muted
                       />
+                    ) : icms.difalNaoRecolhido ? (
+                      <MemoriaRow
+                        label="DIFAL — não recolhido"
+                        value={money(icms.difal)}
+                        conta={`${money(t.receitaBruta)} × (${pct(icms.aliquotaInternaTotal * 100)} − ${pct(icms.aliquotaInterestadual * 100)}) = ${money(icms.difal)}. A configuração diz que a empresa não recolhe o DIFAL de ${icms.ufDestino}, então ele fica fora do imposto desta venda.`}
+                        muted
+                      />
                     ) : (
                       <MemoriaRow
                         label="DIFAL (diferença de alíquota)"
@@ -367,8 +377,12 @@ export function TaxReportCalculationPanel({
                     <MemoriaDivider />
                     <MemoriaRow
                       label="Débito de ICMS (devido nesta venda)"
-                      value={money(icms.icmsTotal)}
-                      conta={`ICMS interestadual (${money(icms.icmsInterestadual)}) + DIFAL (${money(icms.difal)}) = ${money(icms.icmsTotal)}`}
+                      value={money(icmsDebitoDevido)}
+                      conta={
+                        icms.difalNaoRecolhido
+                          ? `ICMS interestadual (${money(icms.icmsInterestadual)}) — sem o DIFAL não recolhido = ${money(icmsDebitoDevido)}`
+                          : `ICMS interestadual (${money(icms.icmsInterestadual)}) + DIFAL (${money(icms.difal)}) = ${money(icms.icmsTotal)}`
+                      }
                       emphasis
                     />
                   </>
@@ -443,7 +457,7 @@ export function TaxReportCalculationPanel({
                       ? `${formatFinancialPercent(icmsLiquidoPercent)} (${money(icmsLiquido ?? 0)})`
                       : money(icmsLiquido ?? 0)
                   }
-                  conta={`Débito (${money(icms.icmsTotal)}) − Crédito (${money(icmsCred.creditoTotal)}) = ${money(icmsLiquido ?? 0)}`}
+                  conta={`Débito (${money(icmsDebitoDevido)}) − Crédito (${money(icmsCred.creditoTotal)}) = ${money(icmsLiquido ?? 0)}`}
                   emphasis
                 />
                 {(icmsCred.stRecuperavelTotal ?? 0) > 0 ? (

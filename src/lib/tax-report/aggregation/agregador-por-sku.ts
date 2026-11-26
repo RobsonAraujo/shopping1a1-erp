@@ -1,7 +1,7 @@
 import { roundMoney } from "@/lib/pricing/financial-margin";
 import { normalizeProductSku } from "@/lib/pricing/product-pricing";
 import { consolidarApuracao } from "@/lib/tax-report/aggregation/consolidar-apuracao";
-import { icmsSemDifal } from "@/lib/tax-report/calculators/icms-difal";
+import { icmsDevido, icmsSemDifal } from "@/lib/tax-report/calculators/icms-difal";
 import type {
   DetalhamentoTributario,
   RelatorioConsolidado,
@@ -12,7 +12,7 @@ import type {
 export function impostoOperacionalLinhaValor(det: DetalhamentoTributario): number {
   return (
     (det.pisCofins?.liquido ?? 0) +
-    (det.icmsDifal?.icmsTotal ?? 0) -
+    icmsDevido(det.icmsDifal) -
     (det.icmsCreditoCompra?.creditoTotal ?? 0) -
     (det.creditoOutrasDespesas?.creditoTotal ?? 0)
   );
@@ -143,6 +143,12 @@ export function consolidarRelatorio(
   const icmsDifalTotal = roundMoney(
     incluidas.reduce((s, t) => s + (t.icmsDifal?.icmsTotal ?? 0), 0),
   );
+  const difalNaoRecolhidoTotal = roundMoney(
+    incluidas.reduce(
+      (s, t) => s + (t.icmsDifal?.difalNaoRecolhido ? t.icmsDifal.difal : 0),
+      0,
+    ),
+  );
   const cbsIbsInformativoTotal = roundMoney(
     incluidas.reduce(
       (s, t) =>
@@ -170,6 +176,7 @@ export function consolidarRelatorio(
   const impostosOperacionais = roundMoney(
     pisCofinsLiquido +
       icmsDifalTotal -
+      difalNaoRecolhidoTotal -
       icmsCreditoCompraTotal -
       creditoOutrasDespesasTotal,
   );
@@ -203,6 +210,7 @@ export function consolidarRelatorio(
     creditoCustosFixosBaseRegistrada,
     creditoCustosFixosBaseCreditavel,
     icmsDifalTotal,
+    difalNaoRecolhidoTotal,
     icmsCreditoCompraTotal,
     impostoOperacionalTotal: impostosOperacionais,
     faturamentoSemDadosFiscais,
