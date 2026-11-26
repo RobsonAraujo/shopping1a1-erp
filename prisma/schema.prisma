@@ -778,6 +778,16 @@ model KitItem {
   @@map("kit_items")
 }
 
+/// Onde a empresa recolhe o DIFAL das vendas interestaduais a não contribuinte.
+enum DifalCollection {
+  /// Em todos os estados (a lei; comportamento padrão).
+  all
+  /// Em nenhum estado.
+  none
+  /// Só nos estados de `CompanyTaxSettings.difalCollectedUfs`.
+  some
+}
+
 /// Configuração fiscal — uma linha por organização (o antigo singleton
 /// `id: "default"` deixou de existir; `id` agora é um cuid qualquer,
 /// `organizationId` é a chave de negócio real).
@@ -791,6 +801,12 @@ model CompanyTaxSettings {
   cofinsRatePercent               Decimal   @default(7.6) @map("cofins_rate_percent") @db.Decimal(8, 4)
   excludeIcmsFromPisCofinsBase    Boolean   @default(true) @map("exclude_icms_from_pis_cofins_base")
   considerIcmsStRecuperavel       Boolean   @default(true) @map("consider_icms_st_recuperavel")
+  /// Onde a empresa recolhe o DIFAL (EC 87/2015) das vendas interestaduais a
+  /// não contribuinte. Onde não recolhe, o Tributário calcula o DIFAL mas o
+  /// deixa fora do imposto operacional (mostra à parte como não recolhido).
+  difalCollection                 DifalCollection @default(all) @map("difal_collection")
+  /// UFs de destino em que recolhe, quando `difalCollection = some`.
+  difalCollectedUfs               String[]  @default([]) @map("difal_collected_ufs")
   irpjAdditionalThreshold         Decimal   @default(20000) @map("irpj_additional_threshold") @db.Decimal(18, 2)
   wholesaleLevel1ReductionPercent Decimal   @default(10) @map("wholesale_level1_reduction_percent") @db.Decimal(8, 4)
   wholesaleLevel2ReductionPercent Decimal   @default(15) @map("wholesale_level2_reduction_percent") @db.Decimal(8, 4)

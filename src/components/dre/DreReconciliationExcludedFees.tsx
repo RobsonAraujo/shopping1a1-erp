@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 
 const REASON_TEXT: Record<ExcludedFeeReason, string> = {
   in_sales_tax:
-    "Imposto que o ML recolheu por você. Já está em Impostos sobre vendas (calculado pelo Tributário). Confira com o contador se a guia de DIFAL abate esse valor.",
+    "Imposto que o ML recolheu por você. Já está em Impostos sobre vendas (calculado pelo Tributário, que considera que você recolhe o DIFAL em todos os estados). Confira com o contador se a guia de DIFAL abate esse valor.",
   non_operational:
     "Juros de empréstimo (Mercado Crédito), não é tarifa de venda. Se quiser no DRE, lance em Saídas não operacionais ou onde fizer sentido.",
   unrecognized:

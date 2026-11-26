@@ -1100,9 +1100,16 @@ describe("mergeSyncedSnapshot — source unavailable keeps the previous value", 
 });
 
 describe("mlDifalCountsAsFee", () => {
-  it("counts the ML DIFAL as a fee only in the Simples (Lucro Real has it in the sales tax)", () => {
+  it("counts the ML DIFAL as a fee in the Simples (Lucro Real collecting everywhere has it in the sales tax)", () => {
     assert.equal(mlDifalCountsAsFee("SIMPLES"), true);
     assert.equal(mlDifalCountsAsFee("LUCRO_REAL"), false);
+    assert.equal(mlDifalCountsAsFee("LUCRO_REAL", "all"), false);
+  });
+
+  it("counts it as a fee in the Lucro Real when the company does not collect DIFAL everywhere", () => {
+    assert.equal(mlDifalCountsAsFee("LUCRO_REAL", "none"), true);
+    assert.equal(mlDifalCountsAsFee("LUCRO_REAL", "some"), true);
+    assert.equal(mlDifalCountsAsFee("SIMPLES", "all"), true);
   });
 });
 

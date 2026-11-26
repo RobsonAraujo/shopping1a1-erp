@@ -111,6 +111,12 @@ export type IcmsDifalBreakdown = {
    * comprador não é. Ausente sem incentivo (ou em venda interestadual).
    */
   incentivoIcms?: IcmsIncentivoVenda & { aplicado: boolean };
+  /**
+   * A empresa não recolhe o DIFAL desta UF (configuração): o DIFAL fica
+   * calculado em `difal`, mas fora do imposto (`icmsDevido`). Continua na
+   * exclusão da base do PIS/COFINS (`icmsDestacadoParaBase`).
+   */
+  difalNaoRecolhido?: boolean;
 };
 
 export type CreditoOutrasDespesasBreakdown = {
@@ -215,7 +221,10 @@ export type ApuracaoConsolidada = {
     difalDebito: number;
   };
   icmsARecolherSpEstimado: number;
+  /** DIFAL a recolher — só das UFs em que a empresa recolhe. */
   difalARecolherEstimado: number;
+  /** DIFAL calculado das UFs em que a empresa não recolhe (configuração). Ausente em relatórios antigos. */
+  difalNaoRecolhidoEstimado?: number;
   difalPorUf: Record<string, number>;
   /** ICMS-ST recuperável estimado (venda interestadual de produto com ST). Ausente em snapshots antigos. */
   icmsStRecuperavelEstimado?: number;
@@ -238,6 +247,8 @@ export type RelatorioConsolidado = {
   creditoCustosFixosBaseRegistrada?: number;
   /** Base efetivamente creditável (já rateada por dias corridos, se mês em andamento). */
   creditoCustosFixosBaseCreditavel?: number;
+  /** DIFAL calculado mas não recolhido (configuração da empresa) — fora do imposto. Ausente em relatórios antigos. */
+  difalNaoRecolhidoTotal?: number;
   icmsDifalTotal: number;
   /** Crédito de ICMS da compra (NF de entrada + ST recuperável). Ausente em snapshots antigos. */
   icmsCreditoCompraTotal?: number;
@@ -291,6 +302,11 @@ export type TaxReportPayload = {
     duracaoMs: number;
     taxRegime: string;
     originUf: string;
+    /**
+     * Configuração de DIFAL usada (`difalCollectionKey`: `all`, `none` ou
+     * `some:RJ,MG`). Ausente em relatórios antigos = `all`.
+     */
+    difalRecolhimento?: string;
   };
 };
 
@@ -348,7 +364,16 @@ export type TaxCompanyConfig = {
   considerIcmsStRecuperavel: boolean;
   /** Alíquota efetiva do DAS (Simples Nacional), informada manualmente. `null` = ainda não configurada. */
   simplesAliquotaEfetivaPercent: number | null;
+  /**
+   * Onde a empresa recolhe o DIFAL das vendas interestaduais a não
+   * contribuinte. Ausente = `all` (a lei, comportamento antigo).
+   */
+  difalCollection?: DifalCollectionMode;
+  /** UFs de destino em que recolhe, quando `difalCollection = some`. */
+  difalCollectedUfs?: string[];
 };
+
+export type DifalCollectionMode = "all" | "none" | "some";
 
 export type IcmsRateRow = {
   uf: string;

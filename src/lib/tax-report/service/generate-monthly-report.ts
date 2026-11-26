@@ -10,7 +10,10 @@ import {
   type ItemAdMetrics,
 } from "@/lib/mercadolibre/product-ads-metrics";
 import { getCalendarMonthRange } from "@/lib/mercadolibre/revenue-periods";
-import { getTaxReportBillingConcurrency } from "@/lib/tax-report/config";
+import {
+  difalCollectionKey,
+  getTaxReportBillingConcurrency,
+} from "@/lib/tax-report/config";
 import { buildTransacoesFromOrder } from "@/lib/tax-report/enrichment/build-transacao-venda";
 import { loadCustoBySkuMap } from "@/lib/tax-report/enrichment/obter-custo-por-sku";
 import { loadLevelingRecordsOverlappingMonth } from "@/lib/dre/dre-product-cost-leveling";
@@ -388,6 +391,7 @@ export async function generateMonthlyTaxReport(input: {
       duracaoMs: Date.now() - started,
       taxRegime: config.taxRegime,
       originUf: config.originUf,
+      difalRecolhimento: difalCollectionKey(config),
     },
     onComputeProgress: (current, total) => {
       if (current % 100 === 0 || current === total) {
@@ -448,6 +452,7 @@ export async function recomputeTaxReportFromSavedSales(input: {
       origemCalculo: "dados_salvos",
       taxRegime: config.taxRegime,
       originUf: config.originUf,
+      difalRecolhimento: difalCollectionKey(config),
     },
   });
 }

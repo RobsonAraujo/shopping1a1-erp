@@ -10,6 +10,8 @@ import {
   taxReportOrdersFetchedAt,
 } from "@/lib/tax-report/tax-report-meta";
 import { taxReportStaleness } from "@/lib/tax-report/tax-report-staleness";
+import { difalCollectionKey } from "@/lib/tax-report/config";
+import { loadTaxCompanyConfig } from "@/lib/tax-report/tax-config-data";
 import type {
   TaxRecalcPreview,
   TaxReportDreFollowUp,
@@ -95,11 +97,12 @@ export async function loadTaxReportScreen(input: {
   const stored = row.payload as unknown as TaxReportPayload;
   const saved =
     (row.payloadSummary as unknown as TaxReportPayload | null) ?? stored;
-  const [repaired, levelingUpdatedAt, dre, groups] = await Promise.all([
+  const [repaired, levelingUpdatedAt, dre, groups, config] = await Promise.all([
     repairTaxReportPayload(input.sellerId, stored),
     loadLevelingUpdatedAt(input.organizationId, input.year, input.month),
     loadDreTaxUsage(input.organizationId, input.year, input.month, row.generatedAt),
     loadListingGroups(input.organizationId),
+    loadTaxCompanyConfig(input.organizationId),
   ]);
   // Opções de venda: uma linha por produto na tela (os totais não mudam).
   const shown = agruparRelatorioPorProduto(repaired, groups.principalOf);
@@ -126,6 +129,8 @@ export async function loadTaxReportScreen(input: {
         generatedAt: row.generatedAt,
         legacy: isLegacyTaxReport(saved),
         levelingUpdatedAt,
+        difalKeyUsed: saved.meta?.difalRecolhimento,
+        difalKeyCurrent: difalCollectionKey(config),
         now: input.now,
       }),
       dre,

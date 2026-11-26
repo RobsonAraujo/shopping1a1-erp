@@ -208,11 +208,31 @@ export function buildIcmsMemoria(result: IcmsDifalBreakdown): string[] {
     lines.push(
       `Alíquota interna destino ${(result.aliquotaInternaTotal * 100).toFixed(2)}%`,
     );
-    lines.push(`DIFAL = R$ ${result.difal.toFixed(2)}`);
+    lines.push(
+      result.difalNaoRecolhido
+        ? `DIFAL = R$ ${result.difal.toFixed(2)} — não recolhido (configuração), fora do imposto`
+        : `DIFAL = R$ ${result.difal.toFixed(2)}`,
+    );
   }
 
-  lines.push(`ICMS total = R$ ${result.icmsTotal.toFixed(2)}`);
+  lines.push(
+    result.difalNaoRecolhido
+      ? `ICMS devido = R$ ${icmsDevido(result).toFixed(2)}`
+      : `ICMS total = R$ ${result.icmsTotal.toFixed(2)}`,
+  );
   return lines;
+}
+
+/**
+ * ICMS que entra no imposto da venda: o total, menos o DIFAL quando a
+ * empresa não o recolhe para a UF de destino (`difalNaoRecolhido`). Todo
+ * cálculo de imposto operacional passa por aqui — nunca `icmsTotal` direto.
+ */
+export function icmsDevido(icms: IcmsDifalBreakdown | null | undefined): number {
+  if (!icms) return 0;
+  return icms.difalNaoRecolhido
+    ? roundMoney(icms.icmsTotal - icms.difal)
+    : icms.icmsTotal;
 }
 
 /** ICMS destacado usado para excluir da base PIS/COFINS */

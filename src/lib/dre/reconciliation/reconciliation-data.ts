@@ -1,4 +1,5 @@
 import { Prisma } from "@/generated/prisma";
+import { loadTaxCompanyConfig } from "@/lib/tax-report/tax-config-data";
 import type { DreReconciliationImport } from "@/generated/prisma";
 import { prisma } from "@/lib/db/db";
 import {
@@ -174,13 +175,15 @@ export async function createPendingReconciliationImport(input: {
   parsed: ReconciliationParseResult;
 }): Promise<DreReconciliationReview> {
   assertSheetMatchesMonth(input.parsed.rows, input.year, input.month);
-  const [settings, currentPayload] = await Promise.all([
+  const [settings, currentPayload, taxConfig] = await Promise.all([
     getCompanySettings(input.organizationId),
     loadMonthPayload(input.organizationId, input.year, input.month),
+    loadTaxCompanyConfig(input.organizationId),
   ]);
   const aggregation = aggregateReconciliationRows(input.parsed.rows, {
     difalCountsAsFee: mlDifalCountsAsFee(
       settings.taxRegime === "SIMPLES" ? "SIMPLES" : "LUCRO_REAL",
+      taxConfig.difalCollection ?? "all",
     ),
   });
 

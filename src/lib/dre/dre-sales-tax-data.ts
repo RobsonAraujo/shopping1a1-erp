@@ -1,4 +1,5 @@
 import { getCompanySettings } from "@/lib/products/product-data";
+import { loadTaxCompanyConfig } from "@/lib/tax-report/tax-config-data";
 import { normalizeProductSku } from "@/lib/pricing/product-pricing";
 import {
   impostoOperacionalTotalRelatorio,
@@ -115,11 +116,15 @@ export async function loadDreTaxRates(
         ),
       ]
     : saved;
-  return buildDreTaxRates({
-    year,
-    month,
-    regime: "LUCRO_REAL",
-    simplesRatePercent: null,
-    reports,
-  });
+  const taxConfig = await loadTaxCompanyConfig(organizationId);
+  return {
+    ...buildDreTaxRates({
+      year,
+      month,
+      regime: "LUCRO_REAL",
+      simplesRatePercent: null,
+      reports,
+    }),
+    difalCollection: taxConfig.difalCollection ?? "all",
+  };
 }

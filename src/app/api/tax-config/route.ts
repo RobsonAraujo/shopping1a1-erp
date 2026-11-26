@@ -9,6 +9,7 @@ import {
 import { apiErrorPayload, logServerError } from "@/lib/infra/server-public-error";
 import { requireOrganization } from "@/lib/api/api-auth";
 import { parseJsonBody } from "@/lib/api/api-validation";
+import { normalizeUf } from "@/lib/tax-report/brazilian-ufs";
 
 export async function GET() {
   const auth = await requireOrganization();
@@ -41,6 +42,8 @@ const patchBodySchema = z.object({
       excludeIcmsFromPisCofinsBase: z.boolean(),
       considerIcmsStRecuperavel: z.boolean(),
       simplesAliquotaEfetivaPercent: z.number().finite().min(0).max(100).nullable(),
+      difalCollection: z.enum(["all", "none", "some"]),
+      difalCollectedUfs: z.array(z.string().trim().length(2)).max(27),
     })
     .partial()
     .optional(),
@@ -76,7 +79,22 @@ export async function PATCH(request: NextRequest) {
 
   try {
     if (body.company) {
-      await updateTaxCompanyConfig(organizationId, body.company);
+      const { difalCollectedUfs, ...company } = body.company;
+      await updateTaxCompanyConfig(organizationId, {
+        ...company,
+        // Só UFs válidas, sem repetição; a UF da empresa não tem DIFAL.
+        ...(difalCollectedUfs !== undefined
+          ? {
+              difalCollectedUfs: [
+                ...new Set(
+                  difalCollectedUfs
+                    .map((uf) => normalizeUf(uf))
+                    .filter((uf): uf is string => uf != null),
+                ),
+              ].sort(),
+            }
+          : {}),
+      });
     }
 
     const [company, icmsRates, cbsIbs] = await Promise.all([
