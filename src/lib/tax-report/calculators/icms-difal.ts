@@ -1,6 +1,6 @@
 import { roundMoney } from "@/lib/pricing/financial-margin";
 import {
-  SUDESTE_SUL_INTERESTADUAL_UFS,
+  UFS_SUL_SUDESTE_SEM_ES,
   normalizeUf,
 } from "@/lib/tax-report/config";
 import type {
@@ -9,6 +9,11 @@ import type {
   TransacaoVenda,
 } from "@/lib/tax-report/types";
 
+/**
+ * Alíquota interestadual (Resolução do Senado 22/1989 e 13/2012):
+ * importado 4%; origem Sul/Sudeste (sem ES) → destino N/NE/CO/ES 7%;
+ * qualquer outra operação interestadual 12%.
+ */
 export function obterAliquotaInterestadual(input: {
   ufDestino: string;
   ufOrigem: string;
@@ -26,11 +31,14 @@ export function obterAliquotaInterestadual(input: {
     return 0.04;
   }
 
-  if (SUDESTE_SUL_INTERESTADUAL_UFS.has(destino)) {
-    return 0.12;
+  if (
+    UFS_SUL_SUDESTE_SEM_ES.has(origem) &&
+    !UFS_SUL_SUDESTE_SEM_ES.has(destino)
+  ) {
+    return 0.07;
   }
 
-  return 0.07;
+  return 0.12;
 }
 
 export function aliquotaInternaTotal(

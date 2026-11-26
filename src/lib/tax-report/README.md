@@ -8,7 +8,7 @@ Módulo de apuração fiscal por venda (Mercado Livre) para **Lucro Real** — P
 |---------|------------|
 | PIS/COFINS não-cumulativo | Leis 10.637/2002 e 10.833/2003 |
 | Exclusão do ICMS da base PIS/COFINS | RE 574.706 (STF) — parâmetro `excludeIcmsFromPisCofinsBase` |
-| Alíquotas interestaduais | Resolução do Senado nº 13/2012 (12% Sul/Sudeste exc. ES, 7% demais, 4% importado >40%) |
+| Alíquotas interestaduais | Resolução do Senado nº 22/1989 e nº 13/2012: 7% só da origem Sul/Sudeste (exc. ES) para N/NE/CO/ES; 12% em qualquer outra combinação; 4% importado >40% |
 | DIFAL | EC 87/2015 |
 | CBS/IBS (informativo) | LC 214/2025 |
 

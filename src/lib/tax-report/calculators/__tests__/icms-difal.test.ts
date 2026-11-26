@@ -80,6 +80,47 @@ describe("obterAliquotaInterestadual", () => {
       0.04,
     );
   });
+
+  // Resolução do Senado 22/1989: 7% só de S/SE (sem ES) para N/NE/CO/ES.
+  const matriz: Array<[origem: string, destino: string, esperado: number]> = [
+    ["SP", "RJ", 0.12],
+    ["SP", "MG", 0.12],
+    ["SP", "ES", 0.07],
+    ["SP", "BA", 0.07],
+    ["SP", "DF", 0.07],
+    ["MG", "SP", 0.12],
+    ["MG", "RJ", 0.12],
+    ["MG", "BA", 0.07],
+    ["RS", "SP", 0.12],
+    ["BA", "SP", 0.12],
+    ["BA", "PE", 0.12],
+    ["ES", "SP", 0.12],
+    ["ES", "BA", 0.12],
+    ["GO", "MT", 0.12],
+  ];
+  for (const [origem, destino, esperado] of matriz) {
+    it(`${origem} to ${destino} national = ${esperado * 100}%`, () => {
+      assert.equal(
+        obterAliquotaInterestadual({
+          ufDestino: destino,
+          ufOrigem: origem,
+          mercadoriaImportada: false,
+        }),
+        esperado,
+      );
+    });
+  }
+
+  it("imported from outside S/SE = 4%", () => {
+    assert.equal(
+      obterAliquotaInterestadual({
+        ufDestino: "SP",
+        ufOrigem: "BA",
+        mercadoriaImportada: true,
+      }),
+      0.04,
+    );
+  });
 });
 
 describe("calcularIcmsDifal", () => {
