@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db/db";
 import type { StockLot } from "@/generated/prisma";
 import { completePurchaseCyclesOnStockEntry } from "@/lib/compras/replenishment-cycle-data";
 import { toDbSellerId } from "@/lib/mercadolibre/seller-id";
-import { insertMovements, lockOrganizationLedger } from "@/lib/stock/stock-ledger";
+import { insertMovements, LEDGER_TX_OPTIONS, lockOrganizationLedger } from "@/lib/stock/stock-ledger";
 import { planStockExit, type ExitLine, type ExitReason } from "@/lib/stock/stock-exit";
 
 /**
@@ -25,7 +25,9 @@ export class StockActionError extends Error {
       | "review_closed"
       | "count_not_found"
       | "count_closed"
-      | "count_empty",
+      | "count_empty"
+      | "count_open_exists"
+      | "count_approved",
   ) {
     super(code);
   }
@@ -206,7 +208,7 @@ export async function createStockEntry(input: {
     }
     await insertMovements(tx, organizationId, movements);
     return created;
-  });
+  }, LEDGER_TX_OPTIONS);
 
   // Fora da transação: concluir a compra no Kanban não pode derrubar a entrada.
   try {
@@ -272,7 +274,7 @@ export async function reverseStockEntry(input: {
       where: { id: entry.id },
       data: { status: "reversed", reversedAt: now },
     });
-  });
+  }, LEDGER_TX_OPTIONS);
 }
 
 /**
@@ -320,7 +322,7 @@ export async function createStockExit(input: {
         createdByMlUserId: by,
       })),
     );
-  });
+  }, LEDGER_TX_OPTIONS);
   return { exitId, movements: drafts.length };
 }
 
@@ -369,7 +371,7 @@ export async function recordManualStockChange(input: {
         createdByMlUserId: toDbSellerId(input.mlUserId),
       },
     ]);
-  });
+  }, LEDGER_TX_OPTIONS);
 }
 
 export type ReviewDecision =
@@ -515,6 +517,6 @@ export async function resolveStockReview(input: {
     }
 
     throw new StockActionError("invalid_input");
-  });
+  }, LEDGER_TX_OPTIONS);
 }
 

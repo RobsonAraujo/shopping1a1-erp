@@ -1,9 +1,10 @@
 import { prisma } from "@/lib/db/db";
 import { allocateLotsForMovements } from "@/lib/stock/stock-lots";
-import type {
-  StockLocation,
-  StockMovementSource,
-  StockMovementType,
+import {
+  Prisma,
+  type StockLocation,
+  type StockMovementSource,
+  type StockMovementType,
 } from "@/generated/prisma";
 
 /**
@@ -20,6 +21,14 @@ import type {
  */
 
 type TransactionClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
+/**
+ * Opções de toda transação que trava o livro. O padrão do Prisma (5 s) não
+ * cabe: cada query paga a ida e volta função↔banco, a aprovação de um
+ * inventário ou uma fatia do sync faz dezenas delas (PEPS por movimentação),
+ * e a espera pela trava do livro (sync rodando) conta dentro do mesmo limite.
+ */
+export const LEDGER_TX_OPTIONS = { maxWait: 10_000, timeout: 60_000 } as const;
 
 export type MovementInput = {
   stockItemId: string;
@@ -69,14 +78,16 @@ export async function recomputeOwnBalances(
     _sum: { quantity: true },
   });
   const sumById = new Map(sums.map((row) => [row.stockItemId, row._sum.quantity ?? 0]));
-  for (const id of ids) {
-    const ownQty = sumById.get(id) ?? 0;
-    await tx.stockBalance.upsert({
-      where: { stockItemId: id },
-      create: { stockItemId: id, organizationId, ownQty },
-      update: { ownQty },
-    });
-  }
+  // Um upsert só para todos os itens (antes era um por item: uma ida ao banco
+  // cada). Hora em UTC vinda do app, como o `@updatedAt` do Prisma grava.
+  const now = new Date();
+  const values = ids.map((id) => Prisma.sql`(${id}, ${organizationId}, ${sumById.get(id) ?? 0}, ${now})`);
+  await tx.$executeRaw`
+    INSERT INTO "stock_balances" ("stock_item_id", "organization_id", "own_qty", "updated_at")
+    VALUES ${Prisma.join(values)}
+    ON CONFLICT ("stock_item_id") DO UPDATE
+      SET "own_qty" = EXCLUDED."own_qty", "updated_at" = EXCLUDED."updated_at"
+      WHERE "stock_balances"."organization_id" = EXCLUDED."organization_id"`;
 }
 
 /**
@@ -140,5 +151,5 @@ export async function recordMovements(
   return prisma.$transaction(async (tx) => {
     await lockOrganizationLedger(tx, organizationId);
     return insertMovements(tx, organizationId, inputs);
-  });
+  }, LEDGER_TX_OPTIONS);
 }

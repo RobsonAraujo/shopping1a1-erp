@@ -8,7 +8,7 @@ import { itemUserProductId } from "@/lib/mercadolibre/listing-sync";
 import { forEachOrdersSearchPage, type OrdersSearchPage } from "@/lib/mercadolibre/orders-search";
 import type { OrderSearchOrder } from "@/lib/mercadolibre/types";
 import { storedChannelFromShipment } from "@/lib/stock/stock-channel";
-import { insertMovements, lockOrganizationLedger, type MovementInput } from "@/lib/stock/stock-ledger";
+import { insertMovements, LEDGER_TX_OPTIONS, lockOrganizationLedger, type MovementInput } from "@/lib/stock/stock-ledger";
 import { ensureStockItemsForItems, loadListingTargetIndex } from "@/lib/stock/stock-items";
 import {
   orderNeedsShipment,
@@ -367,7 +367,7 @@ async function processOrdersWindow(input: {
       createdReviews = result.count;
     }
     return { created: createdMovements, reviewsCreated: createdReviews };
-  });
+  }, LEDGER_TX_OPTIONS);
 
   return {
     ordersRead: orders.length,

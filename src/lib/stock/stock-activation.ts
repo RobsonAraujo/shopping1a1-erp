@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db/db";
 import { fetchAllUserItemIds, fetchItemsByIdsBatched } from "@/lib/mercadolibre/api";
 import { toDbSellerId } from "@/lib/mercadolibre/seller-id";
 import { ensureStockItemsForItems } from "@/lib/stock/stock-items";
-import { insertMovements, lockOrganizationLedger } from "@/lib/stock/stock-ledger";
+import { insertMovements, LEDGER_TX_OPTIONS, lockOrganizationLedger } from "@/lib/stock/stock-ledger";
 import { openingOwnFor } from "@/lib/stock/stock-opening";
 import { refreshStockPositions, type PositionsProgress } from "@/lib/stock/stock-positions";
 
@@ -202,6 +202,6 @@ async function activateStock(input: {
       }
       return { activatedAt, items: openings.length };
     },
-    { timeout: 60_000 },
+    LEDGER_TX_OPTIONS,
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckCircle2, Printer } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Printer, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils";
 
 type Draft = Record<string, { counted: string; note: string }>;
 type View = "all" | "pending" | "diff";
+type ConfirmAction = "approve" | "cancel" | "delete";
 
 export function StockCountDetailView({ count, companyName }: { count: StockCountDetail; companyName: string }) {
   const router = useRouter();
@@ -45,7 +46,7 @@ export function StockCountDetailView({ count, companyName }: { count: StockCount
   const [dirty, setDirty] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [view, setView] = useState<View>("all");
-  const [confirm, setConfirm] = useState<"approve" | "cancel" | null>(null);
+  const [confirm, setConfirm] = useState<ConfirmAction | null>(null);
   const [busy, setBusy] = useState(false);
   const inputs = useRef(new Map<string, HTMLInputElement>());
 
@@ -136,13 +137,22 @@ export function StockCountDetailView({ count, companyName }: { count: StockCount
     if (next) inputs.current.get(next.stockItemId)?.focus();
   }
 
-  async function finish(action: "approve" | "cancel") {
+  async function finish(action: ConfirmAction) {
     setBusy(true);
     try {
       if (action === "approve" && !(await save())) return;
-      const res = await fetch(`/api/stock/counts/${count.id}/${action}`, { method: "POST" });
+      const res =
+        action === "delete"
+          ? await fetch(`/api/stock/counts/${count.id}`, { method: "DELETE" })
+          : await fetch(`/api/stock/counts/${count.id}/${action}`, { method: "POST" });
       if (!res.ok) {
         toast.error(await readApiError(res, "stock_action_failed"));
+        return;
+      }
+      if (action === "delete") {
+        toast.success("Inventário excluído.");
+        setConfirm(null);
+        router.push("/dashboard/inventory/inventario");
         return;
       }
       if (action === "approve") {
@@ -192,6 +202,16 @@ export function StockCountDetailView({ count, companyName }: { count: StockCount
                 <Printer aria-hidden />
                 Imprimir folha
               </Button>
+              {count.status !== "approved" ? (
+                <Button
+                  variant="ghost"
+                  className="text-[var(--destructive)] hover:text-[var(--destructive)]"
+                  onClick={() => setConfirm("delete")}
+                >
+                  <Trash2 aria-hidden />
+                  Excluir
+                </Button>
+              ) : null}
               {editable ? (
                 <>
                   <Button variant="ghost" onClick={() => setConfirm("cancel")}>
@@ -362,17 +382,43 @@ export function StockCountDetailView({ count, companyName }: { count: StockCount
         <AlertDialog open={confirm != null} onOpenChange={(o) => !o && setConfirm(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>{confirm === "approve" ? "Aprovar os ajustes?" : "Cancelar este inventário?"}</AlertDialogTitle>
+              <AlertDialogTitle>
+                {confirm === "approve"
+                  ? "Aprovar os ajustes?"
+                  : confirm === "delete"
+                    ? "Excluir este inventário?"
+                    : "Cancelar este inventário?"}
+              </AlertDialogTitle>
               <AlertDialogDescription>
                 {confirm === "approve"
                   ? `${summary.divergences} produto${summary.divergences === 1 ? "" : "s"} com diferença viram ajustes de estoque (−${formatUnits(summary.missing)} / +${formatUnits(summary.surplus)} un, ${formatMoneyBRL(summary.value)}). Os não contados ficam como estão. O inventário fica travado como registro.`
-                  : "Nada muda no estoque. O que já foi digitado fica guardado, mas o inventário não pode mais ser aprovado."}
+                  : confirm === "delete"
+                    ? "Ele some da lista com tudo que foi digitado. Nada muda no estoque."
+                    : "Nada muda no estoque. O que já foi digitado fica guardado, mas o inventário não pode mais ser aprovado."}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel disabled={busy}>Voltar</AlertDialogCancel>
-              <AlertDialogAction disabled={busy} onClick={() => confirm && void finish(confirm)}>
-                {confirm === "approve" ? "Aprovar" : "Cancelar inventário"}
+              <AlertDialogAction
+                disabled={busy}
+                variant={confirm === "delete" ? "destructive" : "default"}
+                onClick={(e) => {
+                  // Fica aberto até a resposta: o texto mostra o andamento.
+                  e.preventDefault();
+                  if (confirm) void finish(confirm);
+                }}
+              >
+                {confirm === "approve"
+                  ? busy
+                    ? "Aprovando…"
+                    : "Aprovar"
+                  : confirm === "delete"
+                    ? busy
+                      ? "Excluindo…"
+                      : "Excluir"
+                    : busy
+                      ? "Cancelando…"
+                      : "Cancelar inventário"}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

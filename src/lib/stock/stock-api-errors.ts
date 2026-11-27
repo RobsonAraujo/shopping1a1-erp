@@ -14,6 +14,8 @@ const STATUS_BY_CODE: Record<StockActionError["code"], number> = {
   count_not_found: 404,
   count_closed: 409,
   count_empty: 400,
+  count_open_exists: 409,
+  count_approved: 409,
 };
 
 /** Resposta de erro das rotas de ação do estoque (código mapeado em api-client-error.ts). */

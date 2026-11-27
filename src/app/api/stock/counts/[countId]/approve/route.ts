@@ -3,6 +3,9 @@ import { requireOrganization } from "@/lib/api/api-auth";
 import { stockActionErrorResponse } from "@/lib/stock/stock-api-errors";
 import { approveStockCount } from "@/lib/stock/stock-counts";
 
+// A transação do livro pode levar mais que o padrão (LEDGER_TX_OPTIONS: até 60 s).
+export const maxDuration = 120;
+
 /** Aprova o inventário: cada diferença vira uma movimentação "Inventário". */
 export async function POST(
   _request: Request,

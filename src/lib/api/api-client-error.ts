@@ -47,6 +47,9 @@ const API_ERROR_MESSAGES: Record<string, string> = {
   stock_count_not_found: "Este inventário não existe mais. Atualize a página.",
   stock_count_closed: "Este inventário já foi aprovado ou cancelado.",
   stock_count_empty: "Nenhum produto com esse filtro para contar.",
+  stock_count_open_exists:
+    "Já existe um inventário em contagem com estes produtos. Aprove, cancele ou exclua aquele antes de criar outro.",
+  stock_count_approved: "Inventário aprovado não pode ser excluído: ele já ajustou o estoque.",
   calculator_listing_not_found: "Este anúncio não está mais na sua loja. Atualize a página.",
   calculator_listing_inactive:
     "Este anúncio não está ativo nem pausado no Mercado Livre: não há preço de agora para calcular.",

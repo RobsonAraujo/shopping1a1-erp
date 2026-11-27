@@ -4,7 +4,7 @@ import { mapWithConcurrency } from "@/lib/mercadolibre/concurrency";
 import { fetchWithRetry } from "@/lib/mercadolibre/fetch-with-retry";
 import { toDbSellerId } from "@/lib/mercadolibre/seller-id";
 import { StockActionError } from "@/lib/stock/stock-actions";
-import { insertMovements, lockOrganizationLedger } from "@/lib/stock/stock-ledger";
+import { insertMovements, LEDGER_TX_OPTIONS, lockOrganizationLedger } from "@/lib/stock/stock-ledger";
 import { loadStockOverview } from "@/lib/stock/stock-page-data";
 
 /**
@@ -112,6 +112,19 @@ export async function createStockCount(input: {
   );
   if (rows.length === 0) throw new StockActionError("count_empty");
 
+  // Dois inventários abertos com o mesmo produto aplicariam a diferença duas
+  // vezes (o segundo ainda compara com o saldo de antes do primeiro). Outro
+  // fornecedor pode ficar aberto ao mesmo tempo.
+  const overlapping = await prisma.stockCountLine.findFirst({
+    where: {
+      organizationId,
+      stockItemId: { in: rows.map((r) => r.stockItemId) },
+      count: { status: "counting" },
+    },
+    select: { countId: true },
+  });
+  if (overlapping) throw new StockActionError("count_open_exists");
+
   const referenceAt = new Date();
   const pending = await pendingShipmentUnits(
     organizationId,
@@ -185,11 +198,15 @@ export async function approveStockCount(input: {
     if (count.status !== "counting") throw new StockActionError("count_closed");
     const now = new Date();
     const movements = [];
+    // Linhas agrupadas pelo ajuste: um UPDATE por valor, não um por linha.
+    const idsByAdjustment = new Map<number, string[]>();
     let adjusted = 0;
     for (const line of count.lines) {
       const adjustment = countLineAdjustment(line);
       if (adjustment == null) continue;
-      await tx.stockCountLine.update({ where: { id: line.id }, data: { adjustmentQty: adjustment } });
+      const group = idsByAdjustment.get(adjustment);
+      if (group) group.push(line.id);
+      else idsByAdjustment.set(adjustment, [line.id]);
       if (adjustment === 0) continue;
       adjusted += 1;
       movements.push({
@@ -206,13 +223,19 @@ export async function approveStockCount(input: {
         createdByMlUserId: by,
       });
     }
+    for (const [adjustmentQty, ids] of idsByAdjustment) {
+      await tx.stockCountLine.updateMany({
+        where: { organizationId, countId: count.id, id: { in: ids } },
+        data: { adjustmentQty },
+      });
+    }
     await insertMovements(tx, organizationId, movements);
     await tx.stockCount.update({
       where: { id: count.id },
       data: { status: "approved", approvedAt: now, approvedByMlUserId: by },
     });
     return { adjusted };
-  });
+  }, LEDGER_TX_OPTIONS);
 }
 
 export async function cancelStockCount(organizationId: string, countId: string): Promise<void> {
@@ -221,6 +244,24 @@ export async function cancelStockCount(organizationId: string, countId: string):
     data: { status: "cancelled" },
   });
   if (result.count === 0) throw new StockActionError("count_closed");
+}
+
+/**
+ * Exclui um inventário ainda não aprovado (em contagem ou cancelado): some da
+ * lista com o que foi digitado. Aprovado não sai: já virou movimentação.
+ */
+export async function deleteStockCount(organizationId: string, countId: string): Promise<void> {
+  const count = await prisma.stockCount.findFirst({
+    where: { id: countId, organizationId },
+    select: { status: true },
+  });
+  if (!count) throw new StockActionError("count_not_found");
+  if (count.status === "approved") throw new StockActionError("count_approved");
+  const result = await prisma.stockCount.deleteMany({
+    where: { id: countId, organizationId, status: { in: ["counting", "cancelled"] } },
+  });
+  // Aprovado entre a leitura e a exclusão.
+  if (result.count === 0) throw new StockActionError("count_approved");
 }
 
 // ─── Leituras para as telas ──────────────────────────────────────────────
