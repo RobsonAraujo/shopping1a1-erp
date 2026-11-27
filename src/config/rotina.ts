@@ -18,6 +18,12 @@ export const rotinaConfig = {
   catalogRaiseCushionPercent: 3,
   /** Alta mínima (% sobre o preço de hoje) para a subida virar tarefa. */
   catalogRaiseMinPercent: 2,
+  /**
+   * Dias de vendas que o Atualizar lê por anúncio: limite do "Sem venda em N
+   * dias" e base das vendas/dia da Rotina. Própria da Rotina (Metas) — a
+   * "Janela de vendas" de Planejamento é a régua de Estoque/Compras/Full.
+   */
+  salesWindowDays: 14,
   /** Concorrentes lidos há mais que isto não valem para estimar a subida. */
   catalogCompetitorsMaxAgeMs: 3 * 60 * 60_000,
   /** Fuso que decide o que é "hoje" (novo hoje, feito hoje, resolvido hoje). */

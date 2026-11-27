@@ -10,6 +10,7 @@ import {
   ROTINA_MARGIN_LIMITS,
   ROTINA_RAISE_CUSHION_LIMITS,
   ROTINA_RAISE_MIN_LIMITS,
+  ROTINA_SALES_WINDOW_OPTIONS,
   ROTINA_TACOS_LIMITS,
 } from "@/lib/rotina/settings-shared";
 
@@ -44,10 +45,11 @@ const patchSchema = z
       .min(ROTINA_RAISE_MIN_LIMITS.min)
       .max(ROTINA_RAISE_MIN_LIMITS.max),
     disabledRules: z.array(z.enum(ROTINA_RULE_KEYS)).max(ROTINA_RULE_KEYS.length),
+    salesWindowDays: z.literal([...ROTINA_SALES_WINDOW_OPTIONS]),
   })
   .partial();
 
-/** Metas da Rotina (margens mínimas, TACOS meta, folga de subida no catálogo, regras desligadas). */
+/** Metas da Rotina (margens mínimas, TACOS meta, folga de subida no catálogo, regras desligadas, dias de vendas lidos). */
 export async function PATCH(request: NextRequest) {
   const auth = await requireOrganization();
   if (!auth.ok) {

@@ -1065,6 +1065,10 @@ model OperationalSettings {
   rotinaCatalogRaiseCushionPercent Decimal? @map("rotina_catalog_raise_cushion_percent") @db.Decimal(6, 2)
   /// Rotina: alta mínima (%) sobre o preço de hoje para "Subir preço no catálogo" virar tarefa.
   rotinaCatalogRaiseMinPercent     Decimal? @map("rotina_catalog_raise_min_percent") @db.Decimal(6, 2)
+  /// Rotina: dias de vendas que o Atualizar lê por anúncio (limite do "Sem
+  /// venda em N dias" e base das vendas/dia da Rotina). Solto da
+  /// `salesAverageWindowDays`, que é a régua de Estoque/Compras/Full.
+  rotinaSalesWindowDays            Int?     @map("rotina_sales_window_days")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

@@ -4,14 +4,17 @@ import { OPERATIONAL_SETTINGS_DEFAULTS } from "@/lib/configuracoes/operational-s
 import type { RotinaRuleKey } from "@/lib/rotina/rule-registry";
 import {
   ROTINA_SETTINGS_DEFAULTS,
+  isRotinaSalesWindowDays,
   normalizeDisabledRules,
+  type RotinaSalesWindowDays,
   type RotinaSettings,
 } from "@/lib/rotina/settings-shared";
 
 /**
  * Metas da Rotina moram em `OperationalSettings` (uma linha por organização,
  * coluna nula = default de `src/config/rotina.ts`) — o mesmo lugar do prazo de
- * "promoção vencendo" e da janela de vendas, que a Rotina também usa.
+ * "promoção vencendo", que a Rotina também usa. A janela de vendas é a própria
+ * da Rotina (`rotinaSalesWindowDays`), não a de Planejamento.
  */
 export async function loadRotinaSettings(
   organizationId: string,
@@ -25,8 +28,8 @@ export async function loadRotinaSettings(
       rotinaCatalogRaiseCushionPercent: true,
       rotinaCatalogRaiseMinPercent: true,
       rotinaDisabledRules: true,
+      rotinaSalesWindowDays: true,
       promotionExpiringSoonDays: true,
-      salesAverageWindowDays: true,
     },
   });
 
@@ -36,6 +39,8 @@ export async function loadRotinaSettings(
   const raiseCushion = decimalToNumber(row?.rotinaCatalogRaiseCushionPercent);
   const raiseMin = decimalToNumber(row?.rotinaCatalogRaiseMinPercent);
   const disabledRules = normalizeDisabledRules(row?.rotinaDisabledRules);
+  const storedWindow = row?.rotinaSalesWindowDays;
+  const salesWindow = isRotinaSalesWindowDays(storedWindow) ? storedWindow : null;
 
   return {
     ownMinMarginPercent: ownMin ?? ROTINA_SETTINGS_DEFAULTS.ownMinMarginPercent,
@@ -49,15 +54,14 @@ export async function loadRotinaSettings(
     promotionExpiringSoonDays:
       row?.promotionExpiringSoonDays ??
       OPERATIONAL_SETTINGS_DEFAULTS.promotionExpiringSoonDays,
-    salesAverageWindowDays:
-      row?.salesAverageWindowDays ??
-      OPERATIONAL_SETTINGS_DEFAULTS.salesAverageWindowDays,
+    salesWindowDays: salesWindow ?? ROTINA_SETTINGS_DEFAULTS.salesWindowDays,
     configured:
       ownMin !== null ||
       catalogMin !== null ||
       tacos !== null ||
       raiseCushion !== null ||
       raiseMin !== null ||
+      salesWindow !== null ||
       disabledRules.length > 0,
   };
 }
@@ -69,6 +73,7 @@ export type RotinaSettingsUpdate = Partial<{
   catalogRaiseCushionPercent: number;
   catalogRaiseMinPercent: number;
   disabledRules: RotinaRuleKey[];
+  salesWindowDays: RotinaSalesWindowDays;
 }>;
 
 export async function updateRotinaSettings(
@@ -93,6 +98,9 @@ export async function updateRotinaSettings(
       : {}),
     ...(input.disabledRules !== undefined
       ? { rotinaDisabledRules: normalizeDisabledRules(input.disabledRules) }
+      : {}),
+    ...(input.salesWindowDays !== undefined
+      ? { rotinaSalesWindowDays: input.salesWindowDays }
       : {}),
   };
 

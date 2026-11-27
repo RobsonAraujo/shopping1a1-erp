@@ -35,7 +35,9 @@ import { usePersistedJson } from "@/hooks/use-persisted-json";
 import { readApiError } from "@/lib/api/api-client-error";
 import {
   NO_RECENT_SALES_DEFAULT_DAYS,
+  NO_RECENT_SALES_QUICK_DAYS,
   isNoRecentSales,
+  resolveNoRecentSalesDays,
 } from "@/lib/rotina/no-recent-sales";
 import { ROTINA_RULES, type RotinaRuleKey } from "@/lib/rotina/rule-registry";
 import { isRuleEnabled } from "@/lib/rotina/settings-shared";
@@ -54,10 +56,6 @@ import type { RotinaOtherTask } from "@/components/rotina/RotinaActionRow";
 import { cn } from "@/lib/utils";
 
 const STALE_SALES_DAYS_DEFAULT = NO_RECENT_SALES_DEFAULT_DAYS;
-
-function isStaleSalesDays(value: unknown): value is number {
-  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 90;
-}
 
 type ViewTab = "acoes" | "anuncios";
 
@@ -102,9 +100,6 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
     "rotina-stale-sales-days",
     STALE_SALES_DAYS_DEFAULT,
   );
-  const staleSalesDays = isStaleSalesDays(storedStaleDays)
-    ? storedStaleDays
-    : STALE_SALES_DAYS_DEFAULT;
   const [tab, setTab] = useState<ViewTab>("acoes");
   const [overrides, setOverrides] = useState<Map<string, ActionOverride>>(new Map());
   const [targetsOpen, setTargetsOpen] = useState(
@@ -138,25 +133,43 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
 
   const staleSalesEnabled = isRuleEnabled(view.settings, "no_recent_sales");
   const staleSalesNow = useMemo(() => new Date(view.generatedAt), [view.generatedAt]);
+  // Maior janela de vendas realmente lida no retrato: o prazo não passa dela
+  // (com 14 dias lidos não dá para afirmar "sem venda em 30").
+  const staleSalesWindowDays = useMemo(() => {
+    let max: number | null = null;
+    for (const action of view.staleSalesActions) {
+      const days = action.staleSales?.salesWindowDays ?? null;
+      if (days !== null && (max === null || days > max)) max = days;
+    }
+    return max;
+  }, [view.staleSalesActions]);
+  const staleSalesDays = resolveNoRecentSalesDays(storedStaleDays, staleSalesWindowDays);
   // Abertos entram pelo prazo N; os já decididos ficam no histórico do dia
   // (feito/adiado/ignorado) mesmo que tenham vendido depois.
-  const staleSalesInScope = useMemo(() => {
-    if (!staleSalesEnabled) return [];
-    return view.staleSalesActions.filter((action) => {
-      if (action.bucket !== "active") return true;
-      const facts = action.staleSales;
-      if (!facts) return false;
-      return isNoRecentSales({
-        mlStatus: facts.mlStatus,
-        lastSaleAt: facts.lastSaleAt,
-        salesWindowDays: facts.salesWindowDays,
-        listedAt: facts.listedAt,
-        firstSeenAt: facts.firstSeenAt,
-        days: staleSalesDays,
-        now: staleSalesNow,
+  const staleSalesAt = useCallback(
+    (days: number): RotinaActionView[] => {
+      if (!staleSalesEnabled) return [];
+      return view.staleSalesActions.filter((action) => {
+        if (action.bucket !== "active") return true;
+        const facts = action.staleSales;
+        if (!facts) return false;
+        return isNoRecentSales({
+          mlStatus: facts.mlStatus,
+          lastSaleAt: facts.lastSaleAt,
+          salesWindowDays: facts.salesWindowDays,
+          listedAt: facts.listedAt,
+          firstSeenAt: facts.firstSeenAt,
+          days,
+          now: staleSalesNow,
+        });
       });
-    });
-  }, [staleSalesEnabled, view.staleSalesActions, staleSalesDays, staleSalesNow]);
+    },
+    [staleSalesEnabled, view.staleSalesActions, staleSalesNow],
+  );
+  const staleSalesInScope = useMemo(
+    () => staleSalesAt(staleSalesDays),
+    [staleSalesAt, staleSalesDays],
+  );
 
   const actions = useMemo(
     () => applyActionOverrides([...view.actions, ...staleSalesInScope], overrides),
@@ -184,15 +197,16 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
         }),
     [actions, segment],
   );
-  const staleSalesWindowDays = useMemo(() => {
-    let max: number | null = null;
-    for (const action of view.staleSalesActions) {
-      const days = action.staleSales?.salesWindowDays ?? null;
-      if (days !== null && (max === null || days > max)) max = days;
-    }
-    return max;
-  }, [view.staleSalesActions]);
-  const showStaleSalesGroup = staleSalesEnabled && staleSalesRows.length > 0;
+  // "Sem venda" é monotônico: um prazo menor inclui os anúncios do maior. Se o
+  // menor prazo tem anúncio aberto, o grupo fica (com os chips) mesmo que o
+  // prazo escolhido esteja vazio; só some quando não haveria nada em prazo nenhum.
+  const staleSalesAnyAtShortest = useMemo(() => {
+    if (staleSalesRows.length > 0) return true;
+    return applyActionOverrides(staleSalesAt(NO_RECENT_SALES_QUICK_DAYS[0]), overrides).some(
+      (action) => action.bucket === "active" && inSegment(action, segment),
+    );
+  }, [staleSalesRows.length, staleSalesAt, overrides, segment]);
+  const showStaleSalesGroup = staleSalesEnabled && staleSalesAnyAtShortest;
   const listingCounts = useMemo(() => {
     const catalog = view.listings.filter((row) => row.catalogListing).length;
     return { all: view.listings.length, own: view.listings.length - catalog, catalog };
@@ -443,7 +457,7 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
       });
       if (!response.ok) throw new Error(await readApiError(response, "rotina_settings_failed"));
       toast.success("Metas salvas.", {
-        description: "Os preços mínimos com a meta nova saem no próximo Atualizar.",
+        description: "Preços mínimos e dias de vendas lidos mudam no próximo Atualizar.",
       });
       setTargetsOpen(false);
       reload();
@@ -594,6 +608,8 @@ export function RotinaPageClient({ view }: { view: RotinaView }) {
                         days={staleSalesDays}
                         onDaysChange={setStoredStaleDays}
                         salesWindowDays={staleSalesWindowDays}
+                        configuredWindowDays={view.settings.salesWindowDays}
+                        onOpenTargets={() => setTargetsOpen(true)}
                         open={openGroups.has("no_recent_sales")}
                         onToggle={() => toggleGroup("no_recent_sales")}
                       />

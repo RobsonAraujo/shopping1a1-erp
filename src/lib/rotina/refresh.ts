@@ -640,7 +640,7 @@ export async function runRotinaRefresh(
           params.token,
           params.userId,
           pendingIds,
-          settings.salesAverageWindowDays,
+          settings.salesWindowDays,
           stockPlanningConfig.salesWindowDateField,
         ),
       ).catch((e: unknown) => {
@@ -657,7 +657,7 @@ export async function runRotinaRefresh(
       targets,
       links,
       salesWindow,
-      salesWindowDays: settings.salesAverageWindowDays,
+      salesWindowDays: settings.salesWindowDays,
       previous,
     };
 

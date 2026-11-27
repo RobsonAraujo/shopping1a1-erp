@@ -6,7 +6,37 @@
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const NO_RECENT_SALES_DEFAULT_DAYS = 3;
-export const NO_RECENT_SALES_QUICK_DAYS = [2, 3, 7, 14] as const;
+/** Prazos do filtro (chips). Só aparecem os que cabem nos dias de vendas lidos. */
+export const NO_RECENT_SALES_QUICK_DAYS = [2, 3, 7, 14, 30, 60] as const;
+
+function isQuickDays(value: unknown): value is number {
+  return NO_RECENT_SALES_QUICK_DAYS.some((option) => option === value);
+}
+
+/**
+ * Prazos que dá para afirmar com os dias de vendas lidos (`null` = nada lido
+ * ainda: todos, o filtro não terá candidatos de qualquer jeito).
+ */
+export function noRecentSalesDayOptions(windowDays: number | null): number[] {
+  return NO_RECENT_SALES_QUICK_DAYS.filter(
+    (option) => windowDays === null || option <= windowDays,
+  );
+}
+
+/**
+ * Prazo efetivo a partir do salvo no navegador. Valor que não é chip (prazo
+ * digitado no campo antigo, lixo) volta ao padrão; chip acima dos dias lidos
+ * cai no maior que cabe — um prazo impossível nunca esvazia o grupo.
+ */
+export function resolveNoRecentSalesDays(
+  stored: unknown,
+  windowDays: number | null,
+): number {
+  const days = isQuickDays(stored) ? stored : NO_RECENT_SALES_DEFAULT_DAYS;
+  const options = noRecentSalesDayOptions(windowDays);
+  if (options.includes(days)) return days;
+  return options.at(-1) ?? NO_RECENT_SALES_QUICK_DAYS[0];
+}
 
 export type NoRecentSalesInput = {
   mlStatus: string;

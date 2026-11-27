@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { FormInput } from "@/components/ui/form-input";
+import { FormSelect } from "@/components/ui/form-select";
 import {
   Sheet,
   SheetBody,
@@ -26,13 +27,21 @@ import {
   ROTINA_MARGIN_LIMITS,
   ROTINA_RAISE_CUSHION_LIMITS,
   ROTINA_RAISE_MIN_LIMITS,
+  ROTINA_SALES_WINDOW_OPTIONS,
   ROTINA_TACOS_LIMITS,
+  isRotinaSalesWindowDays,
+  type RotinaSalesWindowDays,
   type RotinaSettings,
 } from "@/lib/rotina/settings-shared";
 import type { RotinaTargetOverride } from "@/lib/rotina/view";
 import { cn } from "@/lib/utils";
 
 const SECTION_TITLE_CLASS = "text-sm font-semibold text-[var(--foreground)]";
+
+const SALES_WINDOW_SELECT_OPTIONS = ROTINA_SALES_WINDOW_OPTIONS.map((days) => ({
+  value: String(days),
+  label: `${days} dias`,
+}));
 
 /** Campo de % da matriz de metas: rótulo vai para leitores de tela, o "%" fica à vista. */
 function PercentField({
@@ -70,6 +79,7 @@ export type RotinaTargetsDraft = {
   catalogRaiseCushionPercent: number;
   catalogRaiseMinPercent: number;
   disabledRules: RotinaRuleKey[];
+  salesWindowDays: RotinaSalesWindowDays;
 };
 
 function toNumber(raw: string): number | null {
@@ -108,6 +118,9 @@ export function RotinaTargetsSheet({
   const [raiseMin, setRaiseMin] = useState(String(settings.catalogRaiseMinPercent));
   const [disabled, setDisabled] = useState<Set<RotinaRuleKey>>(
     () => new Set(settings.disabledRules),
+  );
+  const [salesWindow, setSalesWindow] = useState<RotinaSalesWindowDays>(
+    settings.salesWindowDays,
   );
   const [error, setError] = useState<string | null>(null);
 
@@ -161,6 +174,7 @@ export function RotinaTargetsSheet({
       catalogRaiseCushionPercent: cushionValue,
       catalogRaiseMinPercent: raiseMinValue,
       disabledRules: ROTINA_RULE_KEYS.filter((rule) => disabled.has(rule)),
+      salesWindowDays: salesWindow,
     });
   }
 
@@ -257,6 +271,34 @@ export function RotinaTargetsSheet({
               quando o concorrente tinha vantagens que a lista não mostra (como entrega no
               mesmo dia), o ML chegou a pedir 12% abaixo. Depois de subir, confira se continua
               ganhando.
+            </p>
+          </section>
+
+          <section className="space-y-3">
+            <h3 className={SECTION_TITLE_CLASS}>Sem venda recente</h3>
+            <FormSelect
+              id="rotina-sales-window"
+              label="Dias de vendas lidos no Atualizar"
+              value={String(salesWindow)}
+              onValueChange={(value) => {
+                const days = Number(value);
+                if (isRotinaSalesWindowDays(days)) setSalesWindow(days);
+              }}
+              options={SALES_WINDOW_SELECT_OPTIONS}
+              className="sm:max-w-[14rem]"
+            />
+            <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
+              É o prazo máximo do filtro &quot;Sem venda em&quot; e a base das vendas/dia que
+              ordenam as tarefas. Vale a partir do próximo Atualizar. Mais dias deixam o
+              Atualizar mais lento, porque ele lê mais pedidos de cada anúncio que vende
+              bastante. Não muda a Janela de vendas de Estoque e Compras (
+              <Link
+                href="/dashboard/configuracoes/planejamento"
+                className="font-medium text-[var(--primary)] underline-offset-4 hover:underline"
+              >
+                Configurações › Planejamento
+              </Link>
+              ).
             </p>
           </section>
 

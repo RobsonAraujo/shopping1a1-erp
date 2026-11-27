@@ -23,8 +23,12 @@ export type RotinaSettings = {
   disabledRules: RotinaRuleKey[];
   /** De Configurações > Planejamento — o mesmo prazo do widget Promoções da Home. */
   promotionExpiringSoonDays: number;
-  /** De Configurações > Planejamento — janela de vendas/dia (a mesma de Compras). */
-  salesAverageWindowDays: number;
+  /**
+   * Dias de vendas que o Atualizar lê por anúncio (Metas): limite do "Sem
+   * venda em N dias" e base das vendas/dia da Rotina. Solto da janela de
+   * Planejamento, que é a de Estoque/Compras/Full.
+   */
+  salesWindowDays: RotinaSalesWindowDays;
   /** `false` enquanto a organização nunca salvou nenhuma meta da Rotina. */
   configured: boolean;
 };
@@ -35,12 +39,21 @@ export const ROTINA_TACOS_LIMITS = { min: 0, max: 100 } as const;
 export const ROTINA_RAISE_CUSHION_LIMITS = { min: 0, max: 20 } as const;
 export const ROTINA_RAISE_MIN_LIMITS = { min: 0, max: 50 } as const;
 
+/** Opções de dias de vendas lidos no Atualizar. Mais dias = mais pedidos lidos por anúncio. */
+export const ROTINA_SALES_WINDOW_OPTIONS = [7, 14, 30, 60] as const;
+export type RotinaSalesWindowDays = (typeof ROTINA_SALES_WINDOW_OPTIONS)[number];
+
+export function isRotinaSalesWindowDays(value: unknown): value is RotinaSalesWindowDays {
+  return ROTINA_SALES_WINDOW_OPTIONS.some((option) => option === value);
+}
+
 export const ROTINA_SETTINGS_DEFAULTS = {
   ownMinMarginPercent: rotinaConfig.ownMinMarginPercent,
   catalogMinMarginPercent: rotinaConfig.catalogMinMarginPercent,
   ownTacosTargetPercent: rotinaConfig.ownTacosTargetPercent,
   catalogRaiseCushionPercent: rotinaConfig.catalogRaiseCushionPercent,
   catalogRaiseMinPercent: rotinaConfig.catalogRaiseMinPercent,
+  salesWindowDays: rotinaConfig.salesWindowDays,
 } as const;
 
 /** Só chaves conhecidas, sem repetição, na ordem do registro. */

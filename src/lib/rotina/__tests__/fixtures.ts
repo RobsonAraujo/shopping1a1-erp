@@ -19,7 +19,7 @@ export function settings(overrides: Partial<RotinaSettings> = {}): RotinaSetting
     catalogRaiseMinPercent: 2,
     disabledRules: [],
     promotionExpiringSoonDays: 3,
-    salesAverageWindowDays: 30,
+    salesWindowDays: 30,
     configured: true,
     ...overrides,
   };
